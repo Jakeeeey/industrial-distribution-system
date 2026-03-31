@@ -8,8 +8,6 @@ const DIRECTUS_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 const DIRECTUS_TOKEN = process.env.DIRECTUS_STATIC_TOKEN;
 const SPRING_API_BASE_URL = process.env.SPRING_API_BASE_URL || "";
 
-//haha
-
 const fetchHeaders = {
     Authorization: `Bearer ${DIRECTUS_TOKEN}`,
     "Content-Type": "application/json",

@@ -165,7 +165,6 @@ export function ApprovalModal({
     const isActionable = ["For Approval", "On Hold", "Draft"].includes(activeOrder?.order_status || "");
     const canHold = activeOrder.order_status === "For Approval";
 
-    //haha
 
     // Recalculate totals based on local details state
     const getLineDiscount = (item: OrderDetail) => {
