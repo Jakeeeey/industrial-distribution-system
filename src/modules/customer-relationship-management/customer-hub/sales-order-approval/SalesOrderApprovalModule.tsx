@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSalesOrderApproval, SalesOrder } from "./hooks/useSalesOrderApproval";
-import { ApprovalModal } from "@/modules/customer-relationship-management/customer-hub/sales-order-approval/components/ApprovalModal";
+import { ApprovalModal } from "./components";
 import {
     Table,
     TableBody,
