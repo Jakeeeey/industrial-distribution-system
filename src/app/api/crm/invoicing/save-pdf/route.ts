@@ -80,16 +80,39 @@ export async function POST(req: NextRequest) {
         const uploadData = await uploadRes.json();
         const fileId = uploadData.data.id;
 
+        // 1.5 Dynamic Folder Resolution
+        let targetFolderId = process.env.DIRECTUS_INVOICE_PDF_FOLDER_ID;
+        let folderWarning = null;
+
+        try {
+            const folderRes = await fetch(`${DIRECTUS_BASE}/folders?filter[name][_eq]=sales_invoice_pdf`, {
+                headers: { Authorization: `Bearer ${DIRECTUS_TOKEN}` }
+            });
+            if (folderRes.ok) {
+                const folderData = await folderRes.json();
+                if (folderData.data && folderData.data.length > 0) {
+                    targetFolderId = folderData.data[0].id;
+                    console.log(`[Save PDF API] Found target folder ID: ${targetFolderId}`);
+                } else {
+                    console.warn("[Save PDF API] Folder 'sales_invoice_pdf' not found. Defaulting to root or env variable.");
+                    folderWarning = "Folder 'sales_invoice_pdf' not found. PDF stored in root.";
+                }
+            }
+        } catch (e) {
+            console.error("[Save PDF API] Error looking up folder:", e);
+        }
+
         // 2. PATCH the file to set the folder
-        await fetch(`${DIRECTUS_BASE}/files/${fileId}`, {
-            method: "PATCH",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${DIRECTUS_TOKEN}`,
-            },
-            body: JSON.stringify({
-                folder: process.env.DIRECTUS_INVOICE_PDF_FOLDER_ID}),
-        }).catch(err => console.warn("[Save PDF API] Folder patch failed:", err));
+        if (targetFolderId) {
+            await fetch(`${DIRECTUS_BASE}/files/${fileId}`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${DIRECTUS_TOKEN}`,
+                },
+                body: JSON.stringify({ folder: targetFolderId }),
+            }).catch(err => console.warn("[Save PDF API] Folder patch failed:", err));
+        }
 
         // 3. Create records in sales_invoice_pdf for EACH invoice
         const archivePromises = invoiceIds.map(async (id, index) => {
@@ -123,7 +146,7 @@ export async function POST(req: NextRequest) {
         const createdRecords = await Promise.all(archivePromises);
         console.log(`[Save PDF API] PDF archived for ${createdRecords.length} invoices.`);
 
-        return NextResponse.json({ success: true, record_ids: createdRecords, file_id: fileId });
+        return NextResponse.json({ success: true, record_ids: createdRecords, file_id: fileId, warning: folderWarning });
 
     } catch (err: unknown) {
         console.error("[Save PDF API] Catch Error:", err);
