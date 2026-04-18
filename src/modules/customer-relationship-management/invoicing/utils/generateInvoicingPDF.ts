@@ -1,8 +1,7 @@
 import jsPDF from 'jspdf';
-import JsBarcode from 'jsbarcode';
 
 import { format } from 'date-fns';
-import { ORTemplate } from '../types';
+import { ORTemplate, ORFieldConfig } from '../types';
 
 export interface ReceiptItem {
     product_id: number;
