@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
         const { searchParams } = new URL(req.url);
         const search = searchParams.get("search");
 
-        let url = `${DIRECTUS_BASE}/items/salesman?limit=50&filter[isActive][_eq]=1&fields=id,salesman_name,salesman_code`;
+        let url = `${DIRECTUS_BASE}/items/salesman?limit=50&filter[isActive][_eq]=1&filter[division_id][_eq]=1&fields=id,salesman_name,salesman_code`;
         
         if (search) {
             // Search by salesman_name
