@@ -15,6 +15,7 @@ export interface Supplier {
     id: number;
     supplier_shortcut: string | null;
     supplier_name: string | null;
+    division_id: number | null;
 }
 
 export interface DiscountType {
