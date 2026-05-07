@@ -23,8 +23,9 @@ export async function GET(
         const details = await ActivePickingService.getPickingDetails(consolidatorId, branchId);
         
         return NextResponse.json(details);
-    } catch (err: any) {
-        console.error(`[Active Picking API] Error fetching details for ID ${err.message}`);
-        return NextResponse.json({ error: "Internal Server Error", details: err.message }, { status: 500 });
+    } catch (err) {
+        const error = err as Error;
+        console.error(`[Active Picking API] Error fetching details: ${error.message}`);
+        return NextResponse.json({ error: "Failed to fetch details" }, { status: 500 });
     }
 }

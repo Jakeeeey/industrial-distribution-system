@@ -24,7 +24,7 @@ export const ActivePickingService = {
         const productIds = details.map(d => d.product_id).filter(id => id != null);
         
         // Fetch inventory to get running_inventory_unit
-        const inventory = await ActivePickingRepo.fetchInventoryForProducts(productIds, branchId, 1);
+        const inventory = await ActivePickingRepo.fetchInventoryForProducts(productIds, branchId);
         
         // Map inventory back to details
         const inventoryMap = new Map<number, number>();
@@ -45,16 +45,17 @@ export const ActivePickingService = {
         let onhandInfo;
         try {
             onhandInfo = await ActivePickingRepo.verifySerialOnhand(serialNumber, branchId, sessionToken);
-        } catch (err: any) {
-            if (err.message.includes("DEBUG_TRACE")) throw err;
-            if (err.message === "NETWORK_FAILURE") {
+        } catch (err) {
+            const error = err as Error;
+            if (error.message.includes("DEBUG_TRACE")) throw error;
+            if (error.message === "NETWORK_FAILURE") {
                 throw new Error("Unable to reach the Serial Verification Service. Please check your network connection.");
             }
-            if (err.message.startsWith("EXTERNAL_API_FAILURE")) {
-                const status = err.message.split("_").pop();
+            if (error.message.startsWith("EXTERNAL_API_FAILURE")) {
+                const status = error.message.split("_").pop();
                 throw new Error(`The Serial Verification Service returned error ${status}. This usually means the API server is having trouble running the view query.`);
             }
-            throw err;
+            throw error;
         }
         
         if (!onhandInfo) {
@@ -77,6 +78,15 @@ export const ActivePickingService = {
         }
 
         const detailId = detail.id;
+        const userIdNum = userId ? Number(userId) : null;
+
+        // PH Manila Time (+08:00)
+        // Note: Using ISO string and manually adjusting for Manila offset if needed, 
+        // or just using a helper that ensures UTC+8.
+        const now = new Date();
+        const manilaOffset = 8 * 60; // minutes
+        const manilaTime = new Date(now.getTime() + (manilaOffset + now.getTimezoneOffset()) * 60000);
+        const timestamp = manilaTime.toISOString().replace('Z', '+08:00');
 
         // 3. Check uniqueness in picking mappings
         const exists = await ActivePickingRepo.checkSerialExists(serialNumber);
@@ -85,10 +95,10 @@ export const ActivePickingService = {
         }
 
         // 4. Update picked quantity
-        const newQty = await ActivePickingRepo.updatePickedQuantity(detailId, 1);
+        const newQty = await ActivePickingRepo.updatePickedQuantity(detailId, 1, userIdNum, timestamp);
         
         // 5. Save serial mapping
-        await ActivePickingRepo.saveSerialMapping(detailId, serialNumber, userId);
+        await ActivePickingRepo.saveSerialMapping(detailId, serialNumber, userIdNum, timestamp);
         
         return {
             success: true,
@@ -102,12 +112,18 @@ export const ActivePickingService = {
         return ActivePickingRepo.fetchSerialsForDetail(detailId);
     },
 
-    async removeSerialPick(mappingId: number, detailId: number): Promise<{ success: boolean; newQuantity: number }> {
+    async removeSerialPick(mappingId: number, detailId: number, userId: number | null = null): Promise<{ success: boolean; newQuantity: number }> {
         // 1. Delete mapping
         await ActivePickingRepo.deleteSerialMapping(mappingId);
 
+        // PH Manila Time (+08:00)
+        const now = new Date();
+        const manilaOffset = 8 * 60; // minutes
+        const manilaTime = new Date(now.getTime() + (manilaOffset + now.getTimezoneOffset()) * 60000);
+        const timestamp = manilaTime.toISOString().replace('Z', '+08:00');
+
         // 2. Decrement picked quantity
-        const newQty = await ActivePickingRepo.updatePickedQuantity(detailId, -1);
+        const newQty = await ActivePickingRepo.updatePickedQuantity(detailId, -1, userId, timestamp);
 
         return { success: true, newQuantity: newQty };
     },

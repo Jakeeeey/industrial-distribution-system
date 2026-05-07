@@ -16,8 +16,9 @@ export async function POST(req: NextRequest) {
         await ActivePickingService.completePicking(consolidatorId, status || "Picked");
         
         return NextResponse.json({ success: true });
-    } catch (err: any) {
-        console.error(`[Active Picking API] Error completing picking ${err.message}`);
+    } catch (err) {
+        const error = err as Error;
+        console.error(`[Active Picking API] Error completing picking: ${error.message}`);
         return NextResponse.json({ error: "Failed to complete picking" }, { status: 500 });
     }
 }

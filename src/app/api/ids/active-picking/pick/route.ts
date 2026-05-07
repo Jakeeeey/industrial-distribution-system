@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ActivePickingService } from "@/modules/industrial-distribution-system/active-picking/services/active-picking.service";
-import { ScanSerialSchema } from "@/modules/industrial-distribution-system/active-picking/schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,9 +24,10 @@ export async function POST(req: NextRequest) {
         const result = await ActivePickingService.processSerialPick(consolidatorId, serial_number, userId, branchId, sessionToken);
         
         return NextResponse.json(result);
-    } catch (err: any) {
-        console.error("[Active Picking API] Error processing pick:", err.message);
+    } catch (err) {
+        const error = err as Error;
+        console.error("[Active Picking API] Error processing pick:", error.message);
         
-        return NextResponse.json({ error: "Failed to process pick", details: err.message }, { status: 400 });
+        return NextResponse.json({ error: "Failed to process pick", details: error.message }, { status: 400 });
     }
 }

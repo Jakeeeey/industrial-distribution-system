@@ -22,12 +22,14 @@ export async function DELETE(
             return NextResponse.json({ error: "detailId is required" }, { status: 400 });
         }
         const detailId = parseInt(detailIdStr);
+        const userId = searchParams.get("userId") ? parseInt(searchParams.get("userId")!) : null;
 
-        const result = await ActivePickingService.removeSerialPick(id, detailId);
+        const result = await ActivePickingService.removeSerialPick(id, detailId, userId);
         
         return NextResponse.json(result);
-    } catch (err: any) {
-        console.error(`[Active Picking API] Error deleting serial ${err.message}`);
+    } catch (err) {
+        const error = err as Error;
+        console.error(`[Active Picking API] Error deleting serial: ${error.message}`);
         return NextResponse.json({ error: "Failed to delete serial" }, { status: 500 });
     }
 }

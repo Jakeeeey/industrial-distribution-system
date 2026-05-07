@@ -10,6 +10,15 @@ function getHeaders() {
     };
 }
 
+interface ProductRef {
+    id?: string | number;
+    productId?: string | number;
+    product_id?: string | number;
+    product_code?: string;
+    product_name?: string;
+    unit_of_measurement?: { unit_name: string };
+}
+
 export const ActivePickingRepo = {
     getDirectusBase() { return DIRECTUS_BASE; },
     getHeaders() { return getHeaders(); },
@@ -87,16 +96,16 @@ export const ActivePickingRepo = {
 
         const data = await response.json();
 
-        return data.data.map((item: any) => {
+        return data.data.map((item: { product_id: unknown; [key: string]: unknown }) => {
             // Robustly extract the product ID from the relational object or flat field
-            const productRef = item.product_id;
-            let pId = null;
+            const productRef = item.product_id as ProductRef | null;
+            let pId: string | number | null = null;
 
             if (productRef) {
                 if (typeof productRef === 'object') {
-                    pId = productRef.id ?? productRef.productId ?? productRef.product_id;
+                    pId = productRef.id ?? productRef.productId ?? productRef.product_id ?? null;
                 } else {
-                    pId = productRef;
+                    pId = productRef as unknown as string | number;
                 }
             }
             
@@ -113,7 +122,7 @@ export const ActivePickingRepo = {
         });
     },
 
-    async fetchInventoryForProducts(productIds: number[], branchId: number, divisionId: number): Promise<ProductInventory[]> {
+    async fetchInventoryForProducts(productIds: number[], branchId: number): Promise<ProductInventory[]> {
         if (productIds.length === 0) return [];
 
         const productIdsStr = productIds.join(",");
@@ -139,12 +148,13 @@ export const ActivePickingRepo = {
         return data.data.length > 0;
     },
 
-    async saveSerialMapping(detailId: number, serialNumber: string, userId: number | null): Promise<ConsolidatorSerialMapping> {
+    async saveSerialMapping(detailId: number, serialNumber: string, userId: number | null, timestamp: string): Promise<ConsolidatorSerialMapping> {
         const url = `${DIRECTUS_BASE}/items/consolidator_serial_mappings`;
         const body = {
             detail_id: detailId,
             serial_number: serialNumber,
-            scanned_by: userId
+            scanned_by: userId,
+            scanned_at: timestamp
         };
 
         const response = await fetch(url, {
@@ -161,7 +171,7 @@ export const ActivePickingRepo = {
         return data.data;
     },
 
-    async updatePickedQuantity(detailId: number, incrementBy: number): Promise<number> {
+    async updatePickedQuantity(detailId: number, incrementBy: number, userId: number | null, timestamp: string): Promise<number> {
         // First fetch current to increment safely
         const getUrl = `${DIRECTUS_BASE}/items/consolidator_details/${detailId}?fields=picked_quantity`;
         const getRes = await fetch(getUrl, { headers: getHeaders() });
@@ -175,7 +185,9 @@ export const ActivePickingRepo = {
             method: "PATCH",
             headers: getHeaders(),
             body: JSON.stringify({
-                picked_quantity: newQty
+                picked_quantity: newQty,
+                picked_by: userId,
+                picked_at: timestamp
             })
         });
 
@@ -212,10 +224,10 @@ export const ActivePickingRepo = {
         const inputSerial = serialNumber.trim().toUpperCase();
         const trace: string[] = [];
         
-        const extractData = (raw: any): any[] => {
-            if (Array.isArray(raw)) return raw;
-            if (raw?.content && Array.isArray(raw.content)) return raw.content;
-            if (raw?.data && Array.isArray(raw.data)) return raw.data;
+        const extractData = (raw: Record<string, unknown> | unknown[] | null): Record<string, unknown>[] => {
+            if (Array.isArray(raw)) return raw as Record<string, unknown>[];
+            if (raw && typeof raw === 'object' && 'content' in raw && Array.isArray(raw.content)) return raw.content as Record<string, unknown>[];
+            if (raw && typeof raw === 'object' && 'data' in raw && Array.isArray(raw.data)) return raw.data as Record<string, unknown>[];
             return [];
         };
 
@@ -228,7 +240,7 @@ export const ActivePickingRepo = {
                     headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }
                 });
                 
-                let items: any[] = [];
+                let items: Record<string, unknown>[] = [];
                 if (res.ok) {
                     const json = await res.json();
                     items = extractData(json);
@@ -250,8 +262,9 @@ export const ActivePickingRepo = {
 
                 trace.push(`Found ${items.length} items`);
                 return items;
-            } catch (e: any) {
-                trace.push(`Error: ${e.message}`);
+            } catch (e) {
+                const err = e as Error;
+                trace.push(`Error: ${err.message}`);
                 return [];
             }
         };
@@ -298,11 +311,11 @@ export const ActivePickingRepo = {
                 throw new Error(`DEBUG_TRACE: ${trace.join(" -> ")}`);
             }
 
-            const onhand = data.find(item => {
+            const onhand = data.find((item: Record<string, unknown>) => {
                 const dbVal = item.serialNumber ?? item.serial_number ?? item.serialNo ?? item.serial;
                 if (dbVal === undefined || dbVal === null) return false;
                 
-                const dbSerial = dbVal.toString().trim().toUpperCase();
+                const dbSerial = String(dbVal).trim().toUpperCase();
                 const dbBranchId = item.branchId ?? item.branch_id;
                 const branchMatch = dbBranchId === undefined || dbBranchId === null || Number(dbBranchId) === branchId;
                 
@@ -310,7 +323,8 @@ export const ActivePickingRepo = {
             });
 
             if (onhand) {
-                const pId = onhand.productId ?? onhand.product_id ?? onhand.product?.id ?? onhand.product?.product_id;
+                const product = onhand.product as ProductRef | undefined;
+                const pId = onhand.productId ?? onhand.product_id ?? product?.id ?? product?.product_id;
                 if (pId !== undefined && pId !== null) {
                     return { productId: Number(pId) };
                 }
@@ -318,9 +332,10 @@ export const ActivePickingRepo = {
             }
             
             throw new Error(`DEBUG_TRACE: Serial ${inputSerial} not found in ${data.length} records. First item sample: ${data[0] ? JSON.stringify(data[0]) : "NONE"}`);
-        } catch (error: any) {
-            console.error("[ActivePickingRepo] Error verifying onhand serial:", error);
-            if (error.message.includes("DEBUG_TRACE")) throw error;
+        } catch (error) {
+            const err = error as Error;
+            console.error("[Active Picking Repo] Error verifying onhand serial:", err);
+            if (err.message.includes("DEBUG_TRACE")) throw err;
             throw new Error("NETWORK_FAILURE");
         }
     }

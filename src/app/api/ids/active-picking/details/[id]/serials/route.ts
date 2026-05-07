@@ -19,8 +19,9 @@ export async function GET(
         const serials = await ActivePickingService.getSerialsForDetail(detailId);
         
         return NextResponse.json(serials);
-    } catch (err: any) {
-        console.error(`[Active Picking API] Error fetching serials for detail ${err.message}`);
-        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    } catch (err) {
+        const error = err as Error;
+        console.error(`[Active Picking API] Error fetching serials: ${error.message}`);
+        return NextResponse.json({ error: "Failed to fetch serials" }, { status: 500 });
     }
 }

@@ -7,14 +7,15 @@ type ActivePickingContextType = ReturnType<typeof useActivePicking>;
 
 const ActivePickingContext = createContext<ActivePickingContextType | null>(null);
 
-export function ActivePickingProvider({ children }: { children: React.ReactNode }) {
-    const pickingState = useActivePicking();
+export function ActivePickingProvider({ children, userId }: { children: React.ReactNode, userId: number | null }) {
+    const pickingState = useActivePicking(userId);
+    const { fetchBranches, fetchPickings } = pickingState;
 
     // Initial fetch of branches and pickings
     useEffect(() => {
-        pickingState.fetchBranches();
-        pickingState.fetchPickings();
-    }, [pickingState.fetchBranches, pickingState.fetchPickings]);
+        fetchBranches();
+        fetchPickings();
+    }, [fetchBranches, fetchPickings]);
 
     return (
         <ActivePickingContext.Provider value={pickingState}>

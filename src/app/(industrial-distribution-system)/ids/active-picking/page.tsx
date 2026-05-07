@@ -79,6 +79,8 @@ export default async function Page() {
   const token = cookieStore.get(COOKIE_NAME)?.value ?? null;
 
   const headerUser = buildHeaderUserFromToken(token);
+  const payload = token ? decodeJwtPayload(token) : null;
+  const userId = payload ? Number(payload.id ?? payload.user_id ?? payload.sub) : null;
 
   return (
     // ✅ This fills the RIGHT column provided by SidebarInset (which is now fixed-height).
@@ -117,7 +119,7 @@ export default async function Page() {
 
       {/* ✅ Only content scrolls inside RIGHT column */}
       <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4">
-        <ActivePickingModule />
+        <ActivePickingModule userId={userId} />
       </main>
     </div>
   );

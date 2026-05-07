@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { Consolidator, ConsolidatorDetail, ConsolidatorSerialMapping } from "../types";
 import { toast } from "sonner";
 
-export function useActivePicking() {
+export function useActivePicking(userId: number | null = null) {
     const [branches, setBranches] = useState<{ id: number, branch_name: string }[]>([]);
     const [isLoadingBranches, setIsLoadingBranches] = useState(false);
 
@@ -28,7 +28,7 @@ export function useActivePicking() {
             if (!res.ok) throw new Error("Failed to fetch branches");
             const data = await res.json();
             setBranches(data);
-        } catch (error: any) {
+        } catch (error) {
             console.error(error);
             toast.error("Failed to load branches");
         } finally {
@@ -46,7 +46,7 @@ export function useActivePicking() {
             setTotalPickings(data.meta.total);
             setPage(targetPage);
             setSearchQuery(search);
-        } catch (error: any) {
+        } catch (error) {
             console.error(error);
             toast.error("Failed to load pickings");
         } finally {
@@ -62,7 +62,7 @@ export function useActivePicking() {
             if (!res.ok) throw new Error("Failed to fetch details");
             const data = await res.json();
             setDetails(data);
-        } catch (error: any) {
+        } catch (error) {
             console.error(error);
             toast.error("Failed to load picking details");
             setDetails([]);
@@ -78,7 +78,7 @@ export function useActivePicking() {
             if (!res.ok) throw new Error("Failed to fetch serials");
             const data = await res.json();
             setSerialsMap(prev => ({ ...prev, [detailId]: data }));
-        } catch (error: any) {
+        } catch (error) {
             console.error(error);
         } finally {
             setIsLoadingSerials(prev => ({ ...prev, [detailId]: false }));
@@ -87,7 +87,7 @@ export function useActivePicking() {
 
     const removeSerial = useCallback(async (mappingId: number, detailId: number) => {
         try {
-            const res = await fetch(`/api/ids/active-picking/serials/${mappingId}?detailId=${detailId}`, {
+            const res = await fetch(`/api/ids/active-picking/serials/${mappingId}?detailId=${detailId}&userId=${userId}`, {
                 method: "DELETE"
             });
             const data = await res.json();
@@ -104,13 +104,14 @@ export function useActivePicking() {
 
             toast.success("Serial removed");
             return true;
-        } catch (error: any) {
-            toast.error(error.message);
+        } catch (error) {
+            const err = error as Error;
+            toast.error(err.message);
             return false;
         }
-    }, []);
+    }, [userId]);
 
-    const processSerial = useCallback(async (consolidatorId: number, serialNumber: string, userId: number | null, branchId: number) => {
+    const processSerial = useCallback(async (consolidatorId: number, serialNumber: string, branchId: number) => {
         setIsProcessingSerial(true);
         try {
             const res = await fetch(`/api/ids/active-picking/pick`, {
@@ -141,14 +142,14 @@ export function useActivePicking() {
 
             toast.success("Serial matched and picked successfully");
             return true;
-        } catch (error: any) {
+        } catch (error) {
             console.error(error);
             toast.error("Network error while processing serial");
             return false;
         } finally {
             setIsProcessingSerial(false);
         }
-    }, [fetchSerials]);
+    }, [fetchSerials, userId]);
 
     const completePicking = useCallback(async (consolidatorId: number, status: string = "Picked") => {
         try {
@@ -166,13 +167,15 @@ export function useActivePicking() {
             setActivePickingId(null);
             setDetails([]);
             return true;
-        } catch (error: any) {
-            toast.error(error.message);
+        } catch (error) {
+            const err = error as Error;
+            toast.error(err.message);
             return false;
         }
     }, [fetchPickings, page, searchQuery]);
 
     return {
+        userId,
         branches,
         isLoadingBranches,
         fetchBranches,

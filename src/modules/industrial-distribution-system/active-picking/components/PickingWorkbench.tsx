@@ -7,13 +7,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { 
-    CheckCircle2, 
-    AlertCircle, 
-    Trash2, 
-    ChevronDown, 
-    ChevronUp, 
-    RefreshCcw, 
+import {
+    CheckCircle2,
+    AlertCircle,
+    Trash2,
+    ChevronDown,
+    ChevronUp,
+    RefreshCcw,
     Save,
     ClipboardList,
     Plus
@@ -22,12 +22,12 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 export function PickingWorkbench() {
-    const { 
-        activePickingId, 
-        pickings, 
-        details, 
-        isLoadingDetails, 
-        processSerial, 
+    const {
+        activePickingId,
+        pickings,
+        details,
+        isLoadingDetails,
+        processSerial,
         isProcessingSerial,
         serialsMap,
         isLoadingSerials,
@@ -76,12 +76,12 @@ export function PickingWorkbench() {
         if (!serialInput.trim() || isProcessingSerial || !activePicking) return;
 
         const currentSerial = serialInput.trim();
-        const success = await processSerial(activePickingId, currentSerial, null, activePicking.branch_id || 0);
-        
+        const success = await processSerial(activePickingId, currentSerial, activePicking.branch_id || 0);
+
         if (success) {
             setSerialInput("");
             inputRef.current?.focus();
-            
+
             // The success logic in the hook already refreshes the specific detail quantity and its serials
         }
     };
@@ -108,14 +108,28 @@ export function PickingWorkbench() {
                                 Enter serial numbers to automatically match and fulfill items.
                             </p>
                         </div>
-                        <Button 
-                            variant="default" 
-                            className="bg-green-600 hover:bg-green-700 shadow-md flex items-center gap-2 font-bold"
-                            onClick={handleComplete}
-                        >
-                            <Save className="h-4 w-4" />
-                            Save & Finish Operation
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="outline"
+                                className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 flex items-center gap-2 font-bold"
+                                onClick={() => {
+                                    toast.success("Progress saved successfully", {
+                                        description: "All scans are secured in the database."
+                                    });
+                                }}
+                            >
+                                <Save className="h-4 w-4" />
+                                Save Progress
+                            </Button>
+                            <Button
+                                variant="default"
+                                className="bg-green-600 hover:bg-green-700 shadow-md flex items-center gap-2 font-bold"
+                                onClick={handleComplete}
+                            >
+                                <CheckCircle2 className="h-4 w-4" />
+                                Finish & Complete
+                            </Button>
+                        </div>
                     </div>
                 </CardContent>
             </Card>
@@ -147,8 +161,8 @@ export function PickingWorkbench() {
                                 <RefreshCcw className="absolute right-3 top-2.5 h-5 w-5 animate-spin text-primary" />
                             )}
                         </div>
-                        <Button 
-                            type="submit" 
+                        <Button
+                            type="submit"
                             size="sm"
                             className="h-10 px-4 font-bold shadow-sm"
                             disabled={isProcessingSerial || !serialInput.trim()}
@@ -160,7 +174,20 @@ export function PickingWorkbench() {
 
                 <div className="flex-1 overflow-auto">
                     {isLoadingDetails ? (
-                        <div className="p-12 text-center text-muted-foreground animate-pulse">Loading product list...</div>
+                        <div className="divide-y">
+                            {[...Array(6)].map((_, i) => (
+                                <div key={i} className="p-4 flex items-center gap-4 animate-pulse">
+                                    <div className="w-8 h-8 rounded bg-muted"></div>
+                                    <div className="flex-1 space-y-2">
+                                        <div className="h-4 bg-muted rounded w-3/4"></div>
+                                        <div className="h-3 bg-muted rounded w-1/4"></div>
+                                    </div>
+                                    <div className="w-16 h-8 bg-muted rounded"></div>
+                                    <div className="w-12 h-8 bg-muted rounded"></div>
+                                    <div className="w-24 h-6 bg-muted rounded-full"></div>
+                                </div>
+                            ))}
+                        </div>
                     ) : details.length === 0 ? (
                         <div className="p-12 text-center text-muted-foreground">No items found for this picking.</div>
                     ) : (
@@ -180,19 +207,19 @@ export function PickingWorkbench() {
                                     const isComplete = detail.picked_quantity >= detail.ordered_quantity;
                                     const isExpanded = !!expandedRows[detail.id];
                                     const serials = serialsMap[detail.id] || [];
-                                    
+
                                     return (
                                         <React.Fragment key={detail.id}>
-                                            <TableRow 
+                                            <TableRow
                                                 className={cn(
                                                     "transition-colors group",
                                                     isComplete ? "bg-green-50/20 dark:bg-green-900/5 opacity-80" : "hover:bg-muted/30"
                                                 )}
                                             >
                                                 <TableCell>
-                                                    <Button 
-                                                        variant="ghost" 
-                                                        size="icon" 
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
                                                         className="h-8 w-8"
                                                         onClick={() => toggleRow(detail.id)}
                                                     >
@@ -231,7 +258,7 @@ export function PickingWorkbench() {
                                                     )}
                                                 </TableCell>
                                             </TableRow>
-                                            
+
                                             {isExpanded && (
                                                 <TableRow className="bg-muted/5 border-l-4 border-l-primary/30">
                                                     <TableCell colSpan={6} className="p-0">
@@ -240,20 +267,20 @@ export function PickingWorkbench() {
                                                                 <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Registered Serials ({serials.length})</span>
                                                                 {isLoadingSerials[detail.id] && <RefreshCcw className="h-3 w-3 animate-spin text-primary" />}
                                                             </div>
-                                                            
+
                                                             {serials.length === 0 ? (
                                                                 <div className="text-xs text-muted-foreground italic py-2">No serials entered yet.</div>
                                                             ) : (
                                                                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
                                                                     {serials.map(s => (
-                                                                        <div 
-                                                                            key={s.id} 
-                                                                            className="flex items-center justify-between gap-2 p-1.5 rounded-md border bg-background text-[10px] font-mono group/serial"
+                                                                        <div
+                                                                            key={s.id}
+                                                                            className="flex items-center justify-around gap-2 p-1.5 rounded-md border bg-background text-[10px] font-mono group/serial"
                                                                         >
                                                                             <span className="truncate">{s.serial_number}</span>
-                                                                            <Button 
-                                                                                variant="ghost" 
-                                                                                size="icon" 
+                                                                            <Button
+                                                                                variant="ghost"
+                                                                                size="icon"
                                                                                 className="h-5 w-5 text-destructive opacity-0 group-hover/serial:opacity-100 transition-opacity"
                                                                                 onClick={() => removeSerial(s.id, detail.id)}
                                                                             >
@@ -275,7 +302,7 @@ export function PickingWorkbench() {
                     )}
                 </div>
             </div>
-            
+
             {/* Legend / Info Footer */}
             <div className="p-3 bg-muted/20 border rounded-lg flex items-center gap-4 text-[10px] text-muted-foreground">
                 <div className="flex items-center gap-1.5">

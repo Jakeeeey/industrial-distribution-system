@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { useActivePickingContext } from "../providers/ActivePickingProvider";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -31,8 +31,7 @@ export function ConsolidatorSidebar() {
         fetchPickings, 
         activePickingId, 
         fetchDetails,
-        searchQuery,
-        setSearchQuery
+        searchQuery
     } = useActivePickingContext();
     
     const [localSearch, setLocalSearch] = useState(searchQuery);
@@ -114,14 +113,27 @@ export function ConsolidatorSidebar() {
             <ScrollArea className="flex-1 min-h-0">
                 <div className="p-2 space-y-2">
                     {isLoadingPickings && pickings.length === 0 ? (
-                        <div className="text-center p-8 text-muted-foreground animate-pulse flex flex-col items-center gap-2">
-                            <RefreshCcw className="h-6 w-6 animate-spin text-primary/40" />
-                            <span>Searching records...</span>
+                        <div className="space-y-2">
+                            {[...Array(5)].map((_, i) => (
+                                <div key={i} className="p-3 rounded-lg border bg-muted/20 animate-pulse flex flex-col gap-3">
+                                    <div className="flex items-start justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <div className="h-5 w-5 rounded bg-muted"></div>
+                                            <div className="h-4 w-32 bg-muted rounded"></div>
+                                        </div>
+                                        <div className="h-4 w-16 bg-muted rounded-full"></div>
+                                    </div>
+                                    <div className="flex justify-between items-center border-t pt-2 mt-1">
+                                        <div className="h-3 w-16 bg-muted rounded"></div>
+                                        <div className="h-3 w-20 bg-muted rounded"></div>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     ) : pickings.length === 0 ? (
                         <div className="text-center p-8 text-muted-foreground flex flex-col items-center gap-2">
                             <Search className="h-8 w-8 text-muted-foreground/20" />
-                            <span>No pickings found matching "{localSearch}"</span>
+                            <span>No pickings found matching &quot;{localSearch}&quot;</span>
                         </div>
                     ) : (
                         pickings.map((picking) => (

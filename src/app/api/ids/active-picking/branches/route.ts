@@ -17,8 +17,9 @@ export async function GET(req: NextRequest) {
         const branches = await ActivePickingService.getBranches(divisionId);
         
         return NextResponse.json(branches);
-    } catch (err: any) {
-        console.error("[Active Picking API] Error fetching branches:", err.message);
-        return NextResponse.json({ error: "Internal Server Error", details: err.message }, { status: 500 });
+    } catch (err) {
+        const error = err as Error;
+        console.error(`[Active Picking API] Error fetching branches: ${error.message}`);
+        return NextResponse.json({ error: "Failed to fetch branches" }, { status: 500 });
     }
 }

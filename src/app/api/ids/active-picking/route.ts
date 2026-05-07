@@ -25,8 +25,9 @@ export async function GET(req: NextRequest) {
             data: result.data, 
             meta: { total: result.meta.filter_count, page, limit } 
         });
-    } catch (err: any) {
-        console.error("[Active Picking API] Error fetching pickings:", err.message);
-        return NextResponse.json({ error: "Internal Server Error", details: err.message }, { status: 500 });
+    } catch (err) {
+        const error = err as Error;
+        console.error(`[Active Picking API] Error fetching pickings: ${error.message}`);
+        return NextResponse.json({ error: "Failed to fetch pickings" }, { status: 500 });
     }
 }
