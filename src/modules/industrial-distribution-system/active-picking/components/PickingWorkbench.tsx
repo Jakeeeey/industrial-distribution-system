@@ -10,14 +10,13 @@ import { Input } from "@/components/ui/input";
 import { 
     CheckCircle2, 
     AlertCircle, 
-    ArrowRight, 
     Trash2, 
     ChevronDown, 
     ChevronUp, 
     RefreshCcw, 
-    ArrowLeft,
     Save,
-    ClipboardList
+    ClipboardList,
+    Plus
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -37,26 +36,23 @@ export function PickingWorkbench() {
         completePicking
     } = useActivePickingContext();
 
-    const [selectedDetailId, setSelectedDetailId] = useState<number | null>(null);
     const [serialInput, setSerialInput] = useState("");
     const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({});
     const inputRef = useRef<HTMLInputElement>(null);
 
     const activePicking = pickings.find(p => p.id === activePickingId);
-    const selectedDetail = details.find(d => d.id === selectedDetailId);
 
-    // Auto-focus input when a product is selected
+    // Auto-focus main input when a picking is selected
     useEffect(() => {
-        if (selectedDetailId && inputRef.current) {
+        if (activePickingId && inputRef.current) {
             inputRef.current.focus();
         }
-    }, [selectedDetailId]);
+    }, [activePickingId]);
 
     const toggleRow = (id: number) => {
-        const isNowExpanded = !expandedRows[id];
+        const isExpanding = !expandedRows[id];
         setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
-        
-        if (isNowExpanded) {
+        if (isExpanding) {
             fetchSerials(id);
         }
     };
@@ -69,7 +65,7 @@ export function PickingWorkbench() {
                 </div>
                 <h3 className="text-xl font-semibold">No Picking Selected</h3>
                 <p className="text-muted-foreground mt-2 max-w-md">
-                    Select a picking order from the sidebar to begin manual entry of serial numbers.
+                    Select a picking order from the sidebar to begin processing serial numbers.
                 </p>
             </div>
         );
@@ -77,23 +73,16 @@ export function PickingWorkbench() {
 
     const handleSerialSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedDetailId || !serialInput.trim() || isProcessingSerial || !activePicking) return;
+        if (!serialInput.trim() || isProcessingSerial || !activePicking) return;
 
-        const detail = details.find(d => d.id === selectedDetailId);
-        if (!detail) return;
-
-        if (detail.product && (detail.picked_quantity + 1) > detail.product.running_inventory_unit) {
-            toast.error(`Cannot pick more than available stock (${detail.product.running_inventory_unit})`);
-            return;
-        }
-
-        const success = await processSerial(selectedDetailId, serialInput.trim(), null, activePicking.branch_id || 0);
+        const currentSerial = serialInput.trim();
+        const success = await processSerial(activePickingId, currentSerial, null, activePicking.branch_id || 0);
+        
         if (success) {
             setSerialInput("");
             inputRef.current?.focus();
             
-            // Automatically ensure serials are loaded
-            fetchSerials(selectedDetailId);
+            // The success logic in the hook already refreshes the specific detail quantity and its serials
         }
     };
 
@@ -111,17 +100,17 @@ export function PickingWorkbench() {
                         <div>
                             <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
                                 {activePicking?.consolidator_no}
-                                <Badge variant="outline" className="ml-2 bg-purple-50 text-purple-700 border-purple-200">
+                                <Badge variant="outline" className="ml-2 bg-purple-50 text-purple-700 border-purple-200 uppercase tracking-tighter">
                                     {activePicking?.status}
                                 </Badge>
                             </h2>
                             <p className="text-muted-foreground text-sm">
-                                Enter product serial numbers to fulfill this picking order.
+                                Enter serial numbers to automatically match and fulfill items.
                             </p>
                         </div>
                         <Button 
                             variant="default" 
-                            className="bg-green-600 hover:bg-green-700 shadow-md flex items-center gap-2"
+                            className="bg-green-600 hover:bg-green-700 shadow-md flex items-center gap-2 font-bold"
                             onClick={handleComplete}
                         >
                             <Save className="h-4 w-4" />
@@ -132,238 +121,175 @@ export function PickingWorkbench() {
             </Card>
 
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-card rounded-lg border shadow-sm">
-                {selectedDetail ? (
-                    /* Manual Serial Entry View */
-                    <div className="flex-1 flex flex-col overflow-hidden">
-                        <div className="p-4 border-b bg-muted/30 flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <Button 
-                                    variant="ghost" 
-                                    size="icon" 
-                                    onClick={() => setSelectedDetailId(null)}
-                                    className="hover:bg-background"
-                                >
-                                    <ArrowLeft className="h-5 w-5" />
-                                </Button>
-                                <div>
-                                    <h3 className="font-bold text-lg">{selectedDetail.product?.product_name}</h3>
-                                    <p className="text-xs text-muted-foreground">SKU: {selectedDetail.product?.product_code}</p>
-                                </div>
-                            </div>
-                            <div className="text-right">
-                                <div className="text-xs uppercase font-bold text-muted-foreground tracking-widest">Progress</div>
-                                <div className="text-xl font-black">
-                                    <span className="text-primary">{selectedDetail.picked_quantity}</span>
-                                    <span className="text-muted-foreground/30"> / </span>
-                                    <span>{selectedDetail.ordered_quantity}</span>
-                                </div>
-                            </div>
+                <CardHeader className="py-4 px-6 border-b bg-muted/30 flex flex-row items-center justify-between space-y-0">
+                    <div className="flex items-center gap-3">
+                        <CardTitle className="text-lg">Expected Products</CardTitle>
+                        <Badge variant="secondary" className="font-bold">
+                            {details.length} Items
+                        </Badge>
+                    </div>
+
+                    {/* Global Serial Input - Moved outside per revision */}
+                    <form onSubmit={handleSerialSubmit} className="flex items-center gap-2 w-full max-w-md ml-4">
+                        <div className="relative flex-1">
+                            <Input
+                                ref={inputRef}
+                                placeholder="Enter serial number to pick..."
+                                value={serialInput}
+                                onChange={(e) => setSerialInput(e.target.value)}
+                                disabled={isProcessingSerial}
+                                className={cn(
+                                    "h-10 text-sm font-mono tracking-widest px-3 border-2 focus-visible:ring-primary/20",
+                                    isProcessingSerial && "bg-muted animate-pulse border-primary/50"
+                                )}
+                            />
+                            {isProcessingSerial && (
+                                <RefreshCcw className="absolute right-3 top-2.5 h-5 w-5 animate-spin text-primary" />
+                            )}
                         </div>
+                        <Button 
+                            type="submit" 
+                            size="sm"
+                            className="h-10 px-4 font-bold shadow-sm"
+                            disabled={isProcessingSerial || !serialInput.trim()}
+                        >
+                            {isProcessingSerial ? "Matching..." : <Plus className="h-5 w-5" />}
+                        </Button>
+                    </form>
+                </CardHeader>
 
-                        <div className="flex-1 overflow-auto p-6 space-y-8">
-                            {/* Manual Input Form */}
-                            <div className="max-w-2xl mx-auto space-y-6">
-                                <form onSubmit={handleSerialSubmit} className="space-y-4">
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-bold uppercase tracking-widest text-muted-foreground/70">Manual Serial Input</label>
-                                        <div className="relative">
-                                            <Input
-                                                ref={inputRef}
-                                                placeholder="Enter serial number..."
-                                                value={serialInput}
-                                                onChange={(e) => setSerialInput(e.target.value)}
-                                                disabled={isProcessingSerial}
+                <div className="flex-1 overflow-auto">
+                    {isLoadingDetails ? (
+                        <div className="p-12 text-center text-muted-foreground animate-pulse">Loading product list...</div>
+                    ) : details.length === 0 ? (
+                        <div className="p-12 text-center text-muted-foreground">No items found for this picking.</div>
+                    ) : (
+                        <Table>
+                            <TableHeader className="bg-muted/50 sticky top-0 z-10">
+                                <TableRow>
+                                    <TableHead className="w-[50px]"></TableHead>
+                                    <TableHead>Product Details</TableHead>
+                                    <TableHead className="text-center">Stock</TableHead>
+                                    <TableHead className="text-center">Order</TableHead>
+                                    <TableHead className="text-center">Picked</TableHead>
+                                    <TableHead className="text-right pr-6">Status</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {details.map((detail) => {
+                                    const isComplete = detail.picked_quantity >= detail.ordered_quantity;
+                                    const isExpanded = !!expandedRows[detail.id];
+                                    const serials = serialsMap[detail.id] || [];
+                                    
+                                    return (
+                                        <React.Fragment key={detail.id}>
+                                            <TableRow 
                                                 className={cn(
-                                                    "h-14 text-xl font-mono tracking-widest px-4",
-                                                    isProcessingSerial && "bg-muted animate-pulse"
+                                                    "transition-colors group",
+                                                    isComplete ? "bg-green-50/20 dark:bg-green-900/5 opacity-80" : "hover:bg-muted/30"
                                                 )}
-                                            />
-                                            {isProcessingSerial && (
-                                                <RefreshCcw className="absolute right-4 top-4.5 h-6 w-6 animate-spin text-muted-foreground" />
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    <Button 
-                                        className="w-full h-14 text-lg font-bold shadow-lg transition-all" 
-                                        type="submit"
-                                        disabled={isProcessingSerial || !serialInput.trim()}
-                                    >
-                                        {isProcessingSerial ? "Verifying On-hand..." : "Submit Serial Number"}
-                                        {!isProcessingSerial && <ArrowRight className="ml-2 h-5 w-5" />}
-                                    </Button>
-
-                                    <div className="flex items-start gap-3 p-4 rounded-xl bg-blue-50 border border-blue-100 dark:bg-blue-900/10 dark:border-blue-800">
-                                        <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0" />
-                                        <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
-                                            Every serial number entered will be verified against on-hand stocks. 
-                                            You can save your progress at any time using the button above.
-                                        </p>
-                                    </div>
-                                </form>
-
-                                {/* List of Serials for this product */}
-                                <div className="space-y-4">
-                                    <div className="flex items-center justify-between border-b pb-2">
-                                        <h4 className="text-sm font-black uppercase tracking-widest text-muted-foreground/60">
-                                            Registered Serials
-                                        </h4>
-                                        <Badge variant="secondary" className="font-bold">
-                                            {serialsMap[selectedDetail.id]?.length || 0} Total
-                                        </Badge>
-                                    </div>
-
-                                    {isLoadingSerials[selectedDetail.id] ? (
-                                        <div className="text-center py-8 animate-pulse text-muted-foreground">Loading serials...</div>
-                                    ) : (serialsMap[selectedDetail.id]?.length || 0) === 0 ? (
-                                        <div className="text-center py-12 border-2 border-dashed rounded-xl text-muted-foreground italic">
-                                            No serials registered for this product yet.
-                                        </div>
-                                    ) : (
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                            {serialsMap[selectedDetail.id]?.map((mapping) => (
-                                                <div 
-                                                    key={mapping.id} 
-                                                    className="flex items-center justify-between gap-3 p-3 rounded-xl border bg-card shadow-sm hover:shadow-md transition-shadow group"
-                                                >
-                                                    <span className="font-mono text-sm font-bold tracking-wider">{mapping.serial_number}</span>
+                                            >
+                                                <TableCell>
                                                     <Button 
                                                         variant="ghost" 
                                                         size="icon" 
-                                                        className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                                                        onClick={() => removeSerial(mapping.id, selectedDetail.id)}
+                                                        className="h-8 w-8"
+                                                        onClick={() => toggleRow(detail.id)}
                                                     >
-                                                        <Trash2 className="h-4 w-4" />
+                                                        {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                                                     </Button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                ) : (
-                    /* Product List View */
-                    <div className="flex-1 flex flex-col overflow-hidden">
-                        <CardHeader className="py-4 border-b bg-muted/30 flex-row items-center justify-between space-y-0">
-                            <CardTitle className="text-lg">Expected Products</CardTitle>
-                            <Badge variant="secondary" className="font-bold">
-                                {details.length} Items
-                            </Badge>
-                        </CardHeader>
-                        <div className="flex-1 overflow-auto">
-                            {isLoadingDetails ? (
-                                <div className="p-12 text-center text-muted-foreground animate-pulse">Loading product list...</div>
-                            ) : details.length === 0 ? (
-                                <div className="p-12 text-center text-muted-foreground">No items found for this picking.</div>
-                            ) : (
-                                <Table>
-                                    <TableHeader className="bg-muted/50 sticky top-0 z-10">
-                                        <TableRow>
-                                            <TableHead className="w-[50px]"></TableHead>
-                                            <TableHead>Product Details</TableHead>
-                                            <TableHead className="text-center">Stock</TableHead>
-                                            <TableHead className="text-center">Order</TableHead>
-                                            <TableHead className="text-center">Picked</TableHead>
-                                            <TableHead className="text-right pr-6">Action</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {details.map((detail) => {
-                                            const isComplete = detail.picked_quantity >= detail.ordered_quantity;
-                                            const isExpanded = !!expandedRows[detail.id];
-                                            const serials = serialsMap[detail.id] || [];
-                                            
-                                            return (
-                                                <React.Fragment key={detail.id}>
-                                                    <TableRow 
-                                                        className={cn(
-                                                            "transition-colors group",
-                                                            isComplete && "bg-green-50/30 dark:bg-green-900/5 opacity-80"
-                                                        )}
-                                                    >
-                                                        <TableCell>
-                                                            <Button 
-                                                                variant="ghost" 
-                                                                size="icon" 
-                                                                className="h-8 w-8"
-                                                                onClick={() => toggleRow(detail.id)}
-                                                            >
-                                                                {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                                                            </Button>
-                                                        </TableCell>
-                                                        <TableCell className="font-medium">
-                                                            <div className="font-bold">{detail.product?.product_name || `Product ID: ${detail.product_id}`}</div>
-                                                            <div className="text-xs text-muted-foreground font-mono">
-                                                                {detail.product?.product_code || 'N/A'}
-                                                            </div>
-                                                        </TableCell>
-                                                        <TableCell className="text-center">
-                                                            <Badge variant="secondary" className="opacity-40 font-normal">Hidden</Badge>
-                                                        </TableCell>
-                                                        <TableCell className="text-center font-bold">
-                                                            {detail.ordered_quantity}
-                                                        </TableCell>
-                                                        <TableCell className="text-center">
-                                                            <div className={cn(
-                                                                "inline-flex items-center justify-center min-w-[2.5rem] py-1 px-2 rounded-lg font-black text-sm shadow-inner",
-                                                                isComplete ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
-                                                            )}>
-                                                                {detail.picked_quantity}
-                                                            </div>
-                                                        </TableCell>
-                                                        <TableCell className="text-right pr-6">
-                                                            <Button 
-                                                                variant={isComplete ? "outline" : "default"} 
-                                                                size="sm"
-                                                                className={cn(
-                                                                    "w-28 font-bold shadow-sm transition-all",
-                                                                    !isComplete && "hover:translate-x-1"
-                                                                )}
-                                                                onClick={() => setSelectedDetailId(detail.id)}
-                                                            >
-                                                                {isComplete ? (
-                                                                    <><CheckCircle2 className="mr-2 h-4 w-4 text-green-600" /> Review</>
-                                                                ) : (
-                                                                    "Select Product"
-                                                                )}
-                                                            </Button>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                    
-                                                    {isExpanded && (
-                                                        <TableRow className="bg-muted/5 border-l-4 border-l-primary/30">
-                                                            <TableCell colSpan={6} className="p-0">
-                                                                <div className="p-4 bg-background/40 border-y space-y-2">
-                                                                    <div className="flex items-center justify-between">
-                                                                        <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Registered Serials ({serials.length})</span>
-                                                                        {isLoadingSerials[detail.id] && <RefreshCcw className="h-3 w-3 animate-spin text-muted-foreground" />}
-                                                                    </div>
-                                                                    <div className="flex flex-wrap gap-2">
-                                                                        {serials.length === 0 ? (
-                                                                            <span className="text-xs text-muted-foreground italic">No serials entered yet.</span>
-                                                                        ) : (
-                                                                            serials.map(s => (
-                                                                                <Badge key={s.id} variant="outline" className="font-mono text-[10px] bg-background">
-                                                                                    {s.serial_number}
-                                                                                </Badge>
-                                                                            ))
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                            </TableCell>
-                                                        </TableRow>
+                                                </TableCell>
+                                                <TableCell className="font-medium">
+                                                    <div className="font-bold leading-tight">{detail.product?.product_name || `Product ID: ${detail.product_id}`}</div>
+                                                    <div className="text-[10px] text-muted-foreground font-mono mt-1">
+                                                        SKU: {detail.product?.product_code || 'N/A'}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    <Badge variant="secondary" className="opacity-40 font-normal text-[10px]">Hidden</Badge>
+                                                </TableCell>
+                                                <TableCell className="text-center font-bold text-muted-foreground">
+                                                    {detail.ordered_quantity}
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    <div className={cn(
+                                                        "inline-flex items-center justify-center min-w-[2.5rem] py-1 px-2 rounded-lg font-black text-sm border shadow-sm",
+                                                        isComplete ? "bg-green-100 text-green-700 border-green-200" : "bg-amber-100 text-amber-700 border-amber-200"
+                                                    )}>
+                                                        {detail.picked_quantity}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-right pr-6">
+                                                    {isComplete ? (
+                                                        <Badge className="bg-green-600 text-white hover:bg-green-600 border-none px-3">
+                                                            <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> FULFILLED
+                                                        </Badge>
+                                                    ) : (
+                                                        <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50 dark:bg-amber-900/10">
+                                                            PENDING
+                                                        </Badge>
                                                     )}
-                                                </React.Fragment>
-                                            );
-                                        })}
-                                    </TableBody>
-                                </Table>
-                            )}
-                        </div>
-                    </div>
-                )}
+                                                </TableCell>
+                                            </TableRow>
+                                            
+                                            {isExpanded && (
+                                                <TableRow className="bg-muted/5 border-l-4 border-l-primary/30">
+                                                    <TableCell colSpan={6} className="p-0">
+                                                        <div className="p-4 bg-background/40 border-y space-y-3">
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Registered Serials ({serials.length})</span>
+                                                                {isLoadingSerials[detail.id] && <RefreshCcw className="h-3 w-3 animate-spin text-primary" />}
+                                                            </div>
+                                                            
+                                                            {serials.length === 0 ? (
+                                                                <div className="text-xs text-muted-foreground italic py-2">No serials entered yet.</div>
+                                                            ) : (
+                                                                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                                                                    {serials.map(s => (
+                                                                        <div 
+                                                                            key={s.id} 
+                                                                            className="flex items-center justify-between gap-2 p-1.5 rounded-md border bg-background text-[10px] font-mono group/serial"
+                                                                        >
+                                                                            <span className="truncate">{s.serial_number}</span>
+                                                                            <Button 
+                                                                                variant="ghost" 
+                                                                                size="icon" 
+                                                                                className="h-5 w-5 text-destructive opacity-0 group-hover/serial:opacity-100 transition-opacity"
+                                                                                onClick={() => removeSerial(s.id, detail.id)}
+                                                                            >
+                                                                                <Trash2 className="h-3 w-3" />
+                                                                            </Button>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </React.Fragment>
+                                    );
+                                })}
+                            </TableBody>
+                        </Table>
+                    )}
+                </div>
+            </div>
+            
+            {/* Legend / Info Footer */}
+            <div className="p-3 bg-muted/20 border rounded-lg flex items-center gap-4 text-[10px] text-muted-foreground">
+                <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                    <span>Fulfilled</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-amber-500"></div>
+                    <span>Pending</span>
+                </div>
+                <div className="flex items-center gap-1.5 ml-auto">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    <span>Enter any on-hand serial number to automatically match it to its product row.</span>
+                </div>
             </div>
         </div>
     );

@@ -10,6 +10,7 @@ export function useActivePicking() {
     const [totalPickings, setTotalPickings] = useState(0);
     const [page, setPage] = useState(1);
     const [isLoadingPickings, setIsLoadingPickings] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
     
     const [activePickingId, setActivePickingId] = useState<number | null>(null);
     const [details, setDetails] = useState<ConsolidatorDetail[]>([]);
@@ -35,15 +36,16 @@ export function useActivePicking() {
         }
     }, []);
 
-    const fetchPickings = useCallback(async (divisionId: number = 1, status: string = "Picking", targetPage: number = 1) => {
+    const fetchPickings = useCallback(async (divisionId: number = 1, status: string = "Picking", targetPage: number = 1, search: string = "") => {
         setIsLoadingPickings(true);
         try {
-            const res = await fetch(`/api/ids/active-picking?divisionId=${divisionId}&status=${status}&page=${targetPage}&limit=10`);
+            const res = await fetch(`/api/ids/active-picking?divisionId=${divisionId}&status=${status}&page=${targetPage}&limit=10&search=${encodeURIComponent(search)}`);
             if (!res.ok) throw new Error("Failed to fetch pickings");
             const data = await res.json();
             setPickings(data.data);
             setTotalPickings(data.meta.total);
             setPage(targetPage);
+            setSearchQuery(search);
         } catch (error: any) {
             console.error(error);
             toast.error("Failed to load pickings");
@@ -108,13 +110,13 @@ export function useActivePicking() {
         }
     }, []);
 
-    const processSerial = useCallback(async (detailId: number, serialNumber: string, userId: number | null, branchId: number) => {
+    const processSerial = useCallback(async (consolidatorId: number, serialNumber: string, userId: number | null, branchId: number) => {
         setIsProcessingSerial(true);
         try {
             const res = await fetch(`/api/ids/active-picking/pick`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ detail_id: detailId, serial_number: serialNumber, userId, branchId })
+                body: JSON.stringify({ consolidatorId, serial_number: serialNumber, userId, branchId })
             });
 
             const data = await res.json();
@@ -123,6 +125,8 @@ export function useActivePicking() {
                 toast.error(data.details || data.error || "Failed to process serial");
                 return false;
             }
+
+            const detailId = data.detailId;
 
             // Update details with new quantity from server
             setDetails(prev => prev.map(d => {
@@ -135,7 +139,7 @@ export function useActivePicking() {
             // Refresh serials for this detail
             fetchSerials(detailId);
 
-            toast.success("Serial scanned successfully");
+            toast.success("Serial matched and picked successfully");
             return true;
         } catch (error: any) {
             console.error(error);
@@ -158,7 +162,7 @@ export function useActivePicking() {
             toast.success(`Picking ${status} successfully`);
             
             // Refresh pickings
-            fetchPickings();
+            fetchPickings(1, "Picking", page, searchQuery);
             setActivePickingId(null);
             setDetails([]);
             return true;
@@ -166,7 +170,7 @@ export function useActivePicking() {
             toast.error(error.message);
             return false;
         }
-    }, [fetchPickings]);
+    }, [fetchPickings, page, searchQuery]);
 
     return {
         branches,
@@ -177,6 +181,8 @@ export function useActivePicking() {
         totalPickings,
         page,
         setPage,
+        searchQuery,
+        setSearchQuery,
         isLoadingPickings,
         fetchPickings,
         

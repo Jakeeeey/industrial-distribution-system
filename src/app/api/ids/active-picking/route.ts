@@ -12,17 +12,18 @@ export async function GET(req: NextRequest) {
         const divisionId = parseInt(divisionIdStr);
         const status = searchParams.get("status") || "Picking";
         const page = parseInt(searchParams.get("page") || "1");
-        const limit = parseInt(searchParams.get("limit") || "20");
+        const limit = parseInt(searchParams.get("limit") || "10");
+        const search = searchParams.get("search") || "";
 
         if (isNaN(divisionId)) {
             return NextResponse.json({ error: "Invalid division ID" }, { status: 400 });
         }
 
-        const result = await ActivePickingService.getPickings(divisionId, status, page, limit);
+        const result = await ActivePickingService.getPickings(divisionId, status, page, limit, search);
         
         return NextResponse.json({ 
             data: result.data, 
-            meta: { total: result.meta.total, page, limit } 
+            meta: { total: result.meta.filter_count, page, limit } 
         });
     } catch (err: any) {
         console.error("[Active Picking API] Error fetching pickings:", err.message);

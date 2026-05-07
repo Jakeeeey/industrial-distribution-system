@@ -6,12 +6,13 @@ export const ActivePickingService = {
         return ActivePickingRepo.fetchBranchesByDivision(divisionId);
     },
 
-    async getPickings(divisionId: number = 1, status: string = "Picking", page: number = 1, limit: number = 20): Promise<{ data: Consolidator[], meta: { total: number } }> {
-        const result = await ActivePickingRepo.fetchPickings(divisionId, status, page, limit);
+    async getPickings(divisionId: number = 1, status: string = "Picking", page: number = 1, limit: number = 20, search: string = ""): Promise<{ data: Consolidator[], meta: { total: number, filter_count: number } }> {
+        const result = await ActivePickingRepo.fetchPickings(divisionId, status, page, limit, search);
         return {
             data: result.data,
             meta: {
-                total: result.meta.filter_count
+                total: result.meta.filter_count,
+                filter_count: result.meta.filter_count
             }
         };
     },
@@ -39,19 +40,43 @@ export const ActivePickingService = {
         });
     },
 
-    async processSerialPick(detailId: number, serialNumber: string, userId: number | null, branchId: number): Promise<{ success: boolean; message: string; newQuantity: number }> {
-        // 1. Fetch detail to get productId
-        const detailUrl = `${ActivePickingRepo.getDirectusBase()}/items/consolidator_details/${detailId}?fields=product_id`;
-        const detailRes = await fetch(detailUrl, { headers: ActivePickingRepo.getHeaders() });
-        if (!detailRes.ok) throw new Error("Failed to fetch detail info");
-        const detailData = await detailRes.json();
-        const productId = detailData.data.product_id;
-
-        // 2. Verify if serial is on hand for this branch and product
-        const isOnHand = await ActivePickingRepo.verifySerialOnhand(serialNumber, productId, branchId);
-        if (!isOnHand) {
-            throw new Error(`Serial ${serialNumber} is not on-hand for this branch/product.`);
+    async processSerialPick(consolidatorId: number, serialNumber: string, userId: number | null, branchId: number, sessionToken: string | null = null): Promise<{ success: boolean; message: string; newQuantity: number; detailId: number }> {
+        // 1. Verify if serial is on hand for this branch and identify its productId
+        let onhandInfo;
+        try {
+            onhandInfo = await ActivePickingRepo.verifySerialOnhand(serialNumber, branchId, sessionToken);
+        } catch (err: any) {
+            if (err.message.includes("DEBUG_TRACE")) throw err;
+            if (err.message === "NETWORK_FAILURE") {
+                throw new Error("Unable to reach the Serial Verification Service. Please check your network connection.");
+            }
+            if (err.message.startsWith("EXTERNAL_API_FAILURE")) {
+                const status = err.message.split("_").pop();
+                throw new Error(`The Serial Verification Service returned error ${status}. This usually means the API server is having trouble running the view query.`);
+            }
+            throw err;
         }
+        
+        if (!onhandInfo) {
+            throw new Error(`Serial ${serialNumber} is not marked as on-hand for Branch ID ${branchId} in the warehouse view.`);
+        }
+        
+        // Ensure productId is a number for comparison
+        const productId = Number(onhandInfo.productId);
+
+        // 2. Find the matching detail row in this consolidator for the product
+        const details = await ActivePickingRepo.fetchPickingDetails(consolidatorId);
+        
+        console.log(`[ActivePickingService] Processing serial ${serialNumber}. Identified Product ID: ${productId}`);
+        console.log(`[ActivePickingService] Available products in Order ${consolidatorId}:`, details.map(d => d.product_id));
+
+        const detail = details.find(d => Number(d.product_id) === productId);
+        
+        if (!detail) {
+            throw new Error(`This serial is for Product ID ${productId}, but that product is not required for Picking Order ID ${consolidatorId}.`);
+        }
+
+        const detailId = detail.id;
 
         // 3. Check uniqueness in picking mappings
         const exists = await ActivePickingRepo.checkSerialExists(serialNumber);
@@ -67,8 +92,9 @@ export const ActivePickingService = {
         
         return {
             success: true,
-            message: "Serial scanned successfully",
-            newQuantity: newQty
+            message: "Serial processed and matched to product successfully",
+            newQuantity: newQty,
+            detailId
         };
     },
 

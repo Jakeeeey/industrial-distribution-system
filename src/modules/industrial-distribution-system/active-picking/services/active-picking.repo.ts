@@ -32,7 +32,7 @@ export const ActivePickingRepo = {
         return data.data;
     },
 
-    async fetchPickings(divisionId: number = 1, status: string = "Picking", page: number = 1, limit: number = 20): Promise<{ data: Consolidator[], meta: { filter_count: number } }> {
+    async fetchPickings(divisionId: number = 1, status: string = "Picking", page: number = 1, limit: number = 20, search: string = ""): Promise<{ data: Consolidator[], meta: { filter_count: number } }> {
         const fields = [
             "id",
             "consolidator_no",
@@ -43,18 +43,22 @@ export const ActivePickingRepo = {
             "created_at",
             "updated_at"
         ].join(",");
-        
+
         // Fetch consolidators with status and branches belonging to the division
         // Sort by id descending to get recent first (CLDTO-XXXXX)
-        const url = `${DIRECTUS_BASE}/items/consolidator?filter[status][_eq]=${status}&filter[branch_id][division_id][_eq]=${divisionId}&fields=${fields}&sort=-id&page=${page}&limit=${limit}&meta=filter_count`;
-        
+        let url = `${DIRECTUS_BASE}/items/consolidator?filter[status][_eq]=${status}&filter[branch_id][division_id][_eq]=${divisionId}&fields=${fields}&sort=-id&page=${page}&limit=${limit}&meta=filter_count`;
+
+        if (search) {
+            url += `&filter[consolidator_no][_icontains]=${encodeURIComponent(search)}`;
+        }
+
         console.log(`[ActivePickingRepo] Fetching from: ${url}`);
 
         const response = await fetch(url, { headers: getHeaders(), cache: "no-store" });
         if (!response.ok) {
             throw new Error(`Failed to fetch consolidators: ${await response.text()}`);
         }
-        
+
         return await response.json();
     },
 
@@ -63,6 +67,7 @@ export const ActivePickingRepo = {
             "id",
             "consolidator_id",
             "product_id",
+            "product_id.product_id",
             "ordered_quantity",
             "picked_quantity",
             "applied_quantity",
@@ -72,40 +77,54 @@ export const ActivePickingRepo = {
             "product_id.product_name",
             "product_id.unit_of_measurement.unit_name"
         ].join(",");
-        
+
         const url = `${DIRECTUS_BASE}/items/consolidator_details?filter[consolidator_id][_eq]=${consolidatorId}&fields=${fields}&limit=-1`;
-        
+
         const response = await fetch(url, { headers: getHeaders(), cache: "no-store" });
         if (!response.ok) {
             throw new Error(`Failed to fetch consolidator details: ${await response.text()}`);
         }
-        
+
         const data = await response.json();
-        
-        return data.data.map((item: any) => ({
-            ...item,
-            product: item.product_id && typeof item.product_id === 'object' ? {
-                product_code: item.product_id.product_code,
-                product_name: item.product_id.product_name,
-                unit_name: item.product_id.unit_of_measurement?.unit_name || '',
-                running_inventory_unit: 0 // Will be populated later
-            } : undefined,
-            product_id: typeof item.product_id === 'object' ? item.product_id.id : item.product_id // Restore primitive ID
-        }));
+
+        return data.data.map((item: any) => {
+            // Robustly extract the product ID from the relational object or flat field
+            const productRef = item.product_id;
+            let pId = null;
+
+            if (productRef) {
+                if (typeof productRef === 'object') {
+                    pId = productRef.id ?? productRef.productId ?? productRef.product_id;
+                } else {
+                    pId = productRef;
+                }
+            }
+            
+            return {
+                ...item,
+                product_id: pId ? Number(pId) : null,
+                product: productRef && typeof productRef === 'object' ? {
+                    product_code: productRef.product_code,
+                    product_name: productRef.product_name,
+                    unit_name: productRef.unit_of_measurement?.unit_name || '',
+                    running_inventory_unit: 0 // Will be populated later
+                } : undefined
+            };
+        });
     },
 
     async fetchInventoryForProducts(productIds: number[], branchId: number, divisionId: number): Promise<ProductInventory[]> {
         if (productIds.length === 0) return [];
-        
+
         const productIdsStr = productIds.join(",");
         const url = `${DIRECTUS_BASE}/items/v_running_inventory_by_unit?filter[product_id][_in]=${productIdsStr}&filter[branch_id][_eq]=${branchId}&limit=-1`;
-        
+
         const response = await fetch(url, { headers: getHeaders(), cache: "no-store" });
         if (!response.ok) {
             console.error("Failed to fetch inventory from view, response:", await response.text());
             return [];
         }
-        
+
         const data = await response.json();
         return data.data;
     },
@@ -127,17 +146,17 @@ export const ActivePickingRepo = {
             serial_number: serialNumber,
             scanned_by: userId
         };
-        
+
         const response = await fetch(url, {
             method: "POST",
             headers: getHeaders(),
             body: JSON.stringify(body)
         });
-        
+
         if (!response.ok) {
             throw new Error(`Failed to save serial mapping: ${await response.text()}`);
         }
-        
+
         const data = await response.json();
         return data.data;
     },
@@ -150,7 +169,7 @@ export const ActivePickingRepo = {
         const getData = await getRes.json();
         const currentQty = getData.data.picked_quantity || 0;
         const newQty = Math.max(0, currentQty + incrementBy);
-        
+
         const patchUrl = `${DIRECTUS_BASE}/items/consolidator_details/${detailId}`;
         const patchRes = await fetch(patchUrl, {
             method: "PATCH",
@@ -159,7 +178,7 @@ export const ActivePickingRepo = {
                 picked_quantity: newQty
             })
         });
-        
+
         if (!patchRes.ok) {
             throw new Error(`Failed to update picked quantity: ${await patchRes.text()}`);
         }
@@ -181,33 +200,129 @@ export const ActivePickingRepo = {
             method: "DELETE",
             headers: getHeaders()
         });
-        
+
         if (!response.ok) {
             throw new Error(`Failed to delete serial mapping: ${await response.text()}`);
         }
     },
 
-    async verifySerialOnhand(serialNumber: string, productId: number, branchId: number): Promise<boolean> {
-        // External API to check onhand serials
-        const url = `http://100.81.225.79:8086/api/v-serial-onhand/all`;
+    async verifySerialOnhand(serialNumber: string, branchId: number, sessionToken: string | null = null): Promise<{ productId: number } | null> {
+        const token = sessionToken || process.env.VOS_ACCESS_TOKEN || process.env.vos_access_token || process.env.DIRECTUS_STATIC_TOKEN || DIRECTUS_TOKEN;
+        const baseUrl = process.env.SPRING_API_BASE_URL;
+        const inputSerial = serialNumber.trim().toUpperCase();
+        const trace: string[] = [];
         
+        const extractData = (raw: any): any[] => {
+            if (Array.isArray(raw)) return raw;
+            if (raw?.content && Array.isArray(raw.content)) return raw.content;
+            if (raw?.data && Array.isArray(raw.data)) return raw.data;
+            return [];
+        };
+
+        const tryFetch = async (endpoint: string, queryParams: string) => {
+            const urlWithAll = `${baseUrl}/api/${endpoint}/all?${queryParams}&size=10000`;
+            trace.push(`Fetching: ${endpoint}/all?${queryParams}`);
+            try {
+                const res = await fetch(urlWithAll, {
+                    cache: "no-store",
+                    headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }
+                });
+                
+                let items: any[] = [];
+                if (res.ok) {
+                    const json = await res.json();
+                    items = extractData(json);
+                }
+
+                // If empty or failed, try without /all
+                if (items.length === 0) {
+                    const urlWithoutAll = `${baseUrl}/api/${endpoint}?${queryParams}&size=10000`;
+                    trace.push(`Fallback: ${endpoint}?${queryParams}`);
+                    const res2 = await fetch(urlWithoutAll, {
+                        cache: "no-store",
+                        headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }
+                    });
+                    if (res2.ok) {
+                        const json2 = await res2.json();
+                        items = extractData(json2);
+                    }
+                }
+
+                trace.push(`Found ${items.length} items`);
+                return items;
+            } catch (e: any) {
+                trace.push(`Error: ${e.message}`);
+                return [];
+            }
+        };
+
         try {
-            const response = await fetch(url, { cache: "no-store" });
-            if (!response.ok) return true; // Fallback to true if API is down to avoid blocking workflow
+            // 1. Try specific search (Serial + Branch)
+            let data = await tryFetch("v-serial-onhand", `serialNumber=${encodeURIComponent(serialNumber.trim())}&branchId=${branchId}`);
             
-            const data: any[] = await response.json();
+            // 2. Try specific search (Serial + Branch) - snake_case
+            if (data.length === 0) {
+                data = await tryFetch("v-serial-onhand", `serial_number=${encodeURIComponent(serialNumber.trim())}&branch_id=${branchId}`);
+            }
+
+            // 3. Try SERIAL ONLY (Postman Style) - This is likely why Postman works
+            if (data.length === 0) {
+                trace.push("Serial+Branch empty, trying Serial only...");
+                data = await tryFetch("v-serial-onhand", `serialNumber=${encodeURIComponent(serialNumber.trim())}`);
+                if (data.length === 0) {
+                    data = await tryFetch("v-serial-onhand", `serial_number=${encodeURIComponent(serialNumber.trim())}`);
+                }
+            }
+
+            // 4. Try BRANCH ONLY
+            if (data.length === 0) {
+                trace.push("Serial search empty, trying Branch only...");
+                data = await tryFetch("v-serial-onhand", `branchId=${branchId}`);
+                if (data.length === 0) {
+                    data = await tryFetch("v-serial-onhand", `branch_id=${branchId}`);
+                }
+            }
+
+            // 5. Global diagnostic: If still 0, see if ANY data exists in this view at all
+            if (data.length === 0) {
+                trace.push("Branch empty, checking global...");
+                const globalSample = await tryFetch("v-serial-onhand", "size=1");
+                if (globalSample.length > 0) {
+                    trace.push(`Global found! Sample: ${JSON.stringify(globalSample[0])}`);
+                } else {
+                    trace.push("Global is also empty!");
+                }
+            }
+
+            if (data.length === 0) {
+                throw new Error(`DEBUG_TRACE: ${trace.join(" -> ")}`);
+            }
+
+            const onhand = data.find(item => {
+                const dbVal = item.serialNumber ?? item.serial_number ?? item.serialNo ?? item.serial;
+                if (dbVal === undefined || dbVal === null) return false;
+                
+                const dbSerial = dbVal.toString().trim().toUpperCase();
+                const dbBranchId = item.branchId ?? item.branch_id;
+                const branchMatch = dbBranchId === undefined || dbBranchId === null || Number(dbBranchId) === branchId;
+                
+                return dbSerial === inputSerial && branchMatch;
+            });
+
+            if (onhand) {
+                const pId = onhand.productId ?? onhand.product_id ?? onhand.product?.id ?? onhand.product?.product_id;
+                if (pId !== undefined && pId !== null) {
+                    return { productId: Number(pId) };
+                }
+                throw new Error(`DEBUG_TRACE: Serial found but productId missing in fields: ${Object.keys(onhand).join(", ")}`);
+            }
             
-            // Find if serial exists for this product and branch
-            const onhand = data.find(s => 
-                s.serialNumber === serialNumber && 
-                Number(s.productId) === productId && 
-                Number(s.branchId) === branchId
-            );
-            
-            return !!onhand;
-        } catch (error) {
+            throw new Error(`DEBUG_TRACE: Serial ${inputSerial} not found in ${data.length} records. First item sample: ${data[0] ? JSON.stringify(data[0]) : "NONE"}`);
+        } catch (error: any) {
             console.error("[ActivePickingRepo] Error verifying onhand serial:", error);
-            return true; // Fallback to true
+            if (error.message.includes("DEBUG_TRACE")) throw error;
+            throw new Error("NETWORK_FAILURE");
         }
     }
 };
+;

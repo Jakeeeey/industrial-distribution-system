@@ -5,19 +5,24 @@ import { ScanSerialSchema } from "@/modules/industrial-distribution-system/activ
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import { cookies } from "next/headers";
+import { COOKIE_NAME } from "@/lib/auth-utils";
+
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
-        
-        // Validate basic payload
-        const { detail_id, serial_number, branchId } = body;
+        const { consolidatorId, serial_number, branchId } = body;
         const userId = body.userId || null;
+        
+        // Extract session token
+        const cookieStore = await cookies();
+        const sessionToken = cookieStore.get(COOKIE_NAME)?.value || null;
 
-        if (!detail_id || !serial_number || !branchId) {
-            return NextResponse.json({ error: "Missing required fields (detail_id, serial_number, branchId)" }, { status: 400 });
+        if (!consolidatorId || !serial_number || !branchId) {
+            return NextResponse.json({ error: "Missing required fields (consolidatorId, serial_number, branchId)" }, { status: 400 });
         }
 
-        const result = await ActivePickingService.processSerialPick(detail_id, serial_number, userId, branchId);
+        const result = await ActivePickingService.processSerialPick(consolidatorId, serial_number, userId, branchId, sessionToken);
         
         return NextResponse.json(result);
     } catch (err: any) {
