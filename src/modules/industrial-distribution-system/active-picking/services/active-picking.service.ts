@@ -17,14 +17,14 @@ export const ActivePickingService = {
         };
     },
 
-    async getPickingDetails(consolidatorId: number, branchId: number): Promise<ConsolidatorDetail[]> {
+    async getPickingDetails(consolidatorId: number, branchId: number, sessionToken: string | null = null): Promise<ConsolidatorDetail[]> {
         const details = await ActivePickingRepo.fetchPickingDetails(consolidatorId);
         
         // Extract product IDs to fetch inventory
         const productIds = details.map(d => d.product_id).filter(id => id != null);
         
         // Fetch inventory to get running_inventory_unit
-        const inventory = await ActivePickingRepo.fetchInventoryForProducts(productIds, branchId);
+        const inventory = await ActivePickingRepo.fetchInventoryForProducts(productIds, branchId, sessionToken);
         
         // Map inventory back to details
         const inventoryMap = new Map<number, number>();
@@ -79,6 +79,24 @@ export const ActivePickingService = {
 
         const detailId = detail.id;
         const userIdNum = userId ? Number(userId) : null;
+
+        // --- NEW VALIDATION CHECKERS ---
+        
+        // 1. Check if Picked >= Ordered
+        if (detail.picked_quantity >= detail.ordered_quantity) {
+            throw new Error(`Order Limit Reached: You have already picked all ${detail.ordered_quantity} required units for this product.`);
+        }
+
+        // 2. Check if Picked >= Available Stock
+        const inventory = await ActivePickingRepo.fetchInventoryForProducts([productId], branchId, sessionToken);
+        const stockInfo = inventory.find(inv => Number(inv.product_id) === productId);
+        const availableStock = stockInfo?.running_inventory_unit || 0;
+
+        if (detail.picked_quantity >= availableStock) {
+            throw new Error(`Insufficient Stock: Only ${availableStock} units are available in the warehouse view. You cannot pick more than the physical stock.`);
+        }
+
+        // -------------------------------
 
         // PH Manila Time (+08:00)
         // Note: Using ISO string and manually adjusting for Manila offset if needed, 

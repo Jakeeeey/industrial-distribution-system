@@ -122,20 +122,48 @@ export const ActivePickingRepo = {
         });
     },
 
-    async fetchInventoryForProducts(productIds: number[], branchId: number): Promise<ProductInventory[]> {
+    async fetchInventoryForProducts(productIds: number[], branchId: number, sessionToken: string | null = null): Promise<ProductInventory[]> {
         if (productIds.length === 0) return [];
 
+        const token = sessionToken || process.env.VOS_ACCESS_TOKEN || process.env.vos_access_token || DIRECTUS_TOKEN;
+        const baseUrl = process.env.SPRING_API_BASE_URL;
         const productIdsStr = productIds.join(",");
-        const url = `${DIRECTUS_BASE}/items/v_running_inventory_by_unit?filter[product_id][_in]=${productIdsStr}&filter[branch_id][_eq]=${branchId}&limit=-1`;
+        
+        // Target Spring Boot View with specific dates and divisionId
+        const url = `${baseUrl}/api/view-running-inventory-by-unit/all?startDate=2025-01-01&endDate=2025-12-30&divisionId=1&productId=${productIdsStr}&branchId=${branchId}&size=10000`;
 
-        const response = await fetch(url, { headers: getHeaders(), cache: "no-store" });
-        if (!response.ok) {
-            console.error("Failed to fetch inventory from view, response:", await response.text());
+        try {
+            const response = await fetch(url, { 
+                headers: {
+                    "Authorization": `Bearer ${token}`,
+                    "Content-Type": "application/json"
+                }, 
+                cache: "no-store" 
+            });
+            
+            if (!response.ok) {
+                console.error(`[ActivePickingRepo] Failed to fetch inventory from Spring, status: ${response.status}`);
+                return [];
+            }
+
+            const json = await response.json();
+            
+            // Handle Spring Boot response structure (might be wrapped in 'content' or 'data')
+            let items = [];
+            if (Array.isArray(json)) items = json;
+            else if (json.content && Array.isArray(json.content)) items = json.content;
+            else if (json.data && Array.isArray(json.data)) items = json.data;
+
+            // Map Spring Boot fields to our ProductInventory type
+            return items.map((item: any) => ({
+                product_id: item.productId ?? item.product_id,
+                branch_id: item.branchId ?? item.branch_id,
+                running_inventory_unit: item.runningInventoryUnit ?? item.running_inventory_unit ?? item.quantity ?? 0
+            }));
+        } catch (error) {
+            console.error("[ActivePickingRepo] Error fetching inventory from Spring:", error);
             return [];
         }
-
-        const data = await response.json();
-        return data.data;
     },
 
     async checkSerialExists(serialNumber: string): Promise<boolean> {

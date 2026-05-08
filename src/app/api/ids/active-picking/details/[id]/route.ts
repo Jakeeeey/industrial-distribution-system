@@ -20,7 +20,8 @@ export async function GET(
         const branchIdStr = searchParams.get("branchId") || "196";
         const branchId = parseInt(branchIdStr);
 
-        const details = await ActivePickingService.getPickingDetails(consolidatorId, branchId);
+        const sessionToken = req.cookies.get("vos_access_token")?.value || null;
+        const details = await ActivePickingService.getPickingDetails(consolidatorId, branchId, sessionToken);
         
         return NextResponse.json(details);
     } catch (err) {
