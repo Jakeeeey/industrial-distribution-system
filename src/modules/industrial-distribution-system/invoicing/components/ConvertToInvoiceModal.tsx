@@ -311,7 +311,7 @@ export const ConvertToInvoiceModal: React.FC<ConvertToInvoiceModalProps> = ({
         setReceipts(receipts.map(r => r.id === id ? { ...r, receipt_no: no } : r));
     };
 
-    const canOverridePrice = order?.salesman_id?.division_id === 1;
+    const canOverridePrice = order?.supplier_id?.division_id === 1;
 
     const updateItemPrice = (receiptId: string, productId: number, newPrice: number) => {
         setReceipts(receipts.map(r => r.id === receiptId ? {
