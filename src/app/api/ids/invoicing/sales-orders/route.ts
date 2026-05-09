@@ -25,8 +25,8 @@ export async function GET(req: NextRequest) {
         const fromDate = searchParams.get("fromDate");
         const toDate = searchParams.get("toDate");
 
-        // Build Sales Order Query
-        let filterParams = "filter[order_status][_eq]=For Invoicing";
+        // Build Sales Order Query - Only show Division 1 suppliers
+        let filterParams = "filter[order_status][_eq]=For Invoicing&filter[supplier_id][division_id][_eq]=1";
         if (orderNo) filterParams += `&filter[order_no][_icontains]=${orderNo}`;
         if (poNo) filterParams += `&filter[po_no][_icontains]=${poNo}`;
         if (customerSearch) filterParams += `&filter[customer_code][_eq]=${customerSearch}`;
@@ -46,6 +46,7 @@ export async function GET(req: NextRequest) {
             "receipt_type.isOfficial",
             "supplier_id.supplier_shortcut",
             "supplier_id.supplier_name",
+            "supplier_id.division_id",
             "customer_code", // Fetch as raw string
             "salesman_id.id",
             "salesman_id.salesman_name",

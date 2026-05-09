@@ -1,7 +1,7 @@
 import { InvoicingFilters, SalesOrder, Salesman, Branch, Supplier, Customer, ReceiptType, LogisticsData, ConversionData, DiscountType, ORTemplate } from "../types";
 
 
-export const INVOICING_API_BASE = "/api/crm/invoicing";
+export const INVOICING_API_BASE = "/api/ids/invoicing";
 
 export const InvoicingService = {
     async getSalesOrders(filters?: InvoicingFilters): Promise<SalesOrder[]> {
@@ -17,7 +17,7 @@ export const InvoicingService = {
             if (filters.toDate) params.append("toDate", filters.toDate);
         }
 
-        const response = await fetch(`/api/crm/invoicing/sales-orders?${params.toString()}`);
+        const response = await fetch(`/api/ids/invoicing/sales-orders?${params.toString()}`);
         if (!response.ok) {
             throw new Error("Failed to fetch sales orders");
         }
@@ -25,14 +25,14 @@ export const InvoicingService = {
     },
 
     async getSalesmen(search?: string): Promise<Salesman[]> {
-        const url = search ? `/api/crm/invoicing/salesman?search=${encodeURIComponent(search)}` : "/api/crm/invoicing/salesman";
+        const url = search ? `/api/ids/invoicing/salesman?search=${encodeURIComponent(search)}` : "/api/ids/invoicing/salesman";
         const response = await fetch(url);
         if (!response.ok) throw new Error("Failed to fetch salesmen");
         return response.json();
     },
 
     async getBranches(search?: string): Promise<Branch[]> {
-        const url = search ? `/api/crm/invoicing/branches?search=${encodeURIComponent(search)}` : "/api/crm/invoicing/branches";
+        const url = search ? `/api/ids/invoicing/branches?search=${encodeURIComponent(search)}` : "/api/ids/invoicing/branches";
         const response = await fetch(url);
         if (!response.ok) {
             throw new Error("Failed to fetch branches");
@@ -41,7 +41,7 @@ export const InvoicingService = {
     },
 
     async getSuppliers(search?: string): Promise<Supplier[]> {
-        const url = search ? `/api/crm/invoicing/suppliers?search=${encodeURIComponent(search)}` : "/api/crm/invoicing/suppliers";
+        const url = search ? `/api/ids/invoicing/suppliers?search=${encodeURIComponent(search)}` : "/api/ids/invoicing/suppliers";
         const response = await fetch(url);
         if (!response.ok) {
             throw new Error("Failed to fetch suppliers");
@@ -50,7 +50,7 @@ export const InvoicingService = {
     },
 
     async getCustomers(search?: string): Promise<Customer[]> {
-        const url = search ? `/api/crm/invoicing/customer?search=${encodeURIComponent(search)}` : "/api/crm/invoicing/customer";
+        const url = search ? `/api/ids/invoicing/customer?search=${encodeURIComponent(search)}` : "/api/ids/invoicing/customer";
         const response = await fetch(url);
         if (!response.ok) {
             throw new Error("Failed to fetch customers");
@@ -59,7 +59,7 @@ export const InvoicingService = {
     },
 
     async updateSalesOrderRemarks(orderId: number, remarks: string | null): Promise<{ success: boolean }> {
-        const url = `/api/crm/invoicing/sales-orders/${orderId}`;
+        const url = `/api/ids/invoicing/sales-orders/${orderId}`;
         const response = await fetch(url, {
             method: 'PATCH',
             headers: {
@@ -75,7 +75,7 @@ export const InvoicingService = {
     },
 
     async updateSalesOrderReceiptType(orderId: number, typeId: number): Promise<{ success: boolean }> {
-        const url = `/api/crm/invoicing/sales-orders/${orderId}`;
+        const url = `/api/ids/invoicing/sales-orders/${orderId}`;
         const response = await fetch(url, {
             method: 'PATCH',
             headers: {
@@ -91,7 +91,7 @@ export const InvoicingService = {
     },
 
     async updateSalesOrder(orderId: number, data: Record<string, unknown>): Promise<{ success: boolean }> {
-        const url = `/api/crm/invoicing/sales-orders/${orderId}`;
+        const url = `/api/ids/invoicing/sales-orders/${orderId}`;
         const response = await fetch(url, {
             method: 'PATCH',
             headers: {
@@ -108,7 +108,7 @@ export const InvoicingService = {
     },
 
     async getLogisticsData(orderId: number): Promise<LogisticsData> {
-        const response = await fetch(`/api/crm/invoicing/logistics/${orderId}`);
+        const response = await fetch(`/api/ids/invoicing/logistics/${orderId}`);
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
             throw new Error(`Failed to fetch logistics data: ${errorData.details || errorData.error || response.statusText}`);
@@ -117,39 +117,39 @@ export const InvoicingService = {
     },
 
     async getConversionDetails(orderId: number): Promise<ConversionData> {
-        const response = await fetch(`/api/crm/invoicing/conversion-details/${orderId}`);
+        const response = await fetch(`/api/ids/invoicing/conversion-details/${orderId}`);
         if (!response.ok) throw new Error("Failed to fetch conversion details");
         return response.json();
     },
 
     async validateReceiptNo(receiptNo: string): Promise<boolean> {
-        const response = await fetch(`/api/crm/invoicing/validate-receipt-no?receiptNo=${encodeURIComponent(receiptNo)}`);
+        const response = await fetch(`/api/ids/invoicing/validate-receipt-no?receiptNo=${encodeURIComponent(receiptNo)}`);
         if (!response.ok) return false;
         const data = await response.json();
         return data.exists;
     },
 
     async getDiscountTypes(): Promise<DiscountType[]> {
-        const response = await fetch(`/api/crm/invoicing/discount-types`);
+        const response = await fetch(`/api/ids/invoicing/discount-types`);
         if (!response.ok) throw new Error("Failed to fetch discount types");
         return response.json();
     },
 
     async getReceiptTypes(): Promise<ReceiptType[]> {
-        const response = await fetch(`/api/crm/invoicing/receipt-types`);
+        const response = await fetch(`/api/ids/invoicing/receipt-types`);
         if (!response.ok) throw new Error("Failed to fetch receipt types");
         return response.json();
     },
 
     async getTemplate(typeId: number): Promise<ORTemplate | null> {
-        const response = await fetch(`/api/crm/invoicing/templates/${typeId}`);
+        const response = await fetch(`/api/ids/invoicing/templates/${typeId}`);
         if (!response.ok) throw new Error("Failed to fetch template");
         const data = await response.json();
         return data.template_config;
     },
 
     async saveTemplate(typeId: number, templateConfig: ORTemplate): Promise<{ success: boolean; data: unknown }> {
-        const response = await fetch(`/api/crm/invoicing/templates/${typeId}`, {
+        const response = await fetch(`/api/ids/invoicing/templates/${typeId}`, {
             method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',
@@ -185,7 +185,7 @@ export const InvoicingService = {
         const formData = new FormData();
         formData.append("file", file);
 
-        const response = await fetch("/api/crm/invoicing/upload", {
+        const response = await fetch("/api/ids/invoicing/upload", {
             method: "POST",
             body: formData,
         });
@@ -211,7 +211,7 @@ export const InvoicingService = {
         if (!invoiceId || invoiceId === "null" || invoiceId === "undefined") {
             return [];
         }
-        const response = await fetch(`/api/crm/invoicing/invoice-details/${invoiceId}`);
+        const response = await fetch(`/api/ids/invoicing/invoice-details/${invoiceId}`);
         if (!response.ok) {
             let errorMsg = "Failed to fetch invoice details";
             try {

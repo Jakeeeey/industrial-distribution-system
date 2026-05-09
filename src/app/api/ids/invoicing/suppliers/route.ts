@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
         const { searchParams } = new URL(req.url);
         const search = searchParams.get("search");
 
-        let url = `${DIRECTUS_BASE}/items/suppliers?limit=50&fields=id,supplier_shortcut,supplier_name&filter[isActive][_eq]=1&filter[supplier_type][_eq]=TRADE`;
+        let url = `${DIRECTUS_BASE}/items/suppliers?limit=50&fields=id,supplier_shortcut,supplier_name&filter[isActive][_eq]=1&filter[supplier_type][_eq]=TRADE&filter[division_id][_eq]=1`;
         
         if (search) {
             const searchTerm = encodeURIComponent(search);
