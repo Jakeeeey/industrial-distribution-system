@@ -15,17 +15,10 @@ export async function GET(request: Request) {
     const search = searchParams.get("search") || undefined;
     const supplierId = searchParams.get("supplierId");
 
-    let data;
-    if (supplierId) {
-      // Supplier-filtered product fetch
-      data = await stockAdjustmentService.fetchProductsBySupplier(
-        Number(supplierId),
-        search
-      );
-    } else {
-      // Fallback: fetch all products (legacy)
-      data = await stockAdjustmentService.fetchProducts({ search });
-    }
+    const data = await stockAdjustmentService.fetchProducts({ 
+      search: search || undefined, 
+      supplierId: supplierId ? Number(supplierId) : undefined 
+    });
 
     return NextResponse.json({ data });
   } catch (error) {

@@ -5,21 +5,21 @@ import { handleApiError } from "@/modules/industrial-distribution-system/supply-
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const rfid = searchParams.get("rfid");
+    const serial = searchParams.get("serial");
     const branchId = searchParams.get("branchId");
     
     const token = request.cookies.get("vos_access_token")?.value;
 
-    if (!rfid) {
-      return NextResponse.json({ error: "Missing rfid" }, { status: 400 });
+    if (!serial) {
+      return NextResponse.json({ error: "Missing serial" }, { status: 400 });
     }
 
     if (!token) {
       return NextResponse.json({ error: "No access token found" }, { status: 401 });
     }
 
-    const { exists, location } = await stockAdjustmentService.checkRFIDExists(
-      rfid, 
+    const { exists, location } = await stockAdjustmentService.checkSerialExists(
+      serial, 
       token, 
       branchId ? Number(branchId) : undefined
     );

@@ -7,16 +7,16 @@ export const StockAdjustmentTypeSchema = z.enum(["IN", "OUT"]);
 export type StockAdjustmentType = z.infer<typeof StockAdjustmentTypeSchema>;
 
 /**
- * RFID Tag Schema
+ * Serial Number Schema
  */
-export const StockAdjustmentRFIDSchema = z.object({
+export const StockAdjustmentSerialSchema = z.object({
   id: z.number().optional(),
-  rfid_tag: z.string().min(1, "RFID tag is required"),
+  serial_number: z.string().min(1, "Serial number is required"),
   stock_adjustment_id: z.number().optional(),
   created_at: z.string().optional(),
   created_by: z.number().optional(),
 });
-export type StockAdjustmentRFID = z.infer<typeof StockAdjustmentRFIDSchema>;
+export type StockAdjustmentSerial = z.infer<typeof StockAdjustmentSerialSchema>;
 
 /**
  * Branch Data Schema
@@ -59,9 +59,10 @@ export const StockAdjustmentItemSchema = z.object({
   unit_id: z.number().nullable().optional(),
   current_stock: z.number().nullable().optional(),
   cost_per_unit: z.number().nullable().optional(),
-  has_rfid: z.boolean().optional(),
-  rfid_count: z.number().optional(),
-  rfid_tags: z.array(z.string()).optional(),
+  has_rfid: z.boolean().optional(), // Keeping for compatibility or renaming if needed
+  is_serialized: z.boolean().optional(),
+  serial_count: z.number().optional(),
+  serial_numbers: z.array(z.string()).optional(),
   brand_name: z.string().nullable().optional(),
   barcode: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
@@ -93,11 +94,11 @@ export const StockAdjustmentHeaderSchema = z.object({
 export type StockAdjustmentHeader = z.infer<typeof StockAdjustmentHeaderSchema>;
 
 /**
- * Full Stock Adjustment (Header + Items + RFID)
+ * Full Stock Adjustment (Header + Items + Serial)
  */
 export const StockAdjustmentDetailSchema = StockAdjustmentHeaderSchema.extend({
   items: z.array(StockAdjustmentItemSchema).default([]),
-  rfid_tags: z.array(StockAdjustmentRFIDSchema).default([]),
+  serial_numbers: z.array(StockAdjustmentSerialSchema).default([]),
 });
 export type StockAdjustmentDetail = z.infer<typeof StockAdjustmentDetailSchema>;
 
@@ -112,7 +113,7 @@ export const StockAdjustmentFormSchema = z.object({
   remarks: z.string().optional(),
   items: z.array(StockAdjustmentItemSchema).min(1, "At least one item is required"),
   isPosted: z.boolean(),
-  postedAt: z.string().optional(),
+  postedAt: z.string().nullable().optional(),
   posted_by: z.any().optional(),
 });
 export type StockAdjustmentFormValues = z.infer<typeof StockAdjustmentFormSchema>;
@@ -148,7 +149,8 @@ export const StockAdjustmentProductSchema = z.object({
   }).optional(),
   unit_id: z.number().optional(),
   current_stock: z.number().optional(),
-  rfidData: z.object({
+  is_serialized: z.boolean().optional(),
+  serialData: z.object({
     quantity: z.number().optional(),
     count: z.number().optional(),
   }).optional(),
@@ -169,4 +171,5 @@ export interface SelectionSupplier {
   id: number;
   supplier_name: string;
   supplier_shortcut?: string;
+  division_id: number | null;
 }

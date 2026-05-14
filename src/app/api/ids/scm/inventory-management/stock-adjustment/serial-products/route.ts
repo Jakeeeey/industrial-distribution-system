@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "No access token found" }, { status: 401 });
     }
 
-    const products = await stockAdjustmentService.fetchBranchRFIDStatus(Number(branchId), token);
+    const products = await stockAdjustmentService.fetchBranchSerialStatus(Number(branchId), token);
     return NextResponse.json({ products });
   } catch (error) {
     return handleApiError(error);
