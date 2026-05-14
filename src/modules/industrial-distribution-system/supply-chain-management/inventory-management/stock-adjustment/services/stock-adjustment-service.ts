@@ -22,13 +22,14 @@ interface RawItem {
     unit_of_measurement?: { unit_name: string; order: number };
     barcode?: string;
     description?: string;
+    is_serialized?: boolean;
   };
   unit_id?: { unit_name: string };
   cost_per_unit?: number;
   brand_name?: string;
   unit_name?: string;
-  rfid_tags?: string[];
-  rfid_count?: number;
+  serial_numbers?: string[];
+  serial_count?: number;
   inferred_supplier_id?: number;
   current_stock?: number;
 }
@@ -38,9 +39,9 @@ interface PPSData {
   supplier_id: number | { id: number };
 }
 
-interface RfidTag {
+interface SerialItem {
   id?: number;
-  rfid_tag: string;
+  serial_number: string;
   stock_adjustment_id: number;
 }
 
@@ -49,7 +50,7 @@ interface InventoryItem {
   running_inventory?: number;
 }
 
-interface RfidStatusItem {
+interface SerialStatusItem {
   productId: number;
   quantity?: number;
   count?: number;
@@ -125,7 +126,7 @@ export const stockAdjustmentService = {
   },
 
   /**
-   * Fetch a single stock adjustment with all its items and RFID tags
+   * Fetch a single stock adjustment with all its items and serial numbers
    */
   async fetchById(id: number): Promise<StockAdjustmentDetail> {
     const headerRes = await directusFetch<{ data: StockAdjustmentHeader }>(
@@ -134,7 +135,7 @@ export const stockAdjustmentService = {
     const header = headerRes.data;
 
     const itemsRes = await directusFetch<{ data: RawItem[] }>(
-      `${DIRECTUS_URL}/items/stock_adjustment?filter={"doc_no":{"_eq":"${header.doc_no}"}}&fields=*,product_id.product_id,product_id.product_name,product_id.product_code,product_id.cost_per_unit,product_id.price_per_unit,product_id.unit_of_measurement.unit_name,product_id.unit_of_measurement.order,product_id.product_brand.brand_name,product_id.product_category.category_name,product_id.barcode,product_id.description,unit_id.unit_name&limit=-1`
+      `${DIRECTUS_URL}/items/stock_adjustment?filter={"doc_no":{"_eq":"${header.doc_no}"}}&fields=*,product_id.product_id,product_id.product_name,product_id.product_code,product_id.cost_per_unit,product_id.price_per_unit,product_id.unit_of_measurement.unit_name,product_id.unit_of_measurement.order,product_id.product_brand.brand_name,product_id.product_category.category_name,product_id.barcode,product_id.description,product_id.is_serialized,unit_id.unit_name&limit=-1`
     );
     const items = (itemsRes.data || []).map((item: RawItem) => {
       const cost = item.cost_per_unit || item.product_id?.cost_per_unit || item.product_id?.price_per_unit || 0;
@@ -142,6 +143,7 @@ export const stockAdjustmentService = {
         ...item,
         product_name: item.product_id?.product_name,
         product_code: item.product_id?.product_code,
+        is_serialized: item.product_id?.is_serialized || false,
         cost_per_unit: cost,
         unit_name: item.unit_id?.unit_name || item.product_id?.unit_of_measurement?.unit_name || item.unit_name || "pcs",
         brand_name: item.product_id?.product_brand?.brand_name || item.brand_name || "N/A",
@@ -188,32 +190,32 @@ export const stockAdjustmentService = {
     }, 0);
 
     const itemIds = items.map((i: RawItem) => i.id).filter(Boolean) as number[];
-    let allRfidTags: RfidTag[] = [];
+    let allSerialNumbers: SerialItem[] = [];
     if (itemIds.length > 0) {
       try {
-        const rfidRes = await directusFetch<{ data: RfidTag[] }>(
-          `${DIRECTUS_URL}/items/stock_adjustment_rfid?filter={"stock_adjustment_id":{"_in":${JSON.stringify(itemIds)}}}&limit=-1`
+        const serialRes = await directusFetch<{ data: SerialItem[] }>(
+          `${DIRECTUS_URL}/items/stock_adjustment_serial?filter={"stock_adjustment_id":{"_in":${JSON.stringify(itemIds)}}}&limit=-1`
         );
-        allRfidTags = rfidRes.data || [];
+        allSerialNumbers = serialRes.data || [];
       } catch (err) {
-        console.error("Error fetching RFID tags for items:", err);
+        console.error("Error fetching serial numbers for items:", err);
       }
     }
 
-    const itemsWithTags = items.map((item: RawItem) => {
-      const itemTags = allRfidTags
-        .filter((t: RfidTag) => t.stock_adjustment_id === item.id)
-        .map((t: RfidTag) => t.rfid_tag);
+    const itemsWithSerials = items.map((item: RawItem) => {
+      const itemSerials = allSerialNumbers
+        .filter((t: SerialItem) => t.stock_adjustment_id === item.id)
+        .map((t: SerialItem) => t.serial_number);
       return {
         ...item,
-        rfid_tags: itemTags,
-        rfid_count: itemTags.length
+        serial_numbers: itemSerials,
+        serial_count: itemSerials.length
       };
     });
 
     return {
       ...header,
-      items: itemsWithTags,
+      items: itemsWithSerials,
       amount: totalAmount > 0 ? totalAmount : (Number(header.amount) || 0),
     } as unknown as StockAdjustmentDetail;
   },
@@ -263,23 +265,23 @@ export const stockAdjustmentService = {
     }
   },
 
-  async fetchBranchRFIDStatus(branchId: number, token: string): Promise<RfidStatusItem[]> {
+  async fetchBranchSerialStatus(branchId: number, token: string): Promise<SerialStatusItem[]> {
     try {
-      const url = `${SPRING_API_URL}/api/view-rfid-onhand?branchId=${branchId}`;
+      const url = `${SPRING_API_URL}/api/v-serial-onhand/all?branchId=${branchId}`;
       const res = await fetch(url, {
         headers: { "Authorization": `Bearer ${token}` }
       });
       if (!res.ok) return [];
       return await res.json();
     } catch (error) {
-      console.error("Failed to fetch branch RFID status:", error);
+      console.error("Failed to fetch branch serial status:", error);
       return [];
     }
   },
 
-  async checkRFIDStatus(productId: number, branchId: number, token: string): Promise<RfidStatusItem | null> {
+  async checkSerialStatus(productId: number, branchId: number, token: string): Promise<SerialStatusItem | null> {
     try {
-      const url = `${SPRING_API_URL}/api/view-rfid-onhand?branchId=${branchId}`;
+      const url = `${SPRING_API_URL}/api/v-serial-onhand/all?branchId=${branchId}`;
 
       const res = await fetch(url, {
         headers: {
@@ -290,20 +292,22 @@ export const stockAdjustmentService = {
 
       const data = await res.json();
       if (Array.isArray(data)) {
-        return data.find((item: RfidStatusItem) => item.productId === productId) || null;
+        return data.find((item: SerialStatusItem) => item.productId === productId) || null;
       }
       return null;
     } catch (error) {
-      console.error("Failed to check RFID status:", error);
+      console.error("Failed to check serial status:", error);
       return null;
     }
   },
 
-  async checkRFIDExists(rfid: string, token: string, branchId?: number): Promise<{ exists: boolean; location?: string }> {
+  async fetchLastSerialNumber(productId: number, token: string, branchId?: number): Promise<string | null> {
     try {
+      const latestSerials: string[] = [];
+
       // 1. Check Spring API (Inventory On Hand)
-      const springUrl = new URL(`${SPRING_API_URL}/api/view-rfid-onhand`);
-      springUrl.searchParams.set("rfid", rfid);
+      const springUrl = new URL(`${SPRING_API_URL}/api/v-serial-onhand/all`);
+      springUrl.searchParams.set("productId", String(productId));
       if (branchId) springUrl.searchParams.set("branchId", String(branchId));
 
       const springRes = await fetch(springUrl.toString(), {
@@ -312,29 +316,84 @@ export const stockAdjustmentService = {
 
       if (springRes.ok) {
         const data = await springRes.json();
-        const hasInventory = Array.isArray(data) ? data.length > 0 : (data && typeof data === 'object' && ('productId' in data || 'id' in data));
-        if (hasInventory) {
-          const locationName = Array.isArray(data) && data[0]?.branch_name ? data[0].branch_name : "Inventory";
+        if (Array.isArray(data)) {
+          data.forEach(item => {
+            const s = item.serialNumber || item.serial_number;
+            if (s) latestSerials.push(String(s));
+          });
+        }
+      }
+
+      // 2. Check Directus Historical Records
+      try {
+        const collections = ["stock_adjustment_serial"]; // Only use verified collections
+        for (const coll of collections) {
+          const res = await directusFetch<{ data: Record<string, unknown>[] }>(
+            `${DIRECTUS_URL}/items/${coll}?fields=serial_number&sort=-serial_number&limit=1`
+          );
+          if (res.data?.[0]?.serial_number) {
+            latestSerials.push(String(res.data[0].serial_number));
+          }
+        }
+      } catch {
+        // Silently fail if historical fetch fails (e.g. permission issues)
+      }
+
+      if (latestSerials.length > 0) {
+        // Sort all found serials and pick the highest one
+        const sorted = latestSerials.sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+        return sorted[0];
+      }
+
+      return null;
+    } catch (err) {
+      console.error("Failed to fetch last serial number:", err);
+      return null;
+    }
+  },
+
+  async checkSerialExists(serial: string, token: string, branchId?: number): Promise<{ exists: boolean; location?: string }> {
+    try {
+      // 1. Check Spring API (Inventory On Hand)
+      const springUrl = new URL(`${SPRING_API_URL}/api/v-serial-onhand/all`);
+      springUrl.searchParams.set("serialNumber", serial);
+      if (branchId) springUrl.searchParams.set("branchId", String(branchId));
+
+      const springRes = await fetch(springUrl.toString(), {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+
+      if (springRes.ok) {
+        const data = await springRes.json();
+        const results = Array.isArray(data) ? data : [data];
+        
+        // MANUALLY FILTER to ensure exact match
+        const exactMatch = results.find(item => 
+          String(item.serialNumber || item.serial_number).toUpperCase() === serial.toUpperCase()
+        );
+
+        if (exactMatch) {
+          const locationName = exactMatch.branch_name || "Inventory";
           return { exists: true, location: locationName };
         }
       }
 
       // 2. Check Directus Historical Records (Cross-Module)
       const collections = [
-        { name: "stock_adjustment_rfid", label: "Stock Adjustment" },
-        { name: "rts_item_rfid", label: "Return to Supplier" },
-        { name: "sales_return_rfid", label: "Sales Return" }
+        { name: "stock_adjustment_serial", label: "Stock Adjustment" },
+        { name: "rts_item_serial", label: "Return to Supplier" },
+        { name: "sales_return_serial", label: "Sales Return" }
       ];
 
       const historicalChecks = await Promise.all(
         collections.map(async (coll) => {
           try {
             const res = await directusFetch<{ data: unknown[] }>(
-              `${DIRECTUS_URL}/items/${coll.name}?filter={"rfid_tag":{"_eq":"${rfid}"}}&fields=id&limit=1`
+              `${DIRECTUS_URL}/items/${coll.name}?filter={"serial_number":{"_eq":"${serial}"}}&fields=id&limit=1`
             );
             return { name: coll.label, exists: res.data && res.data.length > 0 };
           } catch (e) {
-            console.warn(`Failed to check historical RFID in ${coll.name}:`, e);
+            console.warn(`Failed to check historical serial in ${coll.name}:`, e);
             return { name: coll.label, exists: false };
           }
         })
@@ -347,7 +406,7 @@ export const stockAdjustmentService = {
 
       return { exists: false };
     } catch (error) {
-      console.error("Failed to check RFID availability:", error);
+      console.error("Failed to check serial availability:", error);
       return { exists: false };
     }
   },
@@ -391,13 +450,13 @@ export const stockAdjustmentService = {
     });
     const createdItems = Array.isArray(itemsRes.data) ? itemsRes.data : [itemsRes.data];
 
-    const rfidPayload: { rfid_tag: string; stock_adjustment_id: number; created_by?: number }[] = [];
+    const serialPayload: { serial_number: string; stock_adjustment_id: number; created_by?: number }[] = [];
     items.forEach((item: StockAdjustmentItem, index: number) => {
-      if (item.rfid_tags && Array.isArray(item.rfid_tags) && createdItems[index]) {
+      if (item.serial_numbers && Array.isArray(item.serial_numbers) && createdItems[index]) {
         const itemId = createdItems[index].id;
-        item.rfid_tags.forEach((tag: string) => {
-          rfidPayload.push({
-            rfid_tag: tag,
+        item.serial_numbers.forEach((serial: string) => {
+          serialPayload.push({
+            serial_number: serial,
             stock_adjustment_id: itemId,
             created_by: payload.userId
           });
@@ -405,10 +464,10 @@ export const stockAdjustmentService = {
       }
     });
 
-    if (rfidPayload.length > 0) {
-      await directusFetch<{ data: unknown }>(`${DIRECTUS_URL}/items/stock_adjustment_rfid`, {
+    if (serialPayload.length > 0) {
+      await directusFetch<{ data: unknown }>(`${DIRECTUS_URL}/items/stock_adjustment_serial`, {
         method: "POST",
-        body: JSON.stringify(rfidPayload),
+        body: JSON.stringify(serialPayload),
       });
     }
 
@@ -463,13 +522,13 @@ export const stockAdjustmentService = {
     });
     const createdItems = Array.isArray(itemsRes.data) ? itemsRes.data : [itemsRes.data];
 
-    const rfidPayload: { rfid_tag: string; stock_adjustment_id: number; created_by?: number }[] = [];
+    const serialPayload: { serial_number: string; stock_adjustment_id: number; created_by?: number }[] = [];
     payload.items.forEach((item: StockAdjustmentItem, index: number) => {
-      if (item.rfid_tags && Array.isArray(item.rfid_tags) && createdItems[index]) {
+      if (item.serial_numbers && Array.isArray(item.serial_numbers) && createdItems[index]) {
         const itemId = createdItems[index].id;
-        item.rfid_tags.forEach((tag: string) => {
-          rfidPayload.push({
-            rfid_tag: tag,
+        item.serial_numbers.forEach((serial: string) => {
+          serialPayload.push({
+            serial_number: serial,
             stock_adjustment_id: itemId,
             created_by: payload.userId
           });
@@ -477,10 +536,10 @@ export const stockAdjustmentService = {
       }
     });
 
-    if (rfidPayload.length > 0) {
-      await directusFetch<{ data: unknown }>(`${DIRECTUS_URL}/items/stock_adjustment_rfid`, {
+    if (serialPayload.length > 0) {
+      await directusFetch<{ data: unknown }>(`${DIRECTUS_URL}/items/stock_adjustment_serial`, {
         method: "POST",
-        body: JSON.stringify(rfidPayload),
+        body: JSON.stringify(serialPayload),
       });
     }
 
@@ -520,14 +579,14 @@ export const stockAdjustmentService = {
       });
     }
 
-    const rfidRes = await directusFetch<{ data: { id: number }[] }>(
-      `${DIRECTUS_URL}/items/stock_adjustment_rfid?filter={"stock_adjustment_id":{"_eq":${id}}}&fields=id`
+    const serialRes = await directusFetch<{ data: { id: number }[] }>(
+      `${DIRECTUS_URL}/items/stock_adjustment_serial?filter={"stock_adjustment_id":{"_eq":${id}}}&fields=id`
     );
-    const rfidIds = rfidRes.data.map((i: { id: number }) => i.id);
-    if (rfidIds.length > 0) {
-      await directusFetch(`${DIRECTUS_URL}/items/stock_adjustment_rfid`, {
+    const serialIds = serialRes.data.map((i: { id: number }) => i.id);
+    if (serialIds.length > 0) {
+      await directusFetch(`${DIRECTUS_URL}/items/stock_adjustment_serial`, {
         method: "DELETE",
-        body: JSON.stringify(rfidIds),
+        body: JSON.stringify(serialIds),
       });
     }
 
@@ -545,10 +604,11 @@ export const stockAdjustmentService = {
   },
 
   /**
-   * Fetch approved products (SKUs) for the dropdown
+   * Fetch approved products (SKUs) for the dropdown.
+   * If supplierId is provided, it filters by product_per_supplier.
    */
-  async fetchProducts(params?: { search?: string }) {
-    let query = `fields=product_id,product_name,product_code,price_per_unit,cost_per_unit,barcode,description,unit_of_measurement.unit_name,unit_of_measurement.order,product_brand.brand_name&limit=100&sort=product_name`;
+  async fetchProducts(params?: { search?: string; supplierId?: number }) {
+    let query = `fields=product_id,product_name,product_code,price_per_unit,cost_per_unit,barcode,description,is_serialized,unit_of_measurement.unit_name,unit_of_measurement.order,product_brand.brand_name&limit=100&sort=product_name`;
 
     const filters: Record<string, unknown> = {
       isActive: { _eq: 1 }
@@ -560,6 +620,27 @@ export const stockAdjustmentService = {
         { product_code: { _icontains: params.search } },
         { barcode: { _icontains: params.search } }
       ];
+    }
+
+    if (params?.supplierId) {
+      // Filter by supplier via product_per_supplier table
+      try {
+        const ppsRes = await directusFetch<{ data: { product_id: number | { id: number } }[] }>(
+          `${DIRECTUS_URL}/items/product_per_supplier?filter={"supplier_id":{"_eq":${params.supplierId}}}&fields=product_id&limit=-1`
+        );
+        const productIds = (ppsRes.data || []).map(pps => 
+          typeof pps.product_id === 'object' ? pps.product_id.id : pps.product_id
+        ).filter(Boolean);
+
+        if (productIds.length > 0) {
+          filters.product_id = { _in: productIds };
+        } else {
+          // If no products found for this supplier, return empty list
+          return [];
+        }
+      } catch (err) {
+        console.error("Failed to fetch products for supplier:", err);
+      }
     }
 
     query += `&filter=${JSON.stringify(filters)}`;
@@ -586,13 +667,14 @@ export const stockAdjustmentService = {
    * Fetch active suppliers (nonBuy = 0) for the supplier dropdown.
    */
   async fetchSuppliers() {
-    const res = await directusFetch<{ data: Array<{ id: number; supplier_name: string; supplier_shortcut: string }> }>(
-      `${DIRECTUS_URL}/items/suppliers?fields=id,supplier_name,supplier_shortcut,nonBuy&filter[nonBuy][_eq]=0&sort=supplier_name&limit=-1`
+    const res = await directusFetch<{ data: Array<{ id: number; supplier_name: string; supplier_shortcut: string; division_id: number | null }> }>(
+      `${DIRECTUS_URL}/items/suppliers?fields=id,supplier_name,supplier_shortcut,nonBuy,division_id&filter[nonBuy][_eq]=0&filter[division_id][_eq]=1&sort=supplier_name&limit=-1`
     );
     return res.data.map((s) => ({
       id: s.id,
       supplier_name: s.supplier_name,
       supplier_shortcut: s.supplier_shortcut,
+      division_id: s.division_id,
     }));
   },
 
@@ -641,7 +723,7 @@ export const stockAdjustmentService = {
       });
     }
 
-    const query = `fields=product_id,product_name,product_code,price_per_unit,cost_per_unit,barcode,description,unit_of_measurement.unit_name,unit_of_measurement.order,product_brand.brand_name&limit=500&sort=product_name&filter=${JSON.stringify(filters)}`;
+    const query = `fields=product_id,product_name,product_code,price_per_unit,cost_per_unit,barcode,description,is_serialized,unit_of_measurement.unit_name,unit_of_measurement.order,product_brand.brand_name&limit=500&sort=product_name&filter=${JSON.stringify(filters)}`;
     const res = await directusFetch<{ data: unknown[] }>(`${DIRECTUS_URL}/items/products?${query}`);
     const products = res.data || [];
 
@@ -688,3 +770,4 @@ export const stockAdjustmentService = {
     return `${searchPrefix}${nextNumber.toString().padStart(3, "0")}`;
   },
 };
+
