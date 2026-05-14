@@ -73,7 +73,11 @@ export function StockAdjustmentDetailView({ id, onBack }: StockAdjustmentDetailP
 
   if (!data) return <div className="p-12 text-center font-bold">Record not found.</div>;
 
-  const isPosted = !!data.isPosted;
+  const rawPosted = data.isPosted as unknown;
+  const isPosted =
+    rawPosted && typeof rawPosted === 'object' && 'data' in rawPosted
+      ? (rawPosted as { data: number[] }).data?.[0] === 1
+      : Number(rawPosted) === 1;
 
   const generatePDF = () => {
     if (!data) return;

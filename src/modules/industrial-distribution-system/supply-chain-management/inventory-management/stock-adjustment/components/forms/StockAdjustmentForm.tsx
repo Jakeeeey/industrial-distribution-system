@@ -9,13 +9,12 @@ import {
   Save,
   AlertCircle,
   Tag,
-  Info,
   ArrowLeft,
   Package,
   Send,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { RFIDScannerModal } from "../modals/RFIDScannerModal";
+import { SerialInputModal } from "../modals/SerialInputModal";
 import {
   StockAdjustmentFormSchema,
   StockAdjustmentFormValues,
@@ -61,13 +60,12 @@ interface ItemRowProps {
   index: number;
   control: Control<StockAdjustmentFormValues>;
   productOptions: { value: string; label: string; item: StockAdjustmentProduct }[];
-  rfidProductIds: Set<number>;
   isProductsLoading: boolean;
   isLoadingDetails: boolean;
   onProductSelect: (index: number, product: StockAdjustmentProduct) => void;
   onRemove: (index: number) => void;
   setValue: UseFormSetValue<StockAdjustmentFormValues>;
-  onOpenScanner: (index: number) => void;
+  onOpenSerialInput: (index: number) => void;
   isReadOnly?: boolean;
 }
 
@@ -75,13 +73,12 @@ const StockAdjustmentItemRow = React.memo(function StockAdjustmentItemRow({
   index,
   control,
   productOptions,
-  rfidProductIds,
   isProductsLoading,
   isLoadingDetails,
   onProductSelect,
   onRemove,
   setValue,
-  onOpenScanner,
+  onOpenSerialInput,
   isReadOnly = false,
 }: ItemRowProps) {
   // useWatch subscribes to specific fields — only this row re-renders when its own data changes.
@@ -90,12 +87,11 @@ const StockAdjustmentItemRow = React.memo(function StockAdjustmentItemRow({
   const unitName = useWatch({ control, name: `items.${index}.unit_name` });
   const quantity = useWatch({ control, name: `items.${index}.quantity` });
   const costPerUnit = useWatch({ control, name: `items.${index}.cost_per_unit` });
-  const hasRfid = useWatch({ control, name: `items.${index}.has_rfid` });
-  const rfidCount = useWatch({ control, name: `items.${index}.rfid_count` });
+  const isSerialized = useWatch({ control, name: `items.${index}.is_serialized` });
+  const serialNumbers = useWatch({ control, name: `items.${index}.serial_numbers` });
   const brandName = useWatch({ control, name: `items.${index}.brand_name` });
   const barcode = useWatch({ control, name: `items.${index}.barcode` });
   const description = useWatch({ control, name: `items.${index}.description` });
-  const unitOrder = useWatch({ control, name: `items.${index}.unit_order` });
 
   const [productSearch, setProductSearch] = useState("");
   const [productInputValue, setProductInputValue] = useState(product_name || "");
@@ -116,15 +112,15 @@ const StockAdjustmentItemRow = React.memo(function StockAdjustmentItemRow({
 
   return (
     <div
-      className={`border-b last:border-0 p-6 space-y-4 transition-colors duration-200 relative ${hasRfid ? "bg-amber-50/10 dark:bg-amber-900/10 border-amber-200/30 dark:border-amber-800/20" : "border-border/50"
+      className={`border-b last:border-0 p-6 space-y-4 transition-colors duration-200 relative ${isSerialized ? "bg-blue-50/10 dark:bg-blue-900/10 border-blue-200/30 dark:border-blue-800/20" : "border-border/50"
         }`}
     >
-      {/* Per-row loading overlay for RFID/inventory lookup */}
+      {/* Per-row loading overlay for Serial/inventory lookup */}
       {isLoadingDetails && (
         <div className="absolute inset-0 bg-background/60 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-md">
           <div className="flex items-center gap-3 bg-background border border-border shadow-sm px-4 py-2.5 rounded-lg">
             <div className="h-4 w-4 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
-            <span className="text-xs font-bold text-muted-foreground">Checking RFID data...</span>
+            <span className="text-xs font-bold text-muted-foreground">Checking serial data...</span>
           </div>
         </div>
       )}
@@ -177,8 +173,6 @@ const StockAdjustmentItemRow = React.memo(function StockAdjustmentItemRow({
                   if (filtered.length === 0) return <ComboboxEmpty>No products found.</ComboboxEmpty>;
                   return filtered.map((option) => {
                     const p = option.item;
-                    const pId = p.product_id || p.id;
-                    const pHasRfid = rfidProductIds.has(Number(pId));
                     return (
                       <ComboboxItem key={option.value} value={option.value}>
                         <div className="flex items-center justify-between w-full gap-4 min-w-[300px]">
@@ -200,10 +194,10 @@ const StockAdjustmentItemRow = React.memo(function StockAdjustmentItemRow({
                               )}
                             </div>
                           </div>
-                          {pHasRfid && (
-                            <div className="bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 px-1 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 shrink-0">
-                              <Tag className="h-2 w-2 fill-amber-700 dark:fill-amber-400" />
-                              RFID
+                          {p.is_serialized && (
+                            <div className="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 px-1 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 shrink-0">
+                              <Tag className="h-2 w-2 fill-blue-700 dark:fill-blue-400" />
+                              SERIALIZED
                             </div>
                           )}
                         </div>
@@ -233,15 +227,16 @@ const StockAdjustmentItemRow = React.memo(function StockAdjustmentItemRow({
           </Label>
           <Input
             type="number"
-            value={quantity ?? ""}
-            onChange={(e) =>
+            value={isSerialized ? (serialNumbers?.length || 0) : (quantity ?? "")}
+            onChange={(e) => {
+              if (isSerialized) return; // Prevent manual change if serialized
               setValue(
                 `items.${index}.quantity`,
                 e.target.value === "" ? 0 : Number(e.target.value)
               )
-            }
-            readOnly={isReadOnly || !!(rfidCount && rfidCount > 0) || unitOrder === 3}
-            className={`h-10 border-input focus:ring-blue-500 rounded-md text-sm ${isReadOnly || (rfidCount && rfidCount > 0) || unitOrder === 3
+            }}
+            readOnly={isReadOnly || isSerialized}
+            className={`h-10 border-input focus:ring-blue-500 rounded-md text-sm ${isReadOnly || isSerialized
               ? "bg-muted text-muted-foreground cursor-not-allowed font-bold"
               : ""
               }`}
@@ -249,18 +244,18 @@ const StockAdjustmentItemRow = React.memo(function StockAdjustmentItemRow({
           />
         </div>
 
-        {/* RFID Scanner Trigger for Unit Order 3 */}
-        {unitOrder === 3 && (
+        {/* Serial Input Trigger */}
+        {isSerialized && (
           <div className="flex items-end pb-0.5">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => onOpenScanner(index)}
+              onClick={() => onOpenSerialInput(index)}
               className="h-10 border-blue-200 dark:border-blue-800/50 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40 hover:border-blue-300 dark:hover:border-blue-700 font-bold gap-2 px-3 transition-all duration-200 shadow-sm"
             >
               <Tag className="h-4 w-4" />
-              Scan RFID
+              Serial Numbers
             </Button>
           </div>
         )}
@@ -326,11 +321,11 @@ const StockAdjustmentItemRow = React.memo(function StockAdjustmentItemRow({
             </span>
           </div>
 
-          {hasRfid && (
-            <div className="flex items-center gap-2 bg-amber-50/80 dark:bg-amber-900/20 border border-amber-100/50 dark:border-amber-800/30 w-fit px-2.5 py-1 rounded-md">
-              <Tag className="h-3 w-3 text-amber-500 fill-amber-500" />
-              <span className="text-[10px] font-black text-amber-700 dark:text-amber-500">
-                {rfidCount || 0} RFID tag(s) tracked system-wide
+          {isSerialized && (
+            <div className="flex items-center gap-2 bg-blue-50/80 dark:bg-blue-900/20 border border-blue-100/50 dark:border-blue-800/30 w-fit px-2.5 py-1 rounded-md">
+              <Tag className="h-3 w-3 text-blue-500 fill-blue-500" />
+              <span className="text-[10px] font-black text-blue-700 dark:text-blue-500">
+                {(serialNumbers?.length || 0)} Serial Number(s) added
               </span>
             </div>
           )}
@@ -360,27 +355,27 @@ const StockAdjustmentItemRow = React.memo(function StockAdjustmentItemRow({
 function FormSummary({
   control,
   fieldCount,
-  isRfidLoading,
+  isSerialLoading,
 }: {
   control: Control<StockAdjustmentFormValues>;
   fieldCount: number;
-  isRfidLoading: boolean;
+  isSerialLoading: boolean;
 }) {
   const items = useWatch({ control, name: "items" });
 
-  const { totalQuantity, totalAmount, rfidItemsCount } = useMemo(() => {
+  const { totalQuantity, totalAmount, serializedItemsCount } = useMemo(() => {
     const currentItems = items || [];
     let qty = 0;
     let amt = 0;
-    let rfid = 0;
+    let serialized = 0;
     for (const item of currentItems) {
       const q = Number(item?.quantity || 0);
       const c = Number(item?.cost_per_unit || 0);
       qty += q;
       amt += q * c;
-      if (item?.has_rfid) rfid++;
+      if (item?.is_serialized) serialized++;
     }
-    return { totalQuantity: qty, totalAmount: amt, rfidItemsCount: rfid };
+    return { totalQuantity: qty, totalAmount: amt, serializedItemsCount: serialized };
   }, [items]);
 
   return (
@@ -413,23 +408,23 @@ function FormSummary({
           </span>
         </div>
 
-        {(rfidItemsCount > 0 || isRfidLoading) && (
+        {(serializedItemsCount > 0 || isSerialLoading) && (
           <>
             <div className="h-px bg-border w-full" />
             <div className="flex justify-between items-center text-sm">
-              <span className="font-bold text-amber-600 dark:text-amber-400">
-                Items with RFID:
+              <span className="font-bold text-blue-600 dark:text-blue-400">
+                Serialized Items:
               </span>
-              {isRfidLoading ? (
+              {isSerialLoading ? (
                 <div className="flex items-center gap-2">
-                  <Skeleton className="h-4 w-16 bg-amber-100/20 dark:bg-amber-900/20 animate-pulse" />
-                  <span className="text-[10px] text-amber-400 animate-pulse">
+                  <Skeleton className="h-4 w-16 bg-blue-100/20 dark:bg-blue-900/20 animate-pulse" />
+                  <span className="text-[10px] text-blue-400 animate-pulse">
                     Checking...
                   </span>
                 </div>
               ) : (
-                <span className="font-bold text-amber-700 dark:text-amber-400">
-                  {rfidItemsCount} product(s)
+                <span className="font-bold text-blue-700 dark:text-blue-400">
+                  {serializedItemsCount} product(s)
                 </span>
               )}
             </div>
@@ -441,27 +436,26 @@ function FormSummary({
 }
 
 // ——————————————————————————————————————————————————————————————————————————————
-function RfidBanner({ control }: { control: Control<StockAdjustmentFormValues> }) {
+function SerialBanner({ control }: { control: Control<StockAdjustmentFormValues> }) {
   const items = useWatch({ control, name: "items" });
-  const rfidItemsCount = useMemo(() => {
+  const serializedItemsCount = useMemo(() => {
     const currentItems = (items || []) as StockAdjustmentItem[];
-    return currentItems.filter((item) => item?.has_rfid).length;
+    return currentItems.filter((item) => item?.is_serialized).length;
   }, [items]);
 
-  if (rfidItemsCount === 0) return null;
+  if (serializedItemsCount === 0) return null;
 
   return (
-    <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30 px-6 py-4 rounded-xl flex items-start gap-4 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
-      <div className="p-2 bg-amber-100 dark:bg-amber-800/30 rounded-lg">
-        <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+    <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/30 px-6 py-4 rounded-xl flex items-start gap-4 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+      <div className="p-2 bg-blue-100 dark:bg-blue-800/30 rounded-lg">
+        <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
       </div>
       <div>
-        <h4 className="font-bold text-amber-900 dark:text-amber-400">
-          RFID Tracked Items Detected
+        <h4 className="font-bold text-blue-900 dark:text-blue-400">
+          Serialized Items Detected
         </h4>
-        <p className="text-sm text-amber-800 dark:text-amber-300 opacity-90 text-[11px] font-medium mt-1">
-          {rfidItemsCount} item(s) in this adjustment have RFID tags in
-          inventory. Please ensure proper RFID tag management.
+        <p className="text-sm text-blue-800 dark:text-blue-300 opacity-90 text-[11px] font-medium mt-1">
+          {serializedItemsCount} item(s) in this adjustment are serialized. Please ensure proper serial number management.
         </p>
       </div>
     </div>
@@ -478,30 +472,28 @@ export function StockAdjustmentForm({
     fetchById,
     createAdjustment,
     updateAdjustment,
+    fetchProducts,
     fetchProductsBySupplier,
     products = [],
     suppliers = [],
     isProductsLoading,
     isSuppliersLoading,
-    isRfidLoading,
+    isSerialLoading,
     branches,
     fetchInventory,
-    fetchBranchRfidData,
+    fetchBranchSerialData,
     fetchBranchInventory,
-    rfidProductIds,
     inventoryMap,
     fetchNextDocNo,
     postAdjustment,
-    validateRFIDAvailability,
+    validateSerialAvailability,
   } = useStockAdjustmentForm();
 
   const [loading, setLoading] = useState(false);
   const [loadingRows, setLoadingRows] = useState<Set<number>>(new Set());
-  const [showRFIDWarning, setShowRFIDWarning] = useState(false);
-  const [showRFIDScanner, setShowRFIDScanner] = useState(false);
+  const [showSerialInput, setShowSerialInput] = useState(false);
   const [showPostConfirmation, setShowPostConfirmation] = useState(false);
-  const [scannerContext, setScannerContext] = useState<{ index: number; productName: string } | null>(null);
-  const [pendingRFIDProduct, setPendingRFIDProduct] = useState<StockAdjustmentProduct | null>(null);
+  const [serialContext, setSerialContext] = useState<{ index: number; productName: string } | null>(null);
   const [isScannerPreparing, setIsScannerPreparing] = useState(false);
   const [branchInputValue, setBranchInputValue] = useState("");
   const [supplierInputValue, setSupplierInputValue] = useState("");
@@ -603,7 +595,7 @@ export function StockAdjustmentForm({
               product_name:
                 (item.product_id as { product_name?: string })?.product_name ||
                 item.product_name ||
-                "Unknown Product",
+                "",
               product_code:
                 (item.product_id as { product_code?: string })?.product_code ||
                 item.product_code ||
@@ -614,15 +606,15 @@ export function StockAdjustmentForm({
                 item.cost_per_unit ||
                 0,
               current_stock: item.current_stock || 0,
+              is_serialized: !!item.is_serialized,
               unit_name:
                 item.unit_name ||
                 (item.product_id as { unit_name?: string })?.unit_name ||
                 "pcs",
               unit_order: (item.product_id as { unit_of_measurement?: { order: number } })?.unit_of_measurement?.order || 1,
-              rfid_tags: item.rfid_tags || [],
-              rfid_count: item.rfid_count || 0,
+              serial_numbers: item.serial_numbers || [],
+              serial_count: item.serial_count || 0,
               db_id: item.id,
-              has_rfid: (item.rfid_tags && item.rfid_tags.length > 0) || rfidProductIds.has(Number((item.product_id as { id?: number; product_id?: number })?.product_id || (item.product_id as { id?: number; product_id?: number })?.id || item.product_id)),
             })),
             posted_by: data.posted_by,
             postedAt: data.postedAt,
@@ -661,10 +653,10 @@ export function StockAdjustmentForm({
 
   useEffect(() => {
     if (watchedBranchId) {
-      fetchBranchRfidData(Number(watchedBranchId));
+      fetchBranchSerialData(Number(watchedBranchId));
       fetchBranchInventory(Number(watchedBranchId));
     }
-  }, [watchedBranchId, fetchBranchRfidData, fetchBranchInventory]);
+  }, [watchedBranchId, fetchBranchSerialData, fetchBranchInventory]);
 
   // ——————————————————————————————————————————————————————————————————————————————
   useEffect(() => {
@@ -692,10 +684,17 @@ export function StockAdjustmentForm({
 
   // ——————————————————————————————————————————————————————————————————————————————
   useEffect(() => {
-    if (watchedSupplierId) {
-      fetchProductsBySupplier(Number(watchedSupplierId));
+    if (watchedSupplierId && suppliers.length > 0) {
+      const selectedSupplier = suppliers.find(s => s.id === Number(watchedSupplierId));
+      if (selectedSupplier?.division_id === 1) {
+        fetchProductsBySupplier(Number(watchedSupplierId));
+      } else {
+        fetchProducts();
+      }
+    } else if (!watchedSupplierId) {
+      fetchProducts();
     }
-  }, [watchedSupplierId, fetchProductsBySupplier]);
+  }, [watchedSupplierId, suppliers, fetchProductsBySupplier, fetchProducts]);
 
   // ——————————————————————————————————————————————————————————————————————————————
   const isFormLoading = id ? loading : false;
@@ -764,18 +763,20 @@ export function StockAdjustmentForm({
       cost_per_unit: 0,
       unit_name: "-",
       remarks: "",
-      rfid_tags: [],
+      serial_numbers: [],
+      serial_count: 0,
     });
   }, [append, form]);
 
-  const handleRFIDSave = useCallback((tags: string[]) => {
-    if (scannerContext) {
-      const { index } = scannerContext;
-      form.setValue(`items.${index}.rfid_tags`, tags);
-      form.setValue(`items.${index}.quantity`, tags.length);
-      setScannerContext(null);
+  const handleSerialSave = useCallback((serials: string[]) => {
+    if (serialContext) {
+      const { index } = serialContext;
+      form.setValue(`items.${index}.serial_numbers`, serials, { shouldValidate: true });
+      form.setValue(`items.${index}.serial_count`, serials.length, { shouldValidate: true });
+      form.setValue(`items.${index}.quantity`, serials.length, { shouldValidate: true });
+      setSerialContext(null);
     }
-  }, [scannerContext, form]);
+  }, [serialContext, form]);
 
   // ——————————————————————————————————————————————————————————————————————————————
   const handleProductSelect = useCallback(
@@ -797,30 +798,32 @@ export function StockAdjustmentForm({
       form.setValue(`items.${index}.barcode`, product.barcode || "N/A");
       form.setValue(`items.${index}.description`, product.description || "No description available.");
       form.setValue(`items.${index}.unit_order`, product.unit_of_measurement?.order || 1);
+      form.setValue(`items.${index}.is_serialized`, !!product.is_serialized);
+
+      if (product.is_serialized) {
+        form.setValue(`items.${index}.quantity`, 0);
+      }
 
       const cachedStock = inventoryMap.get(Number(productId)) ?? 0;
       form.setValue(`items.${index}.current_stock`, cachedStock);
 
-      const unitOrder = product.unit_of_measurement?.order;
-      const hasRfid = rfidProductIds.has(Number(productId));
-
-      form.setValue(`items.${index}.has_rfid`, hasRfid);
-      form.setValue(`items.${index}.rfid_count`, 0);
+      form.setValue(`items.${index}.is_serialized`, !!product.is_serialized);
+      form.setValue(`items.${index}.serial_count`, 0);
 
       // --- Scanner Logic (Only for new user selections, NOT initial load) ---
-      if (unitOrder === 3 && isNewSelection && !loading) {
-        setScannerContext({ index, productName: product.product_name });
+      if (product.is_serialized && isNewSelection && !loading) {
+        setSerialContext({ index, productName: product.product_name || "Product" });
         setIsScannerPreparing(true);
 
-        toast.info(`RFID Scan Required`, {
-          description: `Preparing scanner for ${product.product_name}...`,
+        toast.info(`Serial Input Required`, {
+          description: `Preparing serial input for ${product.product_name}...`,
           duration: 1500,
           icon: <Tag className="h-4 w-4 text-blue-500" />,
         });
 
         const timer = setTimeout(() => {
           setIsScannerPreparing(false);
-          setShowRFIDScanner(true);
+          setShowSerialInput(true);
         }, 300);
         return () => clearTimeout(timer);
       }
@@ -834,15 +837,6 @@ export function StockAdjustmentForm({
 
           form.setValue(`items.${index}.current_stock`, currentStock);
 
-          if (unitOrder !== 3 && hasRfid && isNewSelection && !loading) {
-            setPendingRFIDProduct({
-              ...product,
-              rfidData: { quantity: 1 },
-              current_stock: currentStock,
-              index,
-            });
-            setShowRFIDWarning(true);
-          }
         } catch (err) {
           console.error("Background fetch error:", err);
         } finally {
@@ -854,22 +848,22 @@ export function StockAdjustmentForm({
         }
       })();
     },
-    [fetchInventory, form, inventoryMap, rfidProductIds, loading]
+    [fetchInventory, form, inventoryMap, loading]
   );
 
-  const handleOpenScanner = useCallback((index: number) => {
+  const handleOpenSerialInput = useCallback((index: number) => {
     const productName = form.getValues(`items.${index}.product_name`) ?? "Product";
-    setScannerContext({ index, productName });
+    setSerialContext({ index, productName });
 
     setIsScannerPreparing(true);
-    toast.info(`Opening RFID Scanner`, {
-      description: `Preparing scanner for ${productName}...`,
+    toast.info(`Opening Serial Input`, {
+      description: `Preparing serial input for ${productName}...`,
       duration: 1500,
     });
 
     setTimeout(() => {
       setIsScannerPreparing(false);
-      setShowRFIDScanner(true);
+      setShowSerialInput(true);
     }, 600);
   }, [form]);
 
@@ -947,7 +941,7 @@ export function StockAdjustmentForm({
         )}
       </div>
 
-      <RfidBanner control={form.control} />
+      <SerialBanner control={form.control} />
 
       {isScannerPreparing && (
         <div className="fixed inset-0 bg-background/40 backdrop-blur-[1px] z-[100] flex items-center justify-center animate-in fade-in duration-300">
@@ -961,7 +955,7 @@ export function StockAdjustmentForm({
                 <Tag className="h-6 w-6 text-blue-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
               </div>
               <div className="text-center space-y-1">
-                <h3 className="font-bold text-foreground">Preparing RFID Scanner</h3>
+                <h3 className="font-bold text-foreground">Preparing Serial Input</h3>
                 <p className="text-sm text-muted-foreground">Please wait a moment...</p>
               </div>
             </CardContent>
@@ -1019,10 +1013,10 @@ export function StockAdjustmentForm({
                 >
                   <ComboboxInput
                     placeholder="Select Branch"
-                    disabled={isReadOnly || !!id}
+                    disabled={isReadOnly || !!id || fields.length > 0}
                     className={form.formState.errors.branch_id ? "border-red-500 bg-red-50 dark:bg-red-900/10" : ""}
-                    showTrigger={!id}
-                    showClear={!id && !isReadOnly}
+                    showTrigger={!id && fields.length === 0}
+                    showClear={!id && !isReadOnly && fields.length === 0}
                   />
                   <ComboboxContent>
                     <ComboboxList>
@@ -1086,10 +1080,10 @@ export function StockAdjustmentForm({
                 >
                   <ComboboxInput
                     placeholder={isSuppliersLoading ? "Loading suppliers..." : "Select Supplier"}
-                    disabled={isReadOnly || !!id}
+                    disabled={isReadOnly || !!id || fields.length > 0}
                     className={form.formState.errors.supplier_id ? "border-red-500 bg-red-50 dark:bg-red-900/10" : ""}
-                    showTrigger={!id}
-                    showClear={!id && !isReadOnly}
+                    showTrigger={!id && fields.length === 0}
+                    showClear={!id && !isReadOnly && fields.length === 0}
                   />
                   <ComboboxContent>
                     <ComboboxList>
@@ -1245,13 +1239,12 @@ export function StockAdjustmentForm({
                         index={index}
                         control={form.control}
                         productOptions={productOptions}
-                        rfidProductIds={rfidProductIds}
                         isProductsLoading={isProductsLoading}
                         isLoadingDetails={loadingRows.has(index)}
                         onProductSelect={handleProductSelect}
                         onRemove={remove}
                         setValue={form.setValue}
-                        onOpenScanner={handleOpenScanner}
+                        onOpenSerialInput={handleOpenSerialInput}
                         isReadOnly={isReadOnly}
                       />
                     ))}
@@ -1264,7 +1257,7 @@ export function StockAdjustmentForm({
             <FormSummary
               control={form.control}
               fieldCount={fields.length}
-              isRfidLoading={isRfidLoading}
+              isSerialLoading={isSerialLoading}
             />
           </CardContent>
         </Card>
@@ -1279,18 +1272,34 @@ export function StockAdjustmentForm({
             Cancel
           </Button>
           {!isReadOnly && (
-            <Button
-              type="submit"
-              disabled={loading}
-              className="h-10 px-8 font-bold bg-blue-600 hover:bg-blue-700 text-white gap-2 shadow-sm rounded-lg"
-            >
-              {loading ? (
-                <span className="animate-spin mr-2">â—Œ</span>
-              ) : (
-                <Save className="h-4 w-4" />
+            <div className="flex flex-col items-end gap-1">
+              <Button
+                type="submit"
+                disabled={loading}
+                onClick={() => {
+                  const errors = form.formState.errors;
+                  if (Object.keys(errors).length > 0) {
+                    console.error("Form Validation Errors:", errors);
+                    toast.error("Please fix the validation errors before saving.", {
+                      description: "Check required fields like Branch, Supplier, or Product details."
+                    });
+                  }
+                }}
+                className="h-10 px-8 font-bold bg-blue-600 hover:bg-blue-700 text-white gap-2 shadow-sm rounded-lg"
+              >
+                {loading ? (
+                  <span className="animate-spin mr-2">â—Œ</span>
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                {id ? "Update Adjustment" : "Save Adjustment"}
+              </Button>
+              {Object.keys(form.formState.errors).length > 0 && (
+                <p className="text-[10px] text-red-500 font-bold animate-pulse">
+                  {Object.keys(form.formState.errors).length} validation error(s) detected
+                </p>
               )}
-              {id ? "Update Adjustment" : "Save Adjustment"}
-            </Button>
+            </div>
           )}
 
           {id && !isReadOnly && (
@@ -1311,148 +1320,24 @@ export function StockAdjustmentForm({
         </div>
       </form>
 
-      {scannerContext && (
-        <RFIDScannerModal
-          open={showRFIDScanner}
-          onOpenChange={setShowRFIDScanner}
-          productName={scannerContext.productName}
-          onSave={handleRFIDSave}
+      {serialContext && (
+        <SerialInputModal
+          open={showSerialInput}
+          onOpenChange={setShowSerialInput}
+          productName={serialContext.productName}
+          onSave={handleSerialSave}
           type={form.getValues("type")}
-          initialTags={form.getValues(`items.${scannerContext.index}.rfid_tags`) || []}
+          initialSerials={form.getValues(`items.${serialContext.index}.serial_numbers`) || []}
+          excludeSerials={(form.getValues("items") || [])
+            .filter((_, idx) => idx !== serialContext.index)
+            .flatMap(item => item.serial_numbers || [])
+          }
           branchId={Number(form.getValues("branch_id"))}
-          validateRFID={validateRFIDAvailability}
+          productId={Number(form.getValues(`items.${serialContext.index}.product_id`))}
+          validateSerial={validateSerialAvailability}
         />
       )}
 
-      {/* RFID Warning Modal */}
-      <AlertDialog open={showRFIDWarning} onOpenChange={setShowRFIDWarning}>
-        <AlertDialogContent className="max-w-md bg-card p-0 overflow-hidden border-none shadow-2xl">
-          <div className="bg-amber-50 dark:bg-amber-900/20 p-6 flex items-start gap-4">
-            <div className="p-2 bg-amber-100 dark:bg-amber-800/30 rounded-full">
-              <AlertCircle className="h-6 w-6 text-amber-600 dark:text-amber-400" />
-            </div>
-            <div className="flex-1">
-              <AlertDialogHeader>
-                <AlertDialogTitle className="text-lg font-bold text-amber-900 dark:text-amber-400">
-                  RFID Tracking Detected
-                </AlertDialogTitle>
-                <AlertDialogDescription className="text-amber-700/80 dark:text-amber-300/80 text-sm mt-1">
-                  Product has existing RFID tags
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setShowRFIDWarning(false)}
-              className="rounded-full h-8 w-8 text-amber-400 hover:text-amber-600 dark:hover:text-amber-300 hover:bg-amber-100/50 dark:hover:bg-amber-800/20"
-            >
-              âœ•
-            </Button>
-          </div>
-
-          <div className="p-6 space-y-6">
-            <div className="bg-muted/30 border border-border rounded-xl p-4 space-y-3">
-              <div className="flex justify-between items-center pb-2 border-b border-border">
-                <span className="font-black text-foreground">
-                  {pendingRFIDProduct?.product_name}
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-y-2 text-xs">
-                <span className="text-muted-foreground">Branch:</span>
-                <span className="text-foreground font-bold text-right">
-                  {branches.find(
-                    (b) =>
-                      String(b.id) === String(form.getValues("branch_id"))
-                  )?.branch_name || "Selected Branch"}
-                </span>
-                <span className="text-muted-foreground">Current Stock:</span>
-                <span className="text-foreground font-bold text-right">
-                  {pendingRFIDProduct?.current_stock || 0}{" "}
-                  {pendingRFIDProduct?.unit_name || "units"}
-                </span>
-                <span className="text-muted-foreground font-bold">
-                  RFID Tags On Hand:
-                </span>
-                <span className="text-foreground font-black text-right text-amber-600 dark:text-amber-400">
-                  {pendingRFIDProduct?.rfidData?.quantity ||
-                    pendingRFIDProduct?.rfidData?.count ||
-                    1}{" "}
-                  tags
-                </span>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <h4 className="text-sm font-black text-foreground flex items-center gap-2">
-                <Info className="h-4 w-4 text-blue-500" />
-                Important Notice:
-              </h4>
-              <ul className="text-xs text-muted-foreground space-y-2.5 list-disc pl-4 font-medium opacity-90">
-                <li>
-                  This product has RFID tags currently in inventory
-                </li>
-                <li>
-                  Stock adjustments may require RFID tag management
-                </li>
-                <li>Ensure RFID tags are properly scanned or updated</li>
-                <li>
-                  Mismatch between physical stock and RFID count may cause
-                  discrepancies
-                </li>
-              </ul>
-            </div>
-
-            <div className="bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 p-4 rounded-xl">
-              <div className="flex gap-3">
-                <div className="p-1 bg-blue-100 dark:bg-blue-800/30 rounded-md h-fit mt-0.5">
-                  <AlertCircle className="h-3 w-3 text-blue-600 dark:text-blue-400" />
-                </div>
-                <p className="text-[11px] leading-relaxed text-blue-700 dark:text-blue-300 font-medium">
-                  <span className="font-black">Recommendation:</span> For
-                  products with RFID tracking, use the RFID scanner to ensure
-                  accurate inventory management.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                onClick={() => setShowRFIDWarning(false)}
-                className="flex-1 h-11 font-bold text-muted-foreground border-border hover:bg-muted rounded-lg"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={() => {
-                  if (
-                    pendingRFIDProduct &&
-                    typeof pendingRFIDProduct.index === "number"
-                  ) {
-                    const { index, rfidData, ...product } = pendingRFIDProduct;
-                    form.setValue(`items.${index}.product_id`, product.product_id || product.id);
-                    form.setValue(`items.${index}.product_name`, product.product_name);
-                    form.setValue(`items.${index}.product_code`, product.product_code);
-                    form.setValue(`items.${index}.cost_per_unit`, product.cost_per_unit || product.price_per_unit || 0);
-                    form.setValue(`items.${index}.current_stock`, product.current_stock || 0);
-                    form.setValue(`items.${index}.unit_name`, product.unit_name || "pcs");
-                    form.setValue(`items.${index}.has_rfid`, true);
-                    form.setValue(`items.${index}.rfid_count`, rfidData?.quantity || rfidData?.count || 0);
-                    form.setValue(`items.${index}.brand_name`, product.brand_name || "N/A");
-                    form.setValue(`items.${index}.barcode`, product.barcode || "N/A");
-                    form.setValue(`items.${index}.description`, product.description || "No description available.");
-                  }
-                  setShowRFIDWarning(false);
-                }}
-                className="flex-1 h-11 font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-md shadow-amber-100 rounded-lg"
-              >
-                Continue Anyway
-              </Button>
-            </div>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Post Confirmation Modal */}
       <AlertDialog open={showPostConfirmation} onOpenChange={setShowPostConfirmation}>
