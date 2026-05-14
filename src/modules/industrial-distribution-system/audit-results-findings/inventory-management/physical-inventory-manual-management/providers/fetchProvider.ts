@@ -250,6 +250,7 @@ export function getSupplierScopedCategoriesFromLookup(
             .filter(
                 (product) =>
                     product.isActive === 1 &&
+                    product.is_serialized === 1 &&
                     allowedProductIds.has(product.product_id) &&
                     product.product_category !== null,
             )
@@ -338,7 +339,7 @@ export async function fetchUnits(): Promise<UnitRow[]> {
 export async function fetchProducts(): Promise<ProductRow[]> {
     return directusGetItems<ProductRow>(TABLES.products, {
         fields:
-            "product_id,parent_id,product_code,product_name,barcode,product_category,product_brand,unit_of_measurement,unit_of_measurement_count,isActive,cost_per_unit",
+            "product_id,parent_id,product_code,product_name,barcode,product_category,product_brand,unit_of_measurement,unit_of_measurement_count,isActive,cost_per_unit,is_serialized",
         sort: "product_name",
         limit: "-1",
     });
@@ -421,7 +422,7 @@ export function buildEligibleVariants(input: {
     }
 
     return lookup.products
-        .filter((product) => product.isActive === 1)
+        .filter((product) => product.isActive === 1 && product.is_serialized === 1)
         .filter((product) => productIdsBySupplier.has(product.product_id))
         .filter((product) => {
             if (isAllCategory) return true;
@@ -728,6 +729,7 @@ export function buildVariantsFromSavedDetails(input: {
     }
 
     return lookup.products
+        .filter((product) => product.is_serialized === 1)
         .filter((product) => productIds.has(product.product_id))
         .map((product) => {
             const detail = detailMap.get(product.product_id);
