@@ -1,4 +1,4 @@
-//src/modules/supply-chain-management/physical-inventory-management/types.ts
+//src/modules/supply-chain-management/physical-inventory-serial-management/types.ts
 export type PhysicalInventoryStatus =
     | "Pending"
     | "Committed"
@@ -37,13 +37,13 @@ export type PriceTypeRow = {
     sort: number | null;
 };
 
-export type RfidOnhandApiRow = {
+export type SerialOnhandApiRow = {
     productId: number;
 };
 
-export type RfidOnhandResult = {
+export type SerialOnhandResult = {
     ok: boolean;
-    item: RfidOnhandApiRow | null;
+    item: SerialOnhandApiRow | null;
     message?: string;
 };
 
@@ -131,12 +131,43 @@ export type PhysicalInventoryDetailRow = {
     offset_match: number | null;
 };
 
-export type PhysicalInventoryDetailRFIDRow = {
+export type PhysicalInventoryDetailSerialRow = {
     id: number;
     pi_detail_id: number;
-    rfid_tag: string;
+    serial_number: string;
     created_at: string | null;
     created_by: number | null;
+};
+
+export type CylinderAssetRow = {
+    id: number;
+    product_id: number;
+    serial_number: string;
+    cylinder_status: "AVAILABLE" | "RESERVED" | "LOADED" | "WITH_CUSTOMER" | "EMPTY" | "DAMAGED" | "LOST" | "RETIRED";
+    cylinder_condition: "GOOD" | "FOR_REPAIR" | "DAMAGED" | "SCRAP";
+    current_branch_id: number | null;
+    current_customer_code: string | null;
+    acquisition_date: string | null;
+    expiration_date: string | null;
+    tare_weight: number | null;
+    cost: number | null;
+    remarks: string | null;
+    created_by: number | null;
+    created_date: string | null;
+    modified_by: number | null;
+    modified_date: string | null;
+};
+
+export type CylinderAssetUpsertPayload = {
+    product_id: number;
+    serial_number: string;
+    cylinder_status: "AVAILABLE" | "RESERVED" | "LOADED" | "WITH_CUSTOMER" | "EMPTY" | "DAMAGED" | "LOST" | "RETIRED";
+    cylinder_condition: "GOOD" | "FOR_REPAIR" | "DAMAGED" | "SCRAP";
+    current_branch_id: number | null;
+    expiration_date?: string | null;
+    tare_weight?: number | null;
+    remarks?: string | null;
+    cost?: number | null;
 };
 
 export type PhysicalInventoryHeaderUpsertPayload = {
@@ -244,6 +275,7 @@ export type EligibleVariantRow = {
     unit_price: number | null;
     cost_per_unit: number | null;
     brand_name: string | null;
+    is_serialized: number | null;
 };
 
 export type GroupedPhysicalInventoryChildRow = {
@@ -277,8 +309,8 @@ export type GroupedPhysicalInventoryChildRow = {
     difference_cost: number;
     amount: number;
 
-    requires_rfid: boolean;
-    rfid_count: number;
+    requires_serial: boolean;
+    serial_count: number;
     brand_name: string | null;
 };
 
