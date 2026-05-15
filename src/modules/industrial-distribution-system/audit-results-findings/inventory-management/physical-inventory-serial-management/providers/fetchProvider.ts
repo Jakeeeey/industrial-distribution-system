@@ -1,11 +1,13 @@
-//src/modules/supply-chain-management/physical-inventory-management/providers/fetchProvider.ts
+//src/modules/supply-chain-management/physical-inventory-serial-management/providers/fetchProvider.ts
 import type {
     BranchRow,
     CategoryRow,
+    CylinderAssetRow,
+    CylinderAssetUpsertPayload,
     DirectusItemResponse,
     DirectusItemsResponse,
     EligibleVariantRow,
-    PhysicalInventoryDetailRFIDRow,
+    PhysicalInventoryDetailSerialRow,
     PhysicalInventoryDetailRow,
     PhysicalInventoryDetailUpsertPayload,
     PhysicalInventoryHeaderRow,
@@ -15,7 +17,7 @@ import type {
     ProductPerPriceTypeRow,
     ProductPerSupplierRow,
     ProductRow,
-    RfidOnhandResult,
+    SerialOnhandResult,
     RunningInventoryApiRow,
     RunningInventoryRow,
     SupplierRow,
@@ -32,7 +34,7 @@ const API_BASE = "/api/ids/arf/inventory-management/physical-inventory";
 const TABLES = {
     physical_inventory: "physical_inventory",
     physical_inventory_details: "physical_inventory_details",
-    physical_inventory_details_rfid: "physical_inventory_details_rfid",
+    physical_inventory_details_serial: "physical_inventory_details_serial",
     products: "products",
     product_per_supplier: "product_per_supplier",
     product_per_price_type: "product_per_price_type",
@@ -41,6 +43,7 @@ const TABLES = {
     units: "units",
     branches: "branches",
     suppliers: "suppliers",
+    cylinder_assets: "cylinder_assets",
 } as const;
 
 type DirectusBulkItemsResponse<T> = {
@@ -284,6 +287,7 @@ export function getSupplierScopedCategoriesFromLookup(
 
 export async function fetchBranches(): Promise<BranchRow[]> {
     return directusGetItems<BranchRow>(TABLES.branches, {
+        filter: JSON.stringify({ division_id: { _eq: 1 } }),
         fields: "id,branch_name",
         sort: "branch_name",
         limit: "-1",
@@ -292,6 +296,7 @@ export async function fetchBranches(): Promise<BranchRow[]> {
 
 export async function fetchSuppliers(): Promise<SupplierRow[]> {
     const rows = await directusGetItems<SupplierRow>(TABLES.suppliers, {
+        filter: JSON.stringify({ division_id: { _eq: 1 } }),
         fields: "id,supplier_name,supplier_shortcut,isActive,supplier_type",
         sort: "supplier_name",
         limit: "-1",
@@ -435,7 +440,7 @@ export function buildEligibleVariants(input: {
     }
 
     return lookup.products
-        .filter((product) => product.isActive === 1 && product.is_serialized === 1)
+        .filter((product) => product.isActive === 1)
         .filter((product) => {
             const familyKey = (product.parent_id && product.parent_id > 0)
                 ? product.parent_id
@@ -446,7 +451,6 @@ export function buildEligibleVariants(input: {
             if (isAllCategory) return true;
             return product.product_category === categoryId;
         })
-        .filter((product) => priceMap.has(product.product_id))
         .map((product) => {
             const priceRow = priceMap.get(product.product_id) ?? null;
             const category =
@@ -474,6 +478,7 @@ export function buildEligibleVariants(input: {
                 unit_price: priceRow?.price ?? null,
                 cost_per_unit: product.cost_per_unit,
                 brand_name: null,
+                is_serialized: product.is_serialized ?? null,
             };
         })
         .sort((a, b) => {
@@ -552,28 +557,28 @@ export async function fetchPhysicalInventoryDetails(
     });
 }
 
-export async function fetchPhysicalInventoryDetailRfid(
+export async function fetchPhysicalInventoryDetailSerial(
     phId: number,
-): Promise<PhysicalInventoryDetailRFIDRow[]> {
+): Promise<PhysicalInventoryDetailSerialRow[]> {
     const details = await fetchPhysicalInventoryDetails(phId);
     const detailIds = details.map((detail) => detail.id);
 
     if (!detailIds.length) return [];
 
-    return directusGetItems<PhysicalInventoryDetailRFIDRow>(
-        TABLES.physical_inventory_details_rfid,
+    return directusGetItems<PhysicalInventoryDetailSerialRow>(
+        TABLES.physical_inventory_details_serial,
         {
             filter: JSON.stringify({
                 pi_detail_id: { _in: detailIds },
             }),
-            fields: "id,pi_detail_id,rfid_tag,created_at,created_by",
+            fields: "id,pi_detail_id,serial_number,created_at,created_by",
             sort: "-id",
             limit: "-1",
         },
     );
 }
 
-export async function fetchPhysicalInventoryRfidCountByHeader(
+export async function fetchPhysicalInventorySerialCountByHeader(
     phId: number,
 ): Promise<Record<number, number>> {
     const details = await fetchPhysicalInventoryDetails(phId);
@@ -583,8 +588,8 @@ export async function fetchPhysicalInventoryRfidCountByHeader(
         return {};
     }
 
-    const rows = await directusGetItems<Pick<PhysicalInventoryDetailRFIDRow, "pi_detail_id">>(
-        TABLES.physical_inventory_details_rfid,
+    const rows = await directusGetItems<Pick<PhysicalInventoryDetailSerialRow, "pi_detail_id">>(
+        TABLES.physical_inventory_details_serial,
         {
             filter: JSON.stringify({
                 pi_detail_id: { _in: detailIds },
@@ -600,49 +605,50 @@ export async function fetchPhysicalInventoryRfidCountByHeader(
     }, {});
 }
 
-export async function fetchRfidOnhandByTag(
-    rfid: string,
+export async function fetchSerialOnhandByTag(
+    serial: string,
     branchId: number,
-): Promise<RfidOnhandResult> {
-    const normalized = rfid.trim();
+): Promise<SerialOnhandResult> {
+    const normalized = serial.trim();
 
     if (!normalized) {
-        throw new Error("RFID tag is required.");
+        throw new Error("Serial tag is required.");
     }
 
     if (!Number.isFinite(branchId) || branchId <= 0) {
-        throw new Error("Branch is required for RFID lookup.");
+        throw new Error("Branch is required for Serial lookup.");
     }
 
-    return apiGet<RfidOnhandResult>(`${API_BASE}/rfid-onhand`, {
-        rfid: normalized,
+    return apiGet<SerialOnhandResult>(`${API_BASE}/serial-onhand`, {
+        serial: normalized,
         branchId: String(branchId),
     });
 }
 
 /**
- * Fetches all available on-hand RFIDs for a specific branch.
+ * Fetches all available on-hand Serials for a specific branch.
  * This is used for caching to enable fast continuous scanning.
  */
-export async function fetchRfidOnhandByBranch(
+export async function fetchSerialOnhandByBranch(
     branchId: number,
-): Promise<Array<{ rfid: string; productId: number }>> {
+): Promise<Array<{ serial: string; productId: number }>> {
     const branch = String(branchId);
     if (!branch || branch === "0") {
-        throw new Error("Branch is required for RFID lookup.");
+        throw new Error("Branch is required for Serial lookup.");
     }
 
     try {
         const res = await apiGet<{
             ok: boolean;
             data: Array<{
-                rfid?: string;
+                serial?: string;
                 tag?: string;
+                serialNumber?: string;
                 productId?: number;
                 product_id?: number;
             }>;
         }>(
-            `${API_BASE}/rfid-onhand/all`,
+            `${API_BASE}/serial-onhand/all`,
             {
                 branchId: branch,
             },
@@ -653,27 +659,27 @@ export async function fetchRfidOnhandByBranch(
         }
 
         return res.data.map((row) => ({
-            rfid: String(row.rfid || row.tag || ""),
+            serial: String(row.serialNumber || row.serial || row.tag || ""),
             productId: Number(row.productId || row.product_id || 0),
         }));
     } catch (error) {
-        console.error("fetchRfidOnhandByBranch failed:", error);
+        console.error("fetchSerialOnhandByBranch failed:", error);
         return [];
     }
 }
 
 /**
- * Performs a global search in physical_inventory_details_rfid to see if an RFID
+ * Performs a global search in physical_inventory_details_serial to see if an Serial
  * was previously scanned and which product it belonged to.
  */
-export async function fetchHistoricalRfidScan(
-    rfidTag: string,
+export async function fetchHistoricalSerialScan(
+    serialTag: string,
 ): Promise<{ product_id: number } | null> {
     const rows = await directusGetItems<{
         pi_detail_id: number | { product_id: number };
-    }>(TABLES.physical_inventory_details_rfid, {
+    }>(TABLES.physical_inventory_details_serial, {
         filter: JSON.stringify({
-            rfid_tag: { _eq: rfidTag.trim() },
+            serial_number: { _eq: serialTag.trim() },
         }),
         fields: "pi_detail_id,pi_detail_id.product_id",
         limit: "1",
@@ -694,16 +700,16 @@ export async function fetchHistoricalRfidScan(
     return null;
 }
 
-export async function fetchPhysicalInventoryDetailRfidByDetailId(
+export async function fetchPhysicalInventoryDetailSerialByDetailId(
     piDetailId: number,
-): Promise<PhysicalInventoryDetailRFIDRow[]> {
-    return directusGetItems<PhysicalInventoryDetailRFIDRow>(
-        TABLES.physical_inventory_details_rfid,
+): Promise<PhysicalInventoryDetailSerialRow[]> {
+    return directusGetItems<PhysicalInventoryDetailSerialRow>(
+        TABLES.physical_inventory_details_serial,
         {
             filter: JSON.stringify({
                 pi_detail_id: { _eq: piDetailId },
             }),
-            fields: "id,pi_detail_id,rfid_tag,created_at,created_by",
+            fields: "id,pi_detail_id,serial_number,created_at,created_by",
             sort: "-id",
             limit: "-1",
         },
@@ -821,6 +827,7 @@ export function buildVariantsFromSavedDetails(input: {
     }
 
     return lookup.products
+        .filter((product) => product.isActive === 1)
         .filter((product) => productIds.has(product.product_id))
         .map((product) => {
             const detail = detailMap.get(product.product_id);
@@ -850,6 +857,7 @@ export function buildVariantsFromSavedDetails(input: {
                 unit_price: detail?.unit_price ?? priceRow?.price ?? null,
                 cost_per_unit: product.cost_per_unit,
                 brand_name: null,
+                is_serialized: product.is_serialized ?? null,
             };
         })
         .sort((a, b) => {
@@ -859,19 +867,62 @@ export function buildVariantsFromSavedDetails(input: {
         });
 }
 
-export async function createPhysicalInventoryDetailRfid(input: {
+export async function createPhysicalInventoryDetailSerial(input: {
     pi_detail_id: number;
-    rfid_tag: string;
+    serial_number: string;
     created_by?: number | null;
-}): Promise<PhysicalInventoryDetailRFIDRow> {
+}): Promise<PhysicalInventoryDetailSerialRow> {
     return directusPostItem<
-        { pi_detail_id: number; rfid_tag: string; created_by?: number | null },
-        PhysicalInventoryDetailRFIDRow
-    >(TABLES.physical_inventory_details_rfid, input);
+        { pi_detail_id: number; serial_number: string; created_by?: number | null },
+        PhysicalInventoryDetailSerialRow
+    >(TABLES.physical_inventory_details_serial, input);
 }
 
-export async function deletePhysicalInventoryDetailRfid(id: number): Promise<void> {
-    await directusDeleteItem(TABLES.physical_inventory_details_rfid, id);
+export async function updateCylinderAsset(
+    id: number,
+    payload: Partial<CylinderAssetUpsertPayload>,
+): Promise<CylinderAssetRow> {
+    return directusPatchItem<Partial<CylinderAssetUpsertPayload>, CylinderAssetRow>(
+        TABLES.cylinder_assets,
+        id,
+        payload,
+    );
+}
+
+export async function createCylinderAsset(
+    payload: CylinderAssetUpsertPayload,
+): Promise<CylinderAssetRow> {
+    return directusPostItem<CylinderAssetUpsertPayload, CylinderAssetRow>(
+        TABLES.cylinder_assets,
+        payload,
+    );
+}
+
+export async function createCylinderAssetsBulk(
+    payloads: CylinderAssetUpsertPayload[],
+): Promise<CylinderAssetRow[]> {
+    return directusPostItems<CylinderAssetUpsertPayload, CylinderAssetRow>(
+        TABLES.cylinder_assets,
+        payloads,
+    );
+}
+
+export async function fetchCylinderAssetBySerial(serial: string): Promise<CylinderAssetRow | null> {
+    const rows = await directusGetItems<CylinderAssetRow>(TABLES.cylinder_assets, {
+        filter: JSON.stringify({
+            serial_number: { _eq: serial.trim() },
+        }),
+        limit: "1",
+    });
+
+    if (rows.length === 0) {
+        return null;
+    }
+    return rows[0] ?? null;
+}
+
+export async function deletePhysicalInventoryDetailSerial(id: number): Promise<void> {
+    await directusDeleteItem(TABLES.physical_inventory_details_serial, id);
 }
 
 export async function deletePhysicalInventoryDetail(id: number): Promise<void> {
