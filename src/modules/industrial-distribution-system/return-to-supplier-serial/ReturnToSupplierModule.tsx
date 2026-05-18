@@ -11,7 +11,7 @@ import { ModuleSkeleton } from "@/components/shared/ModuleSkeleton";
  * Handles top-level loading, error, and data states using shared components.
  */
 export default function ReturnToSupplierModule() {
-  const { data, isLoading, error, refresh } = useReturnLists();
+  const { data, refs, isLoading, error, refresh } = useReturnLists();
 
   if (error) {
     return (
@@ -30,6 +30,7 @@ export default function ReturnToSupplierModule() {
   return (
     <ReturnToSupplierList
       data={data}
+      refs={refs}
       isLoading={isLoading}
       onRefresh={refresh}
     />

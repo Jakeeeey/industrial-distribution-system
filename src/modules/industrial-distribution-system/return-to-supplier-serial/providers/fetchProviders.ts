@@ -53,15 +53,34 @@ export async function getTransactionDetails(
   return handleResponse<RTSItem[]>(res);
 }
 
+// Promise-level cache for reference data
+let referencesCachePromise: Promise<ReferenceData> | null = null;
+
+/**
+ * Invalidates the references cache so that the next request will pull fresh data.
+ */
+export function clearReferencesCache(): void {
+  referencesCachePromise = null;
+}
+
 /**
  * Fetches all reference data (suppliers, branches, products, discounts, etc.).
+ * Implements a Promise-level singleton cache to prevent connection pool exhaustion.
  * @returns ReferenceData bundle.
  */
 export async function getReferences(): Promise<ReferenceData> {
-  const res = await fetch(`${API_BASE}?action=references`, {
-    cache: "no-store",
-  });
-  return handleResponse<ReferenceData>(res);
+  if (!referencesCachePromise) {
+    referencesCachePromise = fetch(`${API_BASE}?action=references`, {
+      cache: "no-store",
+    })
+      .then((res) => handleResponse<ReferenceData>(res))
+      .catch((err) => {
+        // Clear the cache on failure so future attempts can retry
+        referencesCachePromise = null;
+        throw err;
+      });
+  }
+  return referencesCachePromise;
 }
 
 /**

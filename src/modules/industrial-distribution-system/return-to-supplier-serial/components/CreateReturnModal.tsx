@@ -45,15 +45,18 @@ import type {
   InventoryRecord, 
   Product,
   DiscountType, 
-  LinePerDiscountType 
+  LinePerDiscountType,
+  ReferenceData
 } from "../types/rts.schema";
 
 export function CreateReturnModal({
   isOpen,
+  refs: preloadedRefs,
   onClose,
   onReturnCreated,
 }: {
   isOpen: boolean;
+  refs: ReferenceData;
   onClose: () => void;
   onReturnCreated: () => void;
 }) {
@@ -62,7 +65,7 @@ export function CreateReturnModal({
     inventory,
     loadInventory,
     isLoading: isLoadingInventory,
-  } = useReturnCreationData(isOpen);
+  } = useReturnCreationData(isOpen, preloadedRefs);
 
 
   const [selection, setSelection] = useState({

@@ -35,15 +35,22 @@ const EMPTY_REFS: ReferenceData = {
  *
  * @param isActive - Gate flag; references are only fetched when true.
  */
-export function useReturnCreationData(isActive: boolean) {
-  const [refs, setRefs] = useState<ReferenceData>(EMPTY_REFS);
+export function useReturnCreationData(isActive: boolean, initialRefs?: ReferenceData) {
+  const [refs, setRefs] = useState<ReferenceData>(initialRefs || EMPTY_REFS);
   const [inventory, setInventory] = useState<InventoryRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch reference data when dialog opens
+  // Sync state if preloaded references update
   useEffect(() => {
-    if (!isActive) return;
+    if (initialRefs) {
+      setRefs(initialRefs);
+    }
+  }, [initialRefs]);
+
+  // Fetch reference data when dialog opens (only if not pre-loaded)
+  useEffect(() => {
+    if (!isActive || initialRefs) return;
 
     let cancelled = false;
 
@@ -68,7 +75,7 @@ export function useReturnCreationData(isActive: boolean) {
     return () => {
       cancelled = true;
     };
-  }, [isActive]);
+  }, [isActive, initialRefs]);
 
   /**
    * Fetches display-ready inventory for a specific branch + supplier.

@@ -13,6 +13,7 @@ import type {
   ReturnToSupplier,
   CartItem,
   InventoryRecord,
+  ReferenceData,
 } from "../types/rts.schema";
 import {
   getTransactionDetails,
@@ -29,6 +30,7 @@ import { calculateLineItem } from "../utils/calculations";
 
 interface ReturnDetailsModalProps {
   isOpen: boolean;
+  refs: ReferenceData;
   onClose: () => void;
   data: ReturnToSupplier | null;
   onUpdateSuccess?: () => void;
@@ -36,6 +38,7 @@ interface ReturnDetailsModalProps {
 
 export function ReturnDetailsModal({
   isOpen,
+  refs: preloadedRefs,
   onClose,
   data,
   onUpdateSuccess,
@@ -46,7 +49,7 @@ export function ReturnDetailsModal({
     inventory,
     loadInventory,
     isLoading: isLoadingInventory,
-  } = useReturnCreationData(isOpen);
+  } = useReturnCreationData(isOpen, preloadedRefs);
 
   const [items, setItems] = useState<CartItem[]>([]);
   const [remarks, setRemarks] = useState("");
