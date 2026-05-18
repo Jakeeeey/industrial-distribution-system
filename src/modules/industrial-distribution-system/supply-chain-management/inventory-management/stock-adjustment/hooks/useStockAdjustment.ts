@@ -41,7 +41,7 @@ export function useStockAdjustment() {
       // NOTE: status is filtered client-side to avoid Directus boolean filter issues
 
       const response = await fetch(
-        `/api/scm/inventory-management/stock-adjustment?${queryParams.toString()}`
+        `/api/ids/scm/inventory-management/stock-adjustment?${queryParams.toString()}`
       );
       const result = await response.json();
 
@@ -78,7 +78,7 @@ export function useStockAdjustment() {
   const deleteAdjustment = async (id: number) => {
     try {
       const response = await fetch(
-        `/api/scm/inventory-management/stock-adjustment/${id}`,
+        `/api/ids/scm/inventory-management/stock-adjustment/${id}`,
         { method: "DELETE" }
       );
       const result = await response.json();

@@ -70,6 +70,7 @@ export type ProductRow = {
 
     isActive: number;
     cost_per_unit: number | null;
+    is_serialized?: number | null;
 };
 
 export type ProductPerSupplierRow = {
