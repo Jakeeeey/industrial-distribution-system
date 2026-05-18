@@ -21,6 +21,7 @@ export const createReturnItemSchema = z.object({
   return_type_id: z.number().nullable().optional(),
   discount_type_id: z.number().nullable().optional(),
   rfid_tag: z.string().optional(),
+  serials: z.array(z.string()).optional(),
 });
 
 /** Schema for the full create/update transaction payload. */
@@ -162,6 +163,7 @@ export interface CartItem extends Product {
   return_type_id?: number | null;
   discountTypeId?: number;
   rfid_tag?: string;
+  serials: string[];
 }
 
 /** A mapped RTS parent record for the list table. */
@@ -197,6 +199,7 @@ export interface RTSItem {
   returnTypeId?: number;
   discountTypeId?: number;
   rfid_tag?: string;
+  serials: string[];
 }
 
 /** A simplified return item used for print/export views. */
@@ -262,6 +265,16 @@ export interface RtsItemRfid {
   id: number;
   rts_item_id: number;
   rfid_tag: string;
+  status: "PENDING" | "SCANNED" | "RETURNED";
+  created_at: string;
+  created_by: number | null;
+}
+
+/** A serial number linked to a specific return item line. */
+export interface RtsItemSerial {
+  id: number;
+  rts_item_id: number;
+  serial_number: string;
   status: "PENDING" | "SCANNED" | "RETURNED";
   created_at: string;
   created_by: number | null;

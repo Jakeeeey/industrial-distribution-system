@@ -88,7 +88,7 @@ async function directusMutate<T>(path: string, method: "POST" | "PATCH" | "DELET
  */
 export async function getRawRtsHeaders() {
   return directusGet<{ data: Record<string, unknown>[] }>(
-    "/items/return_to_supplier?limit=-1&fields=id,doc_no,transaction_date,is_posted,remarks,supplier_id.supplier_name,branch_id.branch_name,total_net_amount,encoder_id,date_posted&sort=-date_created"
+    "/items/return_to_supplier?limit=-1&filter[supplier_id][division_id][_eq]=1&filter[branch_id][division_id][_eq]=1&fields=id,doc_no,transaction_date,is_posted,remarks,supplier_id.supplier_name,branch_id.branch_name,total_net_amount,encoder_id,date_posted&sort=-date_created"
   );
 }
 
@@ -125,12 +125,23 @@ export async function getRawRfidsByItemIds(itemIds: number[]) {
 }
 
 /**
+ * Fetches Serial Numbers associated with specific RTS item IDs.
+ */
+export async function getRawSerialsByItemIds(itemIds: number[]) {
+  const params = new URLSearchParams({
+    "filter[rts_item_id][_in]": itemIds.join(","),
+    fields: "rts_item_id,serial_number",
+  });
+  return directusGet<{ data: { rts_item_id: number; serial_number: string }[] }>(`/items/rts_item_serial?${params}`);
+}
+
+/**
  * Fetches all reference data required for the modue.
  */
 export async function getRawReferences() {
   return Promise.all([
-    directusGet<{ data: Record<string, unknown>[] }>("/items/suppliers?limit=-1&filter[supplier_type][_eq]=Trade"),
-    directusGet<{ data: Record<string, unknown>[] }>("/items/branches?limit=-1"),
+    directusGet<{ data: Record<string, unknown>[] }>("/items/suppliers?limit=-1&filter[supplier_type][_eq]=Trade&filter[division_id][_eq]=1"),
+    directusGet<{ data: Record<string, unknown>[] }>("/items/branches?limit=-1&filter[division_id][_eq]=1"),
     directusGet<{ data: Record<string, unknown>[] }>(
       "/items/products?limit=-1&fields=product_id,product_name,description,product_code,parent_id,unit_of_measurement,unit_of_measurement_count,cost_per_unit",
     ),
@@ -221,6 +232,92 @@ export async function checkRfidAlreadyBound(rfidTag: string) {
 }
 
 /**
+ * Persistence: Checks if a Serial Number is already bound to any RTS item (Pending, Scanned, or Returned).
+ */
+export async function checkSerialAlreadyReturned(serialNumber: string) {
+  const res = await directusGet<{ data: Record<string, unknown>[] }>(
+    `/items/rts_item_serial?filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&limit=1&fields=id`
+  );
+  return res.data && res.data.length > 0;
+}
+
+/**
+ * Inventory: Checks if a serial number is on-hand and returns its Product ID.
+ * Follows the robust pattern from Active Picking with fallbacks for field naming.
+ */
+export async function getSpringSerialLookup(serialNumber: string, branchId: number, token: string): Promise<{ productId: number } | null> {
+  const SPRING_URL = process.env.SPRING_API_BASE_URL;
+  if (!SPRING_URL) throw new Error("SPRING_API_BASE_URL is not defined");
+
+  const inputSerial = serialNumber.trim().toUpperCase();
+  const extractData = (raw: any): any[] => {
+    if (Array.isArray(raw)) return raw;
+    if (raw?.content && Array.isArray(raw.content)) return raw.content;
+    if (raw?.data && Array.isArray(raw.data)) return raw.data;
+    return [];
+  };
+
+  const tryFetch = async (queryParams: string) => {
+    const url = `${SPRING_URL.replace(/\/$/, "")}/api/v-serial-onhand/all?${queryParams}&size=1000`;
+    try {
+      const res = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        cache: "no-store",
+      });
+      if (!res.ok) return [];
+      const json = await res.json();
+      return extractData(json);
+    } catch {
+      return [];
+    }
+  };
+
+  // 1. Try Serial + Branch (Standard)
+  let data = await tryFetch(`serialNumber=${encodeURIComponent(serialNumber.trim())}&branchId=${branchId}`);
+  
+  // 2. Try Serial + Branch (snake_case fallback)
+  if (data.length === 0) {
+    data = await tryFetch(`serial_number=${encodeURIComponent(serialNumber.trim())}&branch_id=${branchId}`);
+  }
+
+  // 3. Try Serial Only (Global)
+  if (data.length === 0) {
+    data = await tryFetch(`serialNumber=${encodeURIComponent(serialNumber.trim())}`);
+    if (data.length === 0) {
+      data = await tryFetch(`serial_number=${encodeURIComponent(serialNumber.trim())}`);
+    }
+  }
+
+  if (data.length === 0) return null;
+
+  // Find the exact match in the returned set
+  const onhand = data.find((item: any) => {
+    const dbVal = item.serialNumber ?? item.serial_number ?? item.serialNo ?? item.serial;
+    if (dbVal === undefined || dbVal === null) return false;
+    
+    const dbSerial = String(dbVal).trim().toUpperCase();
+    const dbBranchId = item.branchId ?? item.branch_id;
+    
+    // Must match serial exactly, and branch if provided in record
+    const branchMatch = dbBranchId === undefined || dbBranchId === null || Number(dbBranchId) === branchId;
+    return dbSerial === inputSerial && branchMatch;
+  });
+
+  if (onhand) {
+    const pId = onhand.productId ?? onhand.product_id ?? onhand.product?.id ?? onhand.product?.product_id;
+    if (pId !== undefined && pId !== null) {
+      return { productId: Number(pId) };
+    }
+  }
+
+  return null;
+}
+
+/**
  * Persistence: Creates the RTS Header.
  */
 export async function createRtsHeader(header: Record<string, unknown>) {
@@ -239,6 +336,13 @@ export async function createRtsItem(item: Record<string, unknown>) {
  */
 export async function createRtsRfidBinding(binding: Record<string, unknown>) {
   return directusMutate("/items/rts_item_rfid", "POST", binding);
+}
+
+/**
+ * Persistence: Binds a Serial Number to an RTS Item.
+ */
+export async function createRtsItemSerial(payload: Record<string, unknown>) {
+  return directusMutate("/items/rts_item_serial", "POST", payload);
 }
 
 /**
@@ -263,12 +367,20 @@ export async function getExistingRelatedIds(id: string) {
     rfidIds = (rfidJson.data || []).map(r => r.id);
   }
 
-  return { itemIds, rfidIds };
+  let serialIds: number[] = [];
+  if (itemIds.length > 0) {
+    const serialJson = await directusGet<{ data: { id: number }[] }>(
+        `/items/rts_item_serial?filter[rts_item_id][_in]=${itemIds.join(",")}&fields=id`
+    );
+    serialIds = (serialJson.data || []).map(s => s.id);
+  }
+
+  return { itemIds, rfidIds, serialIds };
 }
 
 /**
  * Persistence: Bulk deletes records.
  */
-export async function deleteRecords(collection: "rts_items" | "rts_item_rfid", ids: number[]) {
+export async function deleteRecords(collection: "rts_items" | "rts_item_rfid" | "rts_item_serial", ids: number[]) {
   return directusMutate(`/items/${collection}`, "DELETE", ids);
 }

@@ -130,3 +130,22 @@ export async function updateTransaction(
   });
   return handleResponse(res);
 }
+
+/**
+ * Validates a serial number against database and inventory.
+ * @param serialNumber - The serial number to validate.
+ * @param productId - The product ID.
+ * @param branchId - The branch ID.
+ * @returns Success confirmation, or throws on error.
+ */
+export async function validateSerialNumber(
+  serialNumber: string,
+  productId: number,
+  branchId: number,
+): Promise<{ success: boolean }> {
+  const res = await fetch(
+    `${API_BASE}?action=serial-validate&serialNumber=${encodeURIComponent(serialNumber)}&productId=${productId}&branchId=${branchId}`,
+    { cache: "no-store" },
+  );
+  return handleResponse<{ success: boolean }>(res);
+}

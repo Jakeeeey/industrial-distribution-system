@@ -1,14 +1,14 @@
 // =============================================================================
 // Return-to-Supplier — Core Service Logic
 // =============================================================================
-import type { 
-  ReturnToSupplier, 
-  RTSItem, 
-  ReferenceData, 
-  Product, 
-  Unit, 
-  LineDiscount, 
-  ProductSupplier, 
+import type {
+  ReturnToSupplier,
+  RTSItem,
+  ReferenceData,
+  Product,
+  Unit,
+  LineDiscount,
+  ProductSupplier,
   RTSReturnType,
   InventoryRecord,
   RfidLookupResult,
@@ -81,6 +81,17 @@ interface RawInventoryVariant {
 }
 
 /**
+ * Returns current PH Manila Time (UTC+8) in ISO string format.
+ */
+function getPHTime(): string {
+  const now = new Date();
+  const phOffset = 8 * 60; // 8 hours in minutes
+  const localOffset = now.getTimezoneOffset(); // in minutes
+  const phTime = new Date(now.getTime() + (phOffset + localOffset) * 60000);
+  return phTime.toISOString();
+}
+
+/**
  * Fetches all Return-to-Supplier transactions for the dashboard list.
  */
 export async function fetchTransactions(): Promise<ReturnToSupplier[]> {
@@ -130,10 +141,18 @@ export async function fetchTransactionDetails(
 
   const itemIds = items.map((i) => i.id);
   const rfidJson = await repo.getRawRfidsByItemIds(itemIds);
-  
+
   const rfidMap = new Map<number, string>();
   (rfidJson.data || []).forEach((r: { rts_item_id: number; rfid_tag: string }) => {
     rfidMap.set(Number(r.rts_item_id), r.rfid_tag);
+  });
+
+  const serialJson = await repo.getRawSerialsByItemIds(itemIds);
+  const serialMap = new Map<number, string[]>();
+  (serialJson.data || []).forEach((s: { rts_item_id: number; serial_number: string }) => {
+    const iId = Number(s.rts_item_id);
+    if (!serialMap.has(iId)) serialMap.set(iId, []);
+    serialMap.get(iId)?.push(s.serial_number);
   });
 
   return items.map((i) => {
@@ -159,6 +178,7 @@ export async function fetchTransactionDetails(
       returnTypeId: i.return_type_id ? Number(i.return_type_id) : undefined,
       discountTypeId: i.discount_type_id ? Number(i.discount_type_id) : undefined,
       rfid_tag: rfidMap.get(Number(i.id)),
+      serials: serialMap.get(Number(i.id)) || [],
     } as RTSItem;
   });
 }
@@ -189,6 +209,7 @@ export async function fetchReferences(): Promise<ReferenceData> {
     const raw = p as unknown as RawProduct;
     return {
       id: String(raw.product_id),
+      productId: Number(raw.product_id),
       code: raw.product_code || "N/A",
       name: raw.description || raw.product_name || "Unknown",
       price: Number(raw.cost_per_unit ?? 0),
@@ -210,7 +231,7 @@ export async function fetchReferences(): Promise<ReferenceData> {
       const supId = row.supplier_id as { id: number } | number;
       const prodId = row.product_id as { id?: number; product_id?: number } | number;
       const discType = row.discount_type as { id: number } | number;
-      
+
       return {
         id: row.id,
         supplier_id: typeof supId === "object" ? supId?.id : supId,
@@ -235,10 +256,10 @@ export async function fetchInventory(
 ): Promise<InventoryRecord[]> {
   try {
     const allRows = await repo.getSpringInventory(branchId, supplierId, token);
-    
+
     // Filter by branch and supplier using camelCase names (Standardized in Repo/Schema)
-    const rawViewRows = allRows.filter((r) => 
-      Number(r.branchId) === Number(branchId) && 
+    const rawViewRows = allRows.filter((r) =>
+      Number(r.branchId) === Number(branchId) &&
       Number(r.supplierId) === Number(supplierId)
     );
 
@@ -255,7 +276,7 @@ export async function fetchInventory(
         aggregatedRowsMap.set(pId, { ...r, runningInventoryUnit: Number(r.runningInventoryUnit || 0) });
       }
     });
-    
+
     const viewRows = Array.from(aggregatedRowsMap.values());
 
     // Get prices and parents to calculate families
@@ -285,12 +306,12 @@ export async function fetchInventory(
       // Sort by unitCount descending for remainder cascading
       const castVariants = variants as RawInventoryVariant[];
       castVariants.sort((a, b) => (Number(b.unitCount) || 0) - (Number(a.unitCount) || 0));
-      
+
       let remainderPieces = 0;
       castVariants.forEach((v) => {
         const safeUnitCount = Math.max(v.unitCount || 1, 1);
         const stockValue = Number(v.runningInventoryUnit || 0);
-        
+
         const adjustedInventory = stockValue + (remainderPieces / safeUnitCount);
         const displayStock = Math.floor(adjustedInventory);
         remainderPieces = (adjustedInventory - displayStock) * safeUnitCount;
@@ -337,6 +358,38 @@ export async function lookupRfid(
 }
 
 /**
+ * Validates a serial number against database and inventory.
+ */
+export async function validateSerialNumber(
+  serialNumber: string,
+  productId: number,
+  branchId: number,
+  token: string,
+) {
+  // 1. Check if already returned/scanned in Directus (Uniqueness check)
+  const isAlreadyReturned = await repo.checkSerialAlreadyReturned(serialNumber);
+  if (isAlreadyReturned) {
+    throw new Error(`Serial Number "${serialNumber}" has already been scanned or returned in another transaction.`);
+  }
+
+  // 2. Cross-Product Duplicate Check (Inventory View)
+  // We check if the serial exists in the warehouse. 
+  // If it does, we MUST ensure it belongs to the selected product.
+  const onhandInfo = await repo.getSpringSerialLookup(serialNumber, branchId, token);
+
+  if (onhandInfo) {
+    const identifiedProductId = Number(onhandInfo.productId);
+    if (identifiedProductId !== Number(productId)) {
+      throw new Error(`This serial number is already been used and is onhand in the warehouse.`);
+    }
+  }
+
+  // If the serial is not found in the warehouse view, we ALLOW it as a manual entry.
+  // This allows the user to return items that may not yet be in the system's on-hand records.
+  return { success: true };
+}
+
+/**
  * Creates a new Return-to-Supplier transaction.
  */
 export async function createTransaction(dto: CreateReturnDTO) {
@@ -345,23 +398,36 @@ export async function createTransaction(dto: CreateReturnDTO) {
 
   const calculatedTotalNet = rts_items.reduce((sum, item) => sum + (item.net_amount || 0), 0);
 
-  const parentJson = await repo.createRtsHeader({ 
-    ...header, 
+  const parentJson = await repo.createRtsHeader({
+    ...header,
     doc_no: docNo,
-    total_net_amount: calculatedTotalNet 
+    total_net_amount: calculatedTotalNet
   });
   const parentId = parentJson.data.id;
 
   for (const item of rts_items) {
-    const { rfid_tag, ...itemData } = item;
+    const { rfid_tag, serials, ...itemData } = item;
     const res = await repo.createRtsItem({ ...itemData, rts_id: parentId });
-    
+
     if (rfid_tag) {
       await repo.createRtsRfidBinding({
         rts_item_id: res.data.id,
         rfid_tag: rfid_tag,
         status: "RETURNED"
       });
+    }
+
+    if (serials && serials.length > 0) {
+      const phNow = getPHTime();
+      for (const sn of serials) {
+        await repo.createRtsItemSerial({
+          rts_item_id: res.data.id,
+          serial_number: sn,
+          status: "SCANNED",
+          created_at: phNow,
+          created_by: header.encoder_id || null,
+        });
+      }
     }
   }
 
@@ -374,28 +440,31 @@ export async function createTransaction(dto: CreateReturnDTO) {
  */
 export async function updateTransaction(id: string, dto: CreateReturnDTO) {
   const { rts_items, ...header } = dto;
-  
+
   const calculatedTotalNet = rts_items.reduce((sum, item) => sum + (item.net_amount || 0), 0);
 
   // 1. Update header
-  await repo.updateRtsHeader(id, { 
-    ...header, 
-    total_net_amount: calculatedTotalNet 
+  await repo.updateRtsHeader(id, {
+    ...header,
+    total_net_amount: calculatedTotalNet
   });
 
   // 2. Cleanup old associations
-  const { itemIds, rfidIds } = await repo.getExistingRelatedIds(id);
-  
+  const { itemIds, rfidIds, serialIds } = await repo.getExistingRelatedIds(id);
+
   if (rfidIds.length > 0) {
     await repo.deleteRecords("rts_item_rfid", rfidIds);
   }
   if (itemIds.length > 0) {
     await repo.deleteRecords("rts_items", itemIds);
   }
+  if (serialIds.length > 0) {
+    await repo.deleteRecords("rts_item_serial", serialIds);
+  }
 
   // 3. Create new items
   for (const item of rts_items) {
-    const { rfid_tag, ...itemData } = item;
+    const { rfid_tag, serials, ...itemData } = item;
     const res = await repo.createRtsItem({ ...itemData, rts_id: Number(id) });
 
     if (rfid_tag) {
@@ -404,6 +473,19 @@ export async function updateTransaction(id: string, dto: CreateReturnDTO) {
         rfid_tag: rfid_tag,
         status: "RETURNED"
       });
+    }
+
+    if (serials && serials.length > 0) {
+      const phNow = getPHTime();
+      for (const sn of serials) {
+        await repo.createRtsItemSerial({
+          rts_item_id: res.data.id,
+          serial_number: sn,
+          status: "SCANNED",
+          created_at: phNow,
+          created_by: header.encoder_id || null,
+        });
+      }
     }
   }
 }

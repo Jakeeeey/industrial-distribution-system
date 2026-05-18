@@ -9,7 +9,9 @@ import {
   Loader2,
   PackageOpen,
   ScanBarcode,
+  X,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -263,16 +265,17 @@ export function ProductPicker({
                             </div>
                             <Button
                               size="sm"
-                              className={`h-8 px-4 font-semibold text-xs shadow-sm transition-all ${
-                                isMaxed
-                                  ? "bg-muted text-muted-foreground cursor-not-allowed"
-                                  : "bg-primary text-primary-foreground hover:bg-primary/90"
-                              }`}
-                              disabled={isMaxed}
-                              onClick={() => onAdd(variant, 1)}
+                              variant={cartItem ? "destructive" : "default"}
+                              className={cn(
+                                "h-8 px-4 font-semibold text-xs shadow-sm transition-all",
+                                !cartItem && "bg-primary text-primary-foreground hover:bg-primary/90",
+                              )}
+                              onClick={() => (cartItem ? onRemove(variant.id) : onAdd(variant, 0))}
                             >
-                              {isMaxed ? (
-                                "Maxed"
+                              {cartItem ? (
+                                <>
+                                  <X className="w-3 h-3 mr-1.5" /> Remove
+                                </>
                               ) : (
                                 <>
                                   <Plus className="w-3 h-3 mr-1.5" /> Add
@@ -362,47 +365,10 @@ export function ProductPicker({
                           )}
                         </div>
 
-                        <div className="flex items-center bg-muted/30 rounded-md border">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 rounded-none rounded-l-md hover:bg-background hover:text-destructive"
-                            onClick={() => {
-                              if (item.quantity <= 1) onRemove(item.id);
-                              else onUpdateQty(item.id, item.quantity - 1);
-                            }}
-                          >
-                            <Minus className="h-3 w-3" />
-                          </Button>
-
-                          <div className="w-12 border-x bg-background">
-                            <Input
-                              type="number"
-                              min={1}
-                              max={maxStock}
-                              className="h-7 w-full text-center border-none p-0 text-xs font-bold focus-visible:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none bg-transparent"
-                              value={item.quantity}
-                              onChange={(e) => {
-                                let val = parseInt(e.target.value);
-                                if (isNaN(val)) return;
-                                if (val > maxStock) val = maxStock;
-                                if (val < 1) val = 1;
-                                onUpdateQty(item.id, val);
-                              }}
-                            />
-                          </div>
-
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className={`h-7 w-7 rounded-none rounded-r-md transition-colors ${isMaxed ? "opacity-50 cursor-not-allowed" : "hover:bg-background hover:text-primary"}`}
-                            disabled={isMaxed}
-                            onClick={() =>
-                              onUpdateQty(item.id, item.quantity + 1)
-                            }
-                          >
-                            <Plus className="h-3 w-3" />
-                          </Button>
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs font-bold text-muted-foreground bg-muted/50 px-2 py-1 rounded">
+                            Qty: {item.quantity}
+                          </span>
                         </div>
                       </div>
                     </div>

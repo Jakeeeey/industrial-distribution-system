@@ -87,9 +87,9 @@ export function ReturnDetailsModal({
         try {
           const fetched = await getTransactionDetails(String(data.id));
           const cartItems: CartItem[] = fetched.map((i) => {
-              const validUnitCount = i.unitCount > 0 ? i.unitCount : 1;
+            const validUnitCount = i.unitCount > 0 ? i.unitCount : 1;
             return {
-              id: String(i.id), // Use the unique Database Line ID to prevent duplicate React keys
+              id: String(i.id),
               productId: i.productId,
               code: i.code,
               name: i.name,
@@ -105,6 +105,7 @@ export function ReturnDetailsModal({
               discountTypeId: i.discountTypeId,
               parentId: null,
               rfid_tag: i.rfid_tag,
+              serials: i.serials || [],
             };
           });
           setItems(cartItems);
@@ -301,34 +302,13 @@ export function ReturnDetailsModal({
   /**
    * HANDLERS: RFID & Barcode Scanning
    */
-  const addToCartInternal = useCallback((p_raw: unknown, qty = 1) => {
+  const addToCartInternal = useCallback((p_raw: unknown, qty = 0) => {
     const p = p_raw as CartItem;
     setItems((prev) => {
-      // For RFID items, never merge — always add as a new line
-      if (p.rfid_tag) {
-        return [
-          ...prev,
-          {
-            ...p,
-            id: `${p.id}-rfid-${p.rfid_tag}`, // Unique key per RFID
-            quantity: 1,
-            onHand: p.stock || 0,
-            discount: (p.supplierDiscount || 0) / 100,
-            discountTypeId: p.discountTypeId,
-            customPrice: p.price,
-            rfid_tag: p.rfid_tag,
-          } as CartItem,
-        ];
+      const exists = prev.find((i) => i.productId === p.productId);
+      if (exists) {
+        return prev.filter((i) => i.productId !== p.productId);
       }
-
-      // For non-RFID items, merge quantity as usual
-      const exists = prev.find((i) => i.productId === p.productId && !i.rfid_tag);
-      if (exists)
-        return prev.map((i) =>
-          i.productId === p.productId && !i.rfid_tag
-            ? { ...i, quantity: i.quantity + qty }
-            : i,
-        );
       return [
         ...prev,
         {
@@ -338,6 +318,7 @@ export function ReturnDetailsModal({
           discount: (p.supplierDiscount || 0) / 100,
           discountTypeId: p.discountTypeId,
           customPrice: p.price,
+          serials: [],
         },
       ];
     });
@@ -481,14 +462,13 @@ export function ReturnDetailsModal({
   /**
    * GLOBAL SCAN CAPTURE
    */
+  /**
+   * GLOBAL SCAN CAPTURE: Notifies user of scanned value.
+   */
   useGlobalScanner({
     enabled: isOpen && isEditable && !showPicker,
     onScan: (val) => {
-      if (detectScanType(val) === "rfid") {
-        handleRfidScan(val);
-      } else {
-        handleBarcodeScan(val);
-      }
+      toast.info("Scanned: " + val, { description: "Add this to a product row below." });
     }
   });
 
@@ -564,6 +544,7 @@ export function ReturnDetailsModal({
           discount_type_id: item.discountTypeId || null,
           item_remarks: "",
           rfid_tag: item.rfid_tag,
+          serials: item.serials,
         };
       });
 
@@ -846,37 +827,7 @@ export function ReturnDetailsModal({
                 </h3>
                 <div className="flex items-center gap-2">
                   {/* RFID Scan Field — scanner-only (no manual typing) */}
-                  {isEditable && (
-                    <div className="relative">
-                      <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
-                      <input
-                        ref={rfidInputRef}
-                        type="text"
-                        className="absolute inset-0 opacity-0 cursor-default"
-                        tabIndex={-1}
-                        autoComplete="off"
-                        disabled={rfidScanning || !currentBranchId || !currentSupplierId}
-                      />
-                      <div
-                        className={cn(
-                          "pl-9 pr-3 h-9 w-[220px] text-xs border rounded-md font-mono flex items-center cursor-pointer select-none transition-all",
-                          !currentBranchId || !currentSupplierId
-                            ? "bg-muted text-muted-foreground"
-                            : "bg-primary/5 text-primary hover:border-primary/30",
-                        )}
-                        onClick={() => rfidInputRef.current?.focus()}
-                      >
-                        {rfidScanning
-                          ? "Looking up..."
-                          : lastScannedRfid
-                            ? lastScannedRfid
-                            : "Scan RFID..."}
-                      </div>
-                      {rfidScanning && (
-                        <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-3 w-3 animate-spin text-emerald-500" />
-                      )}
-                    </div>
-                  )}
+
                   {isEditable && (
                     <Button
                       size="sm"
@@ -908,6 +859,7 @@ export function ReturnDetailsModal({
                   }
                   remarks={remarks}
                   setRemarks={setRemarks}
+                  branchId={currentBranchId}
                   readOnly={!isEditable}
                 />
               </div>

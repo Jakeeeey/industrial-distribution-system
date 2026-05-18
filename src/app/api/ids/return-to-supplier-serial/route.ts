@@ -11,6 +11,7 @@ import {
   fetchReferences,
   fetchInventory,
   lookupRfid,
+  validateSerialNumber,
   createTransaction,
   updateTransaction,
 } from "@/modules/industrial-distribution-system/return-to-supplier-serial/services/rts-service";
@@ -125,6 +126,24 @@ export async function GET(req: NextRequest) {
         }
 
         const result = await lookupRfid(rfid, rfidBranchId, rfidToken);
+        return json({ data: result });
+      }
+
+      case "serial-validate": {
+        const serialNumber = url.searchParams.get("serialNumber");
+        const productId = Number(url.searchParams.get("productId"));
+        const branchId = Number(url.searchParams.get("branchId"));
+
+        if (!serialNumber || !productId || !branchId) {
+          return json({ error: "serialNumber, productId, and branchId are required" }, 400);
+        }
+
+        const token = req.cookies.get("vos_access_token")?.value;
+        if (!token) {
+          return json({ error: "Unauthorized: Missing access token" }, 401);
+        }
+
+        const result = await validateSerialNumber(serialNumber, productId, branchId, token);
         return json({ data: result });
       }
 

@@ -195,8 +195,8 @@ export function ReturnToSupplierList({
     () =>
       supplierSearch
         ? uniqueSuppliers.filter((s) =>
-            s.toLowerCase().includes(supplierSearch.toLowerCase()),
-          )
+          s.toLowerCase().includes(supplierSearch.toLowerCase()),
+        )
         : uniqueSuppliers,
     [uniqueSuppliers, supplierSearch],
   );
@@ -205,8 +205,8 @@ export function ReturnToSupplierList({
     () =>
       branchSearch
         ? uniqueBranches.filter((b) =>
-            b.toLowerCase().includes(branchSearch.toLowerCase()),
-          )
+          b.toLowerCase().includes(branchSearch.toLowerCase()),
+        )
         : uniqueBranches,
     [uniqueBranches, branchSearch],
   );
@@ -254,7 +254,18 @@ export function ReturnToSupplierList({
   );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* ===== MODULE TITLE ===== */}
+      <div className="mb-2">
+        <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
+          Return to Supplier Serial
+        </h1>
+        <p className="text-muted-foreground text-sm mt-1">
+          Manage and track serialized returns to trade suppliers.
+        </p>
+      </div>
+
+      <br></br>
       {/* ===== FILTER BAR ===== */}
       <div className="flex flex-col lg:flex-row gap-3 items-start lg:items-center">
         {/* Filter: Supplier Combobox */}

@@ -267,35 +267,14 @@ export function CreateReturnModal({
     }
   }, [selection.supplierId, selection.branchId]);
 
-  const addToCart = useCallback((p_raw: unknown, qty = 1) => {
+  const addToCart = useCallback((p_raw: unknown, qty = 0) => {
     const p = p_raw as Product;
     setCart((prev) => {
-      const r_tag = (p as { rfid_tag?: string }).rfid_tag;
-      // For RFID items, never merge — always add as a new line
-      if (r_tag) {
-        return [
-          ...prev,
-          {
-            ...p,
-            id: `${p.id}-rfid-${r_tag}`, // Unique key per RFID
-            quantity: 1,
-            onHand: p.stock ?? 0,
-            discount: p.supplierDiscount ?? 0,
-            discountTypeId: p.discountTypeId,
-            customPrice: p.price,
-            rfid_tag: r_tag,
-          } as CartItem,
-        ];
+      const exists = prev.find((i) => i.id === p.id);
+      if (exists) {
+        // If it exists, we toggle it off (handled by ProductPicker calling onRemove, but safe here too)
+        return prev.filter((i) => i.id !== p.id);
       }
-
-      // For non-RFID items, merge quantity as usual
-      const exists = prev.find((i) => i.id === p.id && !i.rfid_tag);
-      if (exists)
-        return prev.map((i) =>
-          i.id === p.id && !i.rfid_tag
-            ? { ...i, quantity: i.quantity + qty }
-            : i,
-        );
       return [
         ...prev,
         {
@@ -305,6 +284,7 @@ export function CreateReturnModal({
           discount: p.supplierDiscount ?? 0,
           discountTypeId: p.discountTypeId,
           customPrice: p.price,
+          serials: [],
         } as CartItem,
       ];
     });
@@ -509,14 +489,17 @@ export function CreateReturnModal({
    * GLOBAL SCAN CAPTURE: Automatically detects if a scan is RFID or Barcode
    * and routes to the correct handler.
    */
+  /**
+   * GLOBAL SCAN CAPTURE: Routes scanned value to the correct context.
+   * In Serial mode, we might want to automatically add to the "active" or "last" row.
+   * For now, we disable the auto-add-to-cart logic to prevent confusion.
+   */
   useGlobalScanner({
     enabled: isOpen && !showPicker,
     onScan: (val) => {
-      if (detectScanType(val) === "rfid") {
-        handleRfidScan(val);
-      } else {
-        handleBarcodeScan(val);
-      }
+      // In this new workflow, scanning is mostly done within the expanded row input.
+      // We could implement auto-routing here if a row is focused.
+      toast.info("Scanned: " + val, { description: "Add this to a product row below." });
     }
   });
 
@@ -585,6 +568,7 @@ export function CreateReturnModal({
           return_type_id: item.return_type_id || null,
           discount_type_id: item.discountTypeId || null,
           rfid_tag: item.rfid_tag || undefined,
+          serials: item.serials,
         };
       });
 
@@ -800,38 +784,7 @@ export function CreateReturnModal({
                        <Package className="h-4 w-4 text-primary" /> Items
                     </Label>
                     <div className="flex items-center gap-2">
-                      {/* RFID Scan Field — scanner-only (no manual typing) */}
-                      <div className="relative">
-                          <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
-                          {/* Hidden input captures scanner keyboard wedge input */}
-                          <input
-                            ref={rfidInputRef}
-                            type="text"
-                            className="absolute inset-0 opacity-0 cursor-default"
-                            tabIndex={-1}
-                            autoComplete="off"
-                            disabled={rfidScanning || !selection.branchId || !selection.supplierId}
-                          />
-                          {/* Visible read-only display */}
-                          <div
-                            className={cn(
-                              "pl-9 pr-3 h-9 w-[220px] text-xs border rounded-md font-mono flex items-center cursor-pointer select-none transition-all",
-                              !selection.branchId || !selection.supplierId
-                                ? "bg-muted text-muted-foreground"
-                                : "bg-primary/5 text-primary hover:border-primary/30",
-                            )}
-                            onClick={() => rfidInputRef.current?.focus()}
-                          >
-                            {rfidScanning
-                              ? "Looking up..."
-                              : lastScannedRfid
-                                ? lastScannedRfid
-                                : "Scan RFID..."}
-                          </div>
-                          {rfidScanning && (
-                            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-3 w-3 animate-spin text-emerald-500" />
-                          )}
-                      </div>
+
                       <Button
                         onClick={() => setShowPicker(true)}
                         className="h-9 text-xs"
@@ -855,6 +808,7 @@ export function CreateReturnModal({
                       setRemarks={(r) =>
                         setSelection((s) => ({ ...s, remarks: r }))
                       }
+                      branchId={Number(selection.branchId) || null}
                       readOnly={false}
                     />
                   ) : (

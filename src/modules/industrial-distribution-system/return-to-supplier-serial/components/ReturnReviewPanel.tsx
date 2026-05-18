@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { Trash2, ScanLine, ChevronDown } from "lucide-react";
+import { Trash2, ScanLine, Plus, Loader2, X as CloseIcon } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -21,6 +22,8 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import type { 
   CartItem, 
   LineDiscount, 
@@ -28,6 +31,7 @@ import type {
   DiscountType, 
   LinePerDiscountType 
 } from "../types/rts.schema";
+import { validateSerialNumber as apiValidateSerial } from "../providers/fetchProviders";
 
 interface ReturnReviewPanelProps {
   items: CartItem[];
@@ -35,25 +39,12 @@ interface ReturnReviewPanelProps {
   discountTypes: DiscountType[];
   linePerDiscountType: LinePerDiscountType[];
   returnTypes: RTSReturnType[];
-  onUpdateItem: (id: string, field: keyof CartItem, value: string | number | undefined | null) => void;
+  onUpdateItem: (id: string, field: keyof CartItem, value: any) => void;
   onRemoveItem: (id: string) => void;
   remarks: string;
   setRemarks: (val: string) => void;
+  branchId?: number | null;
   readOnly?: boolean;
-}
-
-// Grouped structure for collapsible RFID rows
-interface GroupedProduct {
-  key: string;
-  code: string;
-  name: string;
-  unit: string;
-  returnTypeName: string;
-  totalQty: number;
-  totalGross: number;
-  totalDiscount: number;
-  totalNet: number;
-  children: CartItem[];
 }
 
 export function ReturnReviewPanel({
@@ -66,12 +57,14 @@ export function ReturnReviewPanel({
   onRemoveItem,
   remarks,
   setRemarks,
+  branchId,
   readOnly = false,
 }: ReturnReviewPanelProps) {
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [serialInput, setSerialInput] = useState("");
+  const [isValidating, setIsValidating] = useState(false);
 
-  // Unified calculation: use the SAME per-row formula as the table rows,
-  // rounding each row to 2 decimal places before accumulating.
+  // Unified calculation
   const { totalAmount, totalQuantity, totalDiscountAmount, grossAmount } =
     useMemo(() => items.reduce(
       (acc, item) => {
@@ -89,87 +82,66 @@ export function ReturnReviewPanel({
       { totalAmount: 0, totalQuantity: 0, totalDiscountAmount: 0, grossAmount: 0 },
     ), [items]);
 
-  // Helper to find discount name by ID or fallback
+  const selectedItem = useMemo(() => items.find(i => i.id === selectedItemId), [items, selectedItemId]);
+
   const getDiscountName = (item: CartItem) => {
     if (item.discountTypeId) {
       const match = discountTypes.find((d) => d.id === item.discountTypeId);
-      if (match) {
-        return (
-          match.discount_type_name ||
-          match.discount_type ||
-          match.name ||
-          `Type ${match.id}`
-        );
-      }
+      if (match) return match.discount_type_name || match.discount_type || match.name || `Type ${match.id}`;
     }
-    const matchByValue = lineDiscounts.find(
-      (d) => Math.abs(Number(d.percentage) / 100 - item.discount) < 0.0001
-    );
+    const matchByValue = lineDiscounts.find((d) => Math.abs(Number(d.percentage) / 100 - item.discount) < 0.0001);
     if (matchByValue) return matchByValue.line_discount;
-
-    return `${(item.discount * 100).toFixed(4).replace(/\.?0+$/, "")}%`;
+    return `${(item.discount * 100).toFixed(2)}%`;
   };
 
-  // Separate items into RFID (grouped) and Manual (flat)
-  const rfidItems = useMemo(() => items.filter((i) => !!i.rfid_tag), [items]);
-  const manualItems = useMemo(() => items.filter((i) => !i.rfid_tag), [items]);
+  const handleAddSerial = async (serial: string) => {
+    if (!selectedItemId || !selectedItem || !serial.trim() || !branchId) return;
+    
+    const sn = serial.trim();
 
-  // Group RFID items by productId + unit + returnType
-  const groupedRfidProducts = useMemo(() => {
-    return rfidItems.reduce((acc, item) => {
-      const returnTypeObj = returnTypes.find((r) => r.id === item.return_type_id);
-      const rTypeName = returnTypeObj?.return_type_name || "Unassigned";
-      const key = `${item.productId}-${item.unit}-${rTypeName}`;
+    // 1. Session Check (All items - Case Insensitive)
+    const normalizedSn = sn.toLowerCase();
+    const isDuplicateInSession = items.some(item => 
+      item.serials.some(s => s.trim().toLowerCase() === normalizedSn)
+    );
+    
+    if (isDuplicateInSession) {
+      toast.error(`Serial Number "${sn}" is already added to this transaction.`);
+      return;
+    }
 
-      if (!acc[key]) {
-        acc[key] = {
-          key,
-          code: item.code,
-          name: item.name,
-          unit: item.unit,
-          returnTypeName: rTypeName,
-          totalQty: 0,
-          totalGross: 0,
-          totalDiscount: 0,
-          totalNet: 0,
-          children: [],
-        };
-      }
-
-      const unitPrice = item.customPrice || item.price;
-      const rowGross = Math.round(unitPrice * item.quantity * 100) / 100;
-      const rowDiscount = Math.round(rowGross * item.discount * 100) / 100;
-      const rowNet = Math.round((rowGross - rowDiscount) * 100) / 100;
-
-      acc[key].totalQty += item.quantity;
-      acc[key].totalGross += rowGross;
-      acc[key].totalDiscount += rowDiscount;
-      acc[key].totalNet += rowNet;
-      acc[key].children.push(item);
-
-      return acc;
-    }, {} as Record<string, GroupedProduct>);
-  }, [rfidItems, returnTypes]);
-
-  const toggleGroup = (key: string) => {
-    setExpandedGroups((prev) => ({ ...prev, [key]: !prev[key] }));
+    setIsValidating(true);
+    try {
+      // 2. Database & Inventory Check
+      await apiValidateSerial(sn, selectedItem.productId, branchId);
+      
+      const newSerials = [...selectedItem.serials, sn];
+      onUpdateItem(selectedItemId, "serials", newSerials);
+      onUpdateItem(selectedItemId, "quantity", newSerials.length);
+      setSerialInput("");
+      toast.success(`Serial "${sn}" verified and added.`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to validate serial number.");
+    } finally {
+      setIsValidating(false);
+    }
   };
 
-  const colSpanCount = readOnly ? 10 : 11;
+  const handleRemoveSerial = (serial: string) => {
+    if (!selectedItemId || !selectedItem) return;
+
+    const newSerials = selectedItem.serials.filter(s => s !== serial);
+    onUpdateItem(selectedItemId, "serials", newSerials);
+    onUpdateItem(selectedItemId, "quantity", newSerials.length);
+  };
 
   const handleDiscountChange = (itemId: string, val: string) => {
     const selectedType = discountTypes.find((d) => d.id.toString() === val);
     if (selectedType) {
       onUpdateItem(itemId, "discountTypeId", selectedType.id);
-
-      // Resolve percentage
-      const junctions = linePerDiscountType.filter(
-        (j) => String(j.type_id) === String(selectedType.id)
-      );
+      const junctions = linePerDiscountType.filter((j) => String(j.type_id) === String(selectedType.id));
       if (junctions.length > 0) {
-        const lineDiscount = lineDiscounts.find(
-          (ld) => String(ld.id) === String(junctions[0].line_id)
-        );
+        const lineDiscount = lineDiscounts.find((ld) => String(ld.id) === String(junctions[0].line_id));
         if (lineDiscount) {
           onUpdateItem(itemId, "discount", Number(lineDiscount.percentage) / 100);
         }
@@ -179,473 +151,217 @@ export function ReturnReviewPanel({
     }
   };
 
+  const colSpanCount = readOnly ? 8 : 9;
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* 1. TABLE SECTION */}
       <div className="rounded-md border overflow-hidden bg-card shadow-sm">
         <Table>
           <TableHeader className="bg-muted/50 border-b">
             <TableRow>
-              <TableHead className="w-[100px] text-xs font-bold text-muted-foreground uppercase pl-4">
-                Code
-              </TableHead>
-              <TableHead className="w-[120px] text-xs font-bold text-muted-foreground uppercase">
-                RFID
-              </TableHead>
-              <TableHead className="text-xs font-bold text-muted-foreground uppercase">
-                Product Name
-              </TableHead>
-              <TableHead className="w-20 text-xs font-bold text-muted-foreground uppercase text-center">
-                Unit
-              </TableHead>
-              <TableHead className="w-[100px] text-xs font-bold text-muted-foreground uppercase text-center">
-                Quantity
-              </TableHead>
-              <TableHead className="w-[120px] text-xs font-bold text-muted-foreground uppercase text-right">
-                Unit Price
-              </TableHead>
-              <TableHead className="w-40 text-xs font-bold text-muted-foreground uppercase text-center">
-                Discount Type
-              </TableHead>
-              <TableHead className="w-[120px] text-xs font-bold text-muted-foreground uppercase text-right">
-                Discount Amt
-              </TableHead>
-              <TableHead className="w-40 text-xs font-bold text-muted-foreground uppercase text-center">
-                Return Type
-              </TableHead>
-              <TableHead className="w-[120px] text-xs font-bold text-muted-foreground uppercase text-right">
-                Total
-              </TableHead>
-              {!readOnly && (
-                <TableHead className="w-[60px] text-xs font-bold text-muted-foreground uppercase text-center pr-4">
-                  Action
-                </TableHead>
-              )}
+              <TableHead className="w-[120px] text-xs font-bold text-muted-foreground uppercase pl-4">Code</TableHead>
+              <TableHead className="text-xs font-bold text-muted-foreground uppercase">Product Name</TableHead>
+              <TableHead className="w-20 text-xs font-bold text-muted-foreground uppercase text-center">Unit</TableHead>
+              <TableHead className="w-[100px] text-xs font-bold text-muted-foreground uppercase text-center">Quantity</TableHead>
+              <TableHead className="w-[120px] text-xs font-bold text-muted-foreground uppercase text-right">Unit Price</TableHead>
+              <TableHead className="w-40 text-xs font-bold text-muted-foreground uppercase text-center">Discount Type</TableHead>
+              <TableHead className="w-[120px] text-xs font-bold text-muted-foreground uppercase text-right">Discount Amt</TableHead>
+              <TableHead className="w-40 text-xs font-bold text-muted-foreground uppercase text-center">Return Type</TableHead>
+              <TableHead className="w-[120px] text-xs font-bold text-muted-foreground uppercase text-right">Total</TableHead>
+              {!readOnly && <TableHead className="w-[60px] text-xs font-bold text-muted-foreground uppercase text-center pr-4">Action</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {items.length === 0 ? (
               <TableRow>
-                <TableCell
-                  colSpan={colSpanCount}
-                  className="h-32 text-center text-muted-foreground/50"
-                >
+                <TableCell colSpan={colSpanCount + 1} className="h-32 text-center text-muted-foreground/50">
                   No items selected.
                 </TableCell>
               </TableRow>
             ) : (
-              <>
-                {/* ═══════════════════════════════════════════════════════
-                    1. MANUAL ITEMS (Flat rows — no RFID tag)
-                    ═══════════════════════════════════════════════════════ */}
-                {manualItems.map((item) => {
-                  const unitPrice = item.customPrice || item.price;
-                  const totalLineDiscount = (unitPrice * item.quantity) * item.discount;
-                  const rowTotal = (unitPrice * item.quantity) - totalLineDiscount;
+              items.map((item) => {
+                const unitPrice = item.customPrice || item.price;
+                const totalLineDiscount = (unitPrice * item.quantity) * item.discount;
+                const rowTotal = (unitPrice * item.quantity) - totalLineDiscount;
+                const isSelected = selectedItemId === item.id;
 
-                  return (
-                    <TableRow
-                      key={item.id}
-                      className="hover:bg-muted/30 border-b last:border-0"
-                    >
-                      <TableCell className="text-xs text-muted-foreground font-mono pl-4">
-                        {item.code}
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-muted-foreground/30 text-xs">—</span>
-                      </TableCell>
-                      <TableCell className="font-medium text-sm">
-                        {item.name}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span className="inline-flex items-center justify-center px-2 py-1 rounded bg-primary/5 text-primary text-[10px] font-bold uppercase tracking-wide">
-                          {item.unit}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        {readOnly ? (
-                          <div className="text-center text-sm font-bold">
-                            {item.quantity}
-                          </div>
-                        ) : (
-                          <Input
-                            type="number"
-                            min={1}
-                            value={item.quantity}
-                            onChange={(e) =>
-                              onUpdateItem(
-                                item.id,
-                                "quantity",
-                                Math.max(1, parseFloat(e.target.value) || 0),
-                              )
-                            }
-                            className="h-8 text-center"
-                          />
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right text-sm font-medium">
-                        <div>
-                          ₱{" "}
-                          {unitPrice.toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
+                return (
+                  <TableRow 
+                    key={item.id} 
+                    className={cn(
+                      "hover:bg-muted/30 border-b transition-colors cursor-pointer",
+                      isSelected && "bg-primary/5 hover:bg-primary/10"
+                    )}
+                    onClick={() => setSelectedItemId(item.id)}
+                  >
+                    <TableCell className="text-xs text-muted-foreground font-mono pl-4">{item.code}</TableCell>
+                    <TableCell className="font-medium text-sm">{item.name}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant="outline" className="text-[10px] font-bold uppercase">{item.unit}</Badge>
+                    </TableCell>
+                    <TableCell className="text-center text-sm font-bold text-primary">
+                      {item.quantity}
+                    </TableCell>
+                    <TableCell className="text-right text-sm font-medium">
+                      ₱ {unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      {readOnly ? (
+                        <div className="text-center text-sm font-medium">{getDiscountName(item)}</div>
+                      ) : (
+                        <div className="flex justify-center">
+                          <Select
+                            value={item.discountTypeId ? item.discountTypeId.toString() : ""}
+                            onValueChange={(val) => handleDiscountChange(item.id, val)}
+                          >
+                            <SelectTrigger className="h-8 w-full text-xs truncate"><SelectValue placeholder="-" /></SelectTrigger>
+                            <SelectContent>
+                              {discountTypes.map((d) => (
+                                <SelectItem key={d.id} value={d.id.toString()}>
+                                  {d.discount_type_name || d.discount_type || d.name || `Type ${d.id}`}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
-                      </TableCell>
-
-                      {/* DISCOUNT TYPE */}
-                      <TableCell>
-                        {readOnly ? (
-                          <div className="text-center text-sm font-medium">
-                            {getDiscountName(item)}
-                          </div>
-                        ) : (
-                          <div className="flex justify-center">
-                            <Select
-                              value={
-                                item.discountTypeId
-                                  ? item.discountTypeId.toString()
-                                  : ""
-                              }
-                              onValueChange={(val) => handleDiscountChange(item.id, val)}
-                            >
-                              <SelectTrigger className="h-8 w-full text-xs truncate">
-                                <SelectValue placeholder="-" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {discountTypes.map((d) => (
-                                  <SelectItem key={d.id} value={d.id.toString()}>
-                                  {d.discount_type_name ||
-                                    d.discount_type ||
-                                    d.name ||
-                                    `Type ${d.id}`}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
-                      </TableCell>
-
-                      <TableCell className="text-right text-sm font-medium">
-                        {totalLineDiscount > 0 ? (
-                          <span>
-                            ₱{" "}
-                            {totalLineDiscount.toLocaleString(undefined, {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground/30">-</span>
-                        )}
-                      </TableCell>
-
-                      <TableCell>
-                        {readOnly ? (
-                          <div className="text-center text-sm">
-                            {returnTypes.find((r) => r.id === item.return_type_id)
-                              ?.return_type_name || "-"}
-                          </div>
-                        ) : (
-                          <div className="flex justify-center">
-                            <Select
-                              value={
-                                item.return_type_id
-                                  ? String(item.return_type_id)
-                                  : ""
-                              }
-                              onValueChange={(val: string) => {
-                                onUpdateItem(
-                                  item.id,
-                                  "return_type_id",
-                                  Number(val),
-                                );
-                              }}
-                            >
-                              <SelectTrigger className="h-8 w-full text-xs truncate">
-                                <SelectValue placeholder="Select Type" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {returnTypes.map((r) => (
-                                  <SelectItem key={r.id} value={String(r.id)}>
-                                    {r.return_type_name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
-                      </TableCell>
-
-                      <TableCell className="text-right font-bold text-sm">
-                        ₱{" "}
-                        {rowTotal.toLocaleString(undefined, {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </TableCell>
-                      {!readOnly && (
-                        <TableCell className="text-center pr-4">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => onRemoveItem(item.id)}
-                            className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
                       )}
-                    </TableRow>
-                  );
-                })}
-
-                {/* ═══════════════════════════════════════════════════════
-                    2. RFID ITEMS (Collapsible grouped rows)
-                    ═══════════════════════════════════════════════════════ */}
-                {Object.values(groupedRfidProducts).map((group) => (
-                  <React.Fragment key={group.key}>
-                    {/* ── PARENT SUMMARY ROW ── */}
-                    <TableRow className="bg-muted/10 font-semibold border-b border-border hover:bg-muted/20 transition-colors">
-                      <TableCell className="pl-4">
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => toggleGroup(group.key)}
-                            className="p-1 hover:bg-muted rounded-md transition-colors text-foreground"
-                          >
-                            <ChevronDown
-                              className={`h-4 w-4 transition-transform duration-200 ${
-                                expandedGroups[group.key] ? "rotate-180" : ""
-                              }`}
-                            />
-                          </button>
-                          <span className="text-xs font-mono text-muted-foreground">
-                            {group.code}
-                          </span>
+                    </TableCell>
+                    <TableCell className="text-right text-sm font-medium">
+                      {totalLineDiscount > 0 ? (
+                        <span>₱ {totalLineDiscount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      ) : (
+                        <span className="text-muted-foreground/30">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      {readOnly ? (
+                        <div className="text-center text-sm">
+                          {returnTypes.find((r) => r.id === item.return_type_id)?.return_type_name || "-"}
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 text-[10px] font-semibold uppercase tracking-wide">
-                          <ScanLine className="h-3 w-3" />
-                          {group.children.length} tag{group.children.length > 1 ? "s" : ""}
-                        </span>
-                      </TableCell>
-                      <TableCell className="font-medium text-sm text-foreground">
-                        {group.name}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span className="inline-flex items-center justify-center px-2 py-1 rounded bg-primary/5 text-primary text-[10px] font-bold uppercase tracking-wide">
-                          {group.unit}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-center text-sm font-bold text-primary">
-                        {group.totalQty}
-                      </TableCell>
-                      <TableCell className="text-right text-sm text-muted-foreground">
-                        —
-                      </TableCell>
-                      <TableCell className="text-center text-sm text-muted-foreground">
-                        —
-                      </TableCell>
-                      <TableCell className="text-right text-sm font-mono text-muted-foreground">
-                        ₱{" "}
-                        {group.totalDiscount.toLocaleString(undefined, {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {group.returnTypeName !== "Unassigned" ? (
-                          <span className="bg-primary/10 text-primary px-2 py-0.5 rounded text-xs font-medium">
-                            {group.returnTypeName}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground/50 italic text-xs">Unassigned</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right font-bold text-sm text-primary">
-                        ₱{" "}
-                        {group.totalNet.toLocaleString(undefined, {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </TableCell>
-                      {!readOnly && (
-                        <TableCell className="text-center pr-4">
-                          {/* Empty — delete is per-child */}
-                        </TableCell>
-                      )}
-                    </TableRow>
-
-                    {/* ── CHILD DETAIL ROWS (visible when expanded) ── */}
-                    {expandedGroups[group.key] &&
-                      group.children.map((item) => {
-                        const unitPrice = item.customPrice || item.price;
-                        const totalLineDiscount = (unitPrice * item.quantity) * item.discount;
-                        const rowTotal = (unitPrice * item.quantity) - totalLineDiscount;
-
-                        return (
-                          <TableRow
-                            key={item.id}
-                            className="bg-muted/5 hover:bg-muted/15 border-b border-dashed transition-colors duration-200"
+                      ) : (
+                        <div className="flex justify-center">
+                          <Select
+                            value={item.return_type_id ? String(item.return_type_id) : ""}
+                            onValueChange={(val) => onUpdateItem(item.id, "return_type_id", Number(val))}
                           >
-                            {/* Code — indented */}
-                            <TableCell className="text-xs text-muted-foreground/50 font-mono pl-10">
-                              {item.code}
-                            </TableCell>
-                            {/* RFID Tag */}
-                            <TableCell>
-                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-primary/10 text-primary text-[10px] font-mono">
-                                <ScanLine className="h-3 w-3" />
-                                {item.rfid_tag}
-                              </span>
-                            </TableCell>
-                            {/* Product Name */}
-                            <TableCell className="font-medium text-sm text-foreground/70">
-                              {item.name}
-                            </TableCell>
-                            {/* Unit */}
-                            <TableCell className="text-center">
-                              <span className="inline-flex items-center justify-center px-2 py-1 rounded bg-primary/5 text-primary text-[10px] font-bold uppercase tracking-wide">
-                                {item.unit}
-                              </span>
-                            </TableCell>
-                            {/* Quantity */}
-                            <TableCell className="text-center text-sm font-bold">
-                              {item.quantity}
-                            </TableCell>
-                            {/* Unit Price */}
-                            <TableCell className="text-right text-sm font-medium">
-                              ₱{" "}
-                              {unitPrice.toLocaleString(undefined, {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
-                            </TableCell>
-                            {/* Discount Type */}
-                            <TableCell>
-                              {readOnly ? (
-                                <div className="text-center text-sm font-medium">
-                                  {getDiscountName(item)}
-                                </div>
-                              ) : (
-                                <div className="flex justify-center">
-                                  <Select
-                                    value={
-                                      item.discountTypeId
-                                        ? item.discountTypeId.toString()
-                                        : ""
-                                    }
-                                    onValueChange={(val) => handleDiscountChange(item.id, val)}
-                                  >
-                                    <SelectTrigger className="h-8 w-full text-xs truncate">
-                                      <SelectValue placeholder="-" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {discountTypes.map((d) => (
-                                        <SelectItem key={d.id} value={d.id.toString()}>
-                                          {d.discount_type_name ||
-                                          d.discount_type ||
-                                          d.name ||
-                                          `Type ${d.id}`}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                              )}
-                            </TableCell>
-                            {/* Discount Amount */}
-                            <TableCell className="text-right text-sm font-medium">
-                              {totalLineDiscount > 0 ? (
-                                <span>
-                                  ₱{" "}
-                                  {totalLineDiscount.toLocaleString(undefined, {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground/30">-</span>
-                              )}
-                            </TableCell>
-                            {/* Return Type */}
-                            <TableCell>
-                              {readOnly ? (
-                                <div className="text-center text-sm">
-                                  {returnTypes.find((r) => r.id === item.return_type_id)
-                                    ?.return_type_name || "-"}
-                                </div>
-                              ) : (
-                                <div className="flex justify-center">
-                                  <Select
-                                    value={
-                                      item.return_type_id
-                                        ? String(item.return_type_id)
-                                        : ""
-                                    }
-                                    onValueChange={(val: string) => {
-                                      onUpdateItem(
-                                        item.id,
-                                        "return_type_id",
-                                        Number(val),
-                                      );
-                                    }}
-                                  >
-                                    <SelectTrigger className="h-8 w-full text-xs truncate">
-                                      <SelectValue placeholder="Select Type" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {returnTypes.map((r) => (
-                                        <SelectItem key={r.id} value={String(r.id)}>
-                                          {r.return_type_name}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                              )}
-                            </TableCell>
-                            {/* Total */}
-                            <TableCell className="text-right font-bold text-sm">
-                              ₱{" "}
-                              {rowTotal.toLocaleString(undefined, {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
-                            </TableCell>
-                            {/* Delete — only when Pending (not readOnly) */}
-                            {!readOnly && (
-                              <TableCell className="text-center pr-4">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => onRemoveItem(item.id)}
-                                  className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </TableCell>
-                            )}
-                          </TableRow>
-                        );
-                      })}
-                  </React.Fragment>
-                ))}
-              </>
+                            <SelectTrigger className="h-8 w-full text-xs truncate"><SelectValue placeholder="Select Type" /></SelectTrigger>
+                            <SelectContent>
+                              {returnTypes.map((r) => (
+                                <SelectItem key={r.id} value={String(r.id)}>{r.return_type_name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right font-bold text-sm text-primary">
+                      ₱ {rowTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </TableCell>
+                    {!readOnly && (
+                      <TableCell className="text-center pr-4" onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            if (selectedItemId === item.id) setSelectedItemId(null);
+                            onRemoveItem(item.id);
+                          }}
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
       </div>
 
-      {/* 2. REMARKS & SUMMARY SECTION */}
+      {/* 2. SERIAL MANAGEMENT COMPONENT (Shows when an item is selected) */}
+      {selectedItem && (
+        <div className="bg-[#fcfaff] rounded-xl border border-[#e0d7f7] p-6 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="bg-white border border-[#e0d7f7] p-2.5 rounded-xl shadow-sm">
+                <ScanLine className="h-6 w-6 text-emerald-500" />
+              </div>
+              <h4 className="text-sm font-bold text-[#1a1a1a]">
+                Serial Management for: <span className="text-[#6d28d9] font-black">{selectedItem.name}</span>
+              </h4>
+            </div>
+
+            <div className="flex items-center gap-4">
+               {!readOnly && (
+                 <div className="relative group">
+                   <div className="absolute left-3 top-1/2 -translate-y-1/2">
+                     {isValidating ? (
+                       <Loader2 className="h-4 w-4 text-primary animate-spin" />
+                     ) : (
+                       <ScanLine className="h-4 w-4 text-primary/40 group-focus-within:text-primary transition-colors" />
+                     )}
+                   </div>
+                   <Input
+                     placeholder={isValidating ? "Validating..." : "Type serial and press +"}
+                     className="h-10 pl-10 pr-10 w-[320px] rounded-full border-[#e0d7f7] bg-white focus:ring-primary/20 focus:border-primary transition-all text-sm font-medium"
+                     value={serialInput}
+                     onChange={(e) => setSerialInput(e.target.value)}
+                     onKeyDown={(e) => e.key === "Enter" && !isValidating && handleAddSerial(serialInput)}
+                     disabled={isValidating}
+                   />
+                   <button 
+                     onClick={() => handleAddSerial(serialInput)}
+                     className="absolute right-3 top-1/2 -translate-y-1/2 text-primary hover:scale-110 transition-transform disabled:opacity-50"
+                     disabled={isValidating || !serialInput.trim()}
+                   >
+                     {isValidating ? (
+                       <Loader2 className="h-5 w-5 animate-spin" />
+                     ) : (
+                       <Plus className="h-5 w-5" />
+                     )}
+                   </button>
+                 </div>
+               )}
+               <div className="bg-emerald-50 text-emerald-600 px-4 py-2 rounded-full text-[11px] font-black tracking-tighter border border-emerald-100 shadow-sm">
+                 {selectedItem.serials.length} TOTAL
+               </div>
+            </div>
+          </div>
+
+          <div className="mt-6 flex flex-wrap gap-2.5">
+            {selectedItem.serials.length === 0 ? (
+              <div className="w-full h-24 flex items-center justify-center bg-white/50 rounded-xl border border-dashed border-[#e0d7f7] text-muted-foreground/50 italic text-xs tracking-wide">
+                No serial numbers registered yet. Start by typing or scanning above.
+              </div>
+            ) : (
+              selectedItem.serials.map((sn) => (
+                <div 
+                  key={sn} 
+                  className="flex items-center gap-3 py-2 px-4 rounded-lg bg-white border border-[#f0ebff] shadow-sm animate-in zoom-in-95 duration-200"
+                >
+                  <span className="font-mono text-xs font-bold text-[#4a4a4a] tracking-tight">{sn}</span>
+                  {!readOnly && (
+                    <button 
+                      onClick={() => handleRemoveSerial(sn)}
+                      className="text-red-400 hover:text-red-600 transition-colors"
+                    >
+                      <CloseIcon className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 3. REMARKS & SUMMARY SECTION */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-3">
-          <Label className="flex items-center gap-2 font-bold text-sm">
-            Transaction Remarks
-          </Label>
+          <Label className="flex items-center gap-2 font-bold text-sm">Transaction Remarks</Label>
           <Textarea
             placeholder="Enter detailed reasons for this return (Optional)..."
             className="min-h-40 resize-none shadow-sm"
@@ -657,56 +373,34 @@ export function ReturnReviewPanel({
 
         <div className="lg:col-span-1">
           <div className="bg-card rounded-xl border p-6 shadow-sm h-full flex flex-col">
-            <h4 className="font-bold text-xs uppercase mb-6 flex items-center gap-2 tracking-wider border-b pb-3">
-              Return Summary
-            </h4>
+            <h4 className="font-bold text-xs uppercase mb-6 flex items-center gap-2 tracking-wider border-b pb-3">Return Summary</h4>
             <div className="space-y-4 text-sm flex-1">
               <div className="flex justify-between text-muted-foreground">
                 <span>Total Line Items</span>
-                <span className="font-medium text-foreground">
-                  {items.length}
-                </span>
+                <span className="font-medium text-foreground">{items.length}</span>
               </div>
               <div className="flex justify-between text-muted-foreground">
                 <span>Total Quantity</span>
-                <span className="font-medium text-foreground">
-                  {totalQuantity} units
-                </span>
+                <span className="font-medium text-foreground">{totalQuantity} units</span>
               </div>
               <div className="border-t border-dashed my-4"></div>
               <div className="flex justify-between text-muted-foreground">
                 <span>Gross Amount</span>
                 <span className="font-medium text-foreground">
-                  ₱{" "}
-                  {grossAmount.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
+                  ₱ {grossAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
               <div className="flex justify-between px-2 py-1 rounded bg-amber-500/10 text-amber-600">
                 <span>Total Discount</span>
-                <span className="font-medium">
-                  - ₱{" "}
-                  {totalDiscountAmount.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </span>
+                <span className="font-medium">- ₱ {totalDiscountAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             </div>
 
             <div className="border-t mt-6 pt-4">
               <div className="flex justify-between items-end">
-                <span className="font-bold text-muted-foreground uppercase text-xs mb-1">
-                  Net Amount
-                </span>
+                <span className="font-bold text-muted-foreground uppercase text-xs mb-1">Net Amount</span>
                 <span className="font-extrabold text-3xl text-primary leading-none">
-                  ₱{" "}
-                  {totalAmount.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
+                  ₱ {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
             </div>
