@@ -39,7 +39,7 @@ import { CreateReturnModal } from "./CreateReturnModal";
 import { ReturnDetailsModal } from "./ReturnDetailsModal";
 import { ExportReportModal } from "./ExportReportModal";
 
-import type { ReturnToSupplier } from "../types/rts.schema";
+import type { ReturnToSupplier, ReferenceData } from "../types/rts.schema";
 
 // =============================================================================
 // COLUMN DEFINITIONS
@@ -152,6 +152,7 @@ const columns: ColumnDef<ReturnToSupplier>[] = [
 
 interface ReturnToSupplierListProps {
   data: ReturnToSupplier[];
+  refs: ReferenceData;
   isLoading: boolean;
   onRefresh: () => void;
 }
@@ -163,6 +164,7 @@ interface ReturnToSupplierListProps {
  */
 export function ReturnToSupplierList({
   data,
+  refs,
   isLoading,
   onRefresh,
 }: ReturnToSupplierListProps) {
@@ -456,24 +458,32 @@ export function ReturnToSupplierList({
       />
 
       {/* ===== MODALS ===== */}
-      <CreateReturnModal
-        isOpen={showCreate}
-        onClose={() => setShowCreate(false)}
-        onReturnCreated={onRefresh}
-      />
+      {showCreate && (
+        <CreateReturnModal
+          isOpen={showCreate}
+          refs={refs}
+          onClose={() => setShowCreate(false)}
+          onReturnCreated={onRefresh}
+        />
+      )}
 
-      <ReturnDetailsModal
-        isOpen={!!detailData}
-        onClose={() => setDetailData(null)}
-        data={detailData}
-        onUpdateSuccess={onRefresh}
-      />
+      {detailData && (
+        <ReturnDetailsModal
+          isOpen={!!detailData}
+          refs={refs}
+          onClose={() => setDetailData(null)}
+          data={detailData}
+          onUpdateSuccess={onRefresh}
+        />
+      )}
 
-      <ExportReportModal
-        isOpen={showExport}
-        onClose={() => setShowExport(false)}
-        allData={data}
-      />
+      {showExport && (
+        <ExportReportModal
+          isOpen={showExport}
+          onClose={() => setShowExport(false)}
+          allData={data}
+        />
+      )}
     </div>
   );
 }
