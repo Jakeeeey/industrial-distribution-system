@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -13,8 +13,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
-import { Trash2, ScanLine, Tag, Wifi, Loader2, Plus } from "lucide-react";
+import { Trash2, ScanLine, Tag, Wifi, Loader2, Plus, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { BulkRegisterModal } from "./BulkRegisterModal";
 
 interface SerialInputModalProps {
   open: boolean;
@@ -42,73 +43,30 @@ export function SerialInputModal({
   excludeSerials = [],
 }: SerialInputModalProps) {
   const [serials, setSerials] = useState<string[]>(initialSerials);
+  const [unregisteredSerials, setUnregisteredSerials] = useState<string[]>([]);
+  const [showBulkRegister, setShowBulkRegister] = useState(false);
   const [prevOpen, setPrevOpen] = useState(open);
 
   if (open !== prevOpen) {
     setPrevOpen(open);
     if (open) {
       setSerials(initialSerials);
+      setUnregisteredSerials([]);
     }
   }
 
   const [currentInput, setCurrentInput] = useState("");
   const [isValidating, setIsValidating] = useState(false);
-  const [isFetchingLast, setIsFetchingLast] = useState(false);
-  const [lastSerial, setLastSerial] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  const fetchLastSerial = useCallback(async () => {
-    if (!productId || type !== "IN") return;
-    setIsFetchingLast(true);
-    try {
-      const res = await fetch(`/api/ids/scm/inventory-management/stock-adjustment/last-serial?productId=${productId}${branchId ? `&branchId=${branchId}` : ""}`);
-      const data = await res.json();
-      if (data.lastSerial) {
-        setLastSerial(data.lastSerial);
-      }
-    } catch (err) {
-      console.error("Failed to fetch last serial:", err);
-    } finally {
-      setIsFetchingLast(false);
-    }
-  }, [productId, type, branchId]);
 
   useEffect(() => {
     if (open) {
-      fetchLastSerial();
       requestAnimationFrame(() => {
         inputRef.current?.focus();
       });
     }
-  }, [open, fetchLastSerial]);
+  }, [open]);
 
-  const suggestNextSerial = (current: string) => {
-    if (!current) return "";
-    // Matches numbers at the end of the string
-    const match = current.match(/^(.*?)(\d+)$/);
-    if (match) {
-      const prefix = match[1];
-      const numberStr = match[2];
-      const nextNumber = (parseInt(numberStr, 10) + 1).toString();
-      // Pad with leading zeros if necessary
-      const paddedNumber = nextNumber.padStart(numberStr.length, "0");
-      return prefix + paddedNumber;
-    }
-    return current + "-1"; // Fallback
-  };
-
-  const handleApplySuggestion = () => {
-    const base = lastSerial || (serials.length > 0 ? serials[serials.length - 1] : "");
-    if (base) {
-      let next = suggestNextSerial(base);
-      // Keep suggesting until we find one not in current list or excluded list
-      while (serials.includes(next) || excludeSerials.includes(next)) {
-        next = suggestNextSerial(next);
-      }
-      setCurrentInput(next);
-      inputRef.current?.focus();
-    }
-  };
 
   const handleAddSerial = async (serial: string) => {
     const rawSerial = serial.trim().toUpperCase();
@@ -127,23 +85,28 @@ export function SerialInputModal({
     if (type === "IN" && validateSerial) {
       setIsValidating(true);
       try {
-        const { exists, location } = await validateSerial(rawSerial, branchId);
+        const { exists } = await validateSerial(rawSerial, branchId);
         if (exists) {
-          toast.error("Process Blocked", {
-            description: `Serial number ${rawSerial} already exists (${location || "Unknown Location"}).`,
-            duration: 5000,
+          // It's already in the system, add to the main list
+          setSerials((prev) => Array.from(new Set([...prev, rawSerial])));
+          toast.success(`Serial ${rawSerial} added (Already Registered)`);
+        } else {
+          // It's NOT in the system, add to unregistered list
+          setUnregisteredSerials((prev) => Array.from(new Set([...prev, rawSerial])));
+          toast.info(`Serial ${rawSerial} detected as unregistered`, {
+            description: "Please register it before adding to the adjustment.",
           });
-          setCurrentInput("");
-          return;
         }
       } catch (err) {
         console.error("Serial Validation failed:", err);
       } finally {
         setIsValidating(false);
       }
+    } else {
+      // For OUT or when no validation is provided, just add to main list
+      setSerials((prev) => [...prev, rawSerial]);
     }
 
-    setSerials((prev) => [...prev, rawSerial]);
     setCurrentInput("");
     inputRef.current?.focus();
   };
@@ -220,16 +183,6 @@ export function SerialInputModal({
                 <p className="text-[10px] text-muted-foreground/60 italic">
                   Tip: Press Enter after typing to add the serial number.
                 </p>
-                {(lastSerial || serials.length > 0) && (
-                  <button
-                    type="button"
-                    onClick={handleApplySuggestion}
-                    className="text-[10px] font-bold text-blue-600 hover:text-blue-700 underline underline-offset-2 flex items-center gap-1"
-                  >
-                    {isFetchingLast ? <Loader2 className="h-2 w-2 animate-spin" /> : <Wifi className="h-2 w-2" />}
-                    Suggest Next Serial
-                  </button>
-                )}
               </div>
             </div>
 
@@ -242,6 +195,45 @@ export function SerialInputModal({
                </div>
             </div>
           </div>
+
+          {/* Unregistered Serials Section */}
+          {unregisteredSerials.length > 0 && (
+            <div className="bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800/30 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="bg-orange-500 p-1.5 rounded-lg">
+                    <AlertCircle className="h-4 w-4 text-white" />
+                  </div>
+                  <h4 className="text-[10px] font-black uppercase tracking-widest text-orange-700 dark:text-orange-500">
+                    {unregisteredSerials.length} Unregistered Serials
+                  </h4>
+                </div>
+                <Button 
+                  size="sm" 
+                  onClick={() => setShowBulkRegister(true)}
+                  className="h-8 bg-orange-600 hover:bg-orange-700 text-white text-[10px] font-black uppercase tracking-tighter px-4 rounded-lg"
+                >
+                  Register All
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {unregisteredSerials.map((s, i) => (
+                  <Badge 
+                    key={i} 
+                    className="bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800/30 font-mono text-[10px] px-2 py-0.5 rounded-md flex items-center gap-1.5"
+                  >
+                    {s}
+                    <button 
+                      onClick={() => setUnregisteredSerials(prev => prev.filter(x => x !== s))}
+                      className="hover:text-orange-900 dark:hover:text-orange-200"
+                    >
+                      <Trash2 className="h-2.5 w-2.5" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -309,6 +301,20 @@ export function SerialInputModal({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <BulkRegisterModal 
+        open={showBulkRegister}
+        onOpenChange={setShowBulkRegister}
+        serials={unregisteredSerials}
+        productId={productId || 0}
+        branchId={branchId || 0}
+        onSuccess={() => {
+          // After successful registration, move unregistered to registered serials
+          setSerials(prev => Array.from(new Set([...prev, ...unregisteredSerials])));
+          setUnregisteredSerials([]);
+          toast.success("All cylinders registered and added to list");
+        }}
+      />
     </Dialog>
   );
 }
