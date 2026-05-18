@@ -33,7 +33,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
-import { DataTable } from "@/components/ui/new-data-table";
+import { DataTable } from "./DataTable";
 
 import { CreateReturnModal } from "./CreateReturnModal";
 import { ReturnDetailsModal } from "./ReturnDetailsModal";

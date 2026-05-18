@@ -31,7 +31,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
-import { DataTable } from "@/components/ui/new-data-table";
+import { DataTable } from "./DataTable";
 
 import { SalesReturn } from "../types/sales-return.types";
 
@@ -150,6 +150,7 @@ interface SalesReturnHistoryProps {
   page: number;
   pageSize: number;
   totalPages: number;
+  totalRecords: number;
   filters: { salesman: string; customer: string; status: string };
   salesmenOptions: { value: string; label: string }[];
   customerOptions: { value: string; label: string }[];
@@ -170,6 +171,7 @@ export function SalesReturnHistory({
   page,
   pageSize,
   totalPages,
+  totalRecords,
   filters,
   salesmenOptions,
   customerOptions,
@@ -423,6 +425,7 @@ export function SalesReturnHistory({
         isLoading={loading}
         manualPagination={true}
         pageCount={totalPages}
+        totalRecords={totalRecords}
         pagination={{ pageIndex: page - 1, pageSize: pageSize }}
         onPaginationChange={(p) => {
           if (p.pageSize !== pageSize) {

@@ -14,7 +14,7 @@ import { cookies } from "next/headers";
 
 // ✅ Wire the module you asked for
 // import ComingSoon from "../../_components/ComingSoon";
-import SalesReturnSerial from "@/modules/supply-chain-management/inventories/sales-return-serial/SalesReturnSerialModule";
+import SalesReturnSerial from "./SalesReturnSerialModule";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
