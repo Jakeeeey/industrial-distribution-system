@@ -47,7 +47,7 @@ export const CustomerRow = memo(function CustomerRow({
   const handleViewHistory = () => {
     const code = customer.customer_code || String(customer.id);
     router.push(
-      `/crm/customer-management/customer-history?customerId=${encodeURIComponent(code)}`,
+      `/ids/crm/customer-management/customer-history?customerId=${encodeURIComponent(code)}`,
     );
   };
   const address =
