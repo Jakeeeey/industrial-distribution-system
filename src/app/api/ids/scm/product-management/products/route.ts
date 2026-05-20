@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
     params.set("page", page.toString());
     params.set("limit", limit.toString());
     params.set("meta", "filter_count,total_count");
-    params.set("fields", "product_id,isActive,product_brand,product_code,product_name,description,short_description,unit_of_measurement,unit_of_measurement_count,product_category,cost_per_unit,price_per_unit,is_serialized,product_image,status,created_at,created_by,updated_at,updated_by,last_updated"); 
+    params.set("fields", "product_id,isActive,product_brand,product_code,product_name,description,short_description,unit_of_measurement,unit_of_measurement_count,product_category,cost_per_unit,price_per_unit,is_serialized,product_image,status,created_at,created_by,updated_at,updated_by,last_updated,parent_id,uom_ids"); 
     params.set("sort", "-created_at");
     
     let filterIdx = 0;
@@ -86,7 +86,12 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     
-    // Add audit fields if necessary or let Directus handle it
+    // Check if we are creating a parent product (no parent_id and no uom_ids)
+    const hasParentId = body.parent_id !== undefined && body.parent_id !== null && body.parent_id !== "" && body.parent_id !== 0;
+    const hasUomIds = body.uom_ids !== undefined && body.uom_ids !== null && body.uom_ids !== "";
+    const isParent = !hasParentId && !hasUomIds;
+
+    // Create the primary product first
     const response = await fetch(`${DIRECTUS_URL}/items/${COLLECTION}`, {
       method: "POST",
       headers: getHeaders(),
@@ -98,8 +103,40 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error }, { status: response.status });
     }
 
-    const data = await response.json();
-    return NextResponse.json(data);
+    const parentData = await response.json();
+    const parentProduct = parentData.data;
+
+    // If it is a parent product, automatically generate the 4 standard children variations
+    if (isParent && parentProduct && parentProduct.product_id) {
+      const variants = ["EMPTY", "SWAP", "OUTRIGHT", "DEPOSIT"];
+      const parentId = parentProduct.product_id;
+
+      const children = variants.map(variant => {
+        return {
+          ...body,
+          parent_id: parentId,
+          uom_ids: variant,
+          product_name: parentProduct.product_name || body.product_name,
+          description: `${parentProduct.description || body.description || ""} ${variant}`.trim(),
+          product_code: `${parentProduct.product_code || body.product_code || ""} ${variant}`.trim(),
+          isActive: 1,
+          status: "Active"
+        };
+      });
+
+      const childrenRes = await fetch(`${DIRECTUS_URL}/items/${COLLECTION}`, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify(children),
+      });
+
+      if (!childrenRes.ok) {
+        const childError = await childrenRes.text();
+        console.error("[Products API] Failed to auto-generate child products:", childError);
+      }
+    }
+
+    return NextResponse.json(parentData);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: errorMessage }, { status: 500 });
