@@ -59,8 +59,6 @@ export default function RetailDirectoryModule() {
     setSelectedNode,
   } = useRetailDirectory();
 
-  const totalFilteredCount = hierarchyState.filteredCount;
-
   return (
     <div className="flex-1 space-y-6 p-4 md:p-8 pt-6 animate-in fade-in slide-in-from-bottom-2 duration-700 ease-out max-w-400 mx-auto">
       {/* Header */}
@@ -149,7 +147,6 @@ export default function RetailDirectoryModule() {
           classificationsMeta={classificationsMeta}
           storeTypesMeta={storeTypesMeta}
           resetFilters={resetFilters}
-          totalFilteredCount={totalFilteredCount}
         />
       </div>
 

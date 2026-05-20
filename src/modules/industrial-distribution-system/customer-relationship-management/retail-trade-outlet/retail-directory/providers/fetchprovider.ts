@@ -15,7 +15,7 @@ export async function fetchCustomers(): Promise<CustomerRecord[]> {
 /**
  * Fetches customer classifications
  */
-export async function fetchClassifications(): Promise<any[]> {
+export async function fetchClassifications(): Promise<Record<string, unknown>[]> {
   const res = await fetch(
     `${BASE_URL}?directusCollection=customer_classification&limit=-1`,
   );
@@ -27,7 +27,7 @@ export async function fetchClassifications(): Promise<any[]> {
 /**
  * Fetches store types
  */
-export async function fetchStoreTypes(): Promise<any[]> {
+export async function fetchStoreTypes(): Promise<Record<string, unknown>[]> {
   const res = await fetch(`${BASE_URL}?directusCollection=store_type&limit=-1`);
   if (!res.ok) return [];
   const json = await res.json();

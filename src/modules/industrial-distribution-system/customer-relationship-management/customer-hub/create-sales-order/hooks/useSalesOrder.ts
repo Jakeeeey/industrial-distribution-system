@@ -719,11 +719,10 @@ export function useSalesOrder() {
           const selected = prev.find(
             (c) => c.id.toString() === selectedCustomerId,
           );
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           if (
             selected &&
             !dataSafe.find(
-              (c: any) => c.id.toString() === selected.id.toString(),
+              (c: Customer) => c.id.toString() === selected.id.toString(),
             )
           ) {
             return [selected, ...dataSafe];
@@ -1012,16 +1011,13 @@ export function useSalesOrder() {
 
     // --- REAL-TIME DELETION ---
     // If the item exists in the DB (has detail_id), force delete it now
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((item as any)?.detail_id) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (item?.detail_id) {
       console.log(
-        `[RemoveItem] Force deleting detail_id=${(item as any).detail_id} from DB...`,
+        `[RemoveItem] Force deleting detail_id=${item.detail_id} from DB...`,
       );
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const res = await salesOrderProvider.deleteOrderItem(
-          (item as any).detail_id,
+          item.detail_id,
         );
         if (res.success) {
           toast.success("Item removed from database");

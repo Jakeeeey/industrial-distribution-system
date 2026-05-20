@@ -26,9 +26,9 @@ export function buildHierarchy(customers: CustomerRecord[]): RetailDirectoryStat
         try {
           const parsed = JSON.parse(sub.otherDetails);
           parentId = parsed.parent_dealer_id;
-        } catch (e) {}
+        } catch {}
       } else if (sub.otherDetails && typeof sub.otherDetails === 'object') {
-        parentId = (sub.otherDetails as Record<string, any>).parent_dealer_id;
+        parentId = (sub.otherDetails as Record<string, unknown>).parent_dealer_id;
       }
       
       const isMatch = String(parentId) === String(dealer.id);

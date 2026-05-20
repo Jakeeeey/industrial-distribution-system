@@ -54,7 +54,6 @@ export function useRetailDirectory() {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData();
   }, [fetchData]);
 
@@ -129,7 +128,6 @@ export function useRetailDirectory() {
       }
       
       if (!found) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setSelectedNode(null);
       }
     }

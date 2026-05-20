@@ -1,7 +1,6 @@
 import React from "react";
 import { SelectedNode, DealerNode, SubDealerNode } from "../types";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import {
   MapPin,
   Phone,
@@ -12,6 +11,7 @@ import {
   Map,
   Tag,
   Hash,
+  Users,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -189,7 +189,7 @@ export function CustomerDetailsPanel({ node, classificationsMeta, storeTypesMeta
                   try {
                     const parsed = JSON.parse(sub.otherDetails);
                     parentId = parsed.parent_dealer_id;
-                  } catch (e) {}
+                  } catch {}
                 } else if (sub.otherDetails && typeof sub.otherDetails === "object") {
                   parentId = (sub.otherDetails as Record<string, unknown>).parent_dealer_id;
                 }
@@ -203,5 +203,4 @@ export function CustomerDetailsPanel({ node, classificationsMeta, storeTypesMeta
   );
 }
 
-// Ensure Users is imported since I used it above.
-import { Users } from "lucide-react";
+

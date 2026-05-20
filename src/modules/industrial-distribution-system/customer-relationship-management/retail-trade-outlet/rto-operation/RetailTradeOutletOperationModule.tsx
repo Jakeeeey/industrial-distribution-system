@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 
 import {
@@ -23,13 +22,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronsUpDown } from "lucide-react";
 import { DealerCard } from "./components/DealerCard";
 import { Filters } from "./components/Filters";
 import {
   useRetailTradeOutletOperation,
-  MissingStatusFilter,
-  BalanceStatusFilter,
 } from "./hooks/useRetailTradeOutletOperation";
 
 

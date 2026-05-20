@@ -5,10 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ChevronsUpDown } from "lucide-react";
@@ -34,7 +32,6 @@ interface FilterToolbarProps {
   classificationsMeta: Record<string, string>;
   storeTypesMeta: Record<string, string>;
   resetFilters: () => void;
-  totalFilteredCount: number;
 }
 
 function FilterButton({ label, active }: { label: string; active: boolean }) {
@@ -77,7 +74,6 @@ export function FilterToolbar({
   classificationsMeta,
   storeTypesMeta,
   resetFilters,
-  totalFilteredCount,
 }: FilterToolbarProps) {
   const isFiltered =
     searchQuery !== "" ||
