@@ -128,6 +128,7 @@ interface DataTableProps<TData, TValue> {
   emptyDescription?: string;
   onSelectionChange?: (selectedRows: TData[]) => void;
   actionComponent?: React.ReactNode;
+  onRowClick?: (row: TData) => void;
 }
 
 export function DataTable<TData, TValue>({
@@ -147,6 +148,7 @@ export function DataTable<TData, TValue>({
   emptyDescription,
   onSelectionChange,
   actionComponent,
+  onRowClick,
 }: DataTableProps<TData, TValue>) {
   "use no memo"
   const [internalSorting, setInternalSorting] = React.useState<SortingState>(
@@ -335,7 +337,8 @@ export function DataTable<TData, TValue>({
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
-                  className="group hover:bg-muted/10 transition-colors"
+                  className={`group hover:bg-muted/10 transition-colors ${onRowClick ? "cursor-pointer" : ""}`}
+                  onClick={() => onRowClick?.(row.original)}
                 >
                   {row.getVisibleCells().map((cell: Cell<TData, unknown>) => (
                     <TableCell key={cell.id} className="py-3">

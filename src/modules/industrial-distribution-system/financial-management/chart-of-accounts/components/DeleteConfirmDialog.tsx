@@ -1,4 +1,4 @@
-// src/modules/financial-management/chart-of-accounts/components/DeleteConfirmDialog.tsx
+// src/modules/industrial-distribution-system/financial-management/chart-of-accounts/components/DeleteConfirmDialog.tsx
 "use client";
 
 import * as React from "react";
@@ -32,7 +32,9 @@ export default function DeleteConfirmDialog(props: {
         </AlertDialogHeader>
 
         <AlertDialogFooter>
-          <AlertDialogCancel className="cursor-pointer">Cancel</AlertDialogCancel>
+          <AlertDialogCancel className="cursor-pointer">
+            Cancel
+          </AlertDialogCancel>
           <AlertDialogAction className="cursor-pointer" onClick={onConfirm}>
             Delete
           </AlertDialogAction>
@@ -41,4 +43,3 @@ export default function DeleteConfirmDialog(props: {
     </AlertDialog>
   );
 }
-

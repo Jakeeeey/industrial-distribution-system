@@ -1,7 +1,7 @@
 import {
   Supplier,
   SuppliersResponse,
-} from "@/modules/financial-management/supplier-registration/types/supplier.schema";
+} from "@/modules/industrial-distribution-system/financial-management/supplier-registration/types/supplier.schema";
 
 /**
  * Base Directus API URL

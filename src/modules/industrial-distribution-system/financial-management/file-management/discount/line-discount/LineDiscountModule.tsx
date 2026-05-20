@@ -1,4 +1,4 @@
-// src/modules/financial-management/line-discount/LineDiscountModule.tsx
+// src/modules/industrial-distribution-system/financial-management/line-discount/LineDiscountModule.tsx
 "use client";
 
 import * as React from "react";
@@ -17,7 +17,9 @@ import LineDiscountDialog from "./components/LineDiscountDialog";
 export default function LineDiscountModule() {
   const { rows, loading, create, update } = useLineDiscounts();
 
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
+    [],
+  );
 
   const [createOpen, setCreateOpen] = React.useState(false);
   const [editOpen, setEditOpen] = React.useState(false);
@@ -80,8 +82,6 @@ export default function LineDiscountModule() {
           await update(selected.id, payload);
         }}
       />
-
-
     </div>
   );
 }

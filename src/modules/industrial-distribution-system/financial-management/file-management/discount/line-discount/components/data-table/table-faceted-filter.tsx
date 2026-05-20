@@ -1,4 +1,4 @@
-//src/modules/financial-management/discount-type/components/data-table/table-faceted-filter.tsx
+//src/modules/industrial-distribution-system/financial-management/discount-type/components/data-table/table-faceted-filter.tsx
 "use client";
 
 import * as React from "react";

@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import {
   getActiveOncall,
   extractScheduleFields,
-} from "../../../../../modules/industrial-distribution-system/human-resource-management/workforce/attendance-report/employee-report/utils/oncall";
+} from "@/modules/industrial-distribution-system/human-resource-management/workforce/attendance-report/employee-report/utils/oncall";
 
 function isDeleted(val: unknown): boolean {
   if (typeof val === "boolean") return val;

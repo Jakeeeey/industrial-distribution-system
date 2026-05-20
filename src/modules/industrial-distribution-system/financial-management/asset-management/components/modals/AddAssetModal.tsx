@@ -59,7 +59,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { assetService } from "@/modules/financial-management/asset-management/services/assetService";
+import { assetService } from "@/modules/industrial-distribution-system/financial-management/asset-management/services/assetService";
 import {
   assetFormSchema,
   AssetFormValues,
@@ -68,7 +68,7 @@ import {
   ItemClassification,
   ItemType,
   User,
-} from "@/modules/financial-management/asset-management/types";
+} from "@/modules/industrial-distribution-system/financial-management/asset-management/types";
 
 interface AddAssetModalProps {
   onSuccess: () => void;
@@ -82,9 +82,7 @@ interface AssetItem {
   item_classification?: { classification_name?: string };
 }
 
-export default function AddAssetModal({
-  onLocalAppend,
-}: AddAssetModalProps) {
+export default function AddAssetModal({ onLocalAppend }: AddAssetModalProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [departments, setDepartments] = useState<Department[]>([]);

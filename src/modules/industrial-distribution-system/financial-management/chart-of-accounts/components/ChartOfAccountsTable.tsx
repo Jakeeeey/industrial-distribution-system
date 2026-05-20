@@ -1,4 +1,4 @@
-// src/modules/financial-management/chart-of-accounts/components/ChartOfAccountsTable.tsx
+// src/modules/industrial-distribution-system/financial-management/chart-of-accounts/components/ChartOfAccountsTable.tsx
 "use client";
 
 import * as React from "react";
@@ -28,7 +28,7 @@ function formatMDY(iso: string | null) {
 function byIdLabel<T extends { id: number }>(
   list: T[],
   id: number | null | undefined,
-  getLabel: (x: T) => string
+  getLabel: (x: T) => string,
 ) {
   if (!id) return "-";
   const found = list.find((x) => x.id === id);
@@ -64,12 +64,24 @@ export default function ChartOfAccountsTable(props: {
           {loading ? (
             Array.from({ length: 10 }).map((_, i) => (
               <TableRow key={`sk-${i}`}>
-                <TableCell><Skeleton className="h-4 w-[260px]" /></TableCell>
-                <TableCell><Skeleton className="h-4 w-10" /></TableCell>
-                <TableCell><Skeleton className="h-4 w-[200px]" /></TableCell>
-                <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                <TableCell><Skeleton className="h-4 w-[120px]" /></TableCell>
-                <TableCell><Skeleton className="h-4 w-[90px]" /></TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-[260px]" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-10" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-[200px]" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-16" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-[120px]" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-[90px]" />
+                </TableCell>
                 <TableCell className="text-right">
                   <Skeleton className="ml-auto h-8 w-14" />
                 </TableCell>
@@ -77,7 +89,10 @@ export default function ChartOfAccountsTable(props: {
             ))
           ) : rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+              <TableCell
+                colSpan={7}
+                className="py-10 text-center text-sm text-muted-foreground"
+              >
                 No accounts found.
               </TableCell>
             </TableRow>
@@ -87,27 +102,37 @@ export default function ChartOfAccountsTable(props: {
                 <TableCell className="font-medium">{r.account_title}</TableCell>
                 <TableCell>{r.gl_code || "-"}</TableCell>
                 <TableCell className="uppercase">
-                  {byIdLabel(accountTypes, r.account_type, (x) => x.account_name)}
+                  {byIdLabel(
+                    accountTypes,
+                    r.account_type,
+                    (x) => x.account_name,
+                  )}
                 </TableCell>
                 <TableCell className="uppercase">
-                  {byIdLabel(balanceTypes, r.balance_type, (x) => x.balance_name)}
+                  {byIdLabel(
+                    balanceTypes,
+                    r.balance_type,
+                    (x) => x.balance_name,
+                  )}
                 </TableCell>
                 <TableCell>
                   {(() => {
                     const addedBy = r.added_by;
                     if (!addedBy) return "-";
-                    
+
                     const idStr = String(addedBy);
-                    const u = users.find((x) => 
-                      String(x.user_id) === idStr || 
-                      String(x.id) === idStr
+                    const u = users.find(
+                      (x) =>
+                        String(x.user_id) === idStr || String(x.id) === idStr,
                     );
 
                     if (!u) return "-";
 
-                    const fname = u.user_fname || u.first_name || u.firstname || "";
-                    const lname = u.user_lname || u.last_name || u.lastname || "";
-                    
+                    const fname =
+                      u.user_fname || u.first_name || u.firstname || "";
+                    const lname =
+                      u.user_lname || u.last_name || u.lastname || "";
+
                     const fullName = [fname, lname].filter(Boolean).join(" ");
                     return fullName || "-";
                   })()}

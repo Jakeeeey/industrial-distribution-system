@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Representative,
   RepresentativeFormValues,
-} from "@/modules/financial-management/supplier-registration/types/representative.schema";
+} from "@/modules/industrial-distribution-system/financial-management/supplier-registration/types/representative.schema";
 import { toast } from "sonner";
 
 /**

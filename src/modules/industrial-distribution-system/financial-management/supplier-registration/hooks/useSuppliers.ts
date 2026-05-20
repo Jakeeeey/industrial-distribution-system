@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Supplier } from "@/modules/financial-management/supplier-registration/types/supplier.schema";
+import { Supplier } from "@/modules/industrial-distribution-system/financial-management/supplier-registration/types/supplier.schema";
 
 /**
  * Custom hook for managing suppliers data
@@ -47,7 +47,9 @@ export function useSuppliers() {
     } catch (err: unknown) {
       setError({
         hasError: true,
-        message: (err instanceof Error ? err.message : String(err)) || "Could not load asset records.",
+        message:
+          (err instanceof Error ? err.message : String(err)) ||
+          "Could not load asset records.",
       });
       setSuppliers([]);
     } finally {

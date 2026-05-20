@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   AddRepresentativeFormSchema,
   AddRepresentativeFormValues,
-} from "@/modules/financial-management/supplier-registration/types/representative.schema";
+} from "@/modules/industrial-distribution-system/financial-management/supplier-registration/types/representative.schema";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -17,7 +17,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { useRepresentatives } from "@/modules/financial-management/supplier-registration/hooks/useRepresentatives";
+import { useRepresentatives } from "@/modules/industrial-distribution-system/financial-management/supplier-registration/hooks/useRepresentatives";
 
 interface AddRepresentativeFormProps {
   supplierId: number;

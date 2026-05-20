@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
-import { DataTablePagination } from "@/modules/financial-management/asset-management/components/data-table/table-pagination";
+import { DataTablePagination } from "@/modules/industrial-distribution-system/financial-management/asset-management/components/data-table/table-pagination";
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];

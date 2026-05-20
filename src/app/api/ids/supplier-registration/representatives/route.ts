@@ -4,8 +4,8 @@ import {
   fetchAllRepresentatives,
   createRepresentative,
   checkRepresentativeDuplicate,
-} from "@/modules/financial-management/supplier-registration/services/representative";
-import { RepresentativeFormSchema } from "@/modules/financial-management/supplier-registration/types/representative.schema";
+} from "@/modules/industrial-distribution-system/financial-management/supplier-registration/services/representative";
+import { RepresentativeFormSchema } from "@/modules/industrial-distribution-system/financial-management/supplier-registration/types/representative.schema";
 
 /**
  * GET /api/representatives
@@ -73,14 +73,18 @@ export async function POST(request: NextRequest) {
     );
 
     if (duplicateCheck.isDuplicate) {
-      let errorMessage = "A representative with these details already exists for this supplier";
-      
+      let errorMessage =
+        "A representative with these details already exists for this supplier";
+
       if (duplicateCheck.type === "email") {
-        errorMessage = "A representative with this email already exists for this supplier";
+        errorMessage =
+          "A representative with this email already exists for this supplier";
       } else if (duplicateCheck.type === "contact") {
-        errorMessage = "A representative with this contact number already exists for this supplier";
+        errorMessage =
+          "A representative with this contact number already exists for this supplier";
       } else if (duplicateCheck.type === "name") {
-        errorMessage = "A representative with this name already exists for this supplier";
+        errorMessage =
+          "A representative with this name already exists for this supplier";
       }
 
       return NextResponse.json(

@@ -7,7 +7,7 @@ import {
   Supplier,
   SupplierFormSchema,
   SupplierFormValues,
-} from "@/modules/financial-management/supplier-registration/types/supplier.schema";
+} from "@/modules/industrial-distribution-system/financial-management/supplier-registration/types/supplier.schema";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -27,9 +27,9 @@ import Image from "next/image";
 import {
   usePaymentTerms,
   useDeliveryTerms,
-} from "@/modules/financial-management/supplier-registration/hooks/useTerms";
-import { useDivisions } from "@/modules/human-resource-management/employee-admin/structrure/division/hooks/useDivisions";
-import { Term } from "@/modules/financial-management/supplier-registration/services/terms";
+} from "@/modules/industrial-distribution-system/financial-management/supplier-registration/hooks/useTerms";
+import { useDivisions } from "@/modules/industrial-distribution-system/human-resource-management/employee-admin/structrure/division/hooks/useDivisions";
+import { Term } from "@/modules/industrial-distribution-system/financial-management/supplier-registration/services/terms";
 import { Combobox } from "../ui/Combobox";
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB
@@ -61,7 +61,9 @@ export function EditSupplierForm({
 
   const validateAndSetFile = useCallback((file: File) => {
     if (file.size > MAX_FILE_SIZE) {
-      toast.error(`File too large. Maximum size is 2 MB (got ${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+      toast.error(
+        `File too large. Maximum size is 2 MB (got ${(file.size / 1024 / 1024).toFixed(2)} MB)`,
+      );
       return;
     }
     if (!ALLOWED_TYPES.includes(file.type)) {
@@ -75,12 +77,15 @@ export function EditSupplierForm({
     reader.readAsDataURL(file);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) validateAndSetFile(file);
-  }, [validateAndSetFile]);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+      const file = e.dataTransfer.files[0];
+      if (file) validateAndSetFile(file);
+    },
+    [validateAndSetFile],
+  );
 
   const clearImage = useCallback(() => {
     setSelectedFile(null);
@@ -134,10 +139,13 @@ export function EditSupplierForm({
         formData.append("file", selectedFile);
         formData.append("folder_name", "supplier_profile_image");
 
-        const uploadRes = await fetch("/api/supplier-registration/supplier-image-upload", {
-          method: "POST",
-          body: formData,
-        });
+        const uploadRes = await fetch(
+          "/api/supplier-registration/supplier-image-upload",
+          {
+            method: "POST",
+            body: formData,
+          },
+        );
 
         const uploadResult = await uploadRes.json();
 
@@ -288,7 +296,8 @@ export function EditSupplierForm({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>
-                          Supplier Type <span className="text-destructive">*</span>
+                          Supplier Type{" "}
+                          <span className="text-destructive">*</span>
                         </FormLabel>
                         <FormControl>
                           <Combobox
@@ -311,18 +320,22 @@ export function EditSupplierForm({
                     name="division_id"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>
-                          Division
-                        </FormLabel>
+                        <FormLabel>Division</FormLabel>
                         <FormControl>
                           <Combobox
-                            options={divisions.map(d => ({
+                            options={divisions.map((d) => ({
                               value: String(d.division_id),
-                              label: d.division_name
+                              label: d.division_name,
                             }))}
                             value={field.value ? String(field.value) : ""}
-                            onValueChange={(val) => field.onChange(val ? Number(val) : null)}
-                            placeholder={isLoadingDivisions ? "Loading divisions..." : "Select division (Optional)"}
+                            onValueChange={(val) =>
+                              field.onChange(val ? Number(val) : null)
+                            }
+                            placeholder={
+                              isLoadingDivisions
+                                ? "Loading divisions..."
+                                : "Select division (Optional)"
+                            }
                             disabled={isLoadingDivisions}
                           />
                         </FormControl>
@@ -584,11 +597,16 @@ export function EditSupplierForm({
 
                 {/* Supplier Profile Image Upload */}
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Supplier Profile Image</label>
+                  <label className="text-sm font-medium">
+                    Supplier Profile Image
+                  </label>
                   <div
                     onClick={() => fileInputRef.current?.click()}
                     onDrop={handleDrop}
-                    onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDragging(true);
+                    }}
                     onDragLeave={() => setIsDragging(false)}
                     className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 cursor-pointer transition-colors ${
                       isDragging
@@ -608,7 +626,10 @@ export function EditSupplierForm({
                         />
                         <button
                           type="button"
-                          onClick={(e) => { e.stopPropagation(); clearImage(); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            clearImage();
+                          }}
                           className="absolute -top-2 -right-2 rounded-full bg-destructive p-1 text-destructive-foreground hover:bg-destructive/80"
                         >
                           <X className="h-3 w-3" />
@@ -622,7 +643,9 @@ export function EditSupplierForm({
                         <div className="rounded-full bg-muted p-3 mb-2">
                           <Upload className="h-5 w-5 text-muted-foreground" />
                         </div>
-                        <p className="text-sm font-medium">Click or drag to upload</p>
+                        <p className="text-sm font-medium">
+                          Click or drag to upload
+                        </p>
                         <p className="text-xs text-muted-foreground mt-1">
                           JPEG, PNG, WebP, GIF • Max 2 MB
                         </p>
@@ -657,7 +680,8 @@ export function EditSupplierForm({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        Payment Terms <span className="text-destructive">*</span>
+                        Payment Terms{" "}
+                        <span className="text-destructive">*</span>
                       </FormLabel>
                       <FormControl>
                         <Combobox
@@ -686,7 +710,8 @@ export function EditSupplierForm({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        Delivery Terms <span className="text-destructive">*</span>
+                        Delivery Terms{" "}
+                        <span className="text-destructive">*</span>
                       </FormLabel>
                       <FormControl>
                         <Combobox

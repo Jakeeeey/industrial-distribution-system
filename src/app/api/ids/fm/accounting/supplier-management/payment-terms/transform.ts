@@ -1,4 +1,4 @@
-import type { PaymentTerm } from "@/modules/financial-management/accounting/supplier-management/payment-terms/types";
+import type { PaymentTerm } from "@/modules/industrial-distribution-system/financial-management/accounting/supplier-management/payment-terms/types";
 
 // Helpers to map between Directus `payment_terms` fields and local PaymentTerm shape
 
@@ -52,7 +52,9 @@ function extractCreatedByName(createdBy: unknown) {
   return fullName || null;
 }
 
-export function toLocal(item: PaymentTermSource | null | undefined): PaymentTerm | null {
+export function toLocal(
+  item: PaymentTermSource | null | undefined,
+): PaymentTerm | null {
   if (!item) return null;
 
   return {
@@ -61,7 +63,10 @@ export function toLocal(item: PaymentTermSource | null | undefined): PaymentTerm
     description: item.payment_description ?? item.description ?? "",
     // Normalize null/undefined to 0 for days so forms expect a number
     days: Number(item.payment_days ?? item.days ?? 0) || 0,
-    isActive: typeof item.payment_active === "boolean" ? item.payment_active : (item.isActive ?? true),
+    isActive:
+      typeof item.payment_active === "boolean"
+        ? item.payment_active
+        : (item.isActive ?? true),
     createdBy: extractCreatedById(item.created_by ?? item.createdBy),
     createdByName: extractCreatedByName(item.created_by ?? item.createdBy),
     createdAt: item.created_at ?? item.createdAt ?? undefined,
@@ -69,11 +74,17 @@ export function toLocal(item: PaymentTermSource | null | undefined): PaymentTerm
   };
 }
 
-export function toRemote(local: { name?: string; description?: string | null; days?: number | null; isActive?: boolean }) {
+export function toRemote(local: {
+  name?: string;
+  description?: string | null;
+  days?: number | null;
+  isActive?: boolean;
+}) {
   return {
     payment_name: local.name ?? null,
     payment_description: local.description ?? null,
     payment_days: local.days ?? null,
-    payment_active: typeof local.isActive === "boolean" ? local.isActive : undefined,
+    payment_active:
+      typeof local.isActive === "boolean" ? local.isActive : undefined,
   };
 }

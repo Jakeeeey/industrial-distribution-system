@@ -1,6 +1,6 @@
-import { handleApiError } from "@/modules/supply-chain-management/fleet-management/trip-management/dispatch-plan/utils/error-handler";
-import * as budgetingService from "@/modules/supply-chain-management/fleet-management/trip-management/dispatch-plan/budgeting/services/budgeting.service";
-import { UpdateBudgetSchema } from "@/modules/supply-chain-management/fleet-management/trip-management/dispatch-plan/budgeting/types/budgeting.schema";
+import { handleApiError } from "@/modules/industrial-distribution-system/supply-chain-management/fleet-management/trip-management/dispatch-plan/utils/error-handler";
+import * as budgetingService from "@/modules/industrial-distribution-system/supply-chain-management/fleet-management/trip-management/dispatch-plan/budgeting/services/budgeting.service";
+import { UpdateBudgetSchema } from "@/modules/industrial-distribution-system/supply-chain-management/fleet-management/trip-management/dispatch-plan/budgeting/types/budgeting.schema";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function PATCH(req: NextRequest) {
@@ -20,8 +20,7 @@ export async function PATCH(req: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json(
         {
-          error:
-            parsed.error.issues[0]?.message || "Budget validation failed",
+          error: parsed.error.issues[0]?.message || "Budget validation failed",
         },
         { status: 400 },
       );

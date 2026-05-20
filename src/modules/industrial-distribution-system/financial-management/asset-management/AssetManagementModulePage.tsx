@@ -6,8 +6,8 @@ import { RefreshCw } from "lucide-react";
 import { useState } from "react";
 
 // Components
-import { DataTableSkeleton } from "@/app/(financial-management)/fm/_components/DataTableSkeleton";
-import { ErrorPage } from "@/app/(financial-management)/fm/_components/ErrorPage";
+import { DataTableSkeleton } from "@/app/(industrial-distribution-system)/ids/fm/_components/DataTableSkeleton";
+import { ErrorPage } from "@/app/(industrial-distribution-system)/ids/fm/_components/ErrorPage";
 import { AssetDataTable } from "./components/data-table";
 import { columns } from "./components/data-table/columns";
 import { AssetTableData } from "./types";

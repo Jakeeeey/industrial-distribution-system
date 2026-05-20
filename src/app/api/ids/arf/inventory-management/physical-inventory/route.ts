@@ -1,6 +1,6 @@
 // src/app/api/ids/scm/physical-inventory/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import type { PhysicalInventoryHeaderRow } from "../../../../../../modules/industrial-distribution-system/audit-results-findings/inventory-management/physical-inventory-management/types";
+import type { PhysicalInventoryHeaderRow } from "@/modules/industrial-distribution-system/audit-results-findings/inventory-management/physical-inventory-management/types";
 
 type DirectusSingleResponse<T> = {
   data: T;

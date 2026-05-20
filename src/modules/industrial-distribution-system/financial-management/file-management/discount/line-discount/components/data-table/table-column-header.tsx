@@ -1,8 +1,14 @@
-// src/modules/financial-management/line-discount/components/data-table/table-column-header.tsx
+// src/modules/industrial-distribution-system/financial-management/line-discount/components/data-table/table-column-header.tsx
 "use client";
 
 import type { Column } from "@tanstack/react-table";
-import { ChevronDown, ChevronsUpDown, ChevronUp, EyeOff, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronsUpDown,
+  ChevronUp,
+  EyeOff,
+  X,
+} from "lucide-react";
 
 import {
   DropdownMenu,
@@ -13,8 +19,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
-interface DataTableColumnHeaderProps<TData, TValue>
-  extends React.ComponentProps<typeof DropdownMenuTrigger> {
+interface DataTableColumnHeaderProps<
+  TData,
+  TValue,
+> extends React.ComponentProps<typeof DropdownMenuTrigger> {
   column: Column<TData, TValue>;
   label: string;
 }

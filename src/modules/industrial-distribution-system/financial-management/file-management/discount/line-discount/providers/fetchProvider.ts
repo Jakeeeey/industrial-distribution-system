@@ -1,4 +1,4 @@
-// src/modules/financial-management/line-discount/providers/fetchProvider.ts
+// src/modules/industrial-distribution-system/financial-management/line-discount/providers/fetchProvider.ts
 import type { LineDiscountRow, LineDiscountUpsert } from "../type";
 
 type ListResponse<T> = { data: T[] };
@@ -14,20 +14,28 @@ async function safeJson(res: Response) {
 
 function errMsg(payload: unknown, fallback: string) {
   const p = payload as Record<string, unknown>;
-  return (typeof p?.error === "string" ? p.error : null)
-    || (typeof p?.message === "string" ? p.message : null)
-    || fallback;
+  return (
+    (typeof p?.error === "string" ? p.error : null) ||
+    (typeof p?.message === "string" ? p.message : null) ||
+    fallback
+  );
 }
 
 export async function listLineDiscounts(): Promise<LineDiscountRow[]> {
-  const res = await fetch("/api/fm/file-management/discount/line-discount?limit=-1", { cache: "no-store" });
+  const res = await fetch(
+    "/api/fm/file-management/discount/line-discount?limit=-1",
+    { cache: "no-store" },
+  );
   const payload = await safeJson(res);
 
-  if (!res.ok) throw new Error(errMsg(payload, "Failed to load line discounts."));
+  if (!res.ok)
+    throw new Error(errMsg(payload, "Failed to load line discounts."));
   return (payload as ListResponse<LineDiscountRow>)?.data ?? [];
 }
 
-export async function createLineDiscount(input: LineDiscountUpsert): Promise<LineDiscountRow> {
+export async function createLineDiscount(
+  input: LineDiscountUpsert,
+): Promise<LineDiscountRow> {
   const res = await fetch("/api/fm/file-management/discount/line-discount", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -35,7 +43,8 @@ export async function createLineDiscount(input: LineDiscountUpsert): Promise<Lin
   });
 
   const payload = await safeJson(res);
-  if (!res.ok) throw new Error(errMsg(payload, "Failed to create line discount."));
+  if (!res.ok)
+    throw new Error(errMsg(payload, "Failed to create line discount."));
 
   // Directus returns { data: {...} }
   return payload?.data as LineDiscountRow;
@@ -45,22 +54,30 @@ export async function updateLineDiscount(
   id: number,
   input: LineDiscountUpsert,
 ): Promise<LineDiscountRow> {
-  const res = await fetch(`/api/fm/file-management/discount/line-discount?id=${encodeURIComponent(String(id))}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
+  const res = await fetch(
+    `/api/fm/file-management/discount/line-discount?id=${encodeURIComponent(String(id))}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
 
   const payload = await safeJson(res);
-  if (!res.ok) throw new Error(errMsg(payload, "Failed to update line discount."));
+  if (!res.ok)
+    throw new Error(errMsg(payload, "Failed to update line discount."));
   return payload?.data as LineDiscountRow;
 }
 
 export async function deleteLineDiscount(id: number): Promise<void> {
-  const res = await fetch(`/api/fm/file-management/discount/line-discount?id=${encodeURIComponent(String(id))}`, {
-    method: "DELETE",
-  });
+  const res = await fetch(
+    `/api/fm/file-management/discount/line-discount?id=${encodeURIComponent(String(id))}`,
+    {
+      method: "DELETE",
+    },
+  );
 
   const payload = await safeJson(res);
-  if (!res.ok) throw new Error(errMsg(payload, "Failed to delete line discount."));
+  if (!res.ok)
+    throw new Error(errMsg(payload, "Failed to delete line discount."));
 }

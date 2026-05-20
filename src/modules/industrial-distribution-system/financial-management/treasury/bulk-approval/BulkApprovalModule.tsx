@@ -1,4 +1,4 @@
-// src/modules/financial-management/treasury/bulk-approval/BulkApprovalModule.tsx
+// src/modules/industrial-distribution-system/financial-management/treasury/bulk-approval/BulkApprovalModule.tsx
 "use client";
 
 import * as React from "react";
@@ -44,14 +44,17 @@ export default function BulkApprovalModule() {
         <div className="bg-destructive/10 p-6 rounded-full mb-6 ring-4 ring-destructive/5">
           <ShieldAlert className="h-16 w-16 text-destructive" />
         </div>
-        <h1 className="text-4xl font-black tracking-tight text-foreground">Access Restricted</h1>
+        <h1 className="text-4xl font-black tracking-tight text-foreground">
+          Access Restricted
+        </h1>
         <p className="text-muted-foreground mt-3 max-w-lg font-medium text-lg">
-          You are not registered as an authorized approver for disbursement drafts. Only users in the
-          Disbursement Approver registry may access this module.
+          You are not registered as an authorized approver for disbursement
+          drafts. Only users in the Disbursement Approver registry may access
+          this module.
         </p>
         <Button
           className="mt-8 rounded-full font-bold shadow-lg flex items-center gap-2"
-          onClick={() => window.location.href = "/dashboard"}
+          onClick={() => (window.location.href = "/dashboard")}
           variant="default"
           size="lg"
         >
@@ -75,8 +78,8 @@ export default function BulkApprovalModule() {
             {Object.keys(levelsByDivision).length > 1
               ? `You have active approval roles across ${Object.keys(levelsByDivision).length} divisions.`
               : myLevel > 0
-              ? `You are a Level ${myLevel} approver — cast your vote on pending drafts.`
-              : "Multi-tier consensus approval for disbursement drafts."}
+                ? `You are a Level ${myLevel} approver — cast your vote on pending drafts.`
+                : "Multi-tier consensus approval for disbursement drafts."}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -86,7 +89,9 @@ export default function BulkApprovalModule() {
             onClick={() => window.location.reload()}
             disabled={loading}
           >
-            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`}
+            />
             Refresh
           </Button>
         </div>
@@ -94,7 +99,6 @@ export default function BulkApprovalModule() {
 
       {/* Main Content */}
       <div className="flex flex-col xl:flex-row gap-6 flex-1 min-h-0 overflow-hidden">
-
         {/* Left: Draft List */}
         <div className="flex-[7] flex flex-col min-h-0 bg-card border rounded-2xl shadow-sm overflow-hidden">
           <div className="px-6 py-5 border-b bg-muted/10 shrink-0">
@@ -108,7 +112,8 @@ export default function BulkApprovalModule() {
               </Badge>
             </h2>
             <p className="text-xs font-medium text-muted-foreground mt-1">
-              Click &ldquo;Vote Now&rdquo; when a draft is at your active tier level.
+              Click &ldquo;Vote Now&rdquo; when a draft is at your active tier
+              level.
             </p>
           </div>
 
@@ -133,7 +138,6 @@ export default function BulkApprovalModule() {
         <div className="flex-[3] flex flex-col min-h-0 bg-card border rounded-2xl shadow-sm p-6 overflow-hidden">
           <ActivityFeed logs={logs} loading={logsLoading} />
         </div>
-
       </div>
 
       {/* Vote Modal */}

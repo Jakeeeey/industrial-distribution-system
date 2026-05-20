@@ -54,7 +54,7 @@ import {
   ItemClassification,
   ItemType,
   User,
-} from "@/modules/financial-management/asset-management/types";
+} from "@/modules/industrial-distribution-system/financial-management/asset-management/types";
 import { format } from "date-fns";
 import { Check, ChevronsUpDown, Loader2, UploadCloud, X } from "lucide-react";
 import { assetService } from "../../services/assetService";

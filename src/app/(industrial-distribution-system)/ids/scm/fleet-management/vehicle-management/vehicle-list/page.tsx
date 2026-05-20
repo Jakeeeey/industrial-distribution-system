@@ -1,4 +1,4 @@
-// src/app/(financial-management)/fm/treasury/disbursement/page.tsx
+// src/app/(industrial-distribution-system)/ids/fm/treasury/disbursement/page.tsx
 import {
   Breadcrumb,
   BreadcrumbItem,

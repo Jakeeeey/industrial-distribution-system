@@ -1,4 +1,4 @@
-// src/modules/financial-management/line-discount/components/data-table/index.tsx
+// src/modules/industrial-distribution-system/financial-management/line-discount/components/data-table/index.tsx
 "use client";
 
 import * as React from "react";
@@ -64,7 +64,13 @@ export function LineDiscountDataTable<TData, TValue>({
 
   return (
     <div className="space-y-3">
-      <TableToolbar table={table as unknown as import("@tanstack/react-table").Table<import("../../type").LineDiscountRow>} />
+      <TableToolbar
+        table={
+          table as unknown as import("@tanstack/react-table").Table<
+            import("../../type").LineDiscountRow
+          >
+        }
+      />
 
       <div className="rounded-md border">
         <Table>
@@ -75,7 +81,10 @@ export function LineDiscountDataTable<TData, TValue>({
                   <TableHead key={header.id} className="font-semibold">
                     {header.isPlaceholder
                       ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())}
+                      : flexRender(
+                          header.column.columnDef.header,
+                          header.getContext(),
+                        )}
                   </TableHead>
                 ))}
               </TableRow>
@@ -88,14 +97,20 @@ export function LineDiscountDataTable<TData, TValue>({
                 <TableRow key={row.id}>
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext(),
+                      )}
                     </TableCell>
                   ))}
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center">
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-24 text-center"
+                >
                   No records found.
                 </TableCell>
               </TableRow>
@@ -104,7 +119,9 @@ export function LineDiscountDataTable<TData, TValue>({
         </Table>
       </div>
 
-      <DataTablePagination table={table as unknown as import('@tanstack/react-table').Table<TData>} />
+      <DataTablePagination
+        table={table as unknown as import("@tanstack/react-table").Table<TData>}
+      />
     </div>
   );
 }

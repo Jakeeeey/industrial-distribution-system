@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Supplier } from "@/modules/financial-management/supplier-registration/types/supplier.schema";
+import { Supplier } from "@/modules/industrial-distribution-system/financial-management/supplier-registration/types/supplier.schema";
 
 /**
  * Custom hook for fetching single supplier details

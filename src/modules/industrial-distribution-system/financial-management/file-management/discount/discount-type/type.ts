@@ -1,4 +1,4 @@
-// src/modules/financial-management/discount-type/type.ts
+// src/modules/industrial-distribution-system/financial-management/discount-type/type.ts
 import { z } from "zod";
 
 /** ===== Line Discount (Available list) ===== */
@@ -63,18 +63,12 @@ function parseDecimalToBigInt(value: string, scale: bigint): bigint {
   const wanted = Number(scale);
   const fracPadded = (frac + "0".repeat(wanted)).slice(0, wanted);
 
-  const bi =
-    BigInt(intPart) * (10n ** scale) +
-    BigInt(fracPadded || "0");
+  const bi = BigInt(intPart) * 10n ** scale + BigInt(fracPadded || "0");
 
   return neg ? -bi : bi;
 }
 
-function formatFixed(
-  x: bigint,
-  inScale: bigint,
-  decimals: number,
-): string {
+function formatFixed(x: bigint, inScale: bigint, decimals: number): string {
   const neg = x < 0n;
   const abs = neg ? -x : x;
 

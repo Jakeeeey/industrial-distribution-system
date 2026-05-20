@@ -1,4 +1,4 @@
-// src/app/(supply-chain-management)/scm/supplier-management/purchase-order-approval/page.tsx
+// src/app/(industrial-distribution-system)/ids/scm/supplier-management/purchase-order-approval/page.tsx
 
 import {
   Breadcrumb,

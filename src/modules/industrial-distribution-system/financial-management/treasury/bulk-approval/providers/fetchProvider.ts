@@ -1,4 +1,4 @@
-// src/modules/financial-management/treasury/bulk-approval/providers/fetchProvider.ts
+// src/modules/industrial-distribution-system/financial-management/treasury/bulk-approval/providers/fetchProvider.ts
 "use client";
 
 import type {
@@ -15,7 +15,8 @@ async function apiFetch(url: string, init?: RequestInit): Promise<unknown> {
   const res = await fetch(url, { cache: "no-store", ...init });
   const data = await res.json();
   if (!res.ok) {
-    if (res.status === 403 || res.status === 401) throw new Error("403_UNAUTHORIZED");
+    if (res.status === 403 || res.status === 401)
+      throw new Error("403_UNAUTHORIZED");
     const msg =
       (data as { error?: string; message?: string })?.message ||
       (data as { error?: string })?.error ||
@@ -25,32 +26,48 @@ async function apiFetch(url: string, init?: RequestInit): Promise<unknown> {
   return data;
 }
 
-export async function checkMyAccess(): Promise<{
-  approver_id: number;
-  division_id: number;
-  approver_heirarchy: number;
-}[]> {
+export async function checkMyAccess(): Promise<
+  {
+    approver_id: number;
+    division_id: number;
+    approver_heirarchy: number;
+  }[]
+> {
   const data = await apiFetch(`${BASE}?resource=my-access`);
-  return (data as { data: { approver_id: number; division_id: number; approver_heirarchy: number }[] }).data;
+  return (
+    data as {
+      data: {
+        approver_id: number;
+        division_id: number;
+        approver_heirarchy: number;
+      }[];
+    }
+  ).data;
 }
 
-export async function listDrafts(startDate?: string, endDate?: string): Promise<{ 
-  data: DraftRow[]; 
+export async function listDrafts(
+  startDate?: string,
+  endDate?: string,
+): Promise<{
+  data: DraftRow[];
   myLevel: number;
   levelsByDivision: Record<number, number[]>;
 }> {
   let url = `${BASE}?resource=drafts`;
-  if (startDate && endDate) url += `&start_date=${startDate}&end_date=${endDate}`;
+  if (startDate && endDate)
+    url += `&start_date=${startDate}&end_date=${endDate}`;
   const data = await apiFetch(url);
-  return data as { 
-    data: DraftRow[]; 
+  return data as {
+    data: DraftRow[];
     myLevel: number;
     levelsByDivision: Record<number, number[]>;
   };
 }
 
 export async function getDraftDetail(draftId: number): Promise<DraftDetail> {
-  const data = await apiFetch(`${BASE}?resource=draft-detail&draft_id=${draftId}`);
+  const data = await apiFetch(
+    `${BASE}?resource=draft-detail&draft_id=${draftId}`,
+  );
   return data as DraftDetail;
 }
 
@@ -80,7 +97,11 @@ export async function getActivityLogs(): Promise<LogDraft[]> {
   return (data as { data: LogDraft[] }).data;
 }
 
-export async function getActivityLogDetail(draftId: number): Promise<ActivityLogDetail[]> {
-  const data = await apiFetch(`${BASE}?resource=log-detail&draft_id=${draftId}`);
+export async function getActivityLogDetail(
+  draftId: number,
+): Promise<ActivityLogDetail[]> {
+  const data = await apiFetch(
+    `${BASE}?resource=log-detail&draft_id=${draftId}`,
+  );
   return (data as { data: ActivityLogDetail[] }).data;
 }

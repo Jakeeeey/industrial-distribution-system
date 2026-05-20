@@ -1,7 +1,7 @@
 import {
   fetchAllProducts,
   searchProducts,
-} from "@/modules/financial-management/supplier-registration/services/products";
+} from "@/modules/industrial-distribution-system/financial-management/supplier-registration/services/products";
 import { NextRequest, NextResponse } from "next/server";
 
 /**

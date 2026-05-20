@@ -2,12 +2,12 @@
 // Thin handlers only: parse request → validate → call service → respond.
 // Zero fetch() calls — all I/O is delegated to the service layer.
 
-import { handleApiError } from "@/modules/supply-chain-management/fleet-management/trip-management/dispatch-plan/utils/error-handler";
-import * as dispatchService from "@/modules/supply-chain-management/fleet-management/trip-management/dispatch-plan/creation/services/dispatch.service";
+import { handleApiError } from "@/modules/industrial-distribution-system/supply-chain-management/fleet-management/trip-management/dispatch-plan/utils/error-handler";
+import * as dispatchService from "@/modules/industrial-distribution-system/supply-chain-management/fleet-management/trip-management/dispatch-plan/creation/services/dispatch.service";
 import {
   DispatchCreationFormSchema,
   UpdateTripSchema,
-} from "@/modules/supply-chain-management/fleet-management/trip-management/dispatch-plan/creation/types/dispatch.schema";
+} from "@/modules/industrial-distribution-system/supply-chain-management/fleet-management/trip-management/dispatch-plan/creation/types/dispatch.schema";
 import { NextRequest, NextResponse } from "next/server";
 
 // ─── GET ────────────────────────────────────────────────────
@@ -31,7 +31,10 @@ export async function GET(req: NextRequest) {
       let currentPlanId: number | number[] | undefined = undefined;
       if (currentPlanIdRaw) {
         if (currentPlanIdRaw.includes(",")) {
-          currentPlanId = currentPlanIdRaw.split(",").map(id => Number(id.trim())).filter(id => !isNaN(id));
+          currentPlanId = currentPlanIdRaw
+            .split(",")
+            .map((id) => Number(id.trim()))
+            .filter((id) => !isNaN(id));
         } else {
           currentPlanId = Number(currentPlanIdRaw);
         }
@@ -39,13 +42,13 @@ export async function GET(req: NextRequest) {
       const limit = Number(searchParams.get("limit")) || 25;
       const offset = Number(searchParams.get("offset")) || 0;
       const search = searchParams.get("search") || undefined;
-      
+
       const result = await dispatchService.getApprovedPlans(
         branchId ? Number(branchId) : undefined,
         currentPlanId,
         limit,
         offset,
-        search
+        search,
       );
       return NextResponse.json(result);
     }
@@ -59,8 +62,11 @@ export async function GET(req: NextRequest) {
           { status: 400 },
         );
       }
-      
-      const planIds = planIdsRaw.split(",").map(id => Number(id.trim())).filter(id => !isNaN(id));
+
+      const planIds = planIdsRaw
+        .split(",")
+        .map((id) => Number(id.trim()))
+        .filter((id) => !isNaN(id));
       const result = await dispatchService.getPlanDetails(
         planIds,
         tripId ? Number(tripId) : undefined,
@@ -101,8 +107,8 @@ export async function GET(req: NextRequest) {
       const query = searchParams.get("query");
       const branchIdRaw = searchParams.get("branch_id");
       const data = await dispatchService.getPurchaseOrders(
-        query || undefined, 
-        branchIdRaw ? Number(branchIdRaw) : undefined
+        query || undefined,
+        branchIdRaw ? Number(branchIdRaw) : undefined,
       );
       return NextResponse.json({ data });
     }
@@ -165,8 +171,7 @@ export async function PATCH(req: NextRequest) {
       if (!parsed.success) {
         return NextResponse.json(
           {
-            error:
-              parsed.error.issues[0]?.message || "Trip validation failed",
+            error: parsed.error.issues[0]?.message || "Trip validation failed",
           },
           { status: 400 },
         );

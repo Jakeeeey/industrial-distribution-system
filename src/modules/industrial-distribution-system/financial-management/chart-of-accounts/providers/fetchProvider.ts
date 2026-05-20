@@ -1,4 +1,4 @@
-//src/modules/financial-management/chart-of-accounts/providers/fetchProvider.ts
+//src/modules/industrial-distribution-system/financial-management/chart-of-accounts/providers/fetchProvider.ts
 import type {
   AccountTypeRow,
   BalanceTypeRow,
@@ -27,11 +27,14 @@ function errMsg(data: unknown): string {
   if (typeof data === "string") return data;
   const d = data as Record<string, unknown>;
   const errors = d?.errors as Array<Record<string, unknown>> | undefined;
-  const msg = errors?.[0]?.message || d?.message || d?.error || "Request failed";
+  const msg =
+    errors?.[0]?.message || d?.message || d?.error || "Request failed";
   return String(msg);
 }
 
-export async function listCOA(params: COAListParams): Promise<DirectusListResponse<COARow>> {
+export async function listCOA(
+  params: COAListParams,
+): Promise<DirectusListResponse<COARow>> {
   const sp = new URLSearchParams();
   sp.set("resource", "chart_of_accounts");
   sp.set("q", params.q || "");
@@ -44,7 +47,9 @@ export async function listCOA(params: COAListParams): Promise<DirectusListRespon
   return data as DirectusListResponse<COARow>;
 }
 
-export async function createCOA(payload: COACreatePayload): Promise<DirectusSingleResponse<COARow>> {
+export async function createCOA(
+  payload: COACreatePayload,
+): Promise<DirectusSingleResponse<COARow>> {
   const sp = new URLSearchParams();
   sp.set("resource", "chart_of_accounts");
 
@@ -86,14 +91,18 @@ export async function deleteCOA(id: number): Promise<void> {
 
 /** Lookups */
 export async function listAccountTypes(): Promise<AccountTypeRow[]> {
-  const res = await fetch(`${API}?resource=account_types`, { cache: "no-store" });
+  const res = await fetch(`${API}?resource=account_types`, {
+    cache: "no-store",
+  });
   const data = await safeJson(res);
   if (!res.ok) throw new Error(errMsg(data));
   return (data?.data ?? []) as AccountTypeRow[];
 }
 
 export async function listBalanceTypes(): Promise<BalanceTypeRow[]> {
-  const res = await fetch(`${API}?resource=balance_type`, { cache: "no-store" });
+  const res = await fetch(`${API}?resource=balance_type`, {
+    cache: "no-store",
+  });
   const data = await safeJson(res);
   if (!res.ok) throw new Error(errMsg(data));
   return (data?.data ?? []) as BalanceTypeRow[];
@@ -110,7 +119,9 @@ export async function listBSISTypes(): Promise<BSISTypeRow[]> {
 // ✅ NEW: Findings (general_findings) - CRUD helpers
 // ─────────────────────────────────────────────
 export async function listGeneralFindings(): Promise<FindingRow[]> {
-  const res = await fetch(`${API}?resource=general_findings`, { cache: "no-store" });
+  const res = await fetch(`${API}?resource=general_findings`, {
+    cache: "no-store",
+  });
   const data = await safeJson(res);
   if (!res.ok) throw new Error(errMsg(data));
   return (data?.data ?? []) as FindingRow[];
@@ -146,7 +157,9 @@ export async function deleteFinding(id: number): Promise<void> {
 // ✅ NEW: Payment Methods (payment_methods) - CRUD helpers
 // ─────────────────────────────────────────────
 export async function listPaymentMethods(): Promise<PaymentMethodRow[]> {
-  const res = await fetch(`${API}?resource=payment_methods`, { cache: "no-store" });
+  const res = await fetch(`${API}?resource=payment_methods`, {
+    cache: "no-store",
+  });
   const data = await safeJson(res);
   if (!res.ok) throw new Error(errMsg(data));
   return (data?.data ?? []) as PaymentMethodRow[];
@@ -181,7 +194,9 @@ export async function deletePaymentMethod(method_id: number): Promise<void> {
 }
 
 export async function listUsers(): Promise<UserRow[]> {
-  const res = await fetch(`${API}?resource=user&limit=-1`, { cache: "no-store" });
+  const res = await fetch(`${API}?resource=user&limit=-1`, {
+    cache: "no-store",
+  });
   const data = await safeJson(res);
   if (!res.ok) throw new Error(errMsg(data));
   return (data?.data ?? []) as UserRow[];

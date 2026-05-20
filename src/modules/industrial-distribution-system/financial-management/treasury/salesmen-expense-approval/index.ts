@@ -1,2 +1,2 @@
-// src/modules/financial-management/treasury/salesmen-expense-approval/index.ts
+// src/modules/industrial-distribution-system/financial-management/treasury/salesmen-expense-approval/index.ts
 export { default as SalesmenExpenseApprovalModule } from "./SalesmenExpenseApprovalModule";

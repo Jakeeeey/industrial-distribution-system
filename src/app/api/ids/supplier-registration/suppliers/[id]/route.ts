@@ -3,7 +3,7 @@ import {
   updateSupplier,
   // deleteSupplier,
   fetchSupplierById, // Assuming you have these in your supplier service
-} from "@/modules/financial-management/supplier-registration/services/supplier";
+} from "@/modules/industrial-distribution-system/financial-management/supplier-registration/services/supplier";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -17,7 +17,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ success: true, data });
   } catch (error: unknown) {
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : String(error) },
+      {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      },
       { status: 500 },
     );
   }
@@ -42,7 +45,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   } catch (error: unknown) {
     console.error("PATCH Supplier Error:", error);
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Failed to update supplier" },
+      {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to update supplier",
+      },
       { status: 500 },
     );
   }

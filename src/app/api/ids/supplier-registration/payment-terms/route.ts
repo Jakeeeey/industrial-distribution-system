@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchPaymentTerms } from "@/modules/financial-management/supplier-registration/services/terms";
+import { fetchPaymentTerms } from "@/modules/industrial-distribution-system/financial-management/supplier-registration/services/terms";
 
 export async function GET() {
   try {
@@ -9,7 +9,7 @@ export async function GET() {
     console.error("Payment terms error:", error);
     return NextResponse.json(
       { error: "Failed to fetch payment terms" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

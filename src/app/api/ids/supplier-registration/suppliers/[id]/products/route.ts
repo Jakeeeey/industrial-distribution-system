@@ -2,7 +2,7 @@ import {
   fetchSupplierProducts,
   addProductToSupplier,
   isProductAlreadyAdded,
-} from "@/modules/financial-management/supplier-registration/services/products-per-suppliers";
+} from "@/modules/industrial-distribution-system/financial-management/supplier-registration/services/products-per-suppliers";
 import { NextRequest, NextResponse } from "next/server";
 
 /**

@@ -1,19 +1,19 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
-import { useSuppliers } from "@/modules/financial-management/supplier-registration/hooks/useSuppliers";
+import { useSuppliers } from "@/modules/industrial-distribution-system/financial-management/supplier-registration/hooks/useSuppliers";
 import { SupplierDataTable } from "./components/data-table";
 import { createColumns } from "./components/data-table/columns";
-import { SupplierDetailsModal } from "@/modules/financial-management/supplier-registration/components/modals/suppliers-detail-modal";
+import { SupplierDetailsModal } from "@/modules/industrial-distribution-system/financial-management/supplier-registration/components/modals/suppliers-detail-modal";
 import { Button } from "@/components/ui/button";
-import { Supplier } from "@/modules/financial-management/supplier-registration/types/supplier.schema";
+import { Supplier } from "@/modules/industrial-distribution-system/financial-management/supplier-registration/types/supplier.schema";
 import { Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { EditSupplierModal } from "./components/modals/edit-supplier-modal";
-import { DataTableSkeleton } from "@/app/(financial-management)/fm/_components/DataTableSkeleton";
+import { DataTableSkeleton } from "@/app/(industrial-distribution-system)/ids/fm/_components/DataTableSkeleton";
 import { AddSupplierModal } from "./components/modals/add-supplier-modal";
-import { ErrorPage } from "@/app/(financial-management)/fm/_components/ErrorPage";
-import { DivisionFilterProvider } from "@/modules/human-resource-management/employee-admin/structrure/division/providers/DivisionFilterProvider";
+import { ErrorPage } from "@/app/(industrial-distribution-system)/ids/fm/_components/ErrorPage";
+import { DivisionFilterProvider } from "@/modules/industrial-distribution-system/human-resource-management/employee-admin/structrure/division/providers/DivisionFilterProvider";
 
 export default function SupplierRepresentativeModulePage() {
   const { suppliers, isLoading, error, refresh, setSearchQuery } =
@@ -83,61 +83,61 @@ export default function SupplierRepresentativeModulePage() {
     <DivisionFilterProvider>
       <div className="p-6 space-y-4">
         {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={refresh}
-            disabled={isLoading}
-          >
-            <RefreshCw
-              className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
-            />
-          </Button>
-          <Button onClick={() => setAddModalOpen(true)}>
-            <Plus className="h-4 w-4" />
-            Add Supplier
-          </Button>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={refresh}
+              disabled={isLoading}
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
+              />
+            </Button>
+            <Button onClick={() => setAddModalOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Add Supplier
+            </Button>
+          </div>
         </div>
+
+        {/* Main Content */}
+        <SupplierDataTable
+          columns={columns}
+          data={suppliers || []}
+          searchPlaceholder="Search by name, TIN, or contact person..."
+          onSearchChange={setSearchQuery}
+        />
+
+        {/* Supplier Details Modal */}
+        <SupplierDetailsModal
+          supplier={selectedSupplier}
+          open={viewModalOpen}
+          onClose={() => {
+            setViewModalOpen(false);
+            setSelectedSupplier(null);
+          }}
+        />
+
+        {/* Edit Supplier Modal */}
+        <EditSupplierModal
+          supplier={selectedSupplier}
+          open={editModalOpen}
+          onClose={() => {
+            setEditModalOpen(false);
+            setSelectedSupplier(null);
+          }}
+          onSuccess={handleEditSuccess}
+        />
+
+        {/* Add Supplier Modal */}
+        <AddSupplierModal
+          open={addModalOpen}
+          onClose={() => setAddModalOpen(false)}
+          onSuccess={handleAddSuccess}
+        />
       </div>
-
-      {/* Main Content */}
-      <SupplierDataTable
-        columns={columns}
-        data={suppliers || []}
-        searchPlaceholder="Search by name, TIN, or contact person..."
-        onSearchChange={setSearchQuery}
-      />
-
-      {/* Supplier Details Modal */}
-      <SupplierDetailsModal
-        supplier={selectedSupplier}
-        open={viewModalOpen}
-        onClose={() => {
-          setViewModalOpen(false);
-          setSelectedSupplier(null);
-        }}
-      />
-
-      {/* Edit Supplier Modal */}
-      <EditSupplierModal
-        supplier={selectedSupplier}
-        open={editModalOpen}
-        onClose={() => {
-          setEditModalOpen(false);
-          setSelectedSupplier(null);
-        }}
-        onSuccess={handleEditSuccess}
-      />
-
-      {/* Add Supplier Modal */}
-      <AddSupplierModal
-        open={addModalOpen}
-        onClose={() => setAddModalOpen(false)}
-        onSuccess={handleAddSuccess}
-      />
-    </div>
     </DivisionFilterProvider>
   );
 }

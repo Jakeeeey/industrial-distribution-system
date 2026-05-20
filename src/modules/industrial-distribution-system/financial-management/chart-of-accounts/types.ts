@@ -1,4 +1,4 @@
-// src/modules/financial-management/chart-of-accounts/types.ts
+// src/modules/industrial-distribution-system/financial-management/chart-of-accounts/types.ts
 export type DirectusListResponse<T> = {
   data: T[];
   meta?: {
@@ -101,6 +101,5 @@ export type UserRow = {
   firstname?: string;
   lastname?: string;
 };
-
 
 export type COAUpdatePayload = Partial<COACreatePayload>;

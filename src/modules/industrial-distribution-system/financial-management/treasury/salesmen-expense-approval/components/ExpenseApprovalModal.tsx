@@ -1,8 +1,21 @@
-// src/modules/financial-management/treasury/salesmen-expense-approval/components/ExpenseApprovalModal.tsx
+// src/modules/industrial-distribution-system/financial-management/treasury/salesmen-expense-approval/components/ExpenseApprovalModal.tsx
 "use client";
 
 import * as React from "react";
-import { Loader2, ExternalLink, CheckSquare, Square, AlertCircle, FileText, User, Briefcase, Hash, Wallet, Info, X } from "lucide-react";
+import {
+  Loader2,
+  ExternalLink,
+  CheckSquare,
+  Square,
+  AlertCircle,
+  FileText,
+  User,
+  Briefcase,
+  Hash,
+  Wallet,
+  Info,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -24,7 +37,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 import type { SalesmanExpenseDetail, ExpenseDraftRow } from "../type";
 import * as api from "../providers/fetchProvider";
@@ -38,14 +56,19 @@ interface Props {
 }
 
 function formatCurrency(amount: number) {
-  return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(amount);
+  return new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: "PHP",
+  }).format(amount);
 }
 
 function formatDate(d: string | null) {
   if (!d) return "—";
   try {
     return new Date(d + "T00:00:00").toLocaleDateString("en-PH", {
-      year: "numeric", month: "short", day: "numeric",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
     });
   } catch {
     return d;
@@ -54,17 +77,33 @@ function formatDate(d: string | null) {
 
 function statusBadge(status: ExpenseDraftRow["status"]) {
   if (status === "Drafts")
-    return <Badge className="bg-amber-100 text-amber-800 border-amber-200 shadow-sm transition-all hover:scale-105">Draft</Badge>;
+    return (
+      <Badge className="bg-amber-100 text-amber-800 border-amber-200 shadow-sm transition-all hover:scale-105">
+        Draft
+      </Badge>
+    );
   if (status === "Rejected")
-    return <Badge className="bg-red-100 text-red-700 border-red-200 shadow-sm transition-all hover:scale-105">Rejected</Badge>;
+    return (
+      <Badge className="bg-red-100 text-red-700 border-red-200 shadow-sm transition-all hover:scale-105">
+        Rejected
+      </Badge>
+    );
   return <Badge variant="outline">{status}</Badge>;
 }
 
-export default function ExpenseApprovalModal({ open, loading, detail, onClose, onConfirmed }: Props) {
+export default function ExpenseApprovalModal({
+  open,
+  loading,
+  detail,
+  onClose,
+  onConfirmed,
+}: Props) {
   const [selectedIds, setSelectedIds] = React.useState<Set<number>>(new Set());
   const [remarks, setRemarks] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
-  const [localAmounts, setLocalAmounts] = React.useState<Record<number, string>>({});
+  const [localAmounts, setLocalAmounts] = React.useState<
+    Record<number, string>
+  >({});
 
   // Reset selections when detail changes (new salesman loaded)
   React.useEffect(() => {
@@ -72,7 +111,7 @@ export default function ExpenseApprovalModal({ open, loading, detail, onClose, o
     setRemarks("");
     if (detail) {
       const initial: Record<number, string> = {};
-      detail.expenses.forEach(e => {
+      detail.expenses.forEach((e) => {
         initial[e.id] = String(e.amount);
       });
       setLocalAmounts(initial);
@@ -83,7 +122,7 @@ export default function ExpenseApprovalModal({ open, loading, detail, onClose, o
 
   function handleAmountChange(id: number, val: string) {
     if (/^\d*\.?\d*$/.test(val)) {
-      setLocalAmounts(prev => ({ ...prev, [id]: val }));
+      setLocalAmounts((prev) => ({ ...prev, [id]: val }));
     }
   }
 
@@ -106,9 +145,10 @@ export default function ExpenseApprovalModal({ open, loading, detail, onClose, o
     }
   }
 
-  const totalSelected = detail?.expenses
-    .filter((e) => selectedIds.has(e.id))
-    .reduce((sum, e) => sum + Number(localAmounts[e.id] || 0), 0) ?? 0;
+  const totalSelected =
+    detail?.expenses
+      .filter((e) => selectedIds.has(e.id))
+      .reduce((sum, e) => sum + Number(localAmounts[e.id] || 0), 0) ?? 0;
 
   const expenseLimit = detail?.expense_limit ?? 0;
   const allIds = detail?.expenses.map((e) => e.id) ?? [];
@@ -138,7 +178,7 @@ export default function ExpenseApprovalModal({ open, loading, detail, onClose, o
 
     // Identify edited amounts
     const editedMap: Record<number, number> = {};
-    detail.expenses.forEach(e => {
+    detail.expenses.forEach((e) => {
       const newVal = Number(localAmounts[e.id] || 0);
       if (newVal !== Number(e.amount)) {
         editedMap[e.id] = newVal;
@@ -154,12 +194,13 @@ export default function ExpenseApprovalModal({ open, loading, detail, onClose, o
         salesman_user_id: detail.salesman.employee_id,
         salesman_id: detail.salesman.id,
         device_time: new Date().toLocaleString("sv-SE").replace(" ", "T"),
-        edited_amounts: Object.keys(editedMap).length > 0 ? editedMap : undefined,
+        edited_amounts:
+          Object.keys(editedMap).length > 0 ? editedMap : undefined,
       });
 
       if (result.doc_no) {
         toast.success(`Transaction confirmed! Doc No: ${result.doc_no}`, {
-          description: `Disbursement draft ${result.doc_no} has been created.`
+          description: `Disbursement draft ${result.doc_no} has been created.`,
         });
       } else {
         toast.info("Process complete. No expenses were approved.");
@@ -176,9 +217,14 @@ export default function ExpenseApprovalModal({ open, loading, detail, onClose, o
 
   const salesman = detail?.salesman;
   const userName = salesman?.user
-    ? [salesman.user.user_fname, salesman.user.user_mname, salesman.user.user_lname]
-      .filter(Boolean).join(" ")
-    : salesman?.salesman_name ?? "—";
+    ? [
+        salesman.user.user_fname,
+        salesman.user.user_mname,
+        salesman.user.user_lname,
+      ]
+        .filter(Boolean)
+        .join(" ")
+    : (salesman?.salesman_name ?? "—");
 
   return (
     <>
@@ -192,7 +238,8 @@ export default function ExpenseApprovalModal({ open, loading, detail, onClose, o
               Expense Approval & Disbursement Generation
             </DialogTitle>
             <p className="text-primary-foreground/80 text-sm">
-              Review salesmen submittals and convert approved items into treasury disbursements.
+              Review salesmen submittals and convert approved items into
+              treasury disbursements.
             </p>
           </DialogHeader>
 
@@ -205,7 +252,9 @@ export default function ExpenseApprovalModal({ open, loading, detail, onClose, o
             <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-4">
               <AlertCircle size={48} className="opacity-20" />
               <p>Salesman details could not be loaded.</p>
-              <Button variant="outline" onClick={onClose}>Close</Button>
+              <Button variant="outline" onClick={onClose}>
+                Close
+              </Button>
             </div>
           ) : (
             <div className="flex flex-col flex-1 min-h-0 overflow-hidden bg-muted/20">
@@ -228,28 +277,49 @@ export default function ExpenseApprovalModal({ open, loading, detail, onClose, o
                     {salesman?.user?.user_position ?? "N/A"}
                   </p>
                   <p className="text-[10px] text-muted-foreground truncate">
-                    {salesman?.department_name || "N/A"} / {salesman?.division_name || "N/A"}
+                    {salesman?.department_name || "N/A"} /{" "}
+                    {salesman?.division_name || "N/A"}
                   </p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
                     <Wallet size={10} /> Budget Ceiling
                   </p>
-                  <p className={`font-black text-sm leading-tight ${expenseLimit > 0 ? 'text-primary' : 'text-muted-foreground'}`}>
-                    {expenseLimit > 0 ? formatCurrency(expenseLimit) : "Unlimited"}
+                  <p
+                    className={`font-black text-sm leading-tight ${expenseLimit > 0 ? "text-primary" : "text-muted-foreground"}`}
+                  >
+                    {expenseLimit > 0
+                      ? formatCurrency(expenseLimit)
+                      : "Unlimited"}
                   </p>
-                  <p className="text-[10px] text-muted-foreground italic tracking-tight leading-none pt-1">Applied to total selection</p>
+                  <p className="text-[10px] text-muted-foreground italic tracking-tight leading-none pt-1">
+                    Applied to total selection
+                  </p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
                     <Hash size={10} /> Pending Items
                   </p>
                   <div className="flex gap-2">
-                    <Badge variant="secondary" className="text-[10px] h-4 px-1.5 bg-amber-50 text-amber-700 border-amber-200">
-                      {detail.expenses.filter(e => e.status === "Drafts").length} Draft
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px] h-4 px-1.5 bg-amber-50 text-amber-700 border-amber-200"
+                    >
+                      {
+                        detail.expenses.filter((e) => e.status === "Drafts")
+                          .length
+                      }{" "}
+                      Draft
                     </Badge>
-                    <Badge variant="secondary" className="text-[10px] h-4 px-1.5 bg-red-50 text-red-700 border-red-200">
-                      {detail.expenses.filter(e => e.status === "Rejected").length} Rejected
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px] h-4 px-1.5 bg-red-50 text-red-700 border-red-200"
+                    >
+                      {
+                        detail.expenses.filter((e) => e.status === "Rejected")
+                          .length
+                      }{" "}
+                      Rejected
                     </Badge>
                   </div>
                 </div>
@@ -259,7 +329,8 @@ export default function ExpenseApprovalModal({ open, loading, detail, onClose, o
                 <div className="px-6 py-2 bg-red-50 dark:bg-red-950/20 border-b border-red-100 flex items-center gap-3">
                   <AlertCircle className="h-4 w-4 text-red-600 animate-bounce" />
                   <p className="text-xs font-bold text-red-700 uppercase tracking-tight">
-                    Warning: The total selected amount exceeds this user&apos;s expense ceiling for this batch.
+                    Warning: The total selected amount exceeds this user&apos;s
+                    expense ceiling for this batch.
                   </p>
                 </div>
               )}
@@ -273,10 +344,12 @@ export default function ExpenseApprovalModal({ open, loading, detail, onClose, o
                   </h3>
                   <div className="flex items-center gap-4 text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
                     <span className="flex items-center gap-1.5 font-mono">
-                      <span className="w-2 h-2 rounded-full bg-green-500 shadow-sm" /> NORMAL
+                      <span className="w-2 h-2 rounded-full bg-green-500 shadow-sm" />{" "}
+                      NORMAL
                     </span>
                     <span className="flex items-center gap-1.5 font-mono">
-                      <span className="w-2 h-2 rounded-full bg-red-600 shadow-sm animate-pulse" /> OVER LIMIT
+                      <span className="w-2 h-2 rounded-full bg-red-600 shadow-sm animate-pulse" />{" "}
+                      OVER LIMIT
                     </span>
                   </div>
                 </div>
@@ -293,22 +366,38 @@ export default function ExpenseApprovalModal({ open, loading, detail, onClose, o
                                   onClick={toggleAll}
                                   className="cursor-pointer flex items-center justify-center p-1 rounded-md hover:bg-muted transition-all"
                                 >
-                                  {allSelected
-                                    ? <CheckSquare className="h-5 w-5 text-primary" />
-                                    : <Square className="h-5 w-5 text-muted-foreground" />}
+                                  {allSelected ? (
+                                    <CheckSquare className="h-5 w-5 text-primary" />
+                                  ) : (
+                                    <Square className="h-5 w-5 text-muted-foreground" />
+                                  )}
                                 </button>
                               </TooltipTrigger>
                               <TooltipContent>Select All Items</TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         </TableHead>
-                        <TableHead className="w-12 text-center text-xs font-bold uppercase tracking-tighter italic">#</TableHead>
-                        <TableHead className="text-xs font-bold uppercase tracking-tight">Particulars / COA</TableHead>
-                        <TableHead className="text-right text-xs font-bold uppercase tracking-tight">Amount</TableHead>
-                        <TableHead className="text-center text-xs font-bold uppercase tracking-tight">Docs</TableHead>
-                        <TableHead className="text-center text-xs font-bold uppercase tracking-tight">Date</TableHead>
-                        <TableHead className="text-xs font-bold uppercase tracking-tight">Encoded Remarks</TableHead>
-                        <TableHead className="text-center text-xs font-bold uppercase tracking-tight">Status</TableHead>
+                        <TableHead className="w-12 text-center text-xs font-bold uppercase tracking-tighter italic">
+                          #
+                        </TableHead>
+                        <TableHead className="text-xs font-bold uppercase tracking-tight">
+                          Particulars / COA
+                        </TableHead>
+                        <TableHead className="text-right text-xs font-bold uppercase tracking-tight">
+                          Amount
+                        </TableHead>
+                        <TableHead className="text-center text-xs font-bold uppercase tracking-tight">
+                          Docs
+                        </TableHead>
+                        <TableHead className="text-center text-xs font-bold uppercase tracking-tight">
+                          Date
+                        </TableHead>
+                        <TableHead className="text-xs font-bold uppercase tracking-tight">
+                          Encoded Remarks
+                        </TableHead>
+                        <TableHead className="text-center text-xs font-bold uppercase tracking-tight">
+                          Status
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -317,7 +406,9 @@ export default function ExpenseApprovalModal({ open, loading, detail, onClose, o
                           <TableCell colSpan={8} className="text-center py-20">
                             <div className="flex flex-col items-center gap-2 text-muted-foreground">
                               <Briefcase size={40} className="opacity-10" />
-                              <p className="font-medium">No pending expenses found for this period.</p>
+                              <p className="font-medium">
+                                No pending expenses found for this period.
+                              </p>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -328,7 +419,10 @@ export default function ExpenseApprovalModal({ open, loading, detail, onClose, o
                             className={`group cursor-pointer transition-all border-b-muted/40 ${rowBgClass(expense)}`}
                             onClick={() => toggle(expense.id)}
                           >
-                            <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
+                            <TableCell
+                              className="text-center"
+                              onClick={(e) => e.stopPropagation()}
+                            >
                               <Checkbox
                                 checked={selectedIds.has(expense.id)}
                                 onCheckedChange={() => toggle(expense.id)}
@@ -340,24 +434,35 @@ export default function ExpenseApprovalModal({ open, loading, detail, onClose, o
                             </TableCell>
                             <TableCell className="max-w-[200px]">
                               <p className="text-sm font-bold leading-tight truncate">
-                                {expense.particulars_name || "Uncategorized Particular"}
+                                {expense.particulars_name ||
+                                  "Uncategorized Particular"}
                               </p>
                               <p className="text-[10px] text-muted-foreground font-mono">
                                 #{expense.particulars}
                               </p>
                             </TableCell>
                             <TableCell className="text-right whitespace-nowrap">
-                              <div className="flex flex-col items-end gap-1" onClick={(e) => e.stopPropagation()}>
+                              <div
+                                className="flex flex-col items-end gap-1"
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 <Input
                                   className={`h-8 w-24 text-right font-black tabular-nums transition-all shadow-sm border-2 
-                                    ${Number(localAmounts[expense.id]) !== Number(expense.amount) ? 'border-amber-400 bg-amber-50' : 'border-primary/20 focus:border-primary'}`}
+                                    ${Number(localAmounts[expense.id]) !== Number(expense.amount) ? "border-amber-400 bg-amber-50" : "border-primary/20 focus:border-primary"}`}
                                   value={localAmounts[expense.id] || ""}
-                                  onChange={(e) => handleAmountChange(expense.id, e.target.value)}
+                                  onChange={(e) =>
+                                    handleAmountChange(
+                                      expense.id,
+                                      e.target.value,
+                                    )
+                                  }
                                   disabled={submitting}
                                 />
-                                {Number(localAmounts[expense.id]) !== Number(expense.amount) && (
+                                {Number(localAmounts[expense.id]) !==
+                                  Number(expense.amount) && (
                                   <span className="text-[9px] text-amber-600 font-bold uppercase italic animate-in fade-in slide-in-from-right-1">
-                                    Orig: {formatCurrency(Number(expense.amount))}
+                                    Orig:{" "}
+                                    {formatCurrency(Number(expense.amount))}
                                   </span>
                                 )}
                               </div>
@@ -370,14 +475,18 @@ export default function ExpenseApprovalModal({ open, loading, detail, onClose, o
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          setPreviewUrl(`/api/fm/expense-assets?id=${expense.attachment_url}`);
+                                          setPreviewUrl(
+                                            `/api/fm/expense-assets?id=${expense.attachment_url}`,
+                                          );
                                         }}
                                         className="inline-flex p-1.5 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all shadow-sm cursor-pointer"
                                       >
                                         <ExternalLink className="h-3.5 w-3.5" />
                                       </button>
                                     </TooltipTrigger>
-                                    <TooltipContent>Preview Attachment</TooltipContent>
+                                    <TooltipContent>
+                                      Preview Attachment
+                                    </TooltipContent>
                                   </Tooltip>
                                 </TooltipProvider>
                               ) : (
@@ -390,7 +499,9 @@ export default function ExpenseApprovalModal({ open, loading, detail, onClose, o
                             <TableCell className="text-xs max-w-[240px] italic text-muted-foreground group-hover:text-foreground line-clamp-2 leading-snug">
                               {expense.remarks || "No encoded remarks."}
                             </TableCell>
-                            <TableCell className="text-center">{statusBadge(expense.status)}</TableCell>
+                            <TableCell className="text-center">
+                              {statusBadge(expense.status)}
+                            </TableCell>
                           </TableRow>
                         ))
                       )}
@@ -405,13 +516,20 @@ export default function ExpenseApprovalModal({ open, loading, detail, onClose, o
                   <div className="flex-1 min-w-0 space-y-2">
                     <div className="flex items-center gap-2">
                       <label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
-                        Disbursement Remarks <span className="text-red-600 font-bold">*</span>
+                        Disbursement Remarks{" "}
+                        <span className="text-red-600 font-bold">*</span>
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <Info size={12} className="text-muted-foreground/50" />
+                              <Info
+                                size={12}
+                                className="text-muted-foreground/50"
+                              />
                             </TooltipTrigger>
-                            <TooltipContent side="right">This will be printed on the official disbursement form.</TooltipContent>
+                            <TooltipContent side="right">
+                              This will be printed on the official disbursement
+                              form.
+                            </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
                       </label>
@@ -424,17 +542,25 @@ export default function ExpenseApprovalModal({ open, loading, detail, onClose, o
                       disabled={submitting}
                     />
                     <p className="text-[10px] text-muted-foreground italic">
-                      Unselected expenses will be automatically tagged as <span className="text-red-600 font-bold uppercase italic">Rejected</span>.
+                      Unselected expenses will be automatically tagged as{" "}
+                      <span className="text-red-600 font-bold uppercase italic">
+                        Rejected
+                      </span>
+                      .
                     </p>
                   </div>
 
                   <div className="w-full md:w-[320px] bg-muted/40 rounded-xl p-4 border border-muted/60 flex flex-col gap-3 shadow-inner">
                     <div className="flex items-center justify-between text-[11px] font-bold text-muted-foreground uppercase tracking-wider border-b border-muted pb-2">
                       <span>Summary</span>
-                      <span className="text-foreground tracking-tighter">{selectedIds.size} Lines Selected</span>
+                      <span className="text-foreground tracking-tighter">
+                        {selectedIds.size} Lines Selected
+                      </span>
                     </div>
                     <div className="flex items-center justify-between py-1">
-                      <span className="text-xs font-bold text-muted-foreground italic tracking-tighter uppercase line-clamp-1">Grand Total:</span>
+                      <span className="text-xs font-bold text-muted-foreground italic tracking-tighter uppercase line-clamp-1">
+                        Grand Total:
+                      </span>
                       <span className="text-2xl font-black tabular-nums tracking-tighter text-primary drop-shadow-sm">
                         {formatCurrency(totalSelected || 0)}
                       </span>
@@ -469,12 +595,17 @@ export default function ExpenseApprovalModal({ open, loading, detail, onClose, o
       </Dialog>
 
       {/* Attachment Preview Modal */}
-      <Dialog open={!!previewUrl} onOpenChange={(v) => !v && setPreviewUrl(null)}>
+      <Dialog
+        open={!!previewUrl}
+        onOpenChange={(v) => !v && setPreviewUrl(null)}
+      >
         <DialogContent
           showCloseButton={false}
           className="max-w-[90vw] max-h-[85vh] w-fit p-0 overflow-hidden bg-black border-none shadow-2xl flex flex-col items-center justify-center rounded-lg"
         >
-          <DialogTitle className="sr-only">Expense Attachment Preview</DialogTitle>
+          <DialogTitle className="sr-only">
+            Expense Attachment Preview
+          </DialogTitle>
           <Button
             variant="default"
             size="icon"
@@ -498,5 +629,3 @@ export default function ExpenseApprovalModal({ open, loading, detail, onClose, o
     </>
   );
 }
-
-

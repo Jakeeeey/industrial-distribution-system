@@ -1,200 +1,214 @@
-// src/modules/financial-management/claims-management/for-payment/utils/printTransmittalPaymentA4.ts
+// src/modules/industrial-distribution-system/financial-management/claims-management/for-payment/utils/printTransmittalPaymentA4.ts
 import { formatDateTime, formatPHP, toNumberSafe } from "./format";
 
 type Header = {
-    transmittal_no?: string | null;
-    status?: string | null;
-    supplier_name?: string | null;
-    representative_name?: string | null;
-    created_at?: string | null;
-    created_by_name?: string | null;
-    total_amount?: number | string | null;
+  transmittal_no?: string | null;
+  status?: string | null;
+  supplier_name?: string | null;
+  representative_name?: string | null;
+  created_at?: string | null;
+  created_by_name?: string | null;
+  total_amount?: number | string | null;
 };
 
 type Line = {
-    received_at?: string | null;
-    memo_number?: string | null;
-    customer_name?: string | null;
-    gl_code?: string | null;
-    account_title?: string | null;
-    remarks?: string | null;
-    reason?: string | null;
-    amount?: number | string | null;
+  received_at?: string | null;
+  memo_number?: string | null;
+  customer_name?: string | null;
+  gl_code?: string | null;
+  account_title?: string | null;
+  remarks?: string | null;
+  reason?: string | null;
+  amount?: number | string | null;
 };
 
 export type CompanyProfile = {
-    company_id: number;
-    company_name?: string | null;
-    company_type?: string | null;
-    company_code?: string | null;
+  company_id: number;
+  company_name?: string | null;
+  company_type?: string | null;
+  company_code?: string | null;
 
-    company_address?: string | null;
-    company_brgy?: string | null;
-    company_city?: string | null;
-    company_province?: string | null;
-    company_zipCode?: string | null;
+  company_address?: string | null;
+  company_brgy?: string | null;
+  company_city?: string | null;
+  company_province?: string | null;
+  company_zipCode?: string | null;
 
-    company_registrationNumber?: string | null;
-    company_tin?: string | null;
-    company_dateAdmitted?: string | null;
+  company_registrationNumber?: string | null;
+  company_tin?: string | null;
+  company_dateAdmitted?: string | null;
 
-    company_contact?: string | null;
-    company_email?: string | null;
-    company_outlook?: string | null;
-    company_gmail?: string | null;
+  company_contact?: string | null;
+  company_email?: string | null;
+  company_outlook?: string | null;
+  company_gmail?: string | null;
 
-    company_tags?: string | null;
-    company_department?: string | null;
+  company_tags?: string | null;
+  company_department?: string | null;
 
-    company_logo?: string | null;
-    company_facebook?: string | null;
-    company_website?: string | null;
+  company_logo?: string | null;
+  company_facebook?: string | null;
+  company_website?: string | null;
 };
 
 type Group = {
-    key: string;
-    label: string;
-    rows: Line[];
-    subtotal: number;
+  key: string;
+  label: string;
+  rows: Line[];
+  subtotal: number;
 };
 
 function esc(v: unknown): string {
-    return String(v ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
+  return String(v ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 function safeText(v: unknown): string {
-    return typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim();
+  return typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim();
 }
 
-function companyLineJoin(parts: Array<string | null | undefined>, sep = " • "): string {
-    return parts.map((p) => safeText(p)).filter(Boolean).join(sep);
+function companyLineJoin(
+  parts: Array<string | null | undefined>,
+  sep = " • ",
+): string {
+  return parts
+    .map((p) => safeText(p))
+    .filter(Boolean)
+    .join(sep);
 }
 
 function coaLabelFor(r: Line): string {
-    const title = safeText(r.account_title);
-    const code = safeText(r.gl_code);
-    if (title) return title;
-    if (code) return code;
-    return "—";
+  const title = safeText(r.account_title);
+  const code = safeText(r.gl_code);
+  if (title) return title;
+  if (code) return code;
+  return "—";
 }
 
 function coaKeyFor(r: Line): string {
-    const code = safeText(r.gl_code);
-    const title = safeText(r.account_title);
-    return code || title || "—";
+  const code = safeText(r.gl_code);
+  const title = safeText(r.account_title);
+  return code || title || "—";
 }
 
 function groupByCOA(lines: Line[]): { groups: Group[]; grandTotal: number } {
-    const map = new Map<string, Group>();
+  const map = new Map<string, Group>();
 
-    for (const r of lines) {
-        const key = coaKeyFor(r);
-        const label = coaLabelFor(r);
-        const amt = toNumberSafe(r.amount);
+  for (const r of lines) {
+    const key = coaKeyFor(r);
+    const label = coaLabelFor(r);
+    const amt = toNumberSafe(r.amount);
 
-        const g = map.get(key);
-        if (!g) {
-            map.set(key, { key, label, rows: [r], subtotal: amt });
-        } else {
-            g.rows.push(r);
-            g.subtotal += amt;
-            if (g.label === "—" && label !== "—") g.label = label;
-        }
+    const g = map.get(key);
+    if (!g) {
+      map.set(key, { key, label, rows: [r], subtotal: amt });
+    } else {
+      g.rows.push(r);
+      g.subtotal += amt;
+      if (g.label === "—" && label !== "—") g.label = label;
     }
+  }
 
-    const groups = Array.from(map.values()).sort((a, b) =>
-        a.label.localeCompare(b.label, undefined, { sensitivity: "base" })
-    );
+  const groups = Array.from(map.values()).sort((a, b) =>
+    a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
+  );
 
-    const grandTotal = groups.reduce((sum, g) => sum + g.subtotal, 0);
-    return { groups, grandTotal };
+  const grandTotal = groups.reduce((sum, g) => sum + g.subtotal, 0);
+  return { groups, grandTotal };
 }
 
 export function printTransmittalPaymentA4(args: {
-    header: Header;
-    lines: Line[];
-    company?: CompanyProfile | null;
+  header: Header;
+  lines: Line[];
+  company?: CompanyProfile | null;
 }): void {
-    const header = args.header ?? {};
-    const lines = Array.isArray(args.lines) ? args.lines : [];
-    const company = args.company ?? null;
+  const header = args.header ?? {};
+  const lines = Array.isArray(args.lines) ? args.lines : [];
+  const company = args.company ?? null;
 
-    const transNo = safeText(header.transmittal_no) || "—";
-    const status = safeText(header.status) || "FOR PAYMENT";
+  const transNo = safeText(header.transmittal_no) || "—";
+  const status = safeText(header.status) || "FOR PAYMENT";
 
-    const supplier = safeText(header.supplier_name) || "—";
-    const rep = safeText(header.representative_name) || "—";
+  const supplier = safeText(header.supplier_name) || "—";
+  const rep = safeText(header.representative_name) || "—";
 
-    const createdAt = header.created_at ? formatDateTime(header.created_at) : "—";
-    const createdBy = safeText(header.created_by_name) || "—";
+  const createdAt = header.created_at ? formatDateTime(header.created_at) : "—";
+  const createdBy = safeText(header.created_by_name) || "—";
 
-    const printedAt = formatDateTime(new Date().toISOString());
+  const printedAt = formatDateTime(new Date().toISOString());
 
-    const { groups, grandTotal } = groupByCOA(lines);
-    const grandTotalDisplay = formatPHP(
-        header.total_amount != null ? toNumberSafe(header.total_amount) : grandTotal
-    );
+  const { groups, grandTotal } = groupByCOA(lines);
+  const grandTotalDisplay = formatPHP(
+    header.total_amount != null
+      ? toNumberSafe(header.total_amount)
+      : grandTotal,
+  );
 
-    const companyName = safeText(company?.company_name) || "—";
+  const companyName = safeText(company?.company_name) || "—";
 
-    const companyAddress = companyLineJoin(
-        [
-            company?.company_address,
-            company?.company_brgy,
-            company?.company_city,
-            company?.company_province,
-            company?.company_zipCode,
-        ],
-        ", "
-    );
+  const companyAddress = companyLineJoin(
+    [
+      company?.company_address,
+      company?.company_brgy,
+      company?.company_city,
+      company?.company_province,
+      company?.company_zipCode,
+    ],
+    ", ",
+  );
 
-    const companyLegal = companyLineJoin(
-        [
-            safeText(company?.company_tin) ? `TIN: ${safeText(company?.company_tin)}` : "",
-            safeText(company?.company_registrationNumber)
-                ? `Reg No: ${safeText(company?.company_registrationNumber)}`
-                : "",
-        ],
-        " • "
-    );
+  const companyLegal = companyLineJoin(
+    [
+      safeText(company?.company_tin)
+        ? `TIN: ${safeText(company?.company_tin)}`
+        : "",
+      safeText(company?.company_registrationNumber)
+        ? `Reg No: ${safeText(company?.company_registrationNumber)}`
+        : "",
+    ],
+    " • ",
+  );
 
-    const companyContact = companyLineJoin(
-        [
-            safeText(company?.company_contact) ? `Tel: ${safeText(company?.company_contact)}` : "",
-            safeText(company?.company_email),
+  const companyContact = companyLineJoin(
+    [
+      safeText(company?.company_contact)
+        ? `Tel: ${safeText(company?.company_contact)}`
+        : "",
+      safeText(company?.company_email),
+    ],
+    " • ",
+  );
 
-        ],
-        " • "
-    );
-
-    const rowsHtml =
-        groups.length === 0
-            ? `<tr><td colspan="6" class="muted" style="text-align:center;padding:16px;">No CCM lines.</td></tr>`
-            : groups
-                .map((g) => {
-                    const headerRow = `
+  const rowsHtml =
+    groups.length === 0
+      ? `<tr><td colspan="6" class="muted" style="text-align:center;padding:16px;">No CCM lines.</td></tr>`
+      : groups
+          .map((g) => {
+            const headerRow = `
 <tr class="groupRow avoidBreak">
   <td colspan="6">
     <div class="groupTitle">${esc(g.label)}</div>
   </td>
 </tr>`;
 
-                    const itemRows = g.rows
-                        .map((r) => {
-                            const receivedAt = r.received_at ? formatDateTime(r.received_at) : "—";
-                            const memoNo = safeText(r.memo_number) || "—";
-                            const customer = safeText(r.customer_name) || "—";
+            const itemRows = g.rows
+              .map((r) => {
+                const receivedAt = r.received_at
+                  ? formatDateTime(r.received_at)
+                  : "—";
+                const memoNo = safeText(r.memo_number) || "—";
+                const customer = safeText(r.customer_name) || "—";
 
-                            const coa = coaLabelFor(r);
-                            const remarks = safeText(r.remarks) || safeText(r.reason) || "—";
-                            const total = formatPHP(toNumberSafe(r.amount));
+                const coa = coaLabelFor(r);
+                const remarks =
+                  safeText(r.remarks) || safeText(r.reason) || "—";
+                const total = formatPHP(toNumberSafe(r.amount));
 
-                            return `
+                return `
 <tr class="avoidBreak">
   <td>${esc(coa)}</td>
   <td class="nowrap dateCell">${esc(receivedAt)}</td>
@@ -203,20 +217,20 @@ export function printTransmittalPaymentA4(args: {
   <td>${esc(remarks)}</td>
   <td class="num nowrap">${esc(total)}</td>
 </tr>`;
-                        })
-                        .join("");
+              })
+              .join("");
 
-                    const subtotalRow = `
+            const subtotalRow = `
 <tr class="subRow avoidBreak">
   <td colspan="5" class="subLabel">Subtotal — ${esc(g.label)}</td>
   <td class="num subValue nowrap">${esc(formatPHP(g.subtotal))}</td>
 </tr>`;
 
-                    return headerRow + itemRows + subtotalRow;
-                })
-                .join("");
+            return headerRow + itemRows + subtotalRow;
+          })
+          .join("");
 
-    const html = `<!doctype html>
+  const html = `<!doctype html>
 <html>
 <head>
 <meta charset="utf-8" />
@@ -443,11 +457,11 @@ export function printTransmittalPaymentA4(args: {
 </body>
 </html>`;
 
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
 
-    const w = window.open(url, "_blank");
-    if (!w) return;
+  const w = window.open(url, "_blank");
+  if (!w) return;
 
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }

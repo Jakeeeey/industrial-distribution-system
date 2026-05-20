@@ -1,4 +1,4 @@
-// src/modules/financial-management/treasury/salesmen-expense-approval/components/SalesmanExpenseTable.tsx
+// src/modules/industrial-distribution-system/financial-management/treasury/salesmen-expense-approval/components/SalesmanExpenseTable.tsx
 "use client";
 
 import * as React from "react";
@@ -81,11 +81,21 @@ export default function SalesmanExpenseTable(props: Props) {
           <TableHeader className="sticky top-0 z-10 bg-muted/90 backdrop-blur-sm shadow-sm">
             <TableRow className="bg-muted/50">
               <TableHead className="text-center text-xs">#</TableHead>
-              <TableHead className="text-xs font-bold uppercase tracking-tight">Name</TableHead>
-              <TableHead className="text-xs font-bold uppercase tracking-tight">Division</TableHead>
-              <TableHead className="text-center text-xs font-bold uppercase tracking-tight">Draft</TableHead>
-              <TableHead className="text-center text-xs font-bold uppercase tracking-tight">Rejected</TableHead>
-              <TableHead className="text-center text-xs font-bold uppercase tracking-tight">Action</TableHead>
+              <TableHead className="text-xs font-bold uppercase tracking-tight">
+                Name
+              </TableHead>
+              <TableHead className="text-xs font-bold uppercase tracking-tight">
+                Division
+              </TableHead>
+              <TableHead className="text-center text-xs font-bold uppercase tracking-tight">
+                Draft
+              </TableHead>
+              <TableHead className="text-center text-xs font-bold uppercase tracking-tight">
+                Rejected
+              </TableHead>
+              <TableHead className="text-center text-xs font-bold uppercase tracking-tight">
+                Action
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -94,7 +104,9 @@ export default function SalesmanExpenseTable(props: Props) {
                 <TableCell colSpan={6} className="h-[340px] text-center">
                   <div className="flex flex-col items-center justify-center gap-3 text-muted-foreground">
                     <FolderOpen className="h-10 w-10 opacity-30" />
-                    <p className="text-sm font-medium">No salesmen with pending expenses.</p>
+                    <p className="text-sm font-medium">
+                      No salesmen with pending expenses.
+                    </p>
                   </div>
                 </TableCell>
               </TableRow>
@@ -108,7 +120,10 @@ export default function SalesmanExpenseTable(props: Props) {
                     {(page - 1) * 5 + idx + 1}
                   </TableCell>
                   <TableCell className="overflow-hidden">
-                    <span className="font-bold text-xs truncate block" title={row.salesman_name}>
+                    <span
+                      className="font-bold text-xs truncate block"
+                      title={row.salesman_name}
+                    >
                       {row.salesman_name}
                     </span>
                   </TableCell>
@@ -122,7 +137,9 @@ export default function SalesmanExpenseTable(props: Props) {
                         {row.division_name}
                       </Badge>
                     ) : (
-                      <span className="text-muted-foreground text-[10px]">—</span>
+                      <span className="text-muted-foreground text-[10px]">
+                        —
+                      </span>
                     )}
                   </TableCell>
                   <TableCell className="text-center overflow-hidden">
@@ -134,7 +151,9 @@ export default function SalesmanExpenseTable(props: Props) {
                         {row.draft_count}
                       </Badge>
                     ) : (
-                      <span className="text-muted-foreground text-[10px]">0</span>
+                      <span className="text-muted-foreground text-[10px]">
+                        0
+                      </span>
                     )}
                   </TableCell>
                   <TableCell className="text-center overflow-hidden">
@@ -146,7 +165,9 @@ export default function SalesmanExpenseTable(props: Props) {
                         {row.rejected_count}
                       </Badge>
                     ) : (
-                      <span className="text-muted-foreground text-[10px]">0</span>
+                      <span className="text-muted-foreground text-[10px]">
+                        0
+                      </span>
                     )}
                   </TableCell>
                   <TableCell className="text-center overflow-hidden">
@@ -169,8 +190,10 @@ export default function SalesmanExpenseTable(props: Props) {
       {/* Pagination Controls */}
       <div className="flex items-center justify-between shrink-0 border-t pt-3">
         <p className="text-sm text-muted-foreground">
-          Showing <span className="font-bold text-foreground">{rows.length}</span> of{" "}
-          <span className="font-bold text-foreground">{totalItems}</span> salesmen
+          Showing{" "}
+          <span className="font-bold text-foreground">{rows.length}</span> of{" "}
+          <span className="font-bold text-foreground">{totalItems}</span>{" "}
+          salesmen
         </p>
 
         <div className="flex items-center gap-2">
@@ -198,4 +221,3 @@ export default function SalesmanExpenseTable(props: Props) {
     </div>
   );
 }
-

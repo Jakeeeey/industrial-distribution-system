@@ -1,4 +1,4 @@
-// src/modules/financial-management/accounting/supplier-debit-memo/index.ts
+// src/modules/industrial-distribution-system/financial-management/accounting/supplier-debit-memo/index.ts
 
 export { default as SupplierDebitMemoModule } from "./SupplierDebitMemoModule";
 export * from "./types";

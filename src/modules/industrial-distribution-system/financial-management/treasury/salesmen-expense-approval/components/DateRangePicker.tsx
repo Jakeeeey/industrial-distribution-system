@@ -1,4 +1,4 @@
-// src/modules/financial-management/treasury/salesmen-expense-approval/components/DateRangePicker.tsx
+// src/modules/industrial-distribution-system/financial-management/treasury/salesmen-expense-approval/components/DateRangePicker.tsx
 "use client";
 
 import * as React from "react";
@@ -30,7 +30,7 @@ export function DateRangePicker({ date, setDate, className }: Props) {
             variant={"outline"}
             className={cn(
               "w-[260px] justify-start text-left font-bold rounded-full border-2 hover:border-primary/50 transition-all shadow-sm",
-              !date && "text-muted-foreground"
+              !date && "text-muted-foreground",
             )}
           >
             <CalendarIcon className="mr-2 h-4 w-4 text-primary" />
@@ -38,7 +38,8 @@ export function DateRangePicker({ date, setDate, className }: Props) {
               {date?.from ? (
                 date.to ? (
                   <>
-                    {format(date.from, "LLL dd, y")} - {format(date.to, "LLL dd, y")}
+                    {format(date.from, "LLL dd, y")} -{" "}
+                    {format(date.to, "LLL dd, y")}
                   </>
                 ) : (
                   format(date.from, "LLL dd, y")
@@ -49,23 +50,28 @@ export function DateRangePicker({ date, setDate, className }: Props) {
             </span>
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0 rounded-2xl shadow-2xl border-2" align="end">
+        <PopoverContent
+          className="w-auto p-0 rounded-2xl shadow-2xl border-2"
+          align="end"
+        >
           <div className="p-4 border-b bg-muted/20 flex items-center justify-between">
             <div>
-              <h4 className="font-black text-sm tracking-tight">Select Date Range</h4>
+              <h4 className="font-black text-sm tracking-tight">
+                Select Date Range
+              </h4>
               <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest">
                 Pending Auth list filter
               </p>
             </div>
             {date && (
-                <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-8 w-8 rounded-full hover:bg-destructive/10 hover:text-destructive transition-colors"
-                    onClick={() => setDate(undefined)}
-                >
-                    <X className="h-4 w-4" />
-                </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-full hover:bg-destructive/10 hover:text-destructive transition-colors"
+                onClick={() => setDate(undefined)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
             )}
           </div>
           <Calendar

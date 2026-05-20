@@ -1,17 +1,30 @@
-// src/modules/financial-management/line-discount/components/data-table/table-pagination.tsx
+// src/modules/industrial-distribution-system/financial-management/line-discount/components/data-table/table-pagination.tsx
 "use client";
 
 import type { Table } from "@tanstack/react-table";
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface DataTablePaginationProps<TData> {
   table: Table<TData>;
 }
 
-export function DataTablePagination<TData>({ table }: DataTablePaginationProps<TData>) {
+export function DataTablePagination<TData>({
+  table,
+}: DataTablePaginationProps<TData>) {
   return (
     <div className="flex items-center justify-between px-2 py-2">
       <div className="flex-1 text-sm text-muted-foreground">
@@ -40,7 +53,8 @@ export function DataTablePagination<TData>({ table }: DataTablePaginationProps<T
         </div>
 
         <div className="flex w-24 items-center justify-center text-sm font-medium">
-          Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+          Page {table.getState().pagination.pageIndex + 1} of{" "}
+          {table.getPageCount()}
         </div>
 
         <div className="flex items-center space-x-2">

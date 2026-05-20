@@ -1,4 +1,4 @@
-// src/modules/financial-management/treasury/salesmen-expense-approval/hooks/useSalesmanExpenseApproval.ts
+// src/modules/industrial-distribution-system/financial-management/treasury/salesmen-expense-approval/hooks/useSalesmanExpenseApproval.ts
 "use client";
 
 import * as React from "react";
@@ -6,7 +6,11 @@ import { toast } from "sonner";
 import { startOfMonth, endOfMonth, format } from "date-fns";
 import type { DateRange } from "react-day-picker";
 
-import type { SalesmanExpenseRow, SalesmanExpenseDetail, ApprovalLog } from "../type";
+import type {
+  SalesmanExpenseRow,
+  SalesmanExpenseDetail,
+  ApprovalLog,
+} from "../type";
 import * as api from "../providers/fetchProvider";
 
 export function useSalesmanExpenseApproval() {
@@ -27,18 +31,22 @@ export function useSalesmanExpenseApproval() {
   const [page, setPage] = React.useState(1);
   const pageSize = 5; // User requested 5 rows height
 
-  const startDateStr = React.useMemo(() => 
-    dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : undefined
-  , [dateRange]);
+  const startDateStr = React.useMemo(
+    () => (dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : undefined),
+    [dateRange],
+  );
 
-  const endDateStr = React.useMemo(() => 
-    dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : undefined
-  , [dateRange]);
+  const endDateStr = React.useMemo(
+    () => (dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : undefined),
+    [dateRange],
+  );
 
   const [modalOpen, setModalOpen] = React.useState(false);
   const [modalLoading, setModalLoading] = React.useState(false);
-  const [selectedSalesman, setSelectedSalesman] = React.useState<SalesmanExpenseRow | null>(null);
-  const [salesmanDetail, setSalesmanDetail] = React.useState<SalesmanExpenseDetail | null>(null);
+  const [selectedSalesman, setSelectedSalesman] =
+    React.useState<SalesmanExpenseRow | null>(null);
+  const [salesmanDetail, setSalesmanDetail] =
+    React.useState<SalesmanExpenseDetail | null>(null);
 
   const loadLogs = React.useCallback(async () => {
     try {
@@ -68,7 +76,9 @@ export function useSalesmanExpenseApproval() {
       if (e instanceof Error && e.message === "403_UNAUTHORIZED") {
         setUnauthorized(true);
       } else {
-        toast.error(e instanceof Error ? e.message : "Failed to load expenses.");
+        toast.error(
+          e instanceof Error ? e.message : "Failed to load expenses.",
+        );
       }
       setRows([]);
     } finally {
@@ -91,7 +101,7 @@ export function useSalesmanExpenseApproval() {
     return rows.filter(
       (r) =>
         r.salesman_name.toLowerCase().includes(query) ||
-        r.salesman_code.toLowerCase().includes(query)
+        r.salesman_code.toLowerCase().includes(query),
     );
   }, [rows, q]);
 
@@ -109,7 +119,11 @@ export function useSalesmanExpenseApproval() {
     setModalOpen(true);
     setModalLoading(true);
     try {
-      const detail = await api.getSalesmanExpenses(row.id, startDateStr, endDateStr);
+      const detail = await api.getSalesmanExpenses(
+        row.id,
+        startDateStr,
+        endDateStr,
+      );
       setSalesmanDetail(detail);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Failed to load expenses");
@@ -153,4 +167,3 @@ export function useSalesmanExpenseApproval() {
     setDateRange,
   };
 }
-

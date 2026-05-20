@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useProducts } from "@/modules/financial-management/supplier-registration/hooks/useProducts";
+import { useProducts } from "@/modules/industrial-distribution-system/financial-management/supplier-registration/hooks/useProducts";
 import { Loader2, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 

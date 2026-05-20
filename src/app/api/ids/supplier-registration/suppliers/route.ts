@@ -3,8 +3,8 @@ import {
   fetchAllSuppliers,
   createSupplier,
   searchSuppliers,
-} from "@/modules/financial-management/supplier-registration/services/supplier";
-import { SupplierFormSchema } from "@/modules/financial-management/supplier-registration/types/supplier.schema";
+} from "@/modules/industrial-distribution-system/financial-management/supplier-registration/services/supplier";
+import { SupplierFormSchema } from "@/modules/industrial-distribution-system/financial-management/supplier-registration/types/supplier.schema";
 
 /**
  * GET /api/suppliers

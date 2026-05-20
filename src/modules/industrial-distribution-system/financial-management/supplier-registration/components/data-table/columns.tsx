@@ -10,9 +10,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { DataTableColumnHeader } from "@/modules/financial-management/supplier-registration/components/data-table/table-column-header";
-import { Supplier } from "@/modules/financial-management/supplier-registration/types/supplier.schema";
-import { formatDate } from "@/modules/financial-management/supplier-registration/utils/utils";
+import { DataTableColumnHeader } from "@/modules/industrial-distribution-system/financial-management/supplier-registration/components/data-table/table-column-header";
+import { Supplier } from "@/modules/industrial-distribution-system/financial-management/supplier-registration/types/supplier.schema";
+import { formatDate } from "@/modules/industrial-distribution-system/financial-management/supplier-registration/utils/utils";
 import { ColumnDef } from "@tanstack/react-table";
 import {
   Calendar,

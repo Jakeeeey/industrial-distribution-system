@@ -1,4 +1,4 @@
-// src/modules/financial-management/line-discount/components/data-table/table-toolbar.tsx
+// src/modules/industrial-distribution-system/financial-management/line-discount/components/data-table/table-toolbar.tsx
 "use client";
 
 import type { Table } from "@tanstack/react-table";
@@ -32,13 +32,21 @@ export function TableToolbar({ table }: TableToolbarProps) {
       <div className="flex flex-1 items-center gap-2">
         <Input
           placeholder="Search code..."
-          value={(table.getColumn("line_discount")?.getFilterValue() as string) ?? ""}
-          onChange={(event) => table.getColumn("line_discount")?.setFilterValue(event.target.value)}
+          value={
+            (table.getColumn("line_discount")?.getFilterValue() as string) ?? ""
+          }
+          onChange={(event) =>
+            table.getColumn("line_discount")?.setFilterValue(event.target.value)
+          }
           className="h-9 w-72"
         />
 
         {isFiltered && (
-          <Button variant="ghost" onClick={() => table.resetColumnFilters()} className="h-9 px-2 lg:px-3">
+          <Button
+            variant="ghost"
+            onClick={() => table.resetColumnFilters()}
+            className="h-9 px-2 lg:px-3"
+          >
             Reset
             <X className="ml-2 h-4 w-4" />
           </Button>
@@ -63,7 +71,11 @@ export function TableToolbar({ table }: TableToolbarProps) {
           <DropdownMenuContent align="end" className="w-56">
             {table
               .getAllColumns()
-              .filter((column) => typeof column.accessorFn !== "undefined" && column.getCanHide())
+              .filter(
+                (column) =>
+                  typeof column.accessorFn !== "undefined" &&
+                  column.getCanHide(),
+              )
               .map((column) => {
                 const label =
                   (column.columnDef.meta as Record<string, unknown>)?.label ??
@@ -76,7 +88,9 @@ export function TableToolbar({ table }: TableToolbarProps) {
                     key={column.id}
                     className="capitalize"
                     checked={column.getIsVisible()}
-                    onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                    onCheckedChange={(value) =>
+                      column.toggleVisibility(!!value)
+                    }
                   >
                     {String(label).replace(/_/g, " ")}
                   </DropdownMenuCheckboxItem>

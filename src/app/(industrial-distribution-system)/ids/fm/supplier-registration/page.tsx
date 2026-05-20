@@ -12,7 +12,7 @@ import { NavUser } from "@/components/shared/app-sidebar/nav-user";
 
 import { cookies } from "next/headers";
 
-import SupplierRepresentativeModulePage from "@/modules/financial-management/supplier-registration/SupplierRepresentativeModulePage";
+import SupplierRepresentativeModulePage from "@/modules/industrial-distribution-system/financial-management/supplier-registration/SupplierRepresentativeModulePage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,7 +35,10 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
   }
 }
 
-function pickString(obj: Record<string, unknown> | null | undefined, keys: string[]): string {
+function pickString(
+  obj: Record<string, unknown> | null | undefined,
+  keys: string[],
+): string {
   for (const k of keys) {
     const v = obj ? obj[k] : undefined;
     if (typeof v === "string" && v.trim()) return v.trim();

@@ -1,4 +1,4 @@
-// src/modules/financial-management/treasury/bulk-approval/type.ts
+// src/modules/industrial-distribution-system/financial-management/treasury/bulk-approval/type.ts
 
 export interface DraftRow {
   id: number;
@@ -139,7 +139,12 @@ export interface DraftDetail {
   logs?: DraftLog[];
   expense_logs?: ExpenseLog[];
   my_level: number;
-  my_vote: { status: string; remarks: string | null; created_at: string; version: number } | null;
+  my_vote: {
+    status: string;
+    remarks: string | null;
+    created_at: string;
+    version: number;
+  } | null;
   can_vote: boolean;
 }
 

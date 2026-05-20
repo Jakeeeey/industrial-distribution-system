@@ -1,15 +1,19 @@
-// src/modules/financial-management/chart-of-accounts/hooks/useChartOfAccounts.ts
+// src/modules/industrial-distribution-system/financial-management/chart-of-accounts/hooks/useChartOfAccounts.ts
 "use client";
 
 import * as React from "react";
 import { toast } from "sonner";
 
-import type { AccountTypeRow, BalanceTypeRow, BSISTypeRow, COARow, UserRow } from "../types";
+import type {
+  AccountTypeRow,
+  BalanceTypeRow,
+  BSISTypeRow,
+  COARow,
+  UserRow,
+} from "../types";
 import * as api from "../providers/fetchProvider";
 
-type EditState =
-  | { open: false; row: null }
-  | { open: true; row: COARow };
+type EditState = { open: false; row: null } | { open: true; row: COARow };
 
 export function useChartOfAccounts() {
   const [q, setQ] = React.useState("");
@@ -27,9 +31,15 @@ export function useChartOfAccounts() {
   const [lookupsLoading, setLookupsLoading] = React.useState(true);
 
   const [createOpen, setCreateOpen] = React.useState(false);
-  const [editState, setEditState] = React.useState<EditState>({ open: false, row: null });
+  const [editState, setEditState] = React.useState<EditState>({
+    open: false,
+    row: null,
+  });
 
-  const [currentUser, setCurrentUser] = React.useState<{ id: number | null; name: string } | null>(null);
+  const [currentUser, setCurrentUser] = React.useState<{
+    id: number | null;
+    name: string;
+  } | null>(null);
 
   React.useEffect(() => {
     async function loadMe() {
@@ -38,7 +48,10 @@ export function useChartOfAccounts() {
         if (!res.ok) return;
         const data = await res.json();
         if (data?.id) {
-          const name = [data.user_fname, data.user_lname].filter(Boolean).join(" ") || data.user_email || "User";
+          const name =
+            [data.user_fname, data.user_lname].filter(Boolean).join(" ") ||
+            data.user_email ||
+            "User";
           setCurrentUser({ id: Number(data.id), name });
         }
       } catch (e) {
@@ -76,7 +89,9 @@ export function useChartOfAccounts() {
       const t = res?.meta?.filter_count ?? res?.meta?.total_count ?? 0;
       setTotal(typeof t === "number" ? t : 0);
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to load chart of accounts");
+      toast.error(
+        e instanceof Error ? e.message : "Failed to load chart of accounts",
+      );
       setRows([]);
       setTotal(0);
     } finally {
@@ -120,7 +135,10 @@ export function useChartOfAccounts() {
     }
   }
 
-  async function update(id: number, payload: Parameters<typeof api.updateCOA>[1]) {
+  async function update(
+    id: number,
+    payload: Parameters<typeof api.updateCOA>[1],
+  ) {
     try {
       const body = {
         ...payload,

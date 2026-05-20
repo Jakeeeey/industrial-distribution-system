@@ -1,4 +1,4 @@
-// src/modules/financial-management/line-discount/hooks/useLineDiscounts.ts
+// src/modules/industrial-distribution-system/financial-management/line-discount/hooks/useLineDiscounts.ts
 "use client";
 
 import * as React from "react";
@@ -41,21 +41,32 @@ export function useLineDiscounts() {
     try {
       const created = await api.createLineDiscount(payload);
       toast.success("Line discount created");
-      setRows((prev) => [...prev, created].sort((a, b) => (a.line_discount || "").localeCompare(b.line_discount || "")));
+      setRows((prev) =>
+        [...prev, created].sort((a, b) =>
+          (a.line_discount || "").localeCompare(b.line_discount || ""),
+        ),
+      );
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to create line discount");
+      toast.error(
+        e instanceof Error ? e.message : "Failed to create line discount",
+      );
     }
   }, []);
 
-  const update = React.useCallback(async (id: number, payload: LineDiscountUpsert) => {
-    try {
-      const updated = await api.updateLineDiscount(id, payload);
-      toast.success("Line discount updated");
-      setRows((prev) => prev.map((r) => (r.id === id ? updated : r)));
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to update line discount");
-    }
-  }, []);
+  const update = React.useCallback(
+    async (id: number, payload: LineDiscountUpsert) => {
+      try {
+        const updated = await api.updateLineDiscount(id, payload);
+        toast.success("Line discount updated");
+        setRows((prev) => prev.map((r) => (r.id === id ? updated : r)));
+      } catch (e: unknown) {
+        toast.error(
+          e instanceof Error ? e.message : "Failed to update line discount",
+        );
+      }
+    },
+    [],
+  );
 
   const remove = React.useCallback(async (id: number) => {
     try {
@@ -63,7 +74,9 @@ export function useLineDiscounts() {
       toast.success("Line discount deleted");
       setRows((prev) => prev.filter((r) => r.id !== id));
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to delete line discount");
+      toast.error(
+        e instanceof Error ? e.message : "Failed to delete line discount",
+      );
     }
   }, []);
 

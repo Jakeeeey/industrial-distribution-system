@@ -1,4 +1,4 @@
-// src/app/(supply-chain-management)/scm/supplier-management/purchase-order/purchase-order-receiving-rfid/page.tsx
+// src/app/(industrial-distribution-system)/ids/scm/supplier-management/purchase-order/purchase-order-receiving-rfid/page.tsx
 
 import {
   Breadcrumb,

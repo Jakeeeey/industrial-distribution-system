@@ -1,4 +1,4 @@
-// src/modules/financial-management/treasury/salesmen-expense-approval/type.ts
+// src/modules/industrial-distribution-system/financial-management/treasury/salesmen-expense-approval/type.ts
 
 export interface DirectusUser {
   user_id: number;

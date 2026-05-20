@@ -1,4 +1,4 @@
-// src/modules/financial-management/chart-of-accounts/components/COAFormDialog.tsx
+// src/modules/industrial-distribution-system/financial-management/chart-of-accounts/components/COAFormDialog.tsx
 "use client";
 
 import * as React from "react";
@@ -20,7 +20,12 @@ import {
   createPaymentMethod,
 } from "../providers/fetchProvider";
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,7 +33,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type Mode = "create" | "edit";
 
@@ -48,7 +59,9 @@ function readIsPaymentFromRow(row?: COARow | null) {
   if (n === 1 || n === "1" || n === true) return true;
   if (n === 0 || n === "0" || n === false) return false;
 
-  const buf = (row as Record<string, unknown>).isPayment as { data: number[] } | undefined;
+  const buf = (row as Record<string, unknown>).isPayment as
+    | { data: number[] }
+    | undefined;
   const b = buf?.data?.[0];
   if (b === 1) return true;
   if (b === 0) return false;
@@ -136,12 +149,17 @@ export default function COAFormDialog(props: {
       setFindingsLoading(true);
       setMethodsLoading(true);
 
-      const [fAll, mAll] = await Promise.all([listGeneralFindings(), listPaymentMethods()]);
+      const [fAll, mAll] = await Promise.all([
+        listGeneralFindings(),
+        listPaymentMethods(),
+      ]);
 
       setFindings(fAll.filter((x) => Number(x.coa_id) === Number(coaId)));
       setMethods(mAll.filter((x) => Number(x.coa_id) === Number(coaId)));
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to load extra details");
+      toast.error(
+        e instanceof Error ? e.message : "Failed to load extra details",
+      );
       setFindings([]);
       setMethods([]);
     } finally {
@@ -157,8 +175,13 @@ export default function COAFormDialog(props: {
     try {
       setFindingsLoading(true);
 
-      const created = await createFinding({ finding_name: name, coa_id: coaId });
-      const rowCreated = (created as Record<string, unknown>)?.data as FindingRow | undefined;
+      const created = await createFinding({
+        finding_name: name,
+        coa_id: coaId,
+      });
+      const rowCreated = (created as Record<string, unknown>)?.data as
+        | FindingRow
+        | undefined;
 
       if (rowCreated) setFindings((prev) => [rowCreated, ...prev]);
       else await loadExtras(coaId);
@@ -166,7 +189,9 @@ export default function COAFormDialog(props: {
       setNewFinding("");
       toast.success("Finding remark added");
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to add finding remark");
+      toast.error(
+        e instanceof Error ? e.message : "Failed to add finding remark",
+      );
     } finally {
       setFindingsLoading(false);
     }
@@ -186,7 +211,9 @@ export default function COAFormDialog(props: {
         coa_id: coaId,
       });
 
-      const rowCreated = (created as Record<string, unknown>)?.data as PaymentMethodRow | undefined;
+      const rowCreated = (created as Record<string, unknown>)?.data as
+        | PaymentMethodRow
+        | undefined;
 
       if (rowCreated) setMethods((prev) => [rowCreated, ...prev]);
       else await loadExtras(coaId);
@@ -195,7 +222,9 @@ export default function COAFormDialog(props: {
       setNewMethodDesc("");
       toast.success("Payment method added");
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to add payment method");
+      toast.error(
+        e instanceof Error ? e.message : "Failed to add payment method",
+      );
     } finally {
       setMethodsLoading(false);
     }
@@ -288,14 +317,21 @@ export default function COAFormDialog(props: {
                   <label className="text-sm font-medium">
                     Account Title <span className="text-destructive">*</span>
                   </label>
-                  <Input value={accountTitle} onChange={(e) => setAccountTitle(e.target.value)} />
+                  <Input
+                    value={accountTitle}
+                    onChange={(e) => setAccountTitle(e.target.value)}
+                  />
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">
                     BS/IS Type <span className="text-destructive">*</span>
                   </label>
-                  <Select value={bsisCode} onValueChange={setBsisCode} disabled={lookupsLoading}>
+                  <Select
+                    value={bsisCode}
+                    onValueChange={setBsisCode}
+                    disabled={lookupsLoading}
+                  >
                     <SelectTrigger className="w-full">
                       <div className="truncate text-left">
                         <SelectValue placeholder="Select a BS/IS type" />
@@ -315,7 +351,11 @@ export default function COAFormDialog(props: {
                   <label className="text-sm font-medium">
                     Account Type <span className="text-destructive">*</span>
                   </label>
-                  <Select value={accountType} onValueChange={setAccountType} disabled={lookupsLoading}>
+                  <Select
+                    value={accountType}
+                    onValueChange={setAccountType}
+                    disabled={lookupsLoading}
+                  >
                     <SelectTrigger className="w-full">
                       <div className="truncate text-left">
                         <SelectValue placeholder="Select an account type" />
@@ -335,7 +375,11 @@ export default function COAFormDialog(props: {
                   <label className="text-sm font-medium">
                     Balance Type <span className="text-destructive">*</span>
                   </label>
-                  <Select value={balanceType} onValueChange={setBalanceType} disabled={lookupsLoading}>
+                  <Select
+                    value={balanceType}
+                    onValueChange={setBalanceType}
+                    disabled={lookupsLoading}
+                  >
                     <SelectTrigger className="w-full">
                       <div className="truncate text-left">
                         <SelectValue placeholder="Select a balance type" />
@@ -353,7 +397,10 @@ export default function COAFormDialog(props: {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">GL Code</label>
-                  <Input value={glCode} onChange={(e) => setGlCode(e.target.value)} />
+                  <Input
+                    value={glCode}
+                    onChange={(e) => setGlCode(e.target.value)}
+                  />
                 </div>
 
                 <div className="space-y-2">
@@ -369,7 +416,11 @@ export default function COAFormDialog(props: {
               {/* RIGHT: extras */}
               <div className="min-w-0 space-y-4 border-l pl-2 md:pl-6">
                 <div className="flex items-center gap-2">
-                  <Checkbox checked={isPayment} onCheckedChange={(v) => setIsPayment(v === true)} id="is-payment" />
+                  <Checkbox
+                    checked={isPayment}
+                    onCheckedChange={(v) => setIsPayment(v === true)}
+                    id="is-payment"
+                  />
                   <label
                     htmlFor="is-payment"
                     className="text-sm font-medium leading-none cursor-pointer select-none"
@@ -381,7 +432,9 @@ export default function COAFormDialog(props: {
                 {/* Finding Remarks */}
                 {row?.coa_id ? (
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Finding Remarks</label>
+                    <label className="text-sm font-medium">
+                      Finding Remarks
+                    </label>
 
                     <div className="flex gap-2">
                       <Input
@@ -412,7 +465,9 @@ export default function COAFormDialog(props: {
                         </Badge>
                       ))}
                       {!findingsLoading && findings.length === 0 ? (
-                        <div className="text-xs text-muted-foreground">No finding remarks.</div>
+                        <div className="text-xs text-muted-foreground">
+                          No finding remarks.
+                        </div>
                       ) : null}
                     </div>
                   </div>
@@ -421,7 +476,9 @@ export default function COAFormDialog(props: {
                 {/* Payment Methods */}
                 {row?.coa_id ? (
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Payment Methods</label>
+                    <label className="text-sm font-medium">
+                      Payment Methods
+                    </label>
 
                     <div className="grid gap-2">
                       <div className="flex gap-2">
@@ -462,7 +519,9 @@ export default function COAFormDialog(props: {
                         </Badge>
                       ))}
                       {!methodsLoading && methods.length === 0 ? (
-                        <div className="text-xs text-muted-foreground">No payment methods.</div>
+                        <div className="text-xs text-muted-foreground">
+                          No payment methods.
+                        </div>
                       ) : null}
                     </div>
                   </div>
@@ -476,7 +535,11 @@ export default function COAFormDialog(props: {
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2">
-              <Button variant="outline" className="cursor-pointer" onClick={() => onOpenChange(false)}>
+              <Button
+                variant="outline"
+                className="cursor-pointer"
+                onClick={() => onOpenChange(false)}
+              >
                 Cancel
               </Button>
               <Button className="cursor-pointer" onClick={submit}>
@@ -491,14 +554,21 @@ export default function COAFormDialog(props: {
               <label className="text-sm font-medium">
                 Account Title <span className="text-destructive">*</span>
               </label>
-              <Input value={accountTitle} onChange={(e) => setAccountTitle(e.target.value)} />
+              <Input
+                value={accountTitle}
+                onChange={(e) => setAccountTitle(e.target.value)}
+              />
             </div>
 
             <div className="space-y-2">
               <label className="text-sm font-medium">
                 BS/IS Type <span className="text-destructive">*</span>
               </label>
-              <Select value={bsisCode} onValueChange={setBsisCode} disabled={lookupsLoading}>
+              <Select
+                value={bsisCode}
+                onValueChange={setBsisCode}
+                disabled={lookupsLoading}
+              >
                 <SelectTrigger className="w-full">
                   <div className="truncate text-left">
                     <SelectValue placeholder="Select a BS/IS type" />
@@ -518,7 +588,11 @@ export default function COAFormDialog(props: {
               <label className="text-sm font-medium">
                 Account Type <span className="text-destructive">*</span>
               </label>
-              <Select value={accountType} onValueChange={setAccountType} disabled={lookupsLoading}>
+              <Select
+                value={accountType}
+                onValueChange={setAccountType}
+                disabled={lookupsLoading}
+              >
                 <SelectTrigger className="w-full">
                   <div className="truncate text-left">
                     <SelectValue placeholder="Select an account type" />
@@ -538,7 +612,11 @@ export default function COAFormDialog(props: {
               <label className="text-sm font-medium">
                 Balance Type <span className="text-destructive">*</span>
               </label>
-              <Select value={balanceType} onValueChange={setBalanceType} disabled={lookupsLoading}>
+              <Select
+                value={balanceType}
+                onValueChange={setBalanceType}
+                disabled={lookupsLoading}
+              >
                 <SelectTrigger className="w-full">
                   <div className="truncate text-left">
                     <SelectValue placeholder="Select a balance type" />
@@ -556,7 +634,10 @@ export default function COAFormDialog(props: {
 
             <div className="space-y-2">
               <label className="text-sm font-medium">GL Code</label>
-              <Input value={glCode} onChange={(e) => setGlCode(e.target.value)} />
+              <Input
+                value={glCode}
+                onChange={(e) => setGlCode(e.target.value)}
+              />
             </div>
 
             <div className="space-y-2">
@@ -588,7 +669,11 @@ export default function COAFormDialog(props: {
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2">
-              <Button variant="outline" className="cursor-pointer" onClick={() => onOpenChange(false)}>
+              <Button
+                variant="outline"
+                className="cursor-pointer"
+                onClick={() => onOpenChange(false)}
+              >
                 Cancel
               </Button>
               <Button className="cursor-pointer" onClick={submit}>

@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   getActiveOncall,
   extractScheduleFields,
-} from "../../../../../../modules/industrial-distribution-system/human-resource-management/workforce/attendance-report/department-report/utils/oncall";
+} from "@/modules/industrial-distribution-system/human-resource-management/workforce/attendance-report/department-report/utils/oncall";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

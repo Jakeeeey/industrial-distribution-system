@@ -1,4 +1,4 @@
-// src/modules/financial-management/line-discount/components/LineDiscountDialog.tsx
+// src/modules/industrial-distribution-system/financial-management/line-discount/components/LineDiscountDialog.tsx
 "use client";
 
 import * as React from "react";
@@ -10,7 +10,12 @@ import { toast } from "sonner";
 import type { LineDiscountRow, LineDiscountUpsert } from "../type";
 
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
@@ -27,13 +32,18 @@ import {
 
 const schema = z.object({
   line_discount: z.string().trim().min(1, "Code is required."),
-  percentage: z.union([z.string(), z.number()])
-    .refine((val) => val !== "" && val !== null && val !== undefined, "Percentage is required.")
+  percentage: z
+    .union([z.string(), z.number()])
+    .refine(
+      (val) => val !== "" && val !== null && val !== undefined,
+      "Percentage is required.",
+    )
     .transform((val) => Number(val))
     .pipe(
-      z.number({ message: "Percentage is required." })
+      z
+        .number({ message: "Percentage is required." })
         .min(0, "Must be at least 0.00")
-        .max(99.99, "Must be at most 99.99")
+        .max(99.99, "Must be at most 99.99"),
     ),
   description: z.string().trim().nullable().optional(),
 });
@@ -58,7 +68,9 @@ export default function LineDiscountDialog({
   onSubmit,
 }: Props) {
   const form = useForm<FormValues>({
-    resolver: zodResolver(schema) as import("react-hook-form").Resolver<FormValues>,
+    resolver: zodResolver(
+      schema,
+    ) as import("react-hook-form").Resolver<FormValues>,
     defaultValues: {
       line_discount: initial?.line_discount ?? "",
       percentage:
@@ -90,7 +102,9 @@ export default function LineDiscountDialog({
       await onSubmit({
         line_discount: values.line_discount.trim(),
         percentage: Number(values.percentage),
-        description: values.description?.trim() ? values.description.trim() : null,
+        description: values.description?.trim()
+          ? values.description.trim()
+          : null,
       });
 
       onOpenChange(false);
@@ -101,16 +115,18 @@ export default function LineDiscountDialog({
     }
   }
 
-  function handleValidationError(errors: import("react-hook-form").FieldErrors<FormValues>) {
+  function handleValidationError(
+    errors: import("react-hook-form").FieldErrors<FormValues>,
+  ) {
     const firstError = Object.values(errors)[0];
     if (firstError?.message) {
       toast.error(String(firstError.message));
     }
   }
 
-
   const title = mode === "create" ? "New Line Discount" : "Edit Line Discount";
-  const submitLabel = mode === "create" ? "Create Line Discount" : "Save Changes";
+  const submitLabel =
+    mode === "create" ? "Create Line Discount" : "Save Changes";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -130,7 +146,13 @@ export default function LineDiscountDialog({
           </div>
 
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleSubmit as import("react-hook-form").SubmitHandler<FormValues>, handleValidationError)} className="space-y-6">
+            <form
+              onSubmit={form.handleSubmit(
+                handleSubmit as import("react-hook-form").SubmitHandler<FormValues>,
+                handleValidationError,
+              )}
+              className="space-y-6"
+            >
               {/* ✅ Aligned grid: reserve helper-line space on Code */}
               <div className="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
                 {/* Code */}
@@ -143,7 +165,11 @@ export default function LineDiscountDialog({
                         Code <span className="text-destructive">*</span>
                       </FormLabel>
                       <FormControl>
-                        <Input className="h-10" placeholder="e.g. L1" {...field} />
+                        <Input
+                          className="h-10"
+                          placeholder="e.g. L1"
+                          {...field}
+                        />
                       </FormControl>
 
                       {/* ✅ Placeholder helper text so both columns align */}
@@ -190,7 +216,9 @@ export default function LineDiscountDialog({
                   name="description"
                   render={({ field }) => (
                     <FormItem className="space-y-2 md:col-span-2">
-                      <FormLabel className="leading-none">Description</FormLabel>
+                      <FormLabel className="leading-none">
+                        Description
+                      </FormLabel>
                       <FormControl>
                         <Textarea
                           placeholder="Optional notes..."

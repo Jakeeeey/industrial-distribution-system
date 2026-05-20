@@ -1,17 +1,25 @@
-// src/modules/financial-management/accounting/supplier-debit-memo/utils/index.ts
+// src/modules/industrial-distribution-system/financial-management/accounting/supplier-debit-memo/utils/index.ts
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 export const API_BASE = "/api/fm/accounting/supplier-debit-memo";
 
-export const MEMO_STATUSES: string[] = [
-  "Available",
-  "Applied",
-];
+export const MEMO_STATUSES: string[] = ["Available", "Applied"];
 
-export const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
-  Available: { label: "Available", className: "bg-emerald-500/15 text-emerald-700 border-emerald-500/30 dark:text-emerald-400 dark:border-emerald-500/30" },
-  Applied:   { label: "Applied",   className: "bg-blue-500/15 text-blue-700 border-blue-500/30 dark:text-blue-400 dark:border-blue-500/30" },
+export const STATUS_CONFIG: Record<
+  string,
+  { label: string; className: string }
+> = {
+  Available: {
+    label: "Available",
+    className:
+      "bg-emerald-500/15 text-emerald-700 border-emerald-500/30 dark:text-emerald-400 dark:border-emerald-500/30",
+  },
+  Applied: {
+    label: "Applied",
+    className:
+      "bg-blue-500/15 text-blue-700 border-blue-500/30 dark:text-blue-400 dark:border-blue-500/30",
+  },
 };
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
@@ -26,9 +34,9 @@ export function formatPeso(amount: number): string {
 export function formatDate(dateStr: string): string {
   if (!dateStr) return "—";
   return new Date(dateStr).toLocaleDateString("en-PH", {
-    year:  "numeric",
+    year: "numeric",
     month: "short",
-    day:   "2-digit",
+    day: "2-digit",
   });
 }
 

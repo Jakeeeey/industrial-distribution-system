@@ -1,4 +1,4 @@
-// src/modules/financial-management/treasury/bulk-approval/hooks/useBulkApproval.ts
+// src/modules/industrial-distribution-system/financial-management/treasury/bulk-approval/hooks/useBulkApproval.ts
 "use client";
 
 import * as React from "react";
@@ -13,7 +13,9 @@ export function useBulkApproval() {
   const [drafts, setDrafts] = React.useState<DraftRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [myLevel, setMyLevel] = React.useState<number>(0);
-  const [levelsByDivision, setLevelsByDivision] = React.useState<Record<number, number[]>>({});
+  const [levelsByDivision, setLevelsByDivision] = React.useState<
+    Record<number, number[]>
+  >({});
   const [unauthorized, setUnauthorized] = React.useState(false);
 
   const [logs, setLogs] = React.useState<LogDraft[]>([]);
@@ -30,19 +32,25 @@ export function useBulkApproval() {
   const [page, setPage] = React.useState(1);
   const pageSize = 8;
 
-  const startDateStr = React.useMemo(() => 
-    dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : undefined
-  , [dateRange]);
+  const startDateStr = React.useMemo(
+    () => (dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : undefined),
+    [dateRange],
+  );
 
-  const endDateStr = React.useMemo(() => 
-    dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : undefined
-  , [dateRange]);
+  const endDateStr = React.useMemo(
+    () => (dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : undefined),
+    [dateRange],
+  );
 
   // Vote modal
   const [modalOpen, setModalOpen] = React.useState(false);
   const [modalLoading, setModalLoading] = React.useState(false);
-  const [draftDetail, setDraftDetail] = React.useState<DraftDetail | null>(null);
-  const [selectedDraftId, setSelectedDraftId] = React.useState<number | null>(null);
+  const [draftDetail, setDraftDetail] = React.useState<DraftDetail | null>(
+    null,
+  );
+  const [selectedDraftId, setSelectedDraftId] = React.useState<number | null>(
+    null,
+  );
 
   const loadLogs = React.useCallback(async () => {
     try {
@@ -74,7 +82,9 @@ export function useBulkApproval() {
       if (e instanceof Error && e.message === "403_UNAUTHORIZED") {
         setUnauthorized(true);
       } else {
-        toast.error(e instanceof Error ? e.message : "Failed to load pending drafts.");
+        toast.error(
+          e instanceof Error ? e.message : "Failed to load pending drafts.",
+        );
       }
       setDrafts([]);
     } finally {
@@ -98,7 +108,7 @@ export function useBulkApproval() {
       (d) =>
         d.doc_no.toLowerCase().includes(query) ||
         d.payee_name.toLowerCase().includes(query) ||
-        (d.remarks ?? "").toLowerCase().includes(query)
+        (d.remarks ?? "").toLowerCase().includes(query),
     );
   }, [drafts, q]);
 
@@ -119,7 +129,9 @@ export function useBulkApproval() {
       const detail = await api.getDraftDetail(draft.id);
       setDraftDetail(detail);
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to load draft details");
+      toast.error(
+        e instanceof Error ? e.message : "Failed to load draft details",
+      );
       setDraftDetail(null);
     } finally {
       setModalLoading(false);

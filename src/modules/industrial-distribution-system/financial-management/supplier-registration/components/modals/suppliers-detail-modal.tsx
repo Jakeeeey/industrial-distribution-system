@@ -16,8 +16,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useRepresentatives } from "@/modules/financial-management/supplier-registration/hooks/useRepresentatives";
-import { Supplier } from "@/modules/financial-management/supplier-registration/types/supplier.schema";
+import { useRepresentatives } from "@/modules/industrial-distribution-system/financial-management/supplier-registration/hooks/useRepresentatives";
+import { Supplier } from "@/modules/industrial-distribution-system/financial-management/supplier-registration/types/supplier.schema";
 import {
   CreditCard,
   Hash,

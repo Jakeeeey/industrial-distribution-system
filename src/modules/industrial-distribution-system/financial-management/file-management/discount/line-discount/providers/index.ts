@@ -1,2 +1,2 @@
-// src/modules/financial-management/line-discount/providers/index.ts
+// src/modules/industrial-distribution-system/financial-management/line-discount/providers/index.ts
 export * from "./fetchProvider";

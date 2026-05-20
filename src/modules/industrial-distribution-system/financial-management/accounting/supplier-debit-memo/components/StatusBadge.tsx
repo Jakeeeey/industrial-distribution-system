@@ -1,4 +1,4 @@
-// src/modules/financial-management/accounting/supplier-debit-memo/components/StatusBadge.tsx
+// src/modules/industrial-distribution-system/financial-management/accounting/supplier-debit-memo/components/StatusBadge.tsx
 
 "use client";
 

@@ -1,4 +1,4 @@
-// src/modules/financial-management/line-discount/components/data-table/columns.tsx
+// src/modules/industrial-distribution-system/financial-management/line-discount/components/data-table/columns.tsx
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
@@ -28,22 +28,32 @@ interface LineDiscountTableMeta {
 export const columns: ColumnDef<LineDiscountRow>[] = [
   {
     accessorKey: "line_discount",
-    header: ({ column }) => <DataTableColumnHeader column={column} label="Code" />,
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} label="Code" />
+    ),
     meta: {
       label: "Code",
       placeholder: "Search code...",
       variant: "text",
     },
-    cell: ({ row }) => <div className="font-medium">{row.original.line_discount}</div>,
+    cell: ({ row }) => (
+      <div className="font-medium">{row.original.line_discount}</div>
+    ),
   },
   {
     accessorKey: "percentage",
-    header: ({ column }) => <DataTableColumnHeader column={column} label="Percent" />,
-    cell: ({ row }) => <div className="font-mono">{fmtPct(row.original.percentage)}</div>,
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} label="Percent" />
+    ),
+    cell: ({ row }) => (
+      <div className="font-mono">{fmtPct(row.original.percentage)}</div>
+    ),
   },
   {
     accessorKey: "description",
-    header: ({ column }) => <DataTableColumnHeader column={column} label="Description" />,
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} label="Description" />
+    ),
     cell: ({ row }) => (
       <div className="text-sm text-muted-foreground truncate max-w-[520px]">
         {row.original.description || "—"}

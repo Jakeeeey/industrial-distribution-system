@@ -1,4 +1,4 @@
-// src/modules/financial-management/accounting/supplier-credit-memo/index.ts
+// src/modules/industrial-distribution-system/financial-management/accounting/supplier-credit-memo/index.ts
 
 export * from "./types";
 export * from "./SupplierCreditMemoModule";

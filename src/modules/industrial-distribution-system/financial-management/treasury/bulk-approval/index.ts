@@ -1,2 +1,2 @@
-// src/modules/financial-management/treasury/bulk-approval/index.ts
+// src/modules/industrial-distribution-system/financial-management/treasury/bulk-approval/index.ts
 export { default as BulkApprovalModule } from "./BulkApprovalModule";

@@ -2,7 +2,7 @@ import {
   Representative,
   RepresentativesResponse,
   RepresentativeResponse,
-} from "@/modules/financial-management/supplier-registration/types/representative.schema";
+} from "@/modules/industrial-distribution-system/financial-management/supplier-registration/types/representative.schema";
 /**
  * Base Directus API URL
  */
@@ -182,9 +182,7 @@ export async function checkRepresentativeDuplicate(
     }
 
     // We check each condition separately to identify which field is duplicated
-    const checkFields = async (
-      fieldFilter: Record<string, unknown>,
-    ) => {
+    const checkFields = async (fieldFilter: Record<string, unknown>) => {
       const combinedFilter = {
         _and: [...filters, fieldFilter],
       };
@@ -214,9 +212,7 @@ export async function checkRepresentativeDuplicate(
 
     // 2. Check Contact Number
     if (data.contact_number) {
-      if (
-        await checkFields({ contact_number: { _eq: data.contact_number } })
-      ) {
+      if (await checkFields({ contact_number: { _eq: data.contact_number } })) {
         return { isDuplicate: true, type: "contact" };
       }
     }
