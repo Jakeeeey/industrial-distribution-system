@@ -47,7 +47,7 @@ import {
 } from "@/components/ui/dialog";
 import { PurchaseOrder, Supplier, StatusRef } from "./types";
 import { generatePOSummaryPDF } from "./utils/generatePOSummaryPDF";
-import { DataTable } from "@/components/ui/new-data-table";
+import { DataTable } from "./utils/new-data-table";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Skeleton } from "@/components/ui/skeleton";
 import ErrorPage from "@/components/shared/ErrorPage";
