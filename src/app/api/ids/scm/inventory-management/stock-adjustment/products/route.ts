@@ -3,7 +3,7 @@ import { stockAdjustmentService } from "@/modules/industrial-distribution-system
 import { handleApiError } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/error-handler";
 
 /**
- * GET /api/scm/inventory-management/stock-adjustment/products
+ * GET /api/ids/scm/inventory-management/stock-adjustment/products
  *
  * Query params:
  *   - search   (optional) — filter by product name/code/barcode
@@ -15,9 +15,9 @@ export async function GET(request: Request) {
     const search = searchParams.get("search") || undefined;
     const supplierId = searchParams.get("supplierId");
 
-    const data = await stockAdjustmentService.fetchProducts({ 
-      search: search || undefined, 
-      supplierId: supplierId ? Number(supplierId) : undefined 
+    const data = await stockAdjustmentService.fetchProducts({
+      search: search || undefined,
+      supplierId: supplierId ? Number(supplierId) : undefined,
     });
 
     return NextResponse.json({ data });
