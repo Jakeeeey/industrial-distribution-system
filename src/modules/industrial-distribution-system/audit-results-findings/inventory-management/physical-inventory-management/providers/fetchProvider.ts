@@ -233,7 +233,6 @@ function mapRunningInventoryRow(
     supplier_shortcut: row.supplierShortcut,
   };
 }
-
 function sortSupplierScopedCategories(
   categories: CategoryRow[],
 ): CategoryRow[] {
@@ -247,6 +246,7 @@ function sortSupplierScopedCategories(
     return a.category_name.localeCompare(b.category_name);
   });
 }
+
 
 export function getSupplierScopedCategoriesFromLookup(
   supplierId: number,
@@ -350,12 +350,12 @@ export async function fetchUnits(): Promise<UnitRow[]> {
 }
 
 export async function fetchProducts(): Promise<ProductRow[]> {
-  return directusGetItems<ProductRow>(TABLES.products, {
-    fields:
-      "product_id,parent_id,product_code,product_name,barcode,product_category,product_brand,unit_of_measurement,unit_of_measurement_count,isActive,cost_per_unit,is_serialized",
-    sort: "product_name",
-    limit: "-1",
-  });
+    return directusGetItems<ProductRow>(TABLES.products, {
+        fields:
+            "product_id,parent_id,product_code,product_name,barcode,product_category,product_brand,unit_of_measurement,unit_of_measurement_count,isActive,cost_per_unit,is_serialized",
+        sort: "product_name",
+        limit: "-1",
+    });
 }
 
 export async function fetchProductPerSupplier(): Promise<
@@ -509,13 +509,10 @@ export function buildEligibleVariants(input: {
     });
 }
 
-export async function fetchRunningInventoryAll(): Promise<
-  RunningInventoryRow[]
-> {
-  const rows = await apiGet<RunningInventoryApiRow[]>(
-    `${API_BASE}/running-inventory`,
-  );
-  return Array.isArray(rows) ? rows.map(mapRunningInventoryRow) : [];
+
+export async function fetchRunningInventoryAll(): Promise<RunningInventoryRow[]> {
+    const rows = await apiGet<RunningInventoryApiRow[]>(`${API_BASE}/running-inventory`);
+    return Array.isArray(rows) ? rows.map(mapRunningInventoryRow) : [];
 }
 
 export async function fetchRunningInventoryByBranch(

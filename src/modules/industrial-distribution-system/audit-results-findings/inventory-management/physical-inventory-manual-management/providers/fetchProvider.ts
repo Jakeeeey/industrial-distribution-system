@@ -248,6 +248,7 @@ function sortSupplierScopedCategories(
   });
 }
 
+
 export function getSupplierScopedCategoriesFromLookup(
   supplierId: number,
   lookup: ProductLookupBundle,
@@ -350,33 +351,26 @@ export async function fetchUnits(): Promise<UnitRow[]> {
 }
 
 export async function fetchProducts(): Promise<ProductRow[]> {
-  return directusGetItems<ProductRow>(TABLES.products, {
-    fields:
-      "product_id,parent_id,product_code,product_name,barcode,product_category,product_brand,unit_of_measurement,unit_of_measurement_count,isActive,cost_per_unit,is_serialized",
-    sort: "product_name",
-    limit: "-1",
-  });
+    return directusGetItems<ProductRow>(TABLES.products, {
+        fields:
+            "product_id,parent_id,product_code,product_name,barcode,product_category,product_brand,unit_of_measurement,unit_of_measurement_count,isActive,cost_per_unit,is_serialized",
+        sort: "product_name",
+        limit: "-1",
+    });
 }
 
-export async function fetchProductPerSupplier(): Promise<
-  ProductPerSupplierRow[]
-> {
-  return directusGetItems<ProductPerSupplierRow>(TABLES.product_per_supplier, {
-    fields: "id,product_id,supplier_id",
-    limit: "-1",
-  });
+export async function fetchProductPerSupplier(): Promise<ProductPerSupplierRow[]> {
+    return directusGetItems<ProductPerSupplierRow>(TABLES.product_per_supplier, {
+        fields: "id,product_id,supplier_id",
+        limit: "-1",
+    });
 }
 
-export async function fetchProductPerPriceType(): Promise<
-  ProductPerPriceTypeRow[]
-> {
-  return directusGetItems<ProductPerPriceTypeRow>(
-    TABLES.product_per_price_type,
-    {
-      fields: "id,product_id,price_type_id,price",
-      limit: "-1",
-    },
-  );
+export async function fetchProductPerPriceType(): Promise<ProductPerPriceTypeRow[]> {
+    return directusGetItems<ProductPerPriceTypeRow>(TABLES.product_per_price_type, {
+        fields: "id,product_id,price_type_id,price",
+        limit: "-1",
+    });
 }
 
 export async function fetchProductLookupBundle(): Promise<ProductLookupBundle> {
@@ -490,13 +484,10 @@ export function buildEligibleVariants(input: {
     });
 }
 
-export async function fetchRunningInventoryAll(): Promise<
-  RunningInventoryRow[]
-> {
-  const rows = await apiGet<RunningInventoryApiRow[]>(
-    `${API_BASE}/running-inventory`,
-  );
-  return Array.isArray(rows) ? rows.map(mapRunningInventoryRow) : [];
+
+export async function fetchRunningInventoryAll(): Promise<RunningInventoryRow[]> {
+    const rows = await apiGet<RunningInventoryApiRow[]>(`${API_BASE}/running-inventory`);
+    return Array.isArray(rows) ? rows.map(mapRunningInventoryRow) : [];
 }
 
 export async function fetchRunningInventoryByBranch(
@@ -780,17 +771,17 @@ export function buildVariantsFromSavedDetails(input: {
   }
 
   return lookup.products
-    .filter((product) => product.is_serialized === 1)
+    .filter((product) => product.isActive === 1)
     .filter((product) => productIds.has(product.product_id))
     .map((product) => {
       const detail = detailMap.get(product.product_id);
       const category =
         product.product_category !== null
-          ? (categoryMap.get(product.product_category) ?? null)
+          ? categoryMap.get(product.product_category) ?? null
           : null;
       const unit =
         product.unit_of_measurement !== null
-          ? (unitMap.get(product.unit_of_measurement) ?? null)
+          ? unitMap.get(product.unit_of_measurement) ?? null
           : null;
       const priceRow = priceMap.get(product.product_id) ?? null;
 
