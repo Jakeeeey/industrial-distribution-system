@@ -1,4 +1,4 @@
-// modules/supply-chain-management/supplier-management/purchase-order-tagging/types.ts
+// modules/industrial-distribution-system/supply-chain-management/supplier-management/purchase-order-tagging/types.ts
 
 export type TaggingStatus = "tagging" | "completed";
 
