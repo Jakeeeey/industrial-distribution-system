@@ -3,7 +3,7 @@ import { stockAdjustmentService } from "@/modules/industrial-distribution-system
 import { handleApiError } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/error-handler";
 
 /**
- * GET /api/scm/inventory-management/stock-adjustment/branch-inventory?branchId=190
+ * GET /api/ids/scm/inventory-management/stock-adjustment/branch-inventory?branchId=190
  *
  * Returns the full running-inventory map for a branch so the form can
  * look up any product's current stock instantly without a per-product
@@ -20,10 +20,16 @@ export async function GET(request: NextRequest) {
 
     const token = request.cookies.get("vos_access_token")?.value;
     if (!token) {
-      return NextResponse.json({ error: "No access token found" }, { status: 401 });
+      return NextResponse.json(
+        { error: "No access token found" },
+        { status: 401 },
+      );
     }
 
-    const inventory = await stockAdjustmentService.fetchBranchInventory(Number(branchId), token);
+    const inventory = await stockAdjustmentService.fetchBranchInventory(
+      Number(branchId),
+      token,
+    );
     return NextResponse.json({ inventory });
   } catch (error) {
     return handleApiError(error);
