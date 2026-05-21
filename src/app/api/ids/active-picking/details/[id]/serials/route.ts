@@ -21,7 +21,6 @@ export async function GET(
         return NextResponse.json(serials);
     } catch (err) {
         const error = err as Error;
-        console.error(`[Active Picking API] Error fetching serials: ${error.message}`);
-        return NextResponse.json({ error: "Failed to fetch serials" }, { status: 500 });
+        return NextResponse.json({ error: "Failed to fetch serials", details: error.message }, { status: 500 });
     }
 }

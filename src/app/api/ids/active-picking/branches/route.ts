@@ -19,7 +19,6 @@ export async function GET(req: NextRequest) {
         return NextResponse.json(branches);
     } catch (err) {
         const error = err as Error;
-        console.error(`[Active Picking API] Error fetching branches: ${error.message}`);
-        return NextResponse.json({ error: "Failed to fetch branches" }, { status: 500 });
+        return NextResponse.json({ error: "Failed to fetch branches", details: error.message }, { status: 500 });
     }
 }

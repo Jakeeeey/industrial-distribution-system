@@ -27,7 +27,6 @@ export async function GET(req: NextRequest) {
         });
     } catch (err) {
         const error = err as Error;
-        console.error(`[Active Picking API] Error fetching pickings: ${error.message}`);
-        return NextResponse.json({ error: "Failed to fetch pickings" }, { status: 500 });
+        return NextResponse.json({ error: "Failed to fetch pickings", details: error.message }, { status: 500 });
     }
 }

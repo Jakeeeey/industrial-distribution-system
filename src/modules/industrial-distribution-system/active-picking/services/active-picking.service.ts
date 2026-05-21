@@ -47,19 +47,14 @@ export const ActivePickingService = {
             onhandInfo = await ActivePickingRepo.verifySerialOnhand(serialNumber, branchId, sessionToken);
         } catch (err) {
             const error = err as Error;
-            if (error.message.includes("DEBUG_TRACE")) throw error;
             if (error.message === "NETWORK_FAILURE") {
-                throw new Error("Unable to reach the Serial Verification Service. Please check your network connection.");
+                throw new Error("Unable to reach the warehouse server. Please check your connection.");
             }
-            if (error.message.startsWith("EXTERNAL_API_FAILURE")) {
-                const status = error.message.split("_").pop();
-                throw new Error(`The Serial Verification Service returned error ${status}. This usually means the API server is having trouble running the view query.`);
-            }
-            throw error;
+            throw new Error(error.message || "Failed to verify serial number.");
         }
         
         if (!onhandInfo) {
-            throw new Error(`Serial ${serialNumber} is not marked as on-hand for Branch ID ${branchId} in the warehouse view.`);
+            throw new Error(`Serial ${serialNumber} is not currently available in this branch.`);
         }
         
         // Ensure productId is a number for comparison
@@ -68,13 +63,10 @@ export const ActivePickingService = {
         // 2. Find the matching detail row in this consolidator for the product
         const details = await ActivePickingRepo.fetchPickingDetails(consolidatorId);
         
-        console.log(`[ActivePickingService] Processing serial ${serialNumber}. Identified Product ID: ${productId}`);
-        console.log(`[ActivePickingService] Available products in Order ${consolidatorId}:`, details.map(d => d.product_id));
-
         const detail = details.find(d => Number(d.product_id) === productId);
         
         if (!detail) {
-            throw new Error(`This serial is for Product ID ${productId}, but that product is not required for Picking Order ID ${consolidatorId}.`);
+            throw new Error("This item is not required for this picking order.");
         }
 
         const detailId = detail.id;
@@ -84,7 +76,7 @@ export const ActivePickingService = {
         
         // 1. Check if Picked >= Ordered
         if (detail.picked_quantity >= detail.ordered_quantity) {
-            throw new Error(`Order Limit Reached: You have already picked all ${detail.ordered_quantity} required units for this product.`);
+            throw new Error("Order limit reached for this item.");
         }
 
         // 2. Check if Picked >= Available Stock
@@ -93,7 +85,7 @@ export const ActivePickingService = {
         const availableStock = stockInfo?.running_inventory_unit || 0;
 
         if (detail.picked_quantity >= availableStock) {
-            throw new Error(`Insufficient Stock: Only ${availableStock} units are available in the warehouse view. You cannot pick more than the physical stock.`);
+            throw new Error("Cannot pick more than the available physical stock.");
         }
 
         // -------------------------------
@@ -109,7 +101,7 @@ export const ActivePickingService = {
         // 3. Check uniqueness in picking mappings
         const exists = await ActivePickingRepo.checkSerialExists(serialNumber);
         if (exists) {
-            throw new Error(`Serial number ${serialNumber} has already been scanned.`);
+            throw new Error("This serial number has already been scanned.");
         }
 
         // 4. Update picked quantity

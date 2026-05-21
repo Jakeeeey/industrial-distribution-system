@@ -29,7 +29,6 @@ export async function DELETE(
         return NextResponse.json(result);
     } catch (err) {
         const error = err as Error;
-        console.error(`[Active Picking API] Error deleting serial: ${error.message}`);
-        return NextResponse.json({ error: "Failed to delete serial" }, { status: 500 });
+        return NextResponse.json({ error: "Failed to delete serial", details: error.message }, { status: 400 });
     }
 }

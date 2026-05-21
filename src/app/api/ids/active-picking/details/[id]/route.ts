@@ -20,13 +20,12 @@ export async function GET(
         const branchIdStr = searchParams.get("branchId") || "196";
         const branchId = parseInt(branchIdStr);
 
-        const sessionToken = req.cookies.get("vos_access_token")?.value || null;
+        const sessionToken = req.cookies.get("springboot_token")?.value || req.cookies.get("vos_access_token")?.value || null;
         const details = await ActivePickingService.getPickingDetails(consolidatorId, branchId, sessionToken);
         
         return NextResponse.json(details);
     } catch (err) {
         const error = err as Error;
-        console.error(`[Active Picking API] Error fetching details: ${error.message}`);
-        return NextResponse.json({ error: "Failed to fetch details" }, { status: 500 });
+        return NextResponse.json({ error: "Failed to fetch details", details: error.message }, { status: 500 });
     }
 }

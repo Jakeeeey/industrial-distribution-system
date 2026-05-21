@@ -18,7 +18,6 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true });
     } catch (err) {
         const error = err as Error;
-        console.error(`[Active Picking API] Error completing picking: ${error.message}`);
-        return NextResponse.json({ error: "Failed to complete picking" }, { status: 500 });
+        return NextResponse.json({ error: "Failed to complete picking", details: error.message }, { status: 400 });
     }
 }

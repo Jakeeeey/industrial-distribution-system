@@ -61,11 +61,9 @@ export const ActivePickingRepo = {
             url += `&filter[consolidator_no][_icontains]=${encodeURIComponent(search)}`;
         }
 
-        console.log(`[ActivePickingRepo] Fetching from: ${url}`);
-
         const response = await fetch(url, { headers: getHeaders(), cache: "no-store" });
         if (!response.ok) {
-            throw new Error(`Failed to fetch consolidators: ${await response.text()}`);
+            throw new Error("Failed to fetch consolidators");
         }
 
         return await response.json();
@@ -91,7 +89,7 @@ export const ActivePickingRepo = {
 
         const response = await fetch(url, { headers: getHeaders(), cache: "no-store" });
         if (!response.ok) {
-            throw new Error(`Failed to fetch consolidator details: ${await response.text()}`);
+            throw new Error("Failed to fetch consolidator details");
         }
 
         const data = await response.json();
@@ -103,7 +101,7 @@ export const ActivePickingRepo = {
 
             if (productRef) {
                 if (typeof productRef === 'object') {
-                    pId = productRef.id ?? productRef.productId ?? productRef.product_id ?? null;
+                    pId = productRef.product_id ?? productRef.productId ?? productRef.id ?? null;
                 } else {
                     pId = productRef as unknown as string | number;
                 }
@@ -125,7 +123,9 @@ export const ActivePickingRepo = {
     async fetchInventoryForProducts(productIds: number[], branchId: number, sessionToken: string | null = null): Promise<ProductInventory[]> {
         if (productIds.length === 0) return [];
 
-        const token = sessionToken || process.env.VOS_ACCESS_TOKEN || process.env.vos_access_token || DIRECTUS_TOKEN;
+        // Prefer the dedicated server-side Spring API token over the user session cookie.
+        // The session cookie is a Directus JWT and will be rejected (401) by the Spring API.
+        const token = process.env.VOS_ACCESS_TOKEN || process.env.vos_access_token || sessionToken || DIRECTUS_TOKEN;
         const baseUrl = process.env.SPRING_API_BASE_URL;
         const productIdsStr = productIds.join(",");
         
@@ -142,7 +142,6 @@ export const ActivePickingRepo = {
             });
             
             if (!response.ok) {
-                console.error(`[ActivePickingRepo] Failed to fetch inventory from Spring, status: ${response.status}`);
                 return [];
             }
 
@@ -161,7 +160,6 @@ export const ActivePickingRepo = {
                 running_inventory_unit: item.runningInventoryUnit ?? item.running_inventory_unit ?? item.quantity ?? 0
             }));
         } catch (error) {
-            console.error("[ActivePickingRepo] Error fetching inventory from Spring:", error);
             return [];
         }
     },
@@ -170,7 +168,7 @@ export const ActivePickingRepo = {
         const url = `${DIRECTUS_BASE}/items/consolidator_serial_mappings?filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&limit=1`;
         const response = await fetch(url, { headers: getHeaders(), cache: "no-store" });
         if (!response.ok) {
-            throw new Error(`Failed to check serial: ${await response.text()}`);
+            throw new Error("Failed to check serial");
         }
         const data = await response.json();
         return data.data.length > 0;
@@ -192,7 +190,7 @@ export const ActivePickingRepo = {
         });
 
         if (!response.ok) {
-            throw new Error(`Failed to save serial mapping: ${await response.text()}`);
+            throw new Error("Failed to save serial mapping");
         }
 
         const data = await response.json();
@@ -220,7 +218,7 @@ export const ActivePickingRepo = {
         });
 
         if (!patchRes.ok) {
-            throw new Error(`Failed to update picked quantity: ${await patchRes.text()}`);
+            throw new Error("Failed to update picked quantity");
         }
 
         return newQty;
@@ -242,15 +240,20 @@ export const ActivePickingRepo = {
         });
 
         if (!response.ok) {
-            throw new Error(`Failed to delete serial mapping: ${await response.text()}`);
+            throw new Error("Failed to delete serial mapping");
         }
     },
 
     async verifySerialOnhand(serialNumber: string, branchId: number, sessionToken: string | null = null): Promise<{ productId: number } | null> {
-        const token = sessionToken || process.env.VOS_ACCESS_TOKEN || process.env.vos_access_token || process.env.DIRECTUS_STATIC_TOKEN || DIRECTUS_TOKEN;
+        // Prefer the dedicated server-side Spring API token over the user session cookie.
+        // The session cookie is a Directus JWT and will be rejected (401) by the Spring API.
+        const token = process.env.VOS_ACCESS_TOKEN || process.env.vos_access_token || sessionToken || process.env.DIRECTUS_STATIC_TOKEN || DIRECTUS_TOKEN;
         const baseUrl = process.env.SPRING_API_BASE_URL;
         const inputSerial = serialNumber.trim().toUpperCase();
-        const trace: string[] = [];
+
+        if (!baseUrl) {
+            throw new Error("NETWORK_FAILURE");
+        }
         
         const extractData = (raw: Record<string, unknown> | unknown[] | null): Record<string, unknown>[] => {
             if (Array.isArray(raw)) return raw as Record<string, unknown>[];
@@ -261,39 +264,32 @@ export const ActivePickingRepo = {
 
         const tryFetch = async (endpoint: string, queryParams: string) => {
             const urlWithAll = `${baseUrl}/api/${endpoint}/all?${queryParams}&size=10000`;
-            trace.push(`Fetching: ${endpoint}/all?${queryParams}`);
             try {
                 const res = await fetch(urlWithAll, {
                     cache: "no-store",
                     headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }
                 });
                 
-                let items: Record<string, unknown>[] = [];
                 if (res.ok) {
                     const json = await res.json();
-                    items = extractData(json);
+                    return extractData(json);
                 }
 
-                // If empty or failed, try without /all
-                if (items.length === 0) {
-                    const urlWithoutAll = `${baseUrl}/api/${endpoint}?${queryParams}&size=10000`;
-                    trace.push(`Fallback: ${endpoint}?${queryParams}`);
-                    const res2 = await fetch(urlWithoutAll, {
-                        cache: "no-store",
-                        headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }
-                    });
-                    if (res2.ok) {
-                        const json2 = await res2.json();
-                        items = extractData(json2);
-                    }
+                // Fallback: try without /all
+                const urlWithoutAll = `${baseUrl}/api/${endpoint}?${queryParams}&size=10000`;
+                const res2 = await fetch(urlWithoutAll, {
+                    cache: "no-store",
+                    headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }
+                });
+                
+                if (res2.ok) {
+                    const json2 = await res2.json();
+                    return extractData(json2);
                 }
-
-                trace.push(`Found ${items.length} items`);
-                return items;
-            } catch (e) {
-                const err = e as Error;
-                trace.push(`Error: ${err.message}`);
+                
                 return [];
+            } catch (e) {
+                throw new Error("NETWORK_FAILURE");
             }
         };
 
@@ -306,9 +302,8 @@ export const ActivePickingRepo = {
                 data = await tryFetch("v-serial-onhand", `serial_number=${encodeURIComponent(serialNumber.trim())}&branch_id=${branchId}`);
             }
 
-            // 3. Try SERIAL ONLY (Postman Style) - This is likely why Postman works
+            // 3. Try SERIAL ONLY
             if (data.length === 0) {
-                trace.push("Serial+Branch empty, trying Serial only...");
                 data = await tryFetch("v-serial-onhand", `serialNumber=${encodeURIComponent(serialNumber.trim())}`);
                 if (data.length === 0) {
                     data = await tryFetch("v-serial-onhand", `serial_number=${encodeURIComponent(serialNumber.trim())}`);
@@ -317,53 +312,54 @@ export const ActivePickingRepo = {
 
             // 4. Try BRANCH ONLY
             if (data.length === 0) {
-                trace.push("Serial search empty, trying Branch only...");
                 data = await tryFetch("v-serial-onhand", `branchId=${branchId}`);
                 if (data.length === 0) {
                     data = await tryFetch("v-serial-onhand", `branch_id=${branchId}`);
                 }
             }
 
-            // 5. Global diagnostic: If still 0, see if ANY data exists in this view at all
-            if (data.length === 0) {
-                trace.push("Branch empty, checking global...");
-                const globalSample = await tryFetch("v-serial-onhand", "size=1");
-                if (globalSample.length > 0) {
-                    trace.push(`Global found! Sample: ${JSON.stringify(globalSample[0])}`);
-                } else {
-                    trace.push("Global is also empty!");
-                }
-            }
-
-            if (data.length === 0) {
-                throw new Error(`DEBUG_TRACE: ${trace.join(" -> ")}`);
-            }
-
             const onhand = data.find((item: Record<string, unknown>) => {
-                const dbVal = item.serialNumber ?? item.serial_number ?? item.serialNo ?? item.serial;
+                const dbVal = item.serialNumber ?? item.serial_number ?? item.serialNo ?? item.serial ?? item.sn ?? item.snCode;
                 if (dbVal === undefined || dbVal === null) return false;
                 
                 const dbSerial = String(dbVal).trim().toUpperCase();
                 const dbBranchId = item.branchId ?? item.branch_id;
-                const branchMatch = dbBranchId === undefined || dbBranchId === null || Number(dbBranchId) === branchId;
+                const branchMatch = dbBranchId === undefined || dbBranchId === null || Number(dbBranchId) === Number(branchId);
+                const serialMatch = dbSerial === inputSerial;
                 
-                return dbSerial === inputSerial && branchMatch;
+                return serialMatch && branchMatch;
             });
 
             if (onhand) {
                 const product = onhand.product as ProductRef | undefined;
-                const pId = onhand.productId ?? onhand.product_id ?? product?.id ?? product?.product_id;
+
+                // Try all known field name patterns for the product ID
+                // Each access returns `unknown` (Record<string,unknown>), so cast each
+                // individually before chaining to satisfy strict TS typing.
+                type PrimId = string | number | null | undefined;
+                let pId: PrimId =
+                    (onhand.productId as PrimId) ??
+                    (onhand.product_id as PrimId) ??
+                    (onhand.itemId as PrimId) ??
+                    (onhand.item_id as PrimId) ??
+                    (product?.id as PrimId) ??
+                    (product?.product_id as PrimId) ??
+                    (product?.productId as PrimId);
+
+                // Additional fallback: if the 'product' field itself is a raw number (direct FK value)
+                if ((pId === undefined || pId === null) && typeof onhand.product === 'number') {
+                    pId = onhand.product as number;
+                }
+
                 if (pId !== undefined && pId !== null) {
                     return { productId: Number(pId) };
                 }
-                throw new Error(`DEBUG_TRACE: Serial found but productId missing in fields: ${Object.keys(onhand).join(", ")}`);
+
+                throw new Error("Unable to identify product for this serial.");
             }
             
-            throw new Error(`DEBUG_TRACE: Serial ${inputSerial} not found in ${data.length} records. First item sample: ${data[0] ? JSON.stringify(data[0]) : "NONE"}`);
+            return null;
         } catch (error) {
-            const err = error as Error;
-            console.error("[Active Picking Repo] Error verifying onhand serial:", err);
-            if (err.message.includes("DEBUG_TRACE")) throw err;
             throw new Error("NETWORK_FAILURE");
         }
     }

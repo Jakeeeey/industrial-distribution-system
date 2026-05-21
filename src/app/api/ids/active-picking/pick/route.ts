@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
         
         // Extract session token
         const cookieStore = await cookies();
-        const sessionToken = cookieStore.get(COOKIE_NAME)?.value || null;
+        const sessionToken = cookieStore.get("springboot_token")?.value || cookieStore.get(COOKIE_NAME)?.value || null;
 
         if (!consolidatorId || !serial_number || !branchId) {
             return NextResponse.json({ error: "Missing required fields (consolidatorId, serial_number, branchId)" }, { status: 400 });
@@ -26,8 +26,6 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(result);
     } catch (err) {
         const error = err as Error;
-        console.error("[Active Picking API] Error processing pick:", error.message);
-        
         return NextResponse.json({ error: "Failed to process pick", details: error.message }, { status: 400 });
     }
 }
