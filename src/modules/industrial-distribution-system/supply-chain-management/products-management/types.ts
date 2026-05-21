@@ -44,6 +44,8 @@ export interface Product {
   is_serialized: number; // TINYINT
   product_image?: string | null;
   status: string;
+  parent_id?: number | null;
+  uom_ids?: string | null;
   created_at?: string;
   created_by?: number;
   updated_at?: string;
