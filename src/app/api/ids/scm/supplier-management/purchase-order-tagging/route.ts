@@ -43,7 +43,7 @@ import type {
     TaggingPODetail,
     TaggingPOItem,
     TaggingActivity,
-} from "@/modules/supply-chain-management/supplier-management/purchase-order-tagging/types";
+} from "@/modules/industrial-distribution-system/supply-chain-management/supplier-management/purchase-order-tagging/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
