@@ -278,7 +278,7 @@ export function SiteCylinderManager({ siteId, customerCode, stagedCylinders, onS
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
                   <Label>Select Cylinder Product</Label>
-                  <Popover open={productPickerOpen} onOpenChange={setProductPickerOpen}>
+                  <Popover open={productPickerOpen} onOpenChange={setProductPickerOpen} modal={true}>
                     <PopoverTrigger asChild disabled={!!editingCylinder}>
                       <Button
                         variant="outline"
@@ -338,7 +338,7 @@ export function SiteCylinderManager({ siteId, customerCode, stagedCylinders, onS
 
                 <div className="space-y-2">
                   <Label>Select Cylinder Serial Number</Label>
-                  <Popover open={assetPickerOpen} onOpenChange={setAssetPickerOpen}>
+                  <Popover open={assetPickerOpen} onOpenChange={setAssetPickerOpen} modal={true}>
                     <PopoverTrigger asChild disabled={!!editingCylinder || (!selectedProductId && !editingCylinder)}>
                       <Button
                         variant="outline"
