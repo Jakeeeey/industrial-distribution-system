@@ -2,9 +2,9 @@ import { ReceivingProductsManualModule } from "@/modules/industrial-distribution
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Receiving Products (Manual)",
+    title: "Receiving Products (Manual)",
 };
 
 export default function ReceivingProductsManualPage() {
-  return <ReceivingProductsManualModule />;
+    return <ReceivingProductsManualModule />;
 }

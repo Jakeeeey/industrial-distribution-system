@@ -64,9 +64,9 @@ export type ProductRow = {
   unit_of_measurement: number | null;
   unit_of_measurement_count: number | null;
 
-  isActive: number;
-  cost_per_unit: number | null;
-  is_serialized?: number | null;
+    isActive: number;
+    cost_per_unit: number | null;
+    is_serialized?: number | null;
 };
 
 export type ProductPerSupplierRow = {

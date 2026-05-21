@@ -25,7 +25,7 @@ export const dynamic = "force-dynamic";
  *   /items/product_per_supplier?filter[supplier_id][_eq]=25&fields=product_id,supplier_id,discount_type,id&limit=-1
  *
  * Client calls:
- *   /api/scm/supplier-management/purchase-order/product-supplier-links?supplierId=25
+ *   /api/ids/scm/supplier-management/purchase-order/product-supplier-links?supplierId=25
  */
 export async function GET(req: NextRequest) {
     try {

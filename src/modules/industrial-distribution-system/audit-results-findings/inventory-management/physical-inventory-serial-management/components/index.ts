@@ -1,4 +1,4 @@
-//src/modules/industrial-distribution-system/supply-chain-management/physical-inventory-serial-management/components/index.ts
+//src/modules/supply-chain-management/physical-inventory-serial-management/components/index.ts
 export * from "./PhysicalInventoryHeader";
 export * from "./PhysicalInventoryFilters";
 export * from "./PhysicalInventoryTable";

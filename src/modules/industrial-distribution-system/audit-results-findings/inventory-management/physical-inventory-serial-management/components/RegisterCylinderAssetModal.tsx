@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import { createCylinderAssetsBulk } from "../providers/fetchProvider";
 import { toast } from "sonner";
 import type { CylinderAssetUpsertPayload } from "../types";
@@ -19,10 +19,11 @@ type Props = {
     onOpenChange: (open: boolean) => void;
     onSuccess: (serials: string[]) => void;
     onClear?: () => void;
+    onRemoveRow?: (serial: string) => void;
 };
 
 export function RegisterCylinderAssetModal(props: Props) {
-    const { open, serials, productId, branchId, onOpenChange, onSuccess, onClear } = props;
+    const { open, serials, productId, branchId, onOpenChange, onSuccess, onClear, onRemoveRow } = props;
 
     // individual row states
     const [rows, setRows] = React.useState<Record<string, {
@@ -40,18 +41,28 @@ export function RegisterCylinderAssetModal(props: Props) {
     const [bulkTare, setBulkTare] = React.useState("");
 
     const [isSaving, setIsSaving] = React.useState(false);
+    const [hasSubmitted, setHasSubmitted] = React.useState(false);
 
     React.useEffect(() => {
         if (open) {
-            const initialRows: typeof rows = {};
-            serials.forEach(s => {
-                initialRows[s] = {
-                    condition: "GOOD",
-                    expirationDate: "",
-                    tareWeight: "",
-                };
+            setRows(prev => {
+                const nextRows = { ...prev };
+                let hasChanges = false;
+                serials.forEach(s => {
+                    if (!nextRows[s]) {
+                        nextRows[s] = {
+                            condition: "GOOD",
+                            expirationDate: "",
+                            tareWeight: "",
+                        };
+                        hasChanges = true;
+                    }
+                });
+                return hasChanges ? nextRows : prev;
             });
-            setRows(initialRows);
+        } else {
+            setRows({});
+            setHasSubmitted(false);
             setHistory(null);
             setBulkCondition("GOOD");
             setBulkExpiration("");
@@ -97,12 +108,27 @@ export function RegisterCylinderAssetModal(props: Props) {
     };
 
     const handleSave = async () => {
+        setHasSubmitted(true);
+
         if (!productId || !branchId) {
             toast.error("Required context (Product/Branch) is missing.");
             return;
         }
 
-        if (serials.length === 0) return;
+        if (serials.length === 0) {
+            toast.error("No serials to register.");
+            return;
+        }
+
+        const hasMissingFields = serials.some(serial => {
+            const data = rows[serial];
+            return !data?.condition || !data?.expirationDate || !data?.tareWeight;
+        });
+
+        if (hasMissingFields) {
+            toast.error("Please fill up all fields (Condition, Expiration, Tare) for all serials.");
+            return;
+        }
 
         try {
             setIsSaving(true);
@@ -236,6 +262,7 @@ export function RegisterCylinderAssetModal(props: Props) {
                                     <th className="text-left p-2 font-bold text-muted-foreground w-[120px]">Condition</th>
                                     <th className="text-left p-2 font-bold text-muted-foreground w-[140px]">Expiration</th>
                                     <th className="text-left p-2 font-bold text-muted-foreground">Tare (KG)</th>
+                                    {onRemoveRow && <th className="w-[40px]"></th>}
                                 </tr>
                             </thead>
                             <tbody className="divide-y">
@@ -247,7 +274,7 @@ export function RegisterCylinderAssetModal(props: Props) {
                                                 value={rows[s]?.condition || "GOOD"} 
                                                 onValueChange={(v: CylinderAssetUpsertPayload["cylinder_condition"]) => updateRow(s, "condition", v)}
                                             >
-                                                <SelectTrigger className="h-7 text-[11px] py-0 px-2">
+                                                <SelectTrigger className={`h-7 text-[11px] py-0 px-2 ${hasSubmitted && !rows[s]?.condition ? "border-destructive focus:ring-destructive" : ""}`}>
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -261,7 +288,7 @@ export function RegisterCylinderAssetModal(props: Props) {
                                         <td className="p-2">
                                             <Input 
                                                 type="date" 
-                                                className="h-7 text-[11px] py-0 px-2" 
+                                                className={`h-7 text-[11px] py-0 px-2 ${hasSubmitted && !rows[s]?.expirationDate ? "border-destructive focus-visible:ring-destructive" : ""}`}
                                                 value={rows[s]?.expirationDate || ""}
                                                 onChange={(e) => updateRow(s, "expirationDate", e.target.value)}
                                             />
@@ -271,11 +298,24 @@ export function RegisterCylinderAssetModal(props: Props) {
                                                 type="number" 
                                                 step="0.01" 
                                                 placeholder="0.00"
-                                                className="h-7 text-[11px] py-0 px-2" 
+                                                className={`h-7 text-[11px] py-0 px-2 ${hasSubmitted && !rows[s]?.tareWeight ? "border-destructive focus-visible:ring-destructive" : ""}`}
                                                 value={rows[s]?.tareWeight || ""}
                                                 onChange={(e) => updateRow(s, "tareWeight", e.target.value)}
                                             />
                                         </td>
+                                        {onRemoveRow && (
+                                            <td className="p-2 text-center">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                                    onClick={() => onRemoveRow(s)}
+                                                    disabled={isSaving}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </td>
+                                        )}
                                     </tr>
                                 ))}
                             </tbody>

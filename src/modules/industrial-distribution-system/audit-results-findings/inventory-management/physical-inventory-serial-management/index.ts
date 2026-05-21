@@ -1,4 +1,4 @@
-//src/modules/industrial-distribution-system/supply-chain-management/physical-inventory-serial-management/index.ts
+//src/modules/supply-chain-management/physical-inventory-serial-management/index.ts
 export * from "./types";
 export * from "./providers/fetchProvider";
 export * from "./utils/compute";
