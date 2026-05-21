@@ -23,7 +23,11 @@ interface ProductFormProps {
   initialValues?: Partial<Product>;
   categories: Category[];
   brands: Brand[];
-  units: { unit_id: number | string; unit_name: string; unit_shortcut: string }[];
+  units: {
+    unit_id: number | string;
+    unit_name: string;
+    unit_shortcut: string;
+  }[];
   onSubmit: (values: ProductFormValues) => void;
   onCancel: () => void;
   isLoading?: boolean;
@@ -41,22 +45,26 @@ export function ProductForm({
   onSubmit,
   onCancel,
   isLoading,
-  readOnly
+  readOnly,
 }: ProductFormProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  
+
   const initialImageUrl = initialValues?.product_image
     ? `${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8055"}/assets/${initialValues.product_image}`
     : null;
-    
-  const [imagePreview, setImagePreview] = useState<string | null>(initialImageUrl);
+
+  const [imagePreview, setImagePreview] = useState<string | null>(
+    initialImageUrl,
+  );
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const validateAndSetFile = useCallback((file: File) => {
     if (file.size > MAX_FILE_SIZE) {
-      toast.error(`File too large. Maximum size is 5 MB (got ${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+      toast.error(
+        `File too large. Maximum size is 5 MB (got ${(file.size / 1024 / 1024).toFixed(2)} MB)`,
+      );
       return;
     }
     if (!ALLOWED_TYPES.includes(file.type)) {
@@ -69,13 +77,16 @@ export function ProductForm({
     reader.readAsDataURL(file);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    if (readOnly) return;
-    const file = e.dataTransfer.files[0];
-    if (file) validateAndSetFile(file);
-  }, [validateAndSetFile, readOnly]);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+      if (readOnly) return;
+      const file = e.dataTransfer.files[0];
+      if (file) validateAndSetFile(file);
+    },
+    [validateAndSetFile, readOnly],
+  );
 
   const clearImage = () => {
     if (readOnly) return;
@@ -101,7 +112,7 @@ export function ProductForm({
       is_serialized: initialValues?.is_serialized ?? 1,
       status: initialValues?.status || "Active",
       product_image: initialValues?.product_image || null,
-    }
+    },
   });
 
   const handleFormSubmit = async (values: ProductFormValues) => {
@@ -126,10 +137,13 @@ export function ProductForm({
         formData.append("file", selectedFile);
         formData.append("folder_name", "product_image");
 
-        const uploadRes = await fetch("/api/scm/product-management/product-image-upload", {
-          method: "POST",
-          body: formData,
-        });
+        const uploadRes = await fetch(
+          "/api/ids/scm/product-management/product-image-upload",
+          {
+            method: "POST",
+            body: formData,
+          },
+        );
 
         const uploadResult = await uploadRes.json();
 
@@ -147,7 +161,9 @@ export function ProductForm({
 
       onSubmit({ ...values, product_image: imageId, unit_of_measurement: uomId });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to save product");
+      toast.error(
+        error instanceof Error ? error.message : "Failed to save product",
+      );
     } finally {
       setIsUploading(false);
     }
@@ -155,7 +171,10 @@ export function ProductForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-8 py-2">
+      <form
+        onSubmit={form.handleSubmit(handleFormSubmit)}
+        className="space-y-8 py-2"
+      >
         {/* Section: Basic Information */}
         <div className="space-y-4">
           <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-semibold text-sm uppercase tracking-wider">
@@ -171,7 +190,13 @@ export function ProductForm({
                 <FormItem>
                   <FormLabel>Product Code</FormLabel>
                   <FormControl>
-                    <Input placeholder="PROD-001" {...field} value={field.value ?? ""} className="bg-slate-50/50 dark:bg-slate-900/50" disabled={readOnly} />
+                    <Input
+                      placeholder="PROD-001"
+                      {...field}
+                      value={field.value ?? ""}
+                      className="bg-slate-50/50 dark:bg-slate-900/50"
+                      disabled={readOnly}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -184,7 +209,13 @@ export function ProductForm({
                 <FormItem>
                   <FormLabel>Product Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Enter product name" {...field} value={field.value ?? ""} className="bg-slate-50/50 dark:bg-slate-900/50" disabled={readOnly} />
+                    <Input
+                      placeholder="Enter product name"
+                      {...field}
+                      value={field.value ?? ""}
+                      className="bg-slate-50/50 dark:bg-slate-900/50"
+                      disabled={readOnly}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -248,7 +279,9 @@ export function ProductForm({
                   <FormControl>
                     <Checkbox
                       checked={field.value === 1}
-                      onCheckedChange={(checked) => field.onChange(checked ? 1 : 0)}
+                      onCheckedChange={(checked) =>
+                        field.onChange(checked ? 1 : 0)
+                      }
                       disabled={readOnly}
                     />
                   </FormControl>
@@ -277,7 +310,13 @@ export function ProductForm({
               <FormItem>
                 <FormLabel>Short Description</FormLabel>
                 <FormControl>
-                  <Input placeholder="Brief summary for reports" {...field} value={field.value ?? ""} className="bg-slate-50/50 dark:bg-slate-900/50" disabled={readOnly} />
+                  <Input
+                    placeholder="Brief summary for reports"
+                    {...field}
+                    value={field.value ?? ""}
+                    className="bg-slate-50/50 dark:bg-slate-900/50"
+                    disabled={readOnly}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -290,22 +329,37 @@ export function ProductForm({
               <FormItem>
                 <FormLabel>Full Technical Description</FormLabel>
                 <FormControl>
-                  <Textarea placeholder="Detailed product specifications..." {...field} value={field.value ?? ""} className="min-h-[100px] bg-slate-50/50 dark:bg-slate-900/50 resize-none" disabled={readOnly} />
+                  <Textarea
+                    placeholder="Detailed product specifications..."
+                    {...field}
+                    value={field.value ?? ""}
+                    className="min-h-[100px] bg-slate-50/50 dark:bg-slate-900/50 resize-none"
+                    disabled={readOnly}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
-          
+
           <div className="space-y-3 pt-2">
             <FormLabel>Product Image</FormLabel>
             <div
-              onClick={() => { if (!readOnly) fileInputRef.current?.click(); }}
+              onClick={() => {
+                if (!readOnly) fileInputRef.current?.click();
+              }}
               onDrop={handleDrop}
-              onDragOver={(e) => { e.preventDefault(); if (!readOnly) setIsDragging(true); }}
-              onDragLeave={() => { if (!readOnly) setIsDragging(false); }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                if (!readOnly) setIsDragging(true);
+              }}
+              onDragLeave={() => {
+                if (!readOnly) setIsDragging(false);
+              }}
               className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 transition-colors ${
-                readOnly ? "cursor-default opacity-80 bg-slate-50/50 dark:bg-slate-900/50" : "cursor-pointer"
+                readOnly
+                  ? "cursor-default opacity-80 bg-slate-50/50 dark:bg-slate-900/50"
+                  : "cursor-pointer"
               } ${
                 isDragging
                   ? "border-primary bg-primary/5"
@@ -325,7 +379,10 @@ export function ProductForm({
                   {!readOnly && (
                     <button
                       type="button"
-                      onClick={(e) => { e.stopPropagation(); clearImage(); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        clearImage();
+                      }}
                       className="absolute -top-2 -right-2 rounded-full bg-destructive p-1.5 text-destructive-foreground hover:bg-destructive/80 shadow-sm"
                     >
                       <X className="h-4 w-4" />
