@@ -3,7 +3,7 @@ import { stockAdjustmentService } from "@/modules/industrial-distribution-system
 import { handleApiError } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/error-handler";
 
 /**
- * GET /api/scm/inventory-management/stock-adjustment/suppliers
+ * GET /api/ids/scm/inventory-management/stock-adjustment/suppliers
  * Returns active suppliers (nonBuy = 0) for the supplier filter dropdown.
  */
 export async function GET() {

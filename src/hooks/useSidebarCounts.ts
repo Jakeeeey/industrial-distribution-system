@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from "react";
 
 // Custom event name for force refreshing the counts
-export const SIDEBAR_COUNTS_UPDATE_EVENT = 'sidebar-counts-update';
+export const SIDEBAR_COUNTS_UPDATE_EVENT = "sidebar-counts-update";
 
 export interface SidebarCounts {
   draft: number;
@@ -10,25 +10,29 @@ export interface SidebarCounts {
 }
 
 export function useSidebarCounts(pollingIntervalMs = 15000) {
-  const [counts, setCounts] = useState<SidebarCounts>({ draft: 0, approval: 0, callsheet: 0 });
+  const [counts, setCounts] = useState<SidebarCounts>({
+    draft: 0,
+    approval: 0,
+    callsheet: 0,
+  });
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchCounts = useCallback(async () => {
     try {
       // Use cache: 'no-store' or standard cache-busting
-      const res = await fetch('/api/crm/sidebar-counts', {
+      const res = await fetch("/api/ids/crm/sidebar-counts", {
         headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
         },
-        cache: 'no-store'
+        cache: "no-store",
       });
       if (res.ok) {
         const data = await res.json();
         setCounts({
           draft: data.draft || 0,
           approval: data.approval || 0,
-          callsheet: data.callsheet || 0
+          callsheet: data.callsheet || 0,
         });
       }
     } catch (error) {
@@ -51,7 +55,10 @@ export function useSidebarCounts(pollingIntervalMs = 15000) {
 
     return () => {
       clearInterval(intervalId);
-      window.removeEventListener(SIDEBAR_COUNTS_UPDATE_EVENT, handleUpdateEvent);
+      window.removeEventListener(
+        SIDEBAR_COUNTS_UPDATE_EVENT,
+        handleUpdateEvent,
+      );
     };
   }, [fetchCounts, pollingIntervalMs]);
 
