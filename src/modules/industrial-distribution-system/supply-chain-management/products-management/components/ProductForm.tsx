@@ -93,7 +93,7 @@ export function ProductForm({
       short_description: initialValues?.short_description || "",
       product_category: typeof initialValues?.product_category === 'object' ? initialValues.product_category.category_id : (initialValues?.product_category || 0),
       product_brand: typeof initialValues?.product_brand === 'object' ? initialValues.product_brand.brand_id : (initialValues?.product_brand || 0),
-      unit_of_measurement: typeof initialValues?.unit_of_measurement === 'object' ? initialValues.unit_of_measurement.unit_id : (initialValues?.unit_of_measurement || 0),
+      unit_of_measurement: typeof initialValues?.unit_of_measurement === 'object' ? initialValues.unit_of_measurement.unit_id : (initialValues?.unit_of_measurement || (units && units.length > 0 ? Number(units[0].unit_id) : 1)),
       unit_of_measurement_count: initialValues?.unit_of_measurement_count || 1,
       cost_per_unit: initialValues?.cost_per_unit || 0,
       price_per_unit: initialValues?.price_per_unit || 0,
@@ -106,6 +106,17 @@ export function ProductForm({
 
   const handleFormSubmit = async (values: ProductFormValues) => {
     try {
+      // Client-side validations
+      if (!values.product_category || Number(values.product_category) === 0) {
+        toast.error("Validation Error: Please select a valid Product Category before saving.");
+        return;
+      }
+
+      if (!values.product_brand || Number(values.product_brand) === 0) {
+        toast.error("Validation Error: Please select a valid Product Brand before saving.");
+        return;
+      }
+
       setIsUploading(true);
       let imageId = values.product_image || null;
 
@@ -132,7 +143,9 @@ export function ProductForm({
         imageId = null;
       }
 
-      onSubmit({ ...values, product_image: imageId });
+      const uomId = Number(values.unit_of_measurement) || (units && units.length > 0 ? Number(units[0].unit_id) : 1);
+
+      onSubmit({ ...values, product_image: imageId, unit_of_measurement: uomId });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to save product");
     } finally {
@@ -226,93 +239,12 @@ export function ProductForm({
               )}
             />
           </div>
-        </div>
-
-        {/* Section: Pricing & Inventory */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-semibold text-sm uppercase tracking-wider">
-            <DollarSign className="h-4 w-4" />
-            Pricing & Inventory
-          </div>
-          <Separator className="bg-slate-200/60 dark:bg-slate-800/60" />
-          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <FormField
-              control={form.control}
-              name="cost_per_unit"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Cost per Unit (PHP)</FormLabel>
-                  <FormControl>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">₱</span>
-                      <Input type="number" step="0.01" {...field} value={field.value ?? ""} onChange={(e) => field.onChange(parseFloat(e.target.value))} className="pl-7 bg-slate-50/50 dark:bg-slate-900/50" disabled={true} />
-                    </div>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="price_per_unit"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Price per Unit (PHP)</FormLabel>
-                  <FormControl>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">₱</span>
-                      <Input type="number" step="0.01" {...field} value={field.value ?? ""} onChange={(e) => field.onChange(parseFloat(e.target.value))} className="pl-7 bg-slate-50/50 dark:bg-slate-900/50" disabled={true} />
-                    </div>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
-            <FormField
-              control={form.control}
-              name="unit_of_measurement"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>UOM</FormLabel>
-                  <FormControl>
-                    <SearchableSelect
-                      options={units.map((unit) => ({
-                        value: unit.unit_id.toString(),
-                        label: `${unit.unit_name} (${unit.unit_shortcut})`,
-                      }))}
-                      value={field.value?.toString()}
-                      onValueChange={(v) => field.onChange(parseInt(v))}
-                      placeholder="Select unit"
-                      className="bg-slate-50/50 dark:bg-slate-900/50"
-                      disabled={readOnly}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="unit_of_measurement_count"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Quantity per Unit</FormLabel>
-                  <FormControl>
-                    <Input type="number" {...field} value={field.value ?? ""} onChange={(e) => field.onChange(parseInt(e.target.value))} className="bg-slate-50/50 dark:bg-slate-900/50" disabled={readOnly} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
             <FormField
               control={form.control}
               name="is_serialized"
               render={({ field }) => (
-                <FormItem className="flex items-center space-x-2 space-y-0 p-3 rounded-lg border bg-slate-50/30 dark:bg-slate-900/30">
+                <FormItem className="flex items-center space-x-3 space-y-0 p-4 rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-slate-50/30 dark:bg-slate-900/30 shadow-sm md:col-span-2">
                   <FormControl>
                     <Checkbox
                       checked={field.value === 1}
@@ -320,7 +252,11 @@ export function ProductForm({
                       disabled={readOnly}
                     />
                   </FormControl>
-                  <FormLabel className="text-xs font-semibold cursor-pointer">Serialized</FormLabel>
+                  <div className="space-y-1 leading-none">
+                    <FormLabel className="text-sm font-semibold cursor-pointer select-none">
+                      Is Serialized Product
+                    </FormLabel>
+                  </div>
                 </FormItem>
               )}
             />

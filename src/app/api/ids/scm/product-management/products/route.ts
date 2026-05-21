@@ -91,11 +91,21 @@ export async function POST(req: NextRequest) {
     const hasUomIds = body.uom_ids !== undefined && body.uom_ids !== null && body.uom_ids !== "";
     const isParent = !hasParentId && !hasUomIds;
 
+    // Hardcode Manila Time (UTC+8)
+    const manilaTime = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19);
+
+    const parentPayload = {
+      ...body,
+      unit_of_measurement: 16,
+      date_added: manilaTime,
+      status: "Approved"
+    };
+
     // Create the primary product first
     const response = await fetch(`${DIRECTUS_URL}/items/${COLLECTION}`, {
       method: "POST",
       headers: getHeaders(),
-      body: JSON.stringify(body),
+      body: JSON.stringify(parentPayload),
     });
 
     if (!response.ok) {
@@ -120,7 +130,9 @@ export async function POST(req: NextRequest) {
           description: `${parentProduct.description || body.description || ""} ${variant}`.trim(),
           product_code: `${parentProduct.product_code || body.product_code || ""} ${variant}`.trim(),
           isActive: 1,
-          status: "Active"
+          unit_of_measurement: 16,
+          date_added: manilaTime,
+          status: "Approved"
         };
       });
 
