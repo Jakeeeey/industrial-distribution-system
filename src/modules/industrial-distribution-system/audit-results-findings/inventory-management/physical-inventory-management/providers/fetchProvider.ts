@@ -233,18 +233,12 @@ function mapRunningInventoryRow(
     supplier_shortcut: row.supplierShortcut,
   };
 }
-
-    const categoryIds = new Set(
-        lookup.products
-            .filter(
-                (product) =>
-                    product.isActive === 1 &&
-                    product.is_serialized === 1 &&
-                    allowedProductIds.has(product.product_id) &&
-                    product.product_category !== null,
-            )
-            .map((product) => product.product_category as number),
-    );
+function sortSupplierScopedCategories(
+  categories: CategoryRow[],
+): CategoryRow[] {
+  return [...categories].sort((a, b) => {
+    const aIsAll = isAllCategoryName(a.category_name);
+    const bIsAll = isAllCategoryName(b.category_name);
 
     if (aIsAll && !bIsAll) return -1;
     if (!aIsAll && bIsAll) return 1;
@@ -252,6 +246,7 @@ function mapRunningInventoryRow(
     return a.category_name.localeCompare(b.category_name);
   });
 }
+
 
 export function getSupplierScopedCategoriesFromLookup(
   supplierId: number,
@@ -514,54 +509,6 @@ export function buildEligibleVariants(input: {
     });
 }
 
-    return lookup.products
-        .filter((product) => product.isActive === 1 && product.is_serialized === 1)
-        .filter((product) => {
-            const familyKey = (product.parent_id && product.parent_id > 0)
-                ? product.parent_id
-                : product.product_id;
-            return eligibleFamilyKeys.has(familyKey);
-        })
-        .filter((product) => {
-            if (isAllCategory) return true;
-            return product.product_category === categoryId;
-        })
-        .filter((product) => priceMap.has(product.product_id))
-        .map((product) => {
-            const priceRow = priceMap.get(product.product_id) ?? null;
-            const category =
-                product.product_category !== null
-                    ? categoryMap.get(product.product_category) ?? null
-                    : null;
-            const unit =
-                product.unit_of_measurement !== null
-                    ? unitMap.get(product.unit_of_measurement) ?? null
-                    : null;
-
-            return {
-                product_id: product.product_id,
-                parent_id: product.parent_id,
-                product_code: product.product_code,
-                product_name: product.product_name,
-                barcode: product.barcode,
-                category_id: product.product_category,
-                category_name: category?.category_name ?? null,
-                unit_id: product.unit_of_measurement,
-                unit_name: unit?.unit_name ?? null,
-                unit_shortcut: unit?.unit_shortcut ?? null,
-                unit_order: unit?.order ?? null,
-                unit_count: normalizeUnitCount(product.unit_of_measurement_count),
-                unit_price: priceRow?.price ?? null,
-                cost_per_unit: product.cost_per_unit,
-                brand_name: null,
-            };
-        })
-        .sort((a, b) => {
-            const nameDiff = a.product_name.localeCompare(b.product_name);
-            if (nameDiff !== 0) return nameDiff;
-            return a.product_id - b.product_id;
-        });
-}
 
 export async function fetchRunningInventoryAll(): Promise<RunningInventoryRow[]> {
     const rows = await apiGet<RunningInventoryApiRow[]>(`${API_BASE}/running-inventory`);
