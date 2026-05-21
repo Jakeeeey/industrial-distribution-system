@@ -1,4 +1,4 @@
-// src/modules/supply-chain-management/supplier-management/purchase-order-creation/utils/calculations.ts
+// src/modules/industrial-distribution-system/supply-chain-management/supplier-management/purchase-order-creation/utils/calculations.ts
 
 export function cn(...classes: Array<string | false | null | undefined>) {
     return classes.filter(Boolean).join(" ");
@@ -380,7 +380,7 @@ export function calculateVatExclusiveFromAmounts(
     const vatExclusive = netAmount / (1 + vatRate); // ✅ Net / 1.12
     const vatAmount = Math.max(0, netAmount - vatExclusive); // ✅ Net - VAT Exclusive
 
-    const ewtGoods = Math.max(0,vatExclusive * ewtGoodsRate); // ✅ 1% of Net
+    const ewtGoods = Math.max(0, vatExclusive * ewtGoodsRate); // ✅ 1% of Net
 
     const totalInvoice = netAmount; // ✅ total = net (do NOT add VAT again)
     const payableToSupplier = Math.max(0, totalInvoice - ewtGoods);

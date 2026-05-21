@@ -1,4 +1,4 @@
-// src/modules/supply-chain-management/supplier-management/purchase-order-creation/CreatePurchaseOrderModule.tsx
+// src/modules/industrial-distribution-system/supply-chain-management/supplier-management/purchase-order-creation/CreatePurchaseOrderModule.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
@@ -48,16 +48,16 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
 
 const ProductPickerDialog =
-     
+
     (ProductPickerDialogModule as any).ProductPickerDialog ??
     (ProductPickerDialogModule as any).default;
 
 const PurchaseOrderSummary =
-     
+
     (PurchaseOrderSummaryModule as any).PurchaseOrderSummary ??
     (PurchaseOrderSummaryModule as any).default;
 
- 
+
 type RawSupplier = { id?: string | number; supplier_id?: string | number; supplier_name?: string; name?: string; payment_terms?: string; delivery_terms?: string; apBalance?: number; ap_balance?: number; supplier_type?: string; supplierType?: string };
 type RawBranch = { id?: string | number; branch_id?: string | number; branch_code?: string; branch_name?: string; branch_description?: string };
 type RawProduct = { product_id?: string | number; id?: string | number; product_name?: string; name?: string; product_code?: string; barcode?: string; sku?: string; category?: string; product_category_name?: string; product_category?: any; brand?: string; product_brand_name?: string; product_brand?: any; cost_price_unit?: number; priceA?: number; price_per_unit?: number; cost_per_unit?: number; price?: number; unit_of_measurement?: any; uom_id?: number | string; unit_id?: number | string; unit_of_measurement_count?: number; description?: string; short_description?: string; uom_name?: string; uom?: any; unit_name?: string };
@@ -136,9 +136,9 @@ function normalizeProduct(raw: RawProduct, fixedDiscountTypeId: string): Product
 
     const baseUomIdRaw = Number(
         raw?.unit_of_measurement?.unit_id ??
-            raw?.unit_of_measurement ??
-            raw?.uom_id ??
-            raw?.unit_id
+        raw?.unit_of_measurement ??
+        raw?.uom_id ??
+        raw?.unit_id
     );
     const baseUomId = Number.isFinite(baseUomIdRaw) ? baseUomIdRaw : 1;
 
@@ -156,7 +156,7 @@ function normalizeProduct(raw: RawProduct, fixedDiscountTypeId: string): Product
 
     const parsedMeaningful = piecesPerBoxParsed > 1 ? piecesPerBoxParsed : 0;
     const piecesPerBox = Math.max(1, parsedMeaningful || piecesPerBaseUnit || 1);
-    
+
     // Calculate how many times the base UOM fits into the full Box/Pack size
     let baseUnitsPerBox = piecesPerBox / piecesPerBaseUnit;
     if (!Number.isFinite(baseUnitsPerBox) || baseUnitsPerBox <= 0) {
@@ -178,24 +178,24 @@ function normalizeProduct(raw: RawProduct, fixedDiscountTypeId: string): Product
         price: pricePerUom,
         uom: String(
             raw?.unit_of_measurement?.unit_shortcut ??
-                raw?.unit_of_measurement?.unit_name ??
-                raw?.uom_name ??
-                raw?.uom?.unit_name ??
-                raw?.unit_name ??
-                "BOX"
+            raw?.unit_of_measurement?.unit_name ??
+            raw?.uom_name ??
+            raw?.uom?.unit_name ??
+            raw?.unit_name ??
+            "BOX"
         ).toUpperCase() || "BOX",
         uomId: Number(
             raw?.unit_of_measurement?.unit_id ??
-                raw?.unit_of_measurement ??
-                raw?.uom_id ??
-                raw?.unit_id ??
-                BOX_UOM_ID
+            raw?.unit_of_measurement ??
+            raw?.uom_id ??
+            raw?.unit_id ??
+            BOX_UOM_ID
         ),
         availableUoms: [
             String(
                 raw?.unit_of_measurement?.unit_shortcut ??
-                    raw?.unit_of_measurement?.unit_name ??
-                    "BOX"
+                raw?.unit_of_measurement?.unit_name ??
+                "BOX"
             ).toUpperCase(),
         ],
 
@@ -239,9 +239,9 @@ function SupplierSelect(props: {
                         disabled={props.disabled}
                     >
                         <div className="flex items-center gap-2 min-w-0">
-              <span className="text-xs font-bold text-wrap">
-                {props.value?.name ?? "Select supplier"}
-              </span>
+                            <span className="text-xs font-bold text-wrap">
+                                {props.value?.name ?? "Select supplier"}
+                            </span>
                             {props.value?.id ? (
                                 <Badge
                                     variant="secondary"
@@ -270,40 +270,40 @@ function SupplierSelect(props: {
                                     {props.suppliers.map((s) => {
                                         const selected = props.value?.id === s.id;
                                         return (
-                                                <CommandItem
-                                                    key={s.id}
-                                                    value={`${s.name} ${s.id}`}
-                                                    onSelect={() => {
-                                                        props.onChange(selected ? null : s);
-                                                        setOpen(false);
-                                                    }}
-                                                >
-                                                    <div className="flex items-center gap-2 min-w-0 w-full">
-                                                        <div
-                                                            className={cn(
-                                                                "h-5 w-5 rounded-full border flex items-center justify-center shrink-0",
-                                                                selected
-                                                                    ? "bg-primary text-primary-foreground border-primary"
-                                                                    : "bg-background"
-                                                            )}
-                                                        >
-                                                            {selected ? <Check className="w-3 h-3" /> : null}
-                                                        </div>
-
-                                                        <div className="min-w-0 flex-1">
-                                                            <div className="text-xs font-bold text-wrap">
-                                                                {s.name}
-                                                            </div>
-                                                        </div>
-
-                                                        <Badge
-                                                            variant="secondary"
-                                                            className="text-[10px] font-black shrink-0"
-                                                        >
-                                                            {s.id}
-                                                        </Badge>
+                                            <CommandItem
+                                                key={s.id}
+                                                value={`${s.name} ${s.id}`}
+                                                onSelect={() => {
+                                                    props.onChange(selected ? null : s);
+                                                    setOpen(false);
+                                                }}
+                                            >
+                                                <div className="flex items-center gap-2 min-w-0 w-full">
+                                                    <div
+                                                        className={cn(
+                                                            "h-5 w-5 rounded-full border flex items-center justify-center shrink-0",
+                                                            selected
+                                                                ? "bg-primary text-primary-foreground border-primary"
+                                                                : "bg-background"
+                                                        )}
+                                                    >
+                                                        {selected ? <Check className="w-3 h-3" /> : null}
                                                     </div>
-                                                </CommandItem>
+
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="text-xs font-bold text-wrap">
+                                                            {s.name}
+                                                        </div>
+                                                    </div>
+
+                                                    <Badge
+                                                        variant="secondary"
+                                                        className="text-[10px] font-black shrink-0"
+                                                    >
+                                                        {s.id}
+                                                    </Badge>
+                                                </div>
+                                            </CommandItem>
                                         );
                                     })}
                                 </CommandGroup>
@@ -400,8 +400,8 @@ function BranchMultiSelect(props: {
                                     <div className="flex items-center gap-2">
                                         <Check className="w-4 h-4 opacity-70" />
                                         <span className="text-xs font-black uppercase tracking-wider">
-                      Select All
-                    </span>
+                                            Select All
+                                        </span>
                                     </div>
                                 </CommandItem>
 
@@ -415,8 +415,8 @@ function BranchMultiSelect(props: {
                                     <div className="flex items-center gap-2 text-destructive">
                                         <X className="w-4 h-4" />
                                         <span className="text-xs font-black uppercase tracking-wider">
-                      Clear
-                    </span>
+                                            Clear
+                                        </span>
                                     </div>
                                 </CommandItem>
                             </CommandGroup>
@@ -428,38 +428,38 @@ function BranchMultiSelect(props: {
                                     {props.branches.map((b) => {
                                         const isOn = selected.has(b.id);
                                         return (
-                                                <CommandItem
-                                                    key={b.id}
-                                                    value={`${b.code} ${b.name}`}
-                                                    onSelect={() => {
-                                                        const next = new Set(selected);
-                                                        if (next.has(b.id)) next.delete(b.id);
-                                                        else next.add(b.id);
-                                                        props.onChange(Array.from(next));
-                                                    }}
-                                                >
-                                                    <div className="flex items-center gap-2 w-full min-w-0">
-                                                        <div
-                                                            className={cn(
-                                                                "h-5 w-5 rounded border flex items-center justify-center shrink-0",
-                                                                isOn
-                                                                    ? "bg-primary text-primary-foreground border-primary"
-                                                                    : "bg-background"
-                                                            )}
-                                                        >
-                                                            {isOn ? <Check className="w-3 h-3" /> : null}
-                                                        </div>
+                                            <CommandItem
+                                                key={b.id}
+                                                value={`${b.code} ${b.name}`}
+                                                onSelect={() => {
+                                                    const next = new Set(selected);
+                                                    if (next.has(b.id)) next.delete(b.id);
+                                                    else next.add(b.id);
+                                                    props.onChange(Array.from(next));
+                                                }}
+                                            >
+                                                <div className="flex items-center gap-2 w-full min-w-0">
+                                                    <div
+                                                        className={cn(
+                                                            "h-5 w-5 rounded border flex items-center justify-center shrink-0",
+                                                            isOn
+                                                                ? "bg-primary text-primary-foreground border-primary"
+                                                                : "bg-background"
+                                                        )}
+                                                    >
+                                                        {isOn ? <Check className="w-3 h-3" /> : null}
+                                                    </div>
 
-                                                        <div className="min-w-0 flex-1">
-                                                            <div className="text-xs font-black text-wrap">
-                                                                {b.code}
-                                                            </div>
-                                                            <div className="text-[10px] text-muted-foreground text-wrap">
-                                                                {b.name}
-                                                            </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="text-xs font-black text-wrap">
+                                                            {b.code}
+                                                        </div>
+                                                        <div className="text-[10px] text-muted-foreground text-wrap">
+                                                            {b.name}
                                                         </div>
                                                     </div>
-                                                </CommandItem>
+                                                </div>
+                                            </CommandItem>
                                         );
                                     })}
                                 </CommandGroup>
@@ -501,7 +501,7 @@ export default function CreatePurchaseOrderModule({ encoderId, preparerName }: {
     const [isInvoice, setIsInvoice] = React.useState(false);
     const [isLocked, setIsLocked] = React.useState(false);
 
-     
+
     const meta = React.useMemo(() => (makePoMeta() as any), []);
     const poNumber = String(meta?.poNumber ?? "DRAFT-PO");
     const poDate = String(meta?.poDate ?? "");
@@ -599,7 +599,7 @@ export default function CreatePurchaseOrderModule({ encoderId, preparerName }: {
 
                 const discountByProductId = new Map<string, string>();
                 for (const row of links ?? []) {
-                     
+
                     const r: any = row;
                     const pid = String(r?.product_id ?? "");
                     const dtid = String(r?.discount_type ?? "");
@@ -700,7 +700,7 @@ export default function CreatePurchaseOrderModule({ encoderId, preparerName }: {
             setPickerBranchId(branchId);
 
             setTempCart(
-                 
+
                 (branch.items ?? []).map((it: CartItem) => ({
                     ...it,
                     selectedUom: it.uom || "BOX",
@@ -725,7 +725,7 @@ export default function CreatePurchaseOrderModule({ encoderId, preparerName }: {
                 if (b.branchId !== branchId) return b;
                 return {
                     ...b,
-                     
+
                     items: b.items.map((it: any) =>
                         it.id === productId ? { ...it, orderQty: Math.max(1, qty) } : it
                     ),
@@ -738,7 +738,7 @@ export default function CreatePurchaseOrderModule({ encoderId, preparerName }: {
         setAllocations((prev) =>
             prev.map((b) => {
                 if (b.branchId !== branchId) return b;
-                 
+
                 return { ...b, items: b.items.filter((it: any) => it.id !== productId) };
             })
         );
@@ -769,7 +769,7 @@ export default function CreatePurchaseOrderModule({ encoderId, preparerName }: {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const updateTempUom = React.useCallback((productId: string, _uom: string) => {
         setTempCart((prev) =>
-             
+
             prev.map((x: any) =>
                 x.id === productId ? { ...x, selectedUom: x.uom, uom: x.uom, uomId: x.uomId } : x
             )
@@ -778,7 +778,7 @@ export default function CreatePurchaseOrderModule({ encoderId, preparerName }: {
 
     const updateTempQty = React.useCallback((productId: string, qty: number) => {
         setTempCart((prev) =>
-             
+
             prev.map((x: any) => (x.id === productId ? { ...x, orderQty: Math.max(1, qty) } : x))
         );
     }, []);
@@ -794,7 +794,7 @@ export default function CreatePurchaseOrderModule({ encoderId, preparerName }: {
             return;
         }
 
-         
+
         const normalized = tempCart.map((it: any) => ({
             ...it,
             selectedUom: it.uom,
@@ -804,7 +804,7 @@ export default function CreatePurchaseOrderModule({ encoderId, preparerName }: {
         }));
 
         setAllocations((prev) =>
-             
+
             prev.map((b) => (b.branchId === branchId ? { ...b, items: normalized as any } : b))
         );
 
@@ -837,7 +837,7 @@ export default function CreatePurchaseOrderModule({ encoderId, preparerName }: {
 
     const discountAmount = React.useMemo(() => {
         return allItemsFlat.reduce((sum, x) => {
-             
+
             const item: any = x.item;
             const gross = Number(item.price || 0) * Number(item.orderQty || 0);
 
@@ -866,7 +866,7 @@ export default function CreatePurchaseOrderModule({ encoderId, preparerName }: {
             const nowISO = new Date().toISOString();
             const dateOnly = nowISO.slice(0, 10);
 
-             
+
             const payload: any = {
                 purchase_order_no: poNumber,
                 supplier_name: Number(selectedSupplier.id),
@@ -1008,10 +1008,10 @@ export default function CreatePurchaseOrderModule({ encoderId, preparerName }: {
                         value={selectedSupplier}
                         onChange={(s) => {
                             setSelectedSupplier(s);
-                            
+
                             // Auto-resolve payment term from supplier string
                             if (s?.terms) {
-                                const matched = paymentTerms.find(pt => 
+                                const matched = paymentTerms.find(pt =>
                                     pt.payment_name.toLowerCase().trim() === s.terms.toLowerCase().trim()
                                 );
                                 if (matched) {
@@ -1053,9 +1053,9 @@ export default function CreatePurchaseOrderModule({ encoderId, preparerName }: {
             {/* Pagination controls */}
             {allocations.length > allocPerPage ? (
                 <div className="flex items-center justify-between gap-3">
-          <span className="text-[10px] font-bold text-muted-foreground bg-background px-2 py-0.5 rounded border uppercase">
-            Page {allocPage} of {allocTotalPages}
-          </span>
+                    <span className="text-[10px] font-bold text-muted-foreground bg-background px-2 py-0.5 rounded border uppercase">
+                        Page {allocPage} of {allocTotalPages}
+                    </span>
 
                     <div className="flex items-center gap-2">
                         <Button

@@ -15,7 +15,7 @@ import { NavUser } from "@/components/shared/app-sidebar/nav-user";
 
 import { cookies } from "next/headers";
 
-import PostingOfProductsModule from "@/modules/supply-chain-management/supplier-management/purchase-order-posting/PostingOfProductsModule";
+import PostingOfProductsModule from "@/modules/industrial-distribution-system/supply-chain-management/supplier-management/purchase-order-posting/PostingOfProductsModule";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -126,7 +126,7 @@ export default async function Page() {
             <ScrollArea className="min-h-0 flex-1">
                 <div className="p-4">
                     {/* ✅ Purchase Order UI (Create / Approval / Receiving / Posting) */}
-                    <PostingOfProductsModule/>
+                    <PostingOfProductsModule />
                 </div>
             </ScrollArea>
         </div>

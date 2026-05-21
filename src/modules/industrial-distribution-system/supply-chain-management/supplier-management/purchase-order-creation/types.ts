@@ -1,4 +1,4 @@
-// src/modules/supply-chain-management/supplier-management/purchase-order-creation/types.ts
+// src/modules/industrial-distribution-system/supply-chain-management/supplier-management/purchase-order-creation/types.ts
 
 export type Supplier = {
     id: string;
@@ -40,8 +40,8 @@ export type Product = {
     price: number;
     raw?: unknown;
     // ✅ Actual product UOM name/shortcut
-    uom: string; 
-    uomId?: number; 
+    uom: string;
+    uomId?: number;
 
     // For audit/debug
     baseUnitPrice?: number; // original price_per_unit
@@ -57,7 +57,7 @@ export type Product = {
 
 export type CartItem = Product & {
     orderQty: number;      // ✅ qty in actual units
-    selectedUom: string;   
+    selectedUom: string;
     brand: string;
 };
 

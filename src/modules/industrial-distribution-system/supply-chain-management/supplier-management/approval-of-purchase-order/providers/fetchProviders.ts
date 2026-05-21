@@ -17,7 +17,7 @@ async function fetchData<T>(url: string, init?: RequestInit): Promise<T> {
     return json as T;
 }
 
-const BASE = "/api/scm/supplier-management/approval-of-purchase-order";
+const BASE = "/api/ids/scm/supplier-management/approval-of-purchase-order";
 
 export async function fetchPendingApprovalPOs(): Promise<PendingApprovalPO[]> {
     return fetchData<PendingApprovalPO[]>(BASE);
@@ -43,7 +43,7 @@ export async function approvePurchaseOrder(payload: {
 }
 
 export async function fetchPaymentTerms(): Promise<PaymentTerm[]> {
-    return fetchData<PaymentTerm[]>("/api/scm/supplier-management/payment-terms");
+    return fetchData<PaymentTerm[]>("/api/ids/scm/supplier-management/payment-terms");
 }
 
 

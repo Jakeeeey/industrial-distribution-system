@@ -15,7 +15,7 @@ import { NavUser } from "@/components/shared/app-sidebar/nav-user";
 
 import { cookies } from "next/headers";
 
-import ReceivingProductsModule from "@/modules/supply-chain-management/supplier-management/purchase-order-receiving-rfid/ReceivingProductsModule";
+import ReceivingProductsModule from "@/modules/industrial-distribution-system/supply-chain-management/supplier-management/purchase-order-receiving-rfid/ReceivingProductsModule";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

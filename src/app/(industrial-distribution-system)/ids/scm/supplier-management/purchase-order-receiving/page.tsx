@@ -11,7 +11,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 
 import { cookies } from "next/headers";
 
-import { ReceivingProductsManualModule } from "@/modules/supply-chain-management/supplier-management/purchase-order-receiving-manual";
+import { ReceivingProductsManualModule } from "@/modules/industrial-distribution-system/supply-chain-management/supplier-management/purchase-order-receiving-manual";
 import type { Metadata } from "next";
 import NavUser from "@/components/shared/app-sidebar/nav-user";
 

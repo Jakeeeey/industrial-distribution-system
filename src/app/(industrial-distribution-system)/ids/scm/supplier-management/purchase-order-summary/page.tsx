@@ -12,10 +12,10 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { NavUser } from "@/components/shared/app-sidebar/nav-user";
 
 import { cookies } from "next/headers";
-import { getDirectusBase, directusHeaders } from "@/modules/supply-chain-management/supplier-management/purchase-order-summary/providers/fetchProviders";
+import { getDirectusBase, directusHeaders } from "@/modules/industrial-distribution-system/supply-chain-management/supplier-management/purchase-order-summary/providers/fetchProviders";
 
-import PurchaseOrderSummaryModule from "@/modules/supply-chain-management/supplier-management/purchase-order-summary/PurchaseOrderSummaryModule";
-import { PurchaseOrder, Supplier, StatusRef } from "@/modules/supply-chain-management/supplier-management/purchase-order-summary/types";
+import PurchaseOrderSummaryModule from "@/modules/industrial-distribution-system/supply-chain-management/supplier-management/purchase-order-summary/PurchaseOrderSummaryModule";
+import { PurchaseOrder, Supplier, StatusRef } from "@/modules/industrial-distribution-system/supply-chain-management/supplier-management/purchase-order-summary/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

@@ -17,7 +17,7 @@ import { cookies } from "next/headers";
 
 import { Suspense } from "react";
 
-import TaggingOfPOModule from "@/modules/supply-chain-management/supplier-management/purchase-order-tagging/TaggingOfPOModule";
+import TaggingOfPOModule from "@/modules/industrial-distribution-system/supply-chain-management/supplier-management/purchase-order-tagging/TaggingOfPOModule";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

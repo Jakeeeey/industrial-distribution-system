@@ -15,7 +15,7 @@ import { NavUser } from "@/components/shared/app-sidebar/nav-user";
 
 import { cookies } from "next/headers";
 
-import ApprovalPurchaseOrderModule from "@/modules/supply-chain-management/supplier-management/approval-of-purchase-order/ApprovalPurchaseOrderModule";
+import ApprovalPurchaseOrderModule from "@/modules/industrial-distribution-system/supply-chain-management/supplier-management/approval-of-purchase-order/ApprovalPurchaseOrderModule";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

@@ -24,7 +24,7 @@ async function fetchData<T>(url: string, init?: RequestInit): Promise<T> {
     return json as T;
 }
 
-const BASE = "/api/scm/supplier-management/purchase-order-creation";
+const BASE = "/api/ids/scm/supplier-management/purchase-order-creation";
 
 export async function fetchSuppliers(): Promise<Supplier[]> {
     return fetchData<Supplier[]>(`${BASE}/suppliers`);
@@ -65,7 +65,7 @@ export async function fetchDiscountTypes(): Promise<DiscountType[]> {
 }
 
 export async function fetchPaymentTerms(): Promise<PaymentTerm[]> {
-    return fetchData<PaymentTerm[]>("/api/scm/supplier-management/payment-terms");
+    return fetchData<PaymentTerm[]>("/api/ids/scm/supplier-management/payment-terms");
 }
 
 /** ✅ Save PO to API route */

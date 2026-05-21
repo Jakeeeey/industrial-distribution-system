@@ -1,4 +1,4 @@
-// src/modules/supply-chain-management/supplier-management/purchase-order-creation/components/PurchaseOrderSummary.tsx
+// src/modules/industrial-distribution-system/supply-chain-management/supplier-management/purchase-order-creation/components/PurchaseOrderSummary.tsx
 "use client";
 
 import * as React from "react";

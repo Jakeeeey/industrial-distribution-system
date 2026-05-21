@@ -16,7 +16,7 @@ import { NavUser } from "@/components/shared/app-sidebar/nav-user";
 
 import { cookies } from "next/headers";
 
-import CreatePurchaseOrderModule from "@/modules/supply-chain-management/supplier-management/purchase-order-creation/CreatePurchaseOrderModule";
+import CreatePurchaseOrderModule from "@/modules/industrial-distribution-system/supply-chain-management/supplier-management/purchase-order-creation/CreatePurchaseOrderModule";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

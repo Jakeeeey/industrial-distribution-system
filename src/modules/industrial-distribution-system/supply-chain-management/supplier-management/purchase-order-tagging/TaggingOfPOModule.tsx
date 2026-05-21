@@ -1,4 +1,4 @@
-// src/modules/supply-chain-management/supplier-management/purchase-order-tagging/TaggingOfPOModule.tsx
+// src/modules/industrial-distribution-system/supply-chain-management/supplier-management/purchase-order-tagging/TaggingOfPOModule.tsx
 "use client";
 
 import * as React from "react";
@@ -69,7 +69,7 @@ export default function TaggingOfPOModule() {
 
     const [searchQuery, setSearchQuery] = React.useState("");
     const [pos, setPos] = React.useState<TaggablePOListItem[]>([]);
-    
+
     // ✅ Filtered list based on search
     const filteredPos = React.useMemo(() => {
         const q = searchQuery.trim().toLowerCase();
@@ -296,7 +296,7 @@ export default function TaggingOfPOModule() {
             setLoadingDetail(true);
             const data = await provider.updateTaggingStatus(selectedId, "send_partially_tagged");
             if (data) onDetailChange(data);
-            
+
             toast.success("Ready for Receiving", {
                 description: "This PO status is now updated and visible in Receiving Products."
             });

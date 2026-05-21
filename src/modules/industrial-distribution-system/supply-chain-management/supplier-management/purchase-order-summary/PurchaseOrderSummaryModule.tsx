@@ -120,7 +120,7 @@ export default function PurchaseOrderSummaryModule({
     async function load() {
       setIsLoadingDetails(true);
       try {
-        const res = await fetch("/api/scm/supplier-management/purchase-order-summary", {
+        const res = await fetch("/api/ids/scm/supplier-management/purchase-order-summary", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "get_po_details", poId: selectedPO!.purchase_order_id }),

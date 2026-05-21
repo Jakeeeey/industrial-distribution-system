@@ -147,7 +147,7 @@ type Ctx = {
     // ✅ NEW: Verification/Checklist
     verifiedProductIds: string[];
     toggleProductVerification: (productId: string) => void;
-    
+
     // ✅ NEW: Extra Product
     getSupplierProducts: (supplierId: string) => Promise<{ productId: string; name: string; sku: string; barcode: string; unitPrice: number; uom: string; discountType: string; discountPercent: number; }[]>;
     addExtraProductLocally: (item: { productId: string; name: string; barcode: string; branchId: string; branchName: string; unitPrice?: number; discountType?: string; discountPercent?: number; uom?: string; sku?: string; }) => boolean;
@@ -188,7 +188,7 @@ export function todayYMD() {
     return `${yyyy}-${mm}-${dd}`;
 }
 
-const API_URL = "/api/scm/supplier-management/purchase-order-receiving-manual";
+const API_URL = "/api/ids/scm/supplier-management/purchase-order-receiving-manual";
 
 // ✅ PERSISTENCE: localStorage helpers
 const DRAFT_KEY_PREFIX = "scm_manual_draft_";
@@ -552,7 +552,7 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
                 const uPrice = item.unitPrice || 0;
                 const dPct = item.discountPercent || 0;
                 const dAmt = Number((uPrice * (dPct / 100)).toFixed(2));
-                
+
                 branchAlloc.items = [...branchAlloc.items, {
                     id: `${item.productId}-${item.branchId}`,
                     porId: "",
@@ -579,7 +579,7 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
             updated.allocations = allocs;
             return updated;
         });
-        
+
         // Auto-verify if added
         if (added) {
             setVerifiedProductIds(prev => [...new Set([...prev, item.productId])]);
@@ -601,7 +601,7 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
         setManualCounts(prev => {
             const next = { ...prev };
             // Find all instances across branches (unlikely for extra but safe)
-            delete next[productId]; 
+            delete next[productId];
             // In manual receiving, IDs in manualCounts are often productId or productId-branchId
             // Let's just clear anything matching
             Object.keys(next).forEach(k => {
@@ -724,7 +724,7 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
                     rfids: []
                 };
             });
-            
+
             toast.success(`Receipt ${oldReceiptNo} saved successfully!`);
 
             // ✅ mark success for UI

@@ -1,7 +1,7 @@
-// src/modules/supply-chain-management/supplier-management/purchase-order-tagging/providers/fetchProviders.ts
+// src/modules/industrial-distribution-system/supply-chain-management/supplier-management/purchase-order-tagging/providers/fetchProviders.ts
 import type { TaggablePOListItem, TaggingPODetail } from "../types";
 
-const API = "/api/scm/supplier-management/purchase-order-tagging";
+const API = "/api/ids/scm/supplier-management/purchase-order-tagging";
 
 async function asJson(res: Response) {
     const json = await res.json().catch(() => ({}));

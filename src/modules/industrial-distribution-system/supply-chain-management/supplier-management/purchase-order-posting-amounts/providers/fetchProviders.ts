@@ -17,7 +17,7 @@ async function fetchData<T>(url: string, init?: RequestInit): Promise<T> {
     return json as T;
 }
 
-const BASE = "/api/scm/supplier-management/purchase-order-posting";
+const BASE = "/api/ids/scm/supplier-management/purchase-order-posting";
 
 export async function fetchPendingPOs(): Promise<POListItem[]> {
     return fetchData<POListItem[]>(BASE);
