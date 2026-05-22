@@ -1,4 +1,4 @@
-// src/app/api/scm/inventory-management/physical-inventory/serial-onhand/all/route.ts
+// src/app/api/ids/scm/inventory-management/physical-inventory/serial-onhand/all/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -81,7 +81,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
                     },
                 });
             }
-            
+
             const data = await fallbackRes.json();
             return NextResponse.json({ ok: true, data });
         }
