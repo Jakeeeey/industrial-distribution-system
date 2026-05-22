@@ -19,7 +19,7 @@ export function useAssets() {
       setIsLoading(true);
       setError({ hasError: false });
 
-      const response = await fetch("/api/fm/asset-management");
+      const response = await fetch("/api/ids/fm/asset-management");
       if (!response.ok) throw new Error("Failed to fetch data from server");
 
       const result = await response.json();

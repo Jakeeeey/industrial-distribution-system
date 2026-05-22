@@ -1,4 +1,4 @@
-// src/app/api/fm/treasury/salesman-expense-approval/route.ts
+// src/app/api/ids/fm/treasury/salesman-expense-approval/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
@@ -28,7 +28,7 @@ async function directusFetch(path: string, init?: RequestInit) {
   const cookieStore = await cookies();
   const userToken = cookieStore.get(COOKIE_NAME)?.value;
   const computedHeaders = { ...authHeaders(), ...(init?.headers as Record<string, string> || {}) };
-  
+
   if (!computedHeaders.Authorization && userToken) {
     computedHeaders.Authorization = `Bearer ${userToken}`;
   }
@@ -142,7 +142,7 @@ export async function GET(req: NextRequest) {
       let expFilter = `/items/expense_draft?filter[encoded_by][_eq]=${employeeId}` +
         `&filter[division_id][_eq]=${divisionId_ref}` +
         `&filter[status][_in]=Drafts,Rejected`;
-      
+
       if (startDate && endDate) {
         expFilter += `&filter[transaction_date][_between]=${startDate},${endDate}`;
       }
@@ -278,7 +278,7 @@ export async function GET(req: NextRequest) {
 
         // Wait! Directus doesn't support subqueries in filter JSON usually.
         // Let's do it in two steps for expense_logs if needed, or just fetch ALL for the logIds via payables.
-        
+
         // Actually, let's fetch expense_ids from payables first.
         const pResForIds = await directusFetch(`/items/disbursement_payables_draft?filter[disbursement_id][_in]=${logIds.join(",")}&fields=expense_id&limit=-1`);
         const pRowsForIds = (pResForIds.data as { data?: Record<string, unknown>[] })?.data ?? [];
@@ -289,13 +289,13 @@ export async function GET(req: NextRequest) {
         }).filter(id => !isNaN(id) && id > 0))];
 
         if (expenseIdsForAudit.length > 0) {
-           const finalElRes = await directusFetch(`/items/expense_draft_logs?filter[expense_id][_in]=${expenseIdsForAudit.join(",")}&fields=log_id,expense_id,action,changed_by,changed_at,amount,remarks,particulars,status&limit=-1`);
-           allExpenseLogs = (finalElRes.data as { data?: Record<string, unknown>[] })?.data ?? [];
+          const finalElRes = await directusFetch(`/items/expense_draft_logs?filter[expense_id][_in]=${expenseIdsForAudit.join(",")}&fields=log_id,expense_id,action,changed_by,changed_at,amount,remarks,particulars,status&limit=-1`);
+          allExpenseLogs = (finalElRes.data as { data?: Record<string, unknown>[] })?.data ?? [];
         }
 
         allVotes = (vRes.data as { data?: Record<string, unknown>[] })?.data ?? [];
         allDraftLogs = (dlRes.data as { data?: Record<string, unknown>[] })?.data ?? [];
-        
+
         // Resolve user names for all actors
         const voteUids = [...new Set([
           ...allVotes.map(v => Number(v.approver_id)),
@@ -315,10 +315,10 @@ export async function GET(req: NextRequest) {
         const coaIdsForLogs = [...new Set(allExpenseLogs.map(l => Number(l.particulars)).filter(Boolean))];
         const coaMapForLogs: Record<number, string> = {};
         if (coaIdsForLogs.length > 0) {
-           const cRes = await directusFetch(`/items/chart_of_accounts?filter[coa_id][_in]=${coaIdsForLogs.join(",")}&fields=coa_id,account_title&limit=-1`);
-           for (const c of (cRes.data as { data?: Record<string, unknown>[] })?.data ?? []) {
-             coaMapForLogs[Number(c.coa_id)] = String(c.account_title ?? "");
-           }
+          const cRes = await directusFetch(`/items/chart_of_accounts?filter[coa_id][_in]=${coaIdsForLogs.join(",")}&fields=coa_id,account_title&limit=-1`);
+          for (const c of (cRes.data as { data?: Record<string, unknown>[] })?.data ?? []) {
+            coaMapForLogs[Number(c.coa_id)] = String(c.account_title ?? "");
+          }
         }
 
         const formattedLogs = visibleLogs.map((log) => {
@@ -336,7 +336,7 @@ export async function GET(req: NextRequest) {
             .filter(l => Number(l.draft_id) === Number(log.id))
             .map(l => {
               let snapshot = { old_total: 0, new_total: 0 };
-              try { snapshot = JSON.parse(String(l.payload_snapshot || "{}")); } catch {}
+              try { snapshot = JSON.parse(String(l.payload_snapshot || "{}")); } catch { }
               return {
                 id: Number(l.id),
                 editor_name: userMap[Number(l.editor_id)] || `User #${l.editor_id}`,
@@ -350,8 +350,8 @@ export async function GET(req: NextRequest) {
           // Match expense logs using the mapping
           const currentExpenseIds = pRowsForIds
             .filter(pr => {
-               const draftId = typeof pr.disbursement_id === "object" && pr.disbursement_id !== null ? (pr.disbursement_id as { id: number }).id : pr.disbursement_id;
-               return Number(draftId) === Number(log.id);
+              const draftId = typeof pr.disbursement_id === "object" && pr.disbursement_id !== null ? (pr.disbursement_id as { id: number }).id : pr.disbursement_id;
+              return Number(draftId) === Number(log.id);
             })
             .map(pr => {
               const raw = pr.expense_id;
@@ -362,15 +362,15 @@ export async function GET(req: NextRequest) {
           const expenseLogs = allExpenseLogs
             .filter(l => currentExpenseIds.includes(Number(l.expense_id)))
             .map(l => ({
-               id: Number(l.log_id),
-               expense_id: Number(l.expense_id),
-               action: String(l.action || ""),
-               editor_name: userMap[Number(l.changed_by)] || `User #${l.changed_by}`,
-               changed_at: String(l.changed_at || ""),
-               amount: Number(l.amount || 0),
-               remarks: l.remarks ? String(l.remarks) : null,
-               particulars: coaMapForLogs[Number(l.particulars)] || String(l.particulars || ""),
-               status: String(l.status || ""),
+              id: Number(l.log_id),
+              expense_id: Number(l.expense_id),
+              action: String(l.action || ""),
+              editor_name: userMap[Number(l.changed_by)] || `User #${l.changed_by}`,
+              changed_at: String(l.changed_at || ""),
+              amount: Number(l.amount || 0),
+              remarks: l.remarks ? String(l.remarks) : null,
+              particulars: coaMapForLogs[Number(l.particulars)] || String(l.particulars || ""),
+              status: String(l.status || ""),
             }));
 
           return {
@@ -722,7 +722,7 @@ export async function POST(req: NextRequest) {
       // 6a. UPDATE existing disbursement_draft
       docNo = existingDocNo || `NT-?`;
       disbursementId = existingDisbursementId;
-      
+
       await directusFetch(`/items/disbursement_draft/${disbursementId}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
@@ -742,21 +742,21 @@ export async function POST(req: NextRequest) {
         `/items/disbursement_payables_draft?filter[disbursement_id][_eq]=${disbursementId}&fields=id,coa_id,amount,remarks,date,reference_no,expense_id&limit=-1`
       );
       const oldPRows = (oldPRes.data as { data?: Record<string, unknown>[] })?.data ?? [];
-      
+
       const patchedPayablesLogPayloads = [];
 
       for (const old of oldPRows) {
         const matchedExpense = selectedExpenses.find(e => Number(e.id) === Number(old.expense_id));
         const finalAmount = matchedExpense ? Number(matchedExpense.amount) : 0;
-        
+
         if (Number(old.amount) !== finalAmount) {
           patchedPayablesLogPayloads.push({
-             coa_id: Number(old.coa_id) || null,
-             original_amount: Number(old.amount),
-             new_amount: finalAmount,
-             remarks: String(old.remarks || ""),
-             date: String(old.date || ""),
-             reference_no: String(old.reference_no || ""),
+            coa_id: Number(old.coa_id) || null,
+            original_amount: Number(old.amount),
+            new_amount: finalAmount,
+            remarks: String(old.remarks || ""),
+            date: String(old.date || ""),
+            reference_no: String(old.reference_no || ""),
           });
         }
       }

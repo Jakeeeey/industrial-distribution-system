@@ -1,4 +1,4 @@
-// src/app/api/fm/treasury/budgeting/user-expense-limit/route.ts
+// src/app/api/ids/fm/treasury/budgeting/user-expense-limit/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
@@ -6,13 +6,13 @@ import { cookies } from "next/headers";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const DIRECTUS_URL   = process.env.NEXT_PUBLIC_API_BASE_URL;
+const DIRECTUS_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 const DIRECTUS_TOKEN = process.env.DIRECTUS_STATIC_TOKEN;
-const COOKIE_NAME    = "vos_access_token";
+const COOKIE_NAME = "vos_access_token";
 
 // ─── Shared department type ────────────────────────────────────────────────────
 interface Department {
-  department_id:   number;
+  department_id: number;
   department_name: string;
 }
 
@@ -35,10 +35,10 @@ type RawDepartmentField =
   | undefined;
 
 interface DirectusUser {
-  user_id:         number;
-  user_fname:      string | null;
-  user_lname:      string | null;
-  user_email:      string | null;
+  user_id: number;
+  user_fname: string | null;
+  user_lname: string | null;
+  user_email: string | null;
   user_department: RawDepartmentField;
 }
 
@@ -53,7 +53,7 @@ function parseDeptId(raw: RawDepartmentField): number | undefined {
   if (typeof raw === "number") return raw;
   if (raw && typeof raw === "object") {
     const id = raw.department_id ?? raw.id;
-    const n  = Number(id);
+    const n = Number(id);
     return isNaN(n) ? undefined : n;
   }
   return undefined;
@@ -64,7 +64,7 @@ function parseDeptId(raw: RawDepartmentField): number | undefined {
 // (no action)             → all limits with joined user info
 export async function GET(request: NextRequest) {
   const cookieStore = await cookies();
-  const token       = cookieStore.get(COOKIE_NAME)?.value;
+  const token = cookieStore.get(COOKIE_NAME)?.value;
   if (!token) {
     return NextResponse.json({ ok: false, message: "Unauthorized" }, { status: 401 });
   }
@@ -99,10 +99,10 @@ export async function GET(request: NextRequest) {
       ]);
 
       const existingJson = await existingRes.json() as { data?: { user_id: number }[] };
-      const usersJson    = await usersRes.json()    as { data?: DirectusUser[] };
+      const usersJson = await usersRes.json() as { data?: DirectusUser[] };
 
       const takenIds = new Set((existingJson.data ?? []).map(r => r.user_id));
-      const deptMap  = Object.fromEntries(depts.map(d => [d.department_id, d.department_name]));
+      const deptMap = Object.fromEntries(depts.map(d => [d.department_id, d.department_name]));
 
       const available = (usersJson.data ?? [])
         .filter(u => !takenIds.has(u.user_id))
@@ -138,7 +138,7 @@ export async function GET(request: NextRequest) {
     ]);
 
     const limitsJson = await limitsRes.json() as { data?: Record<string, unknown>[] };
-    const usersJson  = await usersRes.json()  as { data?: DirectusUser[] };
+    const usersJson = await usersRes.json() as { data?: DirectusUser[] };
 
     const userMap = Object.fromEntries(
       (usersJson.data ?? []).map(u => [u.user_id, u])
@@ -149,21 +149,21 @@ export async function GET(request: NextRequest) {
     );
 
     const enriched = (limitsJson.data ?? []).map(l => {
-      const userId = l.user_id    as number;
-      const cbId   = l.created_by as number | null;
-      const ubId   = l.updated_by as number | null;
+      const userId = l.user_id as number;
+      const cbId = l.created_by as number | null;
+      const ubId = l.updated_by as number | null;
 
-      const u  = userMap[userId];
+      const u = userMap[userId];
       const cb = cbId ? userMap[cbId] : undefined;
       const ub = ubId ? userMap[ubId] : undefined;
 
       const deptId = parseDeptId(u?.user_department);    // ← no `any`
-      const dept   = deptId ? deptMap[deptId] : undefined;
+      const dept = deptId ? deptMap[deptId] : undefined;
 
       return {
         ...l,
-        user_name:       fullName(u),
-        user_email:      u?.user_email ?? null,
+        user_name: fullName(u),
+        user_email: u?.user_email ?? null,
         user_department: dept ?? null,
         created_by_name: fullName(cb),
         updated_by_name: fullName(ub),
@@ -186,13 +186,13 @@ export async function GET(request: NextRequest) {
 // ─── Decode JWT payload to get current user_id ────────────────────────────────
 function decodeJwtUserId(token: string): number | null {
   try {
-    const parts   = token.split(".");
+    const parts = token.split(".");
     if (parts.length !== 3) return null;
     const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const padded  = payload + "=".repeat((4 - payload.length % 4) % 4);
+    const padded = payload + "=".repeat((4 - payload.length % 4) % 4);
     const decoded = JSON.parse(Buffer.from(padded, "base64").toString("utf-8")) as Record<string, unknown>;
     const sub = decoded.sub ?? decoded.user_id ?? decoded.userId ?? decoded.id;
-    const id  = Number(sub);
+    const id = Number(sub);
     return isNaN(id) ? null : id;
   } catch {
     return null;
@@ -202,7 +202,7 @@ function decodeJwtUserId(token: string): number | null {
 // ─── POST /api/user-expense-limit ─────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies();
-  const token       = cookieStore.get(COOKIE_NAME)?.value;
+  const token = cookieStore.get(COOKIE_NAME)?.value;
   if (!token) return NextResponse.json({ ok: false, message: "Unauthorized" }, { status: 401 });
 
   const currentUserId = decodeJwtUserId(token);
@@ -218,21 +218,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const res  = await fetch(`${DIRECTUS_URL}/items/user_expense_ceiling`, {
-      method:  "POST",
+    const res = await fetch(`${DIRECTUS_URL}/items/user_expense_ceiling`, {
+      method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${DIRECTUS_TOKEN}` },
-      body:    JSON.stringify({
+      body: JSON.stringify({
         user_id,
         expense_limit,
         created_by: currentUserId,
       }),
-      cache:   "no-store",
+      cache: "no-store",
     });
 
     const json = await res.json() as Record<string, unknown>;
     if (!res.ok) {
       const errors = json?.errors as Record<string, unknown>[] | undefined;
-      const msg    = errors?.[0]?.message ? String(errors[0].message) : "Failed to create.";
+      const msg = errors?.[0]?.message ? String(errors[0].message) : "Failed to create.";
       return NextResponse.json({ ok: false, message: msg }, { status: res.status });
     }
 

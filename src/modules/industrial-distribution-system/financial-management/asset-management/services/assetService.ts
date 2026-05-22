@@ -1,7 +1,7 @@
 import { AssetFormValues } from "../types";
 import { format } from "date-fns";
 
-const API_ROUTE = "/api/fm/asset-management";
+const API_ROUTE = "/api/ids/fm/asset-management";
 
 async function apiRequest(url: string, options?: RequestInit) {
   const res = await fetch(url, options);

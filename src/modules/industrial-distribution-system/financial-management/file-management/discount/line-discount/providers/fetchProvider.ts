@@ -23,7 +23,7 @@ function errMsg(payload: unknown, fallback: string) {
 
 export async function listLineDiscounts(): Promise<LineDiscountRow[]> {
   const res = await fetch(
-    "/api/fm/file-management/discount/line-discount?limit=-1",
+    "/api/ids/fm/file-management/discount/line-discount?limit=-1",
     { cache: "no-store" },
   );
   const payload = await safeJson(res);
@@ -36,7 +36,7 @@ export async function listLineDiscounts(): Promise<LineDiscountRow[]> {
 export async function createLineDiscount(
   input: LineDiscountUpsert,
 ): Promise<LineDiscountRow> {
-  const res = await fetch("/api/fm/file-management/discount/line-discount", {
+  const res = await fetch("/api/ids/fm/file-management/discount/line-discount", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -55,7 +55,7 @@ export async function updateLineDiscount(
   input: LineDiscountUpsert,
 ): Promise<LineDiscountRow> {
   const res = await fetch(
-    `/api/fm/file-management/discount/line-discount?id=${encodeURIComponent(String(id))}`,
+    `/api/ids/fm/file-management/discount/line-discount?id=${encodeURIComponent(String(id))}`,
     {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -71,7 +71,7 @@ export async function updateLineDiscount(
 
 export async function deleteLineDiscount(id: number): Promise<void> {
   const res = await fetch(
-    `/api/fm/file-management/discount/line-discount?id=${encodeURIComponent(String(id))}`,
+    `/api/ids/fm/file-management/discount/line-discount?id=${encodeURIComponent(String(id))}`,
     {
       method: "DELETE",
     },

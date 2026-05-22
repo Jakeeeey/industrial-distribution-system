@@ -1,27 +1,27 @@
-// src/app/api/fm/reports/tax-calendar/[id]/route.ts
+// src/app/api/ids/fm/reports/tax-calendar/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const DIRECTUS_URL   = process.env.NEXT_PUBLIC_API_BASE_URL;
+const DIRECTUS_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 const DIRECTUS_TOKEN = process.env.DIRECTUS_STATIC_TOKEN;
-const COOKIE_NAME    = 'vos_access_token';
+const COOKIE_NAME = 'vos_access_token';
 
 
 
-// ─── PATCH /api/fm/reports/tax-calendar/[id] ──────────────────────────────────
+// ─── PATCH /api/ids/fm/reports/tax-calendar/[id] ──────────────────────────────────
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const cookieStore = await cookies();
-  const token       = cookieStore.get(COOKIE_NAME)?.value;
-  
+  const token = cookieStore.get(COOKIE_NAME)?.value;
+
   if (!token) {
     return NextResponse.json(
-      { ok: false, message: 'Unauthorized' }, 
+      { ok: false, message: 'Unauthorized' },
       { status: 401 }
     );
   }
@@ -48,16 +48,16 @@ export async function PATCH(
     if (amount_paid !== undefined) updateData.amount_paid = amount_paid ? Number(amount_paid) : null;
 
     const res = await fetch(`${DIRECTUS_URL}/items/tax_activities/${id}`, {
-      method:  'PATCH',
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${DIRECTUS_TOKEN}` },
-      body:    JSON.stringify(updateData),
-      cache:   'no-store',
+      body: JSON.stringify(updateData),
+      cache: 'no-store',
     });
 
     const json = await res.json() as Record<string, unknown>;
     if (!res.ok) {
       const errors = json?.errors as Record<string, unknown>[] | undefined;
-      const msg    = errors?.[0]?.message ? String(errors[0].message) : 'Failed to update';
+      const msg = errors?.[0]?.message ? String(errors[0].message) : 'Failed to update';
       console.error('[TAX-CAL PATCH] Directus error:', msg);
       return NextResponse.json({ ok: false, message: msg }, { status: res.status });
     }

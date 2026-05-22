@@ -9,7 +9,7 @@ import type {
   ApprovalLogDetail,
 } from "../type";
 
-const BASE = "/api/fm/treasury/salesman-expense-approval";
+const BASE = "/api/ids/fm/treasury/salesman-expense-approval";
 
 async function apiFetch(url: string, init?: RequestInit): Promise<unknown> {
   const res = await fetch(url, { cache: "no-store", ...init });

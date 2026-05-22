@@ -9,7 +9,7 @@ import type {
   VotePayload,
 } from "../type";
 
-const BASE = "/api/fm/treasury/bulk-approval";
+const BASE = "/api/ids/fm/treasury/bulk-approval";
 
 async function apiFetch(url: string, init?: RequestInit): Promise<unknown> {
   const res = await fetch(url, { cache: "no-store", ...init });

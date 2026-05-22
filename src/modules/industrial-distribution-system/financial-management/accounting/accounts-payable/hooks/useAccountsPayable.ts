@@ -12,28 +12,28 @@ import type {
 } from '../types';
 
 interface UseAPResult {
-  loading:      boolean;
-  error:        string | null;
-  records:      APRecord[];
-  agingData:    AgingBucket[];
+  loading: boolean;
+  error: string | null;
+  records: APRecord[];
+  agingData: AgingBucket[];
   supplierData: SupplierEntry[];
-  statusData:   StatusEntry[];
-  metrics:      APMetrics;
+  statusData: StatusEntry[];
+  metrics: APMetrics;
 }
 
 export function useAccountsPayable(): UseAPResult {
-  const [loading,      setLoading]      = useState(true);
-  const [error,        setError]        = useState<string | null>(null);
-  const [records,      setRecords]      = useState<APRecord[]>([]);
-  const [agingData,    setAgingData]    = useState<AgingBucket[]>([
-    { range: '0–30 Days',  amount: 0 },
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [records, setRecords] = useState<APRecord[]>([]);
+  const [agingData, setAgingData] = useState<AgingBucket[]>([
+    { range: '0–30 Days', amount: 0 },
     { range: '31–60 Days', amount: 0 },
     { range: '61–90 Days', amount: 0 },
-    { range: '91+ Days',   amount: 0 },
+    { range: '91+ Days', amount: 0 },
   ]);
   const [supplierData, setSupplierData] = useState<SupplierEntry[]>([]);
-  const [statusData,   setStatusData]   = useState<StatusEntry[]>([]);
-  const [metrics,      setMetrics]      = useState<APMetrics>({
+  const [statusData, setStatusData] = useState<StatusEntry[]>([]);
+  const [metrics, setMetrics] = useState<APMetrics>({
     totalPayable: 0, totalPaid: 0, totalOutstanding: 0, overdueCount: 0, totalRecords: 0,
   });
 
@@ -43,11 +43,11 @@ export function useAccountsPayable(): UseAPResult {
       try {
         const params = new URLSearchParams({
           startDate: '2020-01-01',
-          endDate:   new Date().toISOString().split('T')[0],
+          endDate: new Date().toISOString().split('T')[0],
         });
 
         const res = await fetch(
-          `/api/fm/accounting/accounts-payable?${params}`,
+          `/api/ids/fm/accounting/accounts-payable?${params}`,
           { credentials: 'include' }
         );
         if (!res.ok) throw new Error(`Request failed: ${res.status} ${res.statusText}`);
@@ -61,7 +61,7 @@ export function useAccountsPayable(): UseAPResult {
           ? result
           : (result.data ?? result.content ?? result.transactions ?? []);
 
-        const transformed  = transformAPRows(rows);
+        const transformed = transformAPRows(rows);
         setRecords(transformed);
         setAgingData(buildAgingBuckets(transformed));
         setSupplierData(buildSupplierData(transformed));

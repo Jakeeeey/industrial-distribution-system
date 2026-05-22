@@ -52,7 +52,7 @@ export default function PaymentTermsModule({ currentUserId }: PaymentTermsModule
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  
+
   // 1. Add state to hold the term currently being edited
   const [termToEdit, setTermToEdit] = useState<PaymentTerm | null>(null);
 
@@ -60,7 +60,7 @@ export default function PaymentTermsModule({ currentUserId }: PaymentTermsModule
     try {
       setIsLoading(true);
       // Ensure we always fetch fresh data and bypass any browser cache
-      const res = await fetch("/api/fm/accounting/supplier-management/payment-terms", { cache: "no-store" });
+      const res = await fetch("/api/ids/fm/accounting/supplier-management/payment-terms", { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         setTerms(data);
@@ -178,11 +178,11 @@ export default function PaymentTermsModule({ currentUserId }: PaymentTermsModule
       </div>
 
       {/* 2. Pass the onEdit prop to the table to resolve the error */}
-      <PaymentTermsTable 
-        terms={paginatedTerms} 
-        isLoading={isLoading} 
+      <PaymentTermsTable
+        terms={paginatedTerms}
+        isLoading={isLoading}
         searchQuery={searchQuery}
-        onEdit={(term) => setTermToEdit(term)} 
+        onEdit={(term) => setTermToEdit(term)}
       />
 
       {!isLoading && tableTerms.length > 0 ? (
@@ -214,52 +214,52 @@ export default function PaymentTermsModule({ currentUserId }: PaymentTermsModule
             {totalPages > 1 ? (
               <Pagination className="mx-0 w-auto justify-start sm:justify-end">
                 <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    href="#"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      setCurrentPage((page) => Math.max(1, page - 1));
-                    }}
-                    aria-disabled={safeCurrentPage === 1}
-                    className={safeCurrentPage === 1 ? "pointer-events-none opacity-50" : ""}
-                  />
-                </PaginationItem>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      href="#"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        setCurrentPage((page) => Math.max(1, page - 1));
+                      }}
+                      aria-disabled={safeCurrentPage === 1}
+                      className={safeCurrentPage === 1 ? "pointer-events-none opacity-50" : ""}
+                    />
+                  </PaginationItem>
 
-                {pageNumbers.map((pageNumber, index) =>
-                  pageNumber === "ellipsis" ? (
-                    <PaginationItem key={`ellipsis-${index}`}>
-                      <PaginationEllipsis />
-                    </PaginationItem>
-                  ) : (
-                    <PaginationItem key={pageNumber}>
-                      <PaginationLink
-                        href="#"
-                        isActive={safeCurrentPage === pageNumber}
-                        onClick={(event) => {
-                          event.preventDefault();
-                          setCurrentPage(pageNumber);
-                        }}
-                      >
-                        {pageNumber}
-                      </PaginationLink>
-                    </PaginationItem>
-                  ),
-                )}
+                  {pageNumbers.map((pageNumber, index) =>
+                    pageNumber === "ellipsis" ? (
+                      <PaginationItem key={`ellipsis-${index}`}>
+                        <PaginationEllipsis />
+                      </PaginationItem>
+                    ) : (
+                      <PaginationItem key={pageNumber}>
+                        <PaginationLink
+                          href="#"
+                          isActive={safeCurrentPage === pageNumber}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            setCurrentPage(pageNumber);
+                          }}
+                        >
+                          {pageNumber}
+                        </PaginationLink>
+                      </PaginationItem>
+                    ),
+                  )}
 
-                <PaginationItem>
-                  <PaginationNext
-                    href="#"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      setCurrentPage((page) => Math.min(totalPages, page + 1));
-                    }}
-                    aria-disabled={safeCurrentPage === totalPages}
-                    className={safeCurrentPage === totalPages ? "pointer-events-none opacity-50" : ""}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
+                  <PaginationItem>
+                    <PaginationNext
+                      href="#"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        setCurrentPage((page) => Math.min(totalPages, page + 1));
+                      }}
+                      aria-disabled={safeCurrentPage === totalPages}
+                      className={safeCurrentPage === totalPages ? "pointer-events-none opacity-50" : ""}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
             ) : null}
           </div>
         </div>
@@ -270,7 +270,7 @@ export default function PaymentTermsModule({ currentUserId }: PaymentTermsModule
         <EditPaymentTermDialog
           term={termToEdit}
           open={!!termToEdit}
-         onOpenChange={(open: boolean) => !open && setTermToEdit(null)}
+          onOpenChange={(open: boolean) => !open && setTermToEdit(null)}
           onSuccess={() => {
             fetchTerms();
             setTermToEdit(null);

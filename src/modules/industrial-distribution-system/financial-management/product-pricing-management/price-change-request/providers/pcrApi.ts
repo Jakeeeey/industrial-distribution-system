@@ -9,10 +9,10 @@ import type {
 } from "../types";
 
 /** Existing consolidated lookups route */
-const LOOKUPS_ENDPOINT = "/api/fm/product-pricing/lookups";
+const LOOKUPS_ENDPOINT = "/api/ids/fm/product-pricing/lookups";
 
 /** Existing products route (DO NOT CHANGE route.ts; we only consume it) */
-const PRODUCT_SEARCH_ENDPOINT = "/api/fm/product-pricing/products";
+const PRODUCT_SEARCH_ENDPOINT = "/api/ids/fm/product-pricing/products";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null;
@@ -70,12 +70,12 @@ export async function listRequests(query: ListQuery) {
     sp.set("page_size", String(query.page_size ?? 50));
 
     return http<{ data: PriceChangeRequestRow[]; meta: ListMeta | null }>(
-        `/api/fm/product-pricing/price-change-requests?${sp.toString()}`,
+        `/api/ids/fm/product-pricing/price-change-requests?${sp.toString()}`,
     );
 }
 
 export async function createRequest(payload: CreatePCRPayload) {
-    return http<{ data: PriceChangeRequestRow }>(`/api/fm/product-pricing/price-change-requests`, {
+    return http<{ data: PriceChangeRequestRow }>(`/api/ids/fm/product-pricing/price-change-requests`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -83,7 +83,7 @@ export async function createRequest(payload: CreatePCRPayload) {
 }
 
 export async function actionRequest(payload: ActionPayload) {
-    return http<{ data: PriceChangeRequestRow }>(`/api/fm/product-pricing/price-change-requests/actions`, {
+    return http<{ data: PriceChangeRequestRow }>(`/api/ids/fm/product-pricing/price-change-requests/actions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -100,12 +100,12 @@ export async function listCostRequests(query: ListQuery) {
     sp.set("page_size", String(query.page_size ?? 50));
 
     return http<{ data: CostChangeRequestRow[]; meta: ListMeta | null }>(
-        `/api/fm/product-pricing/cost-change-requests?${sp.toString()}`,
+        `/api/ids/fm/product-pricing/cost-change-requests?${sp.toString()}`,
     );
 }
 
 export async function createCostRequest(payload: CreateCCRPayload) {
-    return http<{ data: CostChangeRequestRow }>(`/api/fm/product-pricing/cost-change-requests`, {
+    return http<{ data: CostChangeRequestRow }>(`/api/ids/fm/product-pricing/cost-change-requests`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -113,7 +113,7 @@ export async function createCostRequest(payload: CreateCCRPayload) {
 }
 
 export async function actionCostRequest(payload: ActionPayload) {
-    return http<{ data: CostChangeRequestRow }>(`/api/fm/product-pricing/cost-change-requests/actions`, {
+    return http<{ data: CostChangeRequestRow }>(`/api/ids/fm/product-pricing/cost-change-requests/actions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

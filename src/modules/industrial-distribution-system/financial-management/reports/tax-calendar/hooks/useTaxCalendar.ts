@@ -4,24 +4,24 @@ import { toast } from 'sonner';
 import type { TaxActivity, TaxActivityForm } from '../types';
 
 interface UseTaxCalendarResult {
-  loading:    boolean;
-  error:      string | null;
+  loading: boolean;
+  error: string | null;
   activities: TaxActivity[];
-  refetch:    () => void;
-  create:     (form: TaxActivityForm) => Promise<boolean>;
-  update:     (id: string, form: TaxActivityForm) => Promise<boolean>;
+  refetch: () => void;
+  create: (form: TaxActivityForm) => Promise<boolean>;
+  update: (id: string, form: TaxActivityForm) => Promise<boolean>;
 }
 
 export function useTaxCalendar(): UseTaxCalendarResult {
-  const [loading,    setLoading]    = useState(true);
-  const [error,      setError]      = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activities, setActivities] = useState<TaxActivity[]>([]);
 
   const fetchData = useCallback(async () => {
     setLoading(true); setError(null);
     const toastId = toast.loading('Loading tax calendar data...');
     try {
-      const res = await fetch('/api/fm/reports/tax-calendar', { credentials: 'include' });
+      const res = await fetch('/api/ids/fm/reports/tax-calendar', { credentials: 'include' });
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
       const data = await res.json();
       setActivities(Array.isArray(data) ? data : (data.data ?? []));
@@ -40,11 +40,11 @@ export function useTaxCalendar(): UseTaxCalendarResult {
   const create = async (form: TaxActivityForm): Promise<boolean> => {
     const toastId = toast.loading('Creating tax activity...');
     try {
-      const res = await fetch('/api/fm/reports/tax-calendar', {
-        method:      'POST',
-        headers:     { 'Content-Type': 'application/json' },
+      const res = await fetch('/api/ids/fm/reports/tax-calendar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body:        JSON.stringify(form),
+        body: JSON.stringify(form),
       });
       if (!res.ok) throw new Error(`${res.status}`);
       await fetchData();
@@ -60,11 +60,11 @@ export function useTaxCalendar(): UseTaxCalendarResult {
   const update = async (id: string, form: TaxActivityForm): Promise<boolean> => {
     const toastId = toast.loading('Updating tax activity...');
     try {
-      const res = await fetch(`/api/fm/reports/tax-calendar/${id}`, {
-        method:      'PATCH',
-        headers:     { 'Content-Type': 'application/json' },
+      const res = await fetch(`/api/ids/fm/reports/tax-calendar/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body:        JSON.stringify(form),
+        body: JSON.stringify(form),
       });
       if (!res.ok) throw new Error(`${res.status}`);
       await fetchData();

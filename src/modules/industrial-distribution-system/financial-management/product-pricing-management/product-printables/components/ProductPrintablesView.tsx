@@ -29,8 +29,8 @@ function pickId(
   if (v === null || v === undefined) return null;
   const n = Number(
     (v as Record<string, unknown>)?.product_id ??
-      (v as Record<string, unknown>)?.id ??
-      v,
+    (v as Record<string, unknown>)?.id ??
+    v,
   );
   return Number.isFinite(n) && n > 0 ? n : null;
 }
@@ -127,7 +127,7 @@ export default function ProductPrintablesView({
       sp.set("page_size", "-1"); // Custom param to fetch all
 
       const res = await fetch(
-        `/api/fm/product-pricing/printables?${sp.toString()}`,
+        `/api/ids/fm/product-pricing/printables?${sp.toString()}`,
       );
       if (!res.ok) throw new Error("Failed to fetch all products for printing");
       const json = await res.json();

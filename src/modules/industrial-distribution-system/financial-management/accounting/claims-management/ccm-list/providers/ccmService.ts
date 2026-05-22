@@ -19,7 +19,7 @@ export async function fetchCCMList(
     query: CCMListQuery,
     signal?: AbortSignal
 ): Promise<CCMListResponse> {
-    const url = `/api/fm/accounting/claims/ccm?${qs(query)}`;
+    const url = `/api/ids/fm/accounting/claims/ccm?${qs(query)}`;
 
     const res = await fetch(url, {
         method: "GET",

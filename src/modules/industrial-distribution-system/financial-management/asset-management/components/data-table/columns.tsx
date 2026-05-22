@@ -47,7 +47,7 @@ const AssetCell = ({
     <div className="h-10 w-10 overflow-hidden rounded-md border bg-muted flex items-center justify-center shrink-0">
       {imageId ? (
         <Image
-          src={`/api/fm/asset-management/asset-image-view?id=${imageId}`}
+          src={`/api/ids/fm/asset-management/asset-image-view?id=${imageId}`}
           width={100}
           height={100}
           alt={itemName}
@@ -262,10 +262,10 @@ export const columns: ColumnDef<AssetTableData>[] = [
           <span className="text-xs font-medium">
             {date
               ? new Intl.DateTimeFormat("en-US", {
-                  year: "numeric",
-                  month: "short",
-                  day: "numeric",
-                }).format(new Date(date))
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+              }).format(new Date(date))
               : "—"}
           </span>
         </div>
