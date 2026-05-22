@@ -11,7 +11,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { NavUser } from "@/components/shared/app-sidebar/nav-user";
-import ComingSoon from "@/app/(supply-chain-management)/scm/_components/ComingSoon";
+import ComingSoon from "@/app/(industrial-distribution-system)/ids/_components/ComingSoon";
 
 const headerUser = {
     name: "Jake Dave M. De Guzman",
