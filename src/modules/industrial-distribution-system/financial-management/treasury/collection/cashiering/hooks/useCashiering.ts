@@ -1,4 +1,4 @@
-import {useState, useEffect, useCallback} from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
     CashieringState,
     CurrentUser,
@@ -9,7 +9,7 @@ import {
     Denomination,
     COA
 } from "../../types";
-import {fetchProvider} from "../../providers/fetchProvider";
+import { fetchProvider } from "../../providers/fetchProvider";
 
 interface PouchDetailResponse {
     id: number;
@@ -55,11 +55,11 @@ export function useCashiering(currentUser: CurrentUser): CashieringState {
         setIsLoading(true);
         try {
             const [collectionsData, salesmenData, banksData, denomData, coasData] = await Promise.all([
-                fetchProvider.get<CollectionSummary[]>("/api/fm/treasury/collections"),
-                fetchProvider.get<Salesman[]>("/api/fm/treasury/salesmen"),
-                fetchProvider.get<Bank[]>("/api/fm/treasury/bank-names"),
-                fetchProvider.get<Denomination[]>("/api/fm/treasury/denominations"),
-                fetchProvider.get<COA[]>("/api/fm/treasury/coas")
+                fetchProvider.get<CollectionSummary[]>("/api/ids/fm/treasury/collections"),
+                fetchProvider.get<Salesman[]>("/api/ids/fm/treasury/salesmen"),
+                fetchProvider.get<Bank[]>("/api/ids/fm/treasury/bank-names"),
+                fetchProvider.get<Denomination[]>("/api/ids/fm/treasury/denominations"),
+                fetchProvider.get<COA[]>("/api/ids/fm/treasury/coas")
             ]);
 
             // 🚀 FIXED: Removed the Regex hack! The Next.js BFF formats this perfectly now.
@@ -76,7 +76,7 @@ export function useCashiering(currentUser: CurrentUser): CashieringState {
 
             if (denomData) {
                 setDenominationMaster(denomData);
-                const initialCounts = denomData.reduce((acc, d) => ({...acc, [d.id]: 0}), {});
+                const initialCounts = denomData.reduce((acc, d) => ({ ...acc, [d.id]: 0 }), {});
                 setDenominations(initialCounts);
             }
         } catch (error) {
@@ -97,7 +97,7 @@ export function useCashiering(currentUser: CurrentUser): CashieringState {
         setIsSheetOpen(true);    // 🚀 UX FIX: Open immediately so the user sees the slide-in animation!
 
         try {
-            const pouch = await fetchProvider.get<PouchDetailResponse>(`/api/fm/treasury/collections/${id}`);
+            const pouch = await fetchProvider.get<PouchDetailResponse>(`/api/ids/fm/treasury/collections/${id}`);
             if (pouch) {
                 setEditingId(id);
                 setSalesmanId(pouch.salesmanId.toString());
@@ -161,7 +161,7 @@ export function useCashiering(currentUser: CurrentUser): CashieringState {
         setEditingId(null);
         setSalesmanId("");
         setRemarks("");
-        setDenominations(denominationMaster.reduce((acc, d) => ({...acc, [d.id]: 0}), {}));
+        setDenominations(denominationMaster.reduce((acc, d) => ({ ...acc, [d.id]: 0 }), {}));
         setChecks([]);
     };
 
@@ -197,7 +197,7 @@ export function useCashiering(currentUser: CurrentUser): CashieringState {
 
         try {
             const method = editingId ? fetchProvider.put : fetchProvider.post;
-            const url = editingId ? `/api/fm/treasury/collections/${editingId}` : "/api/fm/treasury/collections/receive";
+            const url = editingId ? `/api/ids/fm/treasury/collections/${editingId}` : "/api/ids/fm/treasury/collections/receive";
             const res = await method<string>(url, payload);
             if (res) {
                 alert(editingId ? "Pouch updated!" : "Pouch secured!");
@@ -215,7 +215,7 @@ export function useCashiering(currentUser: CurrentUser): CashieringState {
     };
 
     return {
-        isSheetOpen, setIsSheetOpen,isSheetLoading, isSubmitting, masterList, salesmen, isLoading, salesmanId, setSalesmanId,
+        isSheetOpen, setIsSheetOpen, isSheetLoading, isSubmitting, masterList, salesmen, isLoading, salesmanId, setSalesmanId,
         collectionDate, setCollectionDate, remarks, setRemarks, denominations, handleDenomChange,
         denominationMaster, checks, banks, coas, addCheck, updateCheck, removeCheck, totalCash,
         totalChecks, grandTotal, handleSubmit, loadPouchForEdit, resetForm, editingId

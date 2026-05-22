@@ -19,7 +19,7 @@ interface UseEWTResult {
 
 export function useEWT(): UseEWTResult {
   const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [records, setRecords] = useState<EWTRecord[]>([]);
 
   useEffect(() => {
@@ -29,10 +29,10 @@ export function useEWT(): UseEWTResult {
         // Pass a wide range so all historical records are returned from the backend
         const params = new URLSearchParams({
           startDate: '2020-01-01',
-          endDate:   new Date().toISOString().split('T')[0],
+          endDate: new Date().toISOString().split('T')[0],
         });
 
-        const res = await fetch(`/api/fm/reports/ewt?${params}`, { credentials: 'include' });
+        const res = await fetch(`/api/ids/fm/reports/ewt?${params}`, { credentials: 'include' });
         const contentType = res.headers.get('content-type');
         if (!contentType?.includes('application/json')) {
           throw new Error('Backend did not return JSON');
@@ -58,8 +58,8 @@ export function useEWT(): UseEWTResult {
     fetchData();
   }, []);
 
-  const metrics    = useMemo(() => deriveMetrics(records),        [records]);
-  const aggregated = useMemo(() => aggregateByCustomer(records),  [records]);
+  const metrics = useMemo(() => deriveMetrics(records), [records]);
+  const aggregated = useMemo(() => aggregateByCustomer(records), [records]);
 
   return { loading, error, records, metrics, aggregated };
 }

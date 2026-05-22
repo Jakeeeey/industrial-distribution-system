@@ -144,9 +144,9 @@ function mapApiToRow(raw: unknown): TransmittalHistoryRow {
 ========================= */
 
 /**
- * GET /api/fm/claims/transmittal-history?q=&status=&date_from=&date_to=&page=&limit=
+ * GET /api/ids/fm/claims/transmittal-history?q=&status=&date_from=&date_to=&page=&limit=
  */
-const API_BASE = "/api/fm/accounting/claims/transmittal-history";
+const API_BASE = "/api/ids/fm/accounting/claims/transmittal-history";
 
 async function fetchHistory(
     params?: {

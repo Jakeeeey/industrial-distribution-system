@@ -1,4 +1,4 @@
-// src/app/api/fm/accounting/supplier-management/delivery-terms/route.ts
+// src/app/api/ids/fm/accounting/supplier-management/delivery-terms/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -140,10 +140,10 @@ export async function POST(req: NextRequest) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(payloadWithId),
     });
-    
+
     console.log("📡 Directus response status:", res.status);
     console.log("📡 Directus response:", res.json);
-    
+
     if (!res.ok) return json(res.json, { status: res.status });
     return json(res.json);
   } catch (e: unknown) {

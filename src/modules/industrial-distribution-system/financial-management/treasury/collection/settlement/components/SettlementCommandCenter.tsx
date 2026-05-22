@@ -1,7 +1,7 @@
 "use client";
 
-import React, {useState, useEffect, useMemo} from "react";
-import {useSettlement, WalletItem} from "../hooks/useSettlement";
+import React, { useState, useEffect, useMemo } from "react";
+import { useSettlement, WalletItem } from "../hooks/useSettlement";
 import {
     Receipt,
     ShieldCheck,
@@ -26,22 +26,22 @@ import {
     Check,
     Edit2
 } from "lucide-react";
-import {Button} from "@/components/ui/button";
-import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter} from "@/components/ui/table";
-import {Popover, PopoverContent, PopoverTrigger} from "@/components/ui/popover";
-import {Input} from "@/components/ui/input";
-import {Badge} from "@/components/ui/badge";
-import {Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList} from "@/components/ui/command";
-import {fetchProvider} from "../../providers/fetchProvider";
-import {UnpaidInvoice} from "../../types";
-import {cn} from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { fetchProvider } from "../../providers/fetchProvider";
+import { UnpaidInvoice } from "../../types";
+import { cn } from "@/lib/utils";
 
 interface SettlementCommandCenterProps {
     id: string | number;
     onClose?: () => void;
 }
 
-export default function SettlementCommandCenter({id, onClose}: SettlementCommandCenterProps) {
+export default function SettlementCommandCenter({ id, onClose }: SettlementCommandCenterProps) {
     const {
         isLoading, wallet, credits, cartInvoices, allocations, salesmanName, salesmanId, findings, docNo, isPosted,
         isLoadingRoute, loadRouteInvoices, addToCart, removeFromCart, clearCart,
@@ -86,7 +86,7 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
             setIsSearching(true);
             try {
                 const data = await fetchProvider.get<UnpaidInvoice[]>(
-                    `/api/fm/treasury/collections/search-unpaid?salesmanId=${salesmanId || 0}&query=${encodeURIComponent(searchQuery)}`
+                    `/api/ids/fm/treasury/collections/search-unpaid?salesmanId=${salesmanId || 0}&query=${encodeURIComponent(searchQuery)}`
                 );
                 const cleanResults = (data || []).filter(inv => !cartInvoices.some(cartInv => cartInv.id === inv.id));
                 setSearchResults(cleanResults);
@@ -227,16 +227,16 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
         if (editingId === w.id) {
             return (
                 <div key={`edit-${w.id}`}
-                     className="p-3 rounded-xl border shadow-md bg-card border-primary/40 space-y-3 animate-in fade-in zoom-in-95 duration-200 relative overflow-hidden">
+                    className="p-3 rounded-xl border shadow-md bg-card border-primary/40 space-y-3 animate-in fade-in zoom-in-95 duration-200 relative overflow-hidden">
                     <div className="flex justify-between items-center pb-2 border-b border-border/50">
                         <span
                             className="text-[11px] font-black uppercase tracking-widest text-primary flex items-center gap-1.5">
-                            <Edit2 size={12}/> Edit {w.type}
+                            <Edit2 size={12} /> Edit {w.type}
                         </span>
                         <Button variant="ghost" size="icon"
-                                className="h-5 w-5 text-muted-foreground hover:text-foreground hover:bg-muted"
-                                onClick={() => setEditingId(null)}>
-                            <X size={12}/>
+                            className="h-5 w-5 text-muted-foreground hover:text-foreground hover:bg-muted"
+                            onClick={() => setEditingId(null)}>
+                            <X size={12} />
                         </Button>
                     </div>
 
@@ -245,26 +245,26 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                             <>
                                 <div className="flex gap-2">
                                     <Button size="sm" variant={editBalType === 2 ? "default" : "outline"}
-                                            onClick={() => setEditBalType(2)}
-                                            className={`h-7 w-1/2 text-[10px] font-black tracking-widest uppercase ${editBalType === 2 ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'text-muted-foreground'}`}>Shortage</Button>
+                                        onClick={() => setEditBalType(2)}
+                                        className={`h-7 w-1/2 text-[10px] font-black tracking-widest uppercase ${editBalType === 2 ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'text-muted-foreground'}`}>Shortage</Button>
                                     <Button size="sm" variant={editBalType === 1 ? "default" : "outline"}
-                                            onClick={() => setEditBalType(1)}
-                                            className={`h-7 w-1/2 text-[10px] font-black tracking-widest uppercase ${editBalType === 1 ? 'bg-red-600 hover:bg-red-700 text-white' : 'text-muted-foreground'}`}>Overage</Button>
+                                        onClick={() => setEditBalType(1)}
+                                        className={`h-7 w-1/2 text-[10px] font-black tracking-widest uppercase ${editBalType === 1 ? 'bg-red-600 hover:bg-red-700 text-white' : 'text-muted-foreground'}`}>Overage</Button>
                                 </div>
 
                                 <Popover open={editAccountOpen} onOpenChange={setEditAccountOpen}>
                                     <PopoverTrigger asChild>
                                         <Button variant="outline" role="combobox"
-                                                className={cn("w-full h-8 justify-between text-xs font-bold bg-muted/30 hover:bg-muted/50", !editFId && "text-muted-foreground border-dashed")}>
+                                            className={cn("w-full h-8 justify-between text-xs font-bold bg-muted/30 hover:bg-muted/50", !editFId && "text-muted-foreground border-dashed")}>
                                             <span className="truncate">
                                                 {editFId ? findings?.find((f) => f.id === editFId)?.findingName : "Search Ledger Account..."}
                                             </span>
-                                            <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50"/>
+                                            <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
                                         </Button>
                                     </PopoverTrigger>
                                     <PopoverContent className="w-[280px] p-0 shadow-xl" align="start">
                                         <Command>
-                                            <CommandInput placeholder="Type to search..." className="text-xs h-8"/>
+                                            <CommandInput placeholder="Type to search..." className="text-xs h-8" />
                                             <CommandList>
                                                 <CommandEmpty
                                                     className="py-2 text-xs text-center text-muted-foreground">No
@@ -276,7 +276,7 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                                                             setEditAccountOpen(false);
                                                         }} className="text-xs cursor-pointer py-1.5">
                                                             <Check
-                                                                className={cn("mr-2 h-3 w-3 text-primary", editFId === f.id ? "opacity-100" : "opacity-0")}/>
+                                                                className={cn("mr-2 h-3 w-3 text-primary", editFId === f.id ? "opacity-100" : "opacity-0")} />
                                                             {f.findingName}
                                                         </CommandItem>
                                                     ))}
@@ -291,12 +291,12 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                             <span
                                 className="absolute left-2.5 top-2 text-[10px] font-black text-muted-foreground">₱</span>
                             <Input type="number" value={editAmt} onChange={e => setEditAmt(e.target.value)}
-                                   placeholder="0.00"
-                                   className="h-8 pl-6 text-xs font-mono font-black shadow-inner bg-muted/20"/>
+                                placeholder="0.00"
+                                className="h-8 pl-6 text-xs font-mono font-black shadow-inner bg-muted/20" />
                         </div>
                         <Input value={editRef} onChange={e => setEditRef(e.target.value)}
-                               placeholder={w.type === "EWT" ? "Form 2307 Reference No." : "Remarks / Reason"}
-                               className="h-8 text-xs bg-muted/20 shadow-inner"/>
+                            placeholder={w.type === "EWT" ? "Form 2307 Reference No." : "Remarks / Reason"}
+                            className="h-8 text-xs bg-muted/20 shadow-inner" />
                     </div>
 
                     <Button
@@ -320,7 +320,7 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                             setEditingId(null);
                         }}
                     >
-                        <Save size={12} className="mr-1.5"/> Confirm Update
+                        <Save size={12} className="mr-1.5" /> Confirm Update
                     </Button>
                 </div>
             );
@@ -328,7 +328,7 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
 
         return (
             <div key={`source-${w.id}`}
-                 className={`p-3 rounded-lg border shadow-sm transition-all group ${isExhausted ? 'bg-muted/30 border-dashed opacity-60' : `bg-background border-border border-l-4 ${borderLeft}`}`}>
+                className={`p-3 rounded-lg border shadow-sm transition-all group ${isExhausted ? 'bg-muted/30 border-dashed opacity-60' : `bg-background border-border border-l-4 ${borderLeft}`}`}>
                 <div className="flex justify-between items-start mb-1">
                     <span
                         className={`text-[11px] font-black uppercase tracking-widest truncate pr-2 ${w.type === 'ADJUSTMENT' ? (w.balanceTypeId === 1 ? 'text-red-700' : 'text-purple-700') : ''}`}>
@@ -336,7 +336,7 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                     </span>
                     <div className="flex items-center gap-1 shrink-0">
                         <Badge variant={badgeColor as "default" | "secondary" | "destructive" | "outline"}
-                               className={`text-[8px] uppercase px-1.5 py-0 h-4 ${w.type === 'ADJUSTMENT' && w.balanceTypeId === 2 ? 'border-purple-200 text-purple-700 bg-purple-50' : (w.type === 'EWT' ? 'border-teal-200 text-teal-700 bg-teal-50' : '')}`}>
+                            className={`text-[8px] uppercase px-1.5 py-0 h-4 ${w.type === 'ADJUSTMENT' && w.balanceTypeId === 2 ? 'border-purple-200 text-purple-700 bg-purple-50' : (w.type === 'EWT' ? 'border-teal-200 text-teal-700 bg-teal-50' : '')}`}>
                             {w.type}
                         </Badge>
 
@@ -350,13 +350,13 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                                     setEditFId(w.findingId || ""); // 🚀 CHANGED FROM dbId TO findingId
                                     setEditBalType(w.balanceTypeId || 2);
                                 }} className="text-muted-foreground hover:text-blue-500 transition-colors p-0.5"
-                                        title="Edit Item">
-                                    <Edit2 size={12}/>
+                                    title="Edit Item">
+                                    <Edit2 size={12} />
                                 </button>
                                 <button onClick={() => deleteWalletItem(w.id, w.type)}
-                                        className="text-muted-foreground hover:text-destructive transition-colors p-0.5"
-                                        title="Remove Item">
-                                    <Trash2 size={12}/>
+                                    className="text-muted-foreground hover:text-destructive transition-colors p-0.5"
+                                    title="Remove Item">
+                                    <Trash2 size={12} />
                                 </button>
                             </div>
                         )}
@@ -364,18 +364,18 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                 </div>
                 {w.customerName && (
                     <div className="text-[9px] font-bold text-muted-foreground truncate mb-1.5"
-                         title={w.customerName}>{w.customerName}</div>
+                        title={w.customerName}>{w.customerName}</div>
                 )}
                 <div
                     className={`flex justify-between gap-4 text-xs ${w.customerName ? 'mt-1.5 border-t border-border/50 pt-1.5' : 'mt-2'}`}>
                     <div className="min-w-0 flex-1">
                         <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Original</p>
-                        <p className="font-mono truncate">₱{w.originalAmount.toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
+                        <p className="font-mono truncate">₱{w.originalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                     </div>
                     <div className="text-right min-w-0 flex-1">
                         <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Remaining</p>
                         <p className={`font-mono font-black truncate ${isExhausted ? 'text-muted-foreground' : (w.balanceTypeId === 1 ? 'text-red-600' : 'text-emerald-600')}`}>
-                            ₱{remaining.toLocaleString(undefined, {minimumFractionDigits: 2})}
+                            ₱{remaining.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                         </p>
                     </div>
                 </div>
@@ -398,24 +398,24 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                 <div className="flex items-start lg:items-center gap-4 w-full lg:w-auto">
                     {onClose && (
                         <Button variant="ghost" size="icon" onClick={onClose}
-                                className="shrink-0 h-10 w-10 rounded-full hover:bg-muted border border-border/50">
-                            <X size={20} className="text-muted-foreground hover:text-foreground"/>
+                            className="shrink-0 h-10 w-10 rounded-full hover:bg-muted border border-border/50">
+                            <X size={20} className="text-muted-foreground hover:text-foreground" />
                         </Button>
                     )}
                     <div className="min-w-0">
                         <h1 className="text-xl font-black flex items-center gap-2 truncate">
-                            <ShieldCheck className="text-primary shrink-0" size={20}/>
+                            <ShieldCheck className="text-primary shrink-0" size={20} />
                             <span className="truncate">Settlement Console</span>
                             {isPosted && (
                                 <Badge variant="destructive"
-                                       className="ml-2 bg-red-600 tracking-widest shadow-sm text-[10px] shrink-0">
-                                    <Lock size={10} className="mr-1"/> POSTED & LOCKED
+                                    className="ml-2 bg-red-600 tracking-widest shadow-sm text-[10px] shrink-0">
+                                    <Lock size={10} className="mr-1" /> POSTED & LOCKED
                                 </Badge>
                             )}
                         </h1>
                         <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest mt-1 truncate">
                             Doc No: <span className="font-mono text-primary">{docNo}</span> • Route: <span
-                            className="text-primary">{salesmanName}</span>
+                                className="text-primary">{salesmanName}</span>
                         </p>
                     </div>
                 </div>
@@ -425,20 +425,20 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                     <div className="flex flex-col border-r pr-3 lg:pr-5 border-border/50 flex-1 lg:flex-none">
                         <span className="text-[9px] font-black uppercase text-muted-foreground tracking-tighter">Pouch Value</span>
                         <span
-                            className="text-base font-black font-mono truncate">₱{pouchTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                            className="text-base font-black font-mono truncate">₱{pouchTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                     </div>
                     <div className="flex flex-col border-r pr-3 lg:pr-5 border-border/50 flex-1 lg:flex-none">
                         <span
                             className="text-[9px] font-black uppercase text-emerald-600 tracking-tighter">Allocated</span>
                         <span
-                            className="text-base font-black font-mono text-emerald-600 truncate">₱{totalAllocated.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                            className="text-base font-black font-mono text-emerald-600 truncate">₱{totalAllocated.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                     </div>
                     <div className="flex flex-col pr-2 flex-1 lg:flex-none">
                         <span
                             className="text-[9px] font-black uppercase tracking-tighter text-muted-foreground">Unallocated</span>
                         <span
                             className={`text-base font-black font-mono truncate ${Math.abs(remainingToAllocate) < 0.01 ? 'text-muted-foreground' : 'text-orange-500'}`}>
-                            ₱{remainingToAllocate.toLocaleString(undefined, {minimumFractionDigits: 2})}
+                            ₱{remainingToAllocate.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                         </span>
                     </div>
                 </div>
@@ -446,15 +446,15 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                 <div className="flex items-center gap-2 w-full lg:w-auto">
                     {!isPosted && Math.abs(remainingToAllocate) > 0.01 && (
                         <Button onClick={handleAutoBalance} variant="outline" size="sm"
-                                className="flex-1 lg:flex-none font-black uppercase tracking-widest shadow-sm border-orange-500 text-orange-600 hover:bg-orange-50 h-10">
-                            <Wand2 size={14} className="mr-2"/> Auto-Balance
+                            className="flex-1 lg:flex-none font-black uppercase tracking-widest shadow-sm border-orange-500 text-orange-600 hover:bg-orange-50 h-10">
+                            <Wand2 size={14} className="mr-2" /> Auto-Balance
                         </Button>
                     )}
 
                     {isPosted ? (
                         <Button onClick={() => window.print()} variant="outline" size="sm"
-                                className="flex-1 lg:flex-none font-black uppercase tracking-widest shadow-md border-primary text-primary hover:bg-primary/10 h-10">
-                            <Printer size={14} className="mr-2"/> Print Receipt
+                            className="flex-1 lg:flex-none font-black uppercase tracking-widest shadow-md border-primary text-primary hover:bg-primary/10 h-10">
+                            <Printer size={14} className="mr-2" /> Print Receipt
                         </Button>
                     ) : (
                         <Button
@@ -464,12 +464,11 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                             }}
                             disabled={remainingToAllocate < -0.01}
                             size="sm"
-                            className={`flex-1 lg:flex-none font-black uppercase tracking-widest shadow-md transition-all active:scale-95 h-10 ${
-                                remainingToAllocate < -0.01 ? 'bg-destructive hover:bg-destructive/90 text-white' :
+                            className={`flex-1 lg:flex-none font-black uppercase tracking-widest shadow-md transition-all active:scale-95 h-10 ${remainingToAllocate < -0.01 ? 'bg-destructive hover:bg-destructive/90 text-white' :
                                     (remainingToAllocate > 0.01 ? 'bg-orange-600 hover:bg-orange-700 text-white' : 'bg-primary')
-                            }`}
+                                }`}
                         >
-                            <Save size={14} className="mr-2"/>
+                            <Save size={14} className="mr-2" />
                             {remainingToAllocate < -0.01 ? "Over-Allocated!" : (remainingToAllocate > 0.01 ? "Save Partial" : "Commit to Ledger")}
                         </Button>
                     )}
@@ -485,7 +484,7 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                             className="bg-emerald-500/10 p-3 border-b border-emerald-500/20 flex justify-between items-center shrink-0">
                             <span
                                 className="text-[10px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
-                                <Wallet size={14}/> Funds to Liquidate
+                                <Wallet size={14} /> Funds to Liquidate
                             </span>
 
                             {!isPosted && (
@@ -493,15 +492,15 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                                     <Popover open={ewtOpen} onOpenChange={setEwtOpen}>
                                         <PopoverTrigger asChild>
                                             <Button size="sm" variant="outline"
-                                                    className="h-6 text-[9px] font-black uppercase tracking-widest text-teal-600 border-teal-200 hover:bg-teal-50 px-2 gap-1">
-                                                <Plus size={10} strokeWidth={3}/> Form 2307
+                                                className="h-6 text-[9px] font-black uppercase tracking-widest text-teal-600 border-teal-200 hover:bg-teal-50 px-2 gap-1">
+                                                <Plus size={10} strokeWidth={3} /> Form 2307
                                             </Button>
                                         </PopoverTrigger>
                                         <PopoverContent className="w-80 p-5 space-y-4 shadow-xl border-teal-200"
-                                                        align="start">
+                                            align="start">
                                             <div className="space-y-1 mb-4 border-b border-border/50 pb-3">
                                                 <h4 className="font-black text-sm text-foreground flex items-center gap-2">
-                                                    <FileText size={16} className="text-teal-500"/> Pooled EWT
+                                                    <FileText size={16} className="text-teal-500" /> Pooled EWT
                                                 </h4>
                                                 <p className="text-[11px] font-bold text-muted-foreground leading-tight">
                                                     Add a Form 2307 (EWT) that can be distributed across multiple
@@ -514,14 +513,14 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                                                         className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Amount
                                                         (₱)</label>
                                                     <Input type="number" placeholder="0.00" value={globalEwtAmount}
-                                                           onChange={(e) => setGlobalEwtAmount(e.target.value)}/>
+                                                        onChange={(e) => setGlobalEwtAmount(e.target.value)} />
                                                 </div>
                                                 <div className="flex flex-col gap-1.5">
                                                     <label
                                                         className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Reference
                                                         No.</label>
                                                     <Input placeholder="E.g. 2307-XXX" value={globalEwtRef}
-                                                           onChange={(e) => setGlobalEwtRef(e.target.value)}/>
+                                                        onChange={(e) => setGlobalEwtRef(e.target.value)} />
                                                 </div>
                                                 <Button
                                                     className="w-full mt-2 font-black uppercase tracking-widest bg-teal-600 hover:bg-teal-700 text-white"
@@ -540,15 +539,15 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                                                 setAdjRemarks("");
                                                 setAdjBalanceType(2);
                                             }} size="sm" variant="outline"
-                                                    className="h-6 text-[9px] font-black uppercase tracking-widest text-purple-600 border-purple-200 hover:bg-purple-50 dark:hover:bg-purple-900/20 px-2 gap-1">
-                                                <Plus size={10} strokeWidth={3}/> Variance
+                                                className="h-6 text-[9px] font-black uppercase tracking-widest text-purple-600 border-purple-200 hover:bg-purple-50 dark:hover:bg-purple-900/20 px-2 gap-1">
+                                                <Plus size={10} strokeWidth={3} /> Variance
                                             </Button>
                                         </PopoverTrigger>
                                         <PopoverContent className="w-80 p-5 space-y-4 shadow-xl border-purple-200"
-                                                        align="start">
+                                            align="start">
                                             <div className="space-y-1 mb-4 border-b border-border/50 pb-3">
                                                 <h4 className="font-black text-sm text-foreground flex items-center gap-2">
-                                                    <Wallet size={16} className="text-purple-500"/> Record Variance
+                                                    <Wallet size={16} className="text-purple-500" /> Record Variance
                                                 </h4>
                                                 <p className="text-[11px] font-bold text-muted-foreground leading-tight">
                                                     Select whether this variance increases the physical assets
@@ -563,13 +562,13 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                                                         Type</label>
                                                     <div className="flex gap-2">
                                                         <Button variant={adjBalanceType === 2 ? "default" : "outline"}
-                                                                onClick={() => setAdjBalanceType(2)}
-                                                                className={`h-8 w-1/2 text-xs font-bold ${adjBalanceType === 2 ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'text-muted-foreground'}`}>
+                                                            onClick={() => setAdjBalanceType(2)}
+                                                            className={`h-8 w-1/2 text-xs font-bold ${adjBalanceType === 2 ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'text-muted-foreground'}`}>
                                                             Shortage (Debit)
                                                         </Button>
                                                         <Button variant={adjBalanceType === 1 ? "default" : "outline"}
-                                                                onClick={() => setAdjBalanceType(1)}
-                                                                className={`h-8 w-1/2 text-xs font-bold ${adjBalanceType === 1 ? 'bg-red-600 hover:bg-red-700 text-white' : 'text-muted-foreground'}`}>
+                                                            onClick={() => setAdjBalanceType(1)}
+                                                            className={`h-8 w-1/2 text-xs font-bold ${adjBalanceType === 1 ? 'bg-red-600 hover:bg-red-700 text-white' : 'text-muted-foreground'}`}>
                                                             Overage (Credit)
                                                         </Button>
                                                     </div>
@@ -582,31 +581,31 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                                                     <Popover open={adjAccountOpen} onOpenChange={setAdjAccountOpen}>
                                                         <PopoverTrigger asChild>
                                                             <Button variant="outline" role="combobox"
-                                                                    className={cn("w-full h-9 justify-between text-sm font-bold bg-background", !adjFindingId && "text-muted-foreground border-dashed border-primary/50")}>
+                                                                className={cn("w-full h-9 justify-between text-sm font-bold bg-background", !adjFindingId && "text-muted-foreground border-dashed border-primary/50")}>
                                                                 <span className="truncate">
                                                                     {adjFindingId ? findings?.find((f) => f.id.toString() === adjFindingId.toString())?.findingName : "Select Ledger Account..."}
                                                                 </span>
                                                                 <ChevronsUpDown
-                                                                    className="ml-2 h-4 w-4 shrink-0 opacity-50"/>
+                                                                    className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                                             </Button>
                                                         </PopoverTrigger>
                                                         <PopoverContent className="w-[300px] p-0" align="start">
                                                             <Command>
                                                                 <CommandInput placeholder="Type account name..."
-                                                                              className="text-sm"/>
+                                                                    className="text-sm" />
                                                                 <CommandList>
                                                                     <CommandEmpty>No account found.</CommandEmpty>
                                                                     <CommandGroup>
                                                                         {findings?.map((f) => (
                                                                             <CommandItem key={f.id}
-                                                                                         value={f.findingName}
-                                                                                         onSelect={() => {
-                                                                                             setAdjFindingId(f.id);
-                                                                                             setAdjAccountOpen(false);
-                                                                                         }}
-                                                                                         className="text-sm cursor-pointer">
+                                                                                value={f.findingName}
+                                                                                onSelect={() => {
+                                                                                    setAdjFindingId(f.id);
+                                                                                    setAdjAccountOpen(false);
+                                                                                }}
+                                                                                className="text-sm cursor-pointer">
                                                                                 <Check
-                                                                                    className={cn("mr-2 h-4 w-4 text-primary", adjFindingId === f.id ? "opacity-100" : "opacity-0")}/>
+                                                                                    className={cn("mr-2 h-4 w-4 text-primary", adjFindingId === f.id ? "opacity-100" : "opacity-0")} />
                                                                                 {f.findingName}
                                                                             </CommandItem>
                                                                         ))}
@@ -621,21 +620,21 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                                                         className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Amount
                                                         (₱)</label>
                                                     <Input type="number" placeholder="0.00" value={adjAmount}
-                                                           onChange={(e) => setAdjAmount(e.target.value)}/>
+                                                        onChange={(e) => setAdjAmount(e.target.value)} />
                                                 </div>
                                                 <div className="flex flex-col gap-1.5">
                                                     <label
                                                         className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Reference
                                                         / Remarks</label>
                                                     <Input placeholder="E.g. Reason for variance" value={adjRemarks}
-                                                           onChange={(e) => setAdjRemarks(e.target.value)}/>
+                                                        onChange={(e) => setAdjRemarks(e.target.value)} />
                                                 </div>
                                                 <Button
                                                     className="w-full mt-2 font-black uppercase tracking-widest bg-purple-600 hover:bg-purple-700 text-white"
                                                     disabled={!adjFindingId || adjAmount === "" || parseFloat(adjAmount) === 0 || isNaN(parseFloat(adjAmount)) || isCreatingAdj}
                                                     onClick={handleCreateAdjustment}>
                                                     {isCreatingAdj ? <Loader2 size={16}
-                                                                              className="animate-spin"/> : "Inject into Pouch"}
+                                                        className="animate-spin" /> : "Inject into Pouch"}
                                                 </Button>
                                             </div>
                                         </PopoverContent>
@@ -654,10 +653,10 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                             className="bg-purple-500/10 p-3 border-b border-purple-500/20 flex justify-between items-center shrink-0">
                             <span
                                 className="text-[10px] font-black uppercase tracking-widest text-purple-700 dark:text-purple-400 flex items-center gap-2">
-                                <Percent size={14}/> Available Credits
+                                <Percent size={14} /> Available Credits
                             </span>
                             <Badge variant="outline"
-                                   className="text-[9px] font-black bg-purple-50 border-purple-200 text-purple-700">OPTIONAL</Badge>
+                                className="text-[9px] font-black bg-purple-50 border-purple-200 text-purple-700">OPTIONAL</Badge>
                         </div>
                         <div className="p-3 flex-1 overflow-y-auto space-y-2.5 scrollbar-thin">
                             {credits.length === 0 ? (
@@ -674,24 +673,24 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                         <div className="flex justify-between items-center">
                             <span
                                 className="text-[11px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-400 flex items-center gap-2">
-                                <Receipt size={16}/> Active Settlement Cart
+                                <Receipt size={16} /> Active Settlement Cart
                             </span>
 
                             <div className="flex gap-2 items-center">
                                 {!isPosted && (
                                     <Button onClick={loadRouteInvoices} disabled={isLoadingRoute} variant="secondary"
-                                            size="sm"
-                                            className="h-7 text-[10px] uppercase font-black tracking-widest bg-blue-100 hover:bg-blue-200 text-blue-700 px-3">
-                                        {isLoadingRoute ? <Loader2 size={12} className="mr-1.5 animate-spin"/> :
-                                            <Truck size={12} className="mr-1.5"/>}
+                                        size="sm"
+                                        className="h-7 text-[10px] uppercase font-black tracking-widest bg-blue-100 hover:bg-blue-200 text-blue-700 px-3">
+                                        {isLoadingRoute ? <Loader2 size={12} className="mr-1.5 animate-spin" /> :
+                                            <Truck size={12} className="mr-1.5" />}
                                         Load Route
                                     </Button>
                                 )}
 
                                 {!isPosted && cartInvoices.length > 0 && (
                                     <Button onClick={clearCart} variant="ghost" size="sm"
-                                            className="h-7 text-[10px] uppercase font-black tracking-widest text-destructive hover:bg-destructive/10 px-3">
-                                        <Trash2 size={12} className="mr-1.5"/> Clear Cart
+                                        className="h-7 text-[10px] uppercase font-black tracking-widest text-destructive hover:bg-destructive/10 px-3">
+                                        <Trash2 size={12} className="mr-1.5" /> Clear Cart
                                     </Button>
                                 )}
                             </div>
@@ -701,20 +700,20 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                             <Popover open={searchOpen} onOpenChange={setSearchOpen}>
                                 <PopoverTrigger asChild>
                                     <Button variant="outline" role="combobox" aria-expanded={searchOpen}
-                                            className="w-full justify-between h-9 font-mono text-sm font-bold bg-background text-muted-foreground hover:text-foreground">
-                                        <span className="flex items-center gap-2"><Search size={14}/> Add Invoice from Remittance Report...</span>
+                                        className="w-full justify-between h-9 font-mono text-sm font-bold bg-background text-muted-foreground hover:text-foreground">
+                                        <span className="flex items-center gap-2"><Search size={14} /> Add Invoice from Remittance Report...</span>
                                     </Button>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-[90vw] sm:w-[800px] p-0" align="start">
                                     <Command shouldFilter={false}>
                                         <CommandInput placeholder="Type Invoice No. or Customer Name..."
-                                                      value={searchQuery} onValueChange={setSearchQuery}/>
+                                            value={searchQuery} onValueChange={setSearchQuery} />
                                         <CommandList>
                                             <CommandEmpty className="py-6 text-center text-sm text-muted-foreground">
                                                 {isSearching ?
                                                     <span className="flex items-center justify-center gap-2"><Loader2
                                                         size={16}
-                                                        className="animate-spin"/> Searching...</span> : "No results."}
+                                                        className="animate-spin" /> Searching...</span> : "No results."}
                                             </CommandEmpty>
                                             <CommandGroup heading={searchResults.length > 0 ? "Database Results" : ""}>
                                                 {searchResults.map((inv) => (
@@ -722,7 +721,7 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                                                         addToCart(inv);
                                                         setSearchOpen(false);
                                                     }}
-                                                                 className="flex justify-between items-center cursor-pointer py-3">
+                                                        className="flex justify-between items-center cursor-pointer py-3">
                                                         <div className="flex flex-col">
                                                             <span
                                                                 className="font-mono font-black text-primary">{inv.invoiceNo}</span>
@@ -760,7 +759,7 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                                         <TableCell colSpan={4} className="h-[40vh] text-center">
                                             <div
                                                 className="flex flex-col items-center justify-center text-muted-foreground gap-3">
-                                                <Receipt size={48} className="opacity-20"/>
+                                                <Receipt size={48} className="opacity-20" />
                                                 <p className="font-bold tracking-widest uppercase text-xs">Cart is
                                                     Empty</p>
                                                 <p className="text-[11px]">
@@ -789,41 +788,41 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                                             rowStatus = "ADJUSTED";
                                             badgeColor = "border-orange-200 text-orange-700 bg-orange-100";
                                             rowBg = "bg-orange-50/30 dark:bg-orange-950/10";
-                                            IconComponent = <Wand2 size={10} className="mr-1"/>;
+                                            IconComponent = <Wand2 size={10} className="mr-1" />;
                                         } else if (appliedCredits > 0) {
                                             rowStatus = "CREDITED";
                                             badgeColor = "border-purple-200 text-purple-700 bg-purple-100";
                                             rowBg = "bg-purple-50/30 dark:bg-purple-950/10";
-                                            IconComponent = <Percent size={10} className="mr-1"/>;
+                                            IconComponent = <Percent size={10} className="mr-1" />;
                                         } else {
                                             rowStatus = "PAID";
                                             badgeColor = "border-emerald-200 text-emerald-700 bg-emerald-100";
                                             rowBg = "bg-emerald-50/30 dark:bg-emerald-950/10";
-                                            IconComponent = <CheckCircle2 size={10} className="mr-1"/>;
+                                            IconComponent = <CheckCircle2 size={10} className="mr-1" />;
                                         }
                                     } else if (isPartiallySettled) {
                                         rowStatus = "PARTIAL";
                                         badgeColor = "border-blue-200 text-blue-700 bg-blue-100";
                                         rowBg = "bg-blue-50/10 dark:bg-blue-950/5";
-                                        IconComponent = <Loader2 size={10} className="mr-1"/>;
+                                        IconComponent = <Loader2 size={10} className="mr-1" />;
                                     }
 
                                     return (
                                         <TableRow key={`cart-row-${inv.id}`}
-                                                  className={`group hover:bg-muted/30 transition-all ${rowBg}`}>
+                                            className={`group hover:bg-muted/30 transition-all ${rowBg}`}>
                                             <TableCell className="align-top pt-4 min-w-[180px]">
                                                 <div className="flex items-start gap-2">
                                                     {!isPosted && (
                                                         <button onClick={() => removeFromCart(inv.id)}
-                                                                className="text-muted-foreground hover:text-destructive mt-0.5 shrink-0">
-                                                            <X size={14} strokeWidth={3}/></button>
+                                                            className="text-muted-foreground hover:text-destructive mt-0.5 shrink-0">
+                                                            <X size={14} strokeWidth={3} /></button>
                                                     )}
                                                     <div className="flex flex-col min-w-0">
                                                         <div className="flex items-center gap-2">
                                                             <span
                                                                 className={`font-mono font-black truncate ${isFullySettled ? 'text-primary/70' : 'text-primary'}`}>{inv.invoiceNo}</span>
                                                             {rowStatus && <Badge variant="outline"
-                                                                                 className={`text-[8px] px-1.5 py-0 shrink-0 ${badgeColor}`}>{IconComponent}{rowStatus}</Badge>}
+                                                                className={`text-[8px] px-1.5 py-0 shrink-0 ${badgeColor}`}>{IconComponent}{rowStatus}</Badge>}
                                                         </div>
                                                         <span
                                                             className="text-[10px] font-bold text-muted-foreground leading-tight mt-1">{inv.customerName}</span>
@@ -844,21 +843,21 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                                                         <div
                                                             className="flex justify-between w-full max-w-[170px] text-[9px] font-bold text-blue-600">
                                                             <span>Prev Payments:</span>
-                                                            <span>-₱{inv.totalPayments.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                                                            <span>-₱{inv.totalPayments.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                                         </div>
                                                     )}
                                                     {(inv.totalMemos || 0) > 0 && (
                                                         <div
                                                             className="flex justify-between w-full max-w-[170px] text-[9px] font-bold text-purple-600">
                                                             <span>Applied Memos:</span>
-                                                            <span>-₱{inv.totalMemos.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                                                            <span>-₱{inv.totalMemos.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                                         </div>
                                                     )}
                                                     {(inv.totalReturns || 0) > 0 && (
                                                         <div
                                                             className="flex justify-between w-full max-w-[170px] text-[9px] font-bold text-orange-600">
                                                             <span>Linked Returns:</span>
-                                                            <span>-₱{inv.totalReturns.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                                                            <span>-₱{inv.totalReturns.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                                         </div>
                                                     )}
 
@@ -870,9 +869,9 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                                                             <PopoverTrigger asChild>
                                                                 <button
                                                                     className="font-mono font-black text-sm hover:underline decoration-double flex items-center gap-1 group">
-                                                                    ₱{inv.remainingBalance.toLocaleString(undefined, {minimumFractionDigits: 2})}
+                                                                    ₱{inv.remainingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                                                     <History size={12}
-                                                                             className="text-muted-foreground group-hover:text-primary transition-colors"/>
+                                                                        className="text-muted-foreground group-hover:text-primary transition-colors" />
                                                                 </button>
                                                             </PopoverTrigger>
                                                             <PopoverContent
@@ -881,9 +880,9 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                                                                 <div
                                                                     className="bg-primary p-3 text-white flex justify-between items-center">
                                                                     <h4 className="font-black text-xs uppercase tracking-widest flex items-center gap-2">
-                                                                        <History size={14}/> Audit Trail</h4>
+                                                                        <History size={14} /> Audit Trail</h4>
                                                                     <Badge variant="outline"
-                                                                           className="text-white border-white/50 text-[9px]">{inv.invoiceNo}</Badge>
+                                                                        className="text-white border-white/50 text-[9px]">{inv.invoiceNo}</Badge>
                                                                 </div>
                                                                 <div
                                                                     className="p-3 space-y-2 max-h-[300px] overflow-y-auto scrollbar-thin">
@@ -895,7 +894,7 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                                                                     {inv.history && inv.history.length > 0 ? (
                                                                         inv.history.map((h, i) => (
                                                                             <div key={`hist-${inv.id}-${i}`}
-                                                                                 className="flex justify-between items-center py-2 border-b border-muted/30 last:border-0">
+                                                                                className="flex justify-between items-center py-2 border-b border-muted/30 last:border-0">
                                                                                 <div className="flex flex-col">
                                                                                     <span
                                                                                         className="text-[10px] font-mono font-bold text-foreground">{h.date}</span>
@@ -909,7 +908,7 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                                                                     ) : (
                                                                         <div
                                                                             className="py-8 text-center flex flex-col items-center gap-2 text-muted-foreground">
-                                                                            <Info size={24} className="opacity-20"/>
+                                                                            <Info size={24} className="opacity-20" />
                                                                             <p className="text-[10px] font-bold uppercase italic">No
                                                                                 Historical Records</p>
                                                                         </div>
@@ -924,11 +923,11 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                                             <TableCell className="text-right align-top pt-4">
                                                 <div
                                                     className={`font-mono font-black ${appliedSession > 0 ? 'text-emerald-600' : 'text-muted-foreground'}`}>
-                                                    {appliedSession > 0 ? `₱${appliedSession.toLocaleString(undefined, {minimumFractionDigits: 2})}` : "—"}
+                                                    {appliedSession > 0 ? `₱${appliedSession.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : "—"}
                                                 </div>
                                                 {invoiceAllocations.map((alloc, idx) => (
                                                     <div key={`alloc-${inv.id}-${alloc.sourceTempId}-${idx}`}
-                                                         className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex gap-1 justify-end">
+                                                        className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider flex gap-1 justify-end">
                                                         <span>{combinedSources.find(w => w.id === alloc.sourceTempId)?.type || 'ADJ'}:</span>
                                                         <span
                                                             className="text-foreground">₱{alloc.amountApplied.toLocaleString()}</span>
@@ -940,26 +939,26 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                                                 {!isPosted && (
                                                     <div className="flex justify-end gap-1.5 items-center">
                                                         <Button size="icon" variant="ghost"
-                                                                onClick={() => handleInvoiceDiscrepancy(inv)}
-                                                                title="Resolve Invoice Variance"
-                                                                className="h-7 w-7 text-orange-600 hover:text-orange-700 hover:bg-orange-100 shrink-0">
-                                                            <Wand2 size={12} strokeWidth={3}/>
+                                                            onClick={() => handleInvoiceDiscrepancy(inv)}
+                                                            title="Resolve Invoice Variance"
+                                                            className="h-7 w-7 text-orange-600 hover:text-orange-700 hover:bg-orange-100 shrink-0">
+                                                            <Wand2 size={12} strokeWidth={3} />
                                                         </Button>
 
                                                         <Button size="icon" variant="ghost"
-                                                                onClick={() => handleAutoCalculateEWT(inv)}
-                                                                title="Auto-Generate Form 2307"
-                                                                className="h-7 w-7 text-teal-600 hover:text-teal-700 hover:bg-teal-100 shrink-0">
-                                                            <FileText size={12} strokeWidth={3}/>
+                                                            onClick={() => handleAutoCalculateEWT(inv)}
+                                                            title="Auto-Generate Form 2307"
+                                                            className="h-7 w-7 text-teal-600 hover:text-teal-700 hover:bg-teal-100 shrink-0">
+                                                            <FileText size={12} strokeWidth={3} />
                                                         </Button>
 
                                                         <Popover>
                                                             <PopoverTrigger asChild>
                                                                 <Button size="sm"
-                                                                        variant={appliedSession > 0 ? "outline" : "default"}
-                                                                        className={`h-7 text-[9px] font-black uppercase tracking-widest px-2 shrink-0 ${appliedSession > 0 ? 'border-emerald-500 text-emerald-600' : ''}`}>
+                                                                    variant={appliedSession > 0 ? "outline" : "default"}
+                                                                    className={`h-7 text-[9px] font-black uppercase tracking-widest px-2 shrink-0 ${appliedSession > 0 ? 'border-emerald-500 text-emerald-600' : ''}`}>
                                                                     {appliedSession > 0 ? "Edit" : "Apply"} <ChevronDown
-                                                                    size={10} className="ml-1"/>
+                                                                        size={10} className="ml-1" />
                                                                 </Button>
                                                             </PopoverTrigger>
                                                             <PopoverContent
@@ -978,7 +977,7 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                                                                     <div className="space-y-3">
                                                                         <h5 className="text-[10px] font-black uppercase tracking-widest text-emerald-600 flex items-center border-b pb-1">
                                                                             <Wallet size={12}
-                                                                                    className="mr-1"/> Physical Funds &
+                                                                                className="mr-1" /> Physical Funds &
                                                                             EWT
                                                                         </h5>
                                                                         {wallet.length === 0 ? (
@@ -991,7 +990,7 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
 
                                                                             return (
                                                                                 <div key={`apply-${inv.id}-${w.id}`}
-                                                                                     className="flex flex-col gap-1">
+                                                                                    className="flex flex-col gap-1">
                                                                                     <label
                                                                                         className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex justify-between">
                                                                                         <span
@@ -1027,7 +1026,7 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                                                                     <div className="space-y-3">
                                                                         <h5 className="text-[10px] font-black uppercase tracking-widest text-purple-600 flex items-center border-b pb-1">
                                                                             <Percent size={12}
-                                                                                     className="mr-1"/> Credits
+                                                                                className="mr-1" /> Credits
                                                                             (Memos/Returns)
                                                                         </h5>
                                                                         {credits.filter(c => c.customerName === inv.customerName).length === 0 ? (
@@ -1041,7 +1040,7 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
 
                                                                             return (
                                                                                 <div key={`apply-${inv.id}-${c.id}`}
-                                                                                     className="flex flex-col gap-1">
+                                                                                    className="flex flex-col gap-1">
                                                                                     <label
                                                                                         className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex justify-between">
                                                                                         <span
@@ -1089,14 +1088,14 @@ export default function SettlementCommandCenter({id, onClose}: SettlementCommand
                                             <span
                                                 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mr-4">Total Cart Balance:</span>
                                             <span
-                                                className="font-mono font-black text-sm">₱{cartTotalBalance.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                                                className="font-mono font-black text-sm">₱{cartTotalBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                         </TableCell>
                                         <TableCell className="text-right py-3 border-l border-border/50">
                                             <div className="flex flex-col items-end">
                                                 <span
                                                     className="text-[9px] font-black uppercase tracking-widest text-emerald-600 mb-0.5">Total Applied</span>
                                                 <span
-                                                    className="font-mono font-black text-emerald-600 text-sm">₱{cartTotalAppliedSession.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                                                    className="font-mono font-black text-emerald-600 text-sm">₱{cartTotalAppliedSession.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                             </div>
                                         </TableCell>
                                         <TableCell></TableCell>

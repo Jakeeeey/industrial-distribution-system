@@ -38,7 +38,7 @@ export function useLookups(filters?: Partial<FilterState>) {
             category_id: categoryId,
             brand_id: brandId,
           }),
-          fetch("/api/fm/product-pricing/printables/price-types").then((r) =>
+          fetch("/api/ids/fm/product-pricing/printables/price-types").then((r) =>
             r.json(),
           ),
         ]);

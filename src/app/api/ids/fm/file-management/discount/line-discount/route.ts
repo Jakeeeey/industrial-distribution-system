@@ -1,4 +1,4 @@
-// src/app/api/fm/line-discount/route.ts
+// src/app/api/ids/fm/line-discount/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -63,7 +63,7 @@ function normalizeError(payload: unknown, fallback = "Request failed.") {
 }
 
 /**
- * GET /api/fm/line-discount?limit=-1
+ * GET /api/ids/fm/line-discount?limit=-1
  * returns: { data: [...] }
  */
 export async function GET(req: NextRequest) {
@@ -88,7 +88,7 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * POST /api/fm/line-discount
+ * POST /api/ids/fm/line-discount
  * body: { line_discount, percentage, description }
  */
 export async function POST(req: NextRequest) {
@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * PATCH /api/fm/line-discount?id=123
+ * PATCH /api/ids/fm/line-discount?id=123
  * body: { line_discount, percentage, description }
  */
 export async function PATCH(req: NextRequest) {
@@ -147,7 +147,7 @@ export async function PATCH(req: NextRequest) {
 }
 
 /**
- * DELETE /api/fm/line-discount?id=123
+ * DELETE /api/ids/fm/line-discount?id=123
  */
 export async function DELETE(req: NextRequest) {
   const { searchParams } = new URL(req.url);

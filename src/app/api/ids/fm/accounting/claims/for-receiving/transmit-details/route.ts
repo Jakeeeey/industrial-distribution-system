@@ -140,7 +140,7 @@ function uniq(arr: number[]): number[] {
 }
 
 /**
- * GET /api/fm/claims/for-receiving/transmit-details?transmittal_id=123
+ * GET /api/ids/fm/claims/for-receiving/transmit-details?transmittal_id=123
  * (Your enriched version kept)
  */
 export async function GET(req: NextRequest) {
@@ -345,7 +345,7 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * POST /api/fm/claims/for-receiving/transmit-details
+ * POST /api/ids/fm/claims/for-receiving/transmit-details
  * Body: { claims_transmittal_id: number, customer_memo_ids: number[] }
  *
  * ✅ Adds details (bulk)
