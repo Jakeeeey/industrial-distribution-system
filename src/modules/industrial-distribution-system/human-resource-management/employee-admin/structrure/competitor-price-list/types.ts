@@ -70,6 +70,7 @@ export interface MarketSnapshot {
 	minPrice: number;
 	maxPrice: number;
 	spread: number;
+	competitorCount: number;
 	totalEntries: number;
 	higherCount: number;
 	matchCount: number;

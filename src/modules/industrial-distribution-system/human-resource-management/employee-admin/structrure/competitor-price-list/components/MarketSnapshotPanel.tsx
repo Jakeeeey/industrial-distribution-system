@@ -140,9 +140,14 @@ export function MarketSnapshotPanel({
 					) : (
 						<>
 							<StatRow
+								label="Total Competitors"
+								value={snapshot.competitorCount.toLocaleString()}
+							/>
+							<StatRow
 								label="Total Entries"
 								value={snapshot.totalEntries.toLocaleString()}
 							/>
+							
 							<Separator className="my-1" />
 							<StatRow
 								label="Avg Price"

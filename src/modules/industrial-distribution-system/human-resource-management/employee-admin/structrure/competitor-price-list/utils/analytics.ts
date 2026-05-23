@@ -48,7 +48,11 @@ export function resolveCompetitorName(entry: CompetitorPriceEntry): string {
 	if (typeof c === "object" && c !== null && "name" in c) return c.name;
 	return `ID #${String(c)}`;
 }
-
+function getCompetitorId(entry: CompetitorPriceEntry): number {
+	return typeof entry.competitor_id === "object" && entry.competitor_id !== null
+		? (entry.competitor_id as any).id
+		: entry.competitor_id;
+}
 // ─── Market Snapshot ──────────────────────────────────────────────────────────
 
 export function computeMarketSnapshot(entries: CompetitorPriceEntry[]): MarketSnapshot {
@@ -58,6 +62,7 @@ export function computeMarketSnapshot(entries: CompetitorPriceEntry[]): MarketSn
 			minPrice: 0,
 			maxPrice: 0,
 			spread: 0,
+			competitorCount: 0,
 			totalEntries: 0,
 			higherCount: 0,
 			matchCount: 0,
@@ -88,6 +93,7 @@ export function computeMarketSnapshot(entries: CompetitorPriceEntry[]): MarketSn
 		minPrice: min,
 		maxPrice: max,
 		spread: max - min,
+		competitorCount: new Set(entries.map(getCompetitorId)).size,
 		totalEntries: entries.length,
 		higherCount,
 		matchCount,
