@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { Info, DollarSign, Package, Upload, X } from "lucide-react";
+import { Info, Package, Upload, X } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import Image from "next/image";
@@ -356,15 +356,13 @@ export function ProductForm({
               onDragLeave={() => {
                 if (!readOnly) setIsDragging(false);
               }}
-              className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 transition-colors ${
-                readOnly
+              className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 transition-colors ${readOnly
                   ? "cursor-default opacity-80 bg-slate-50/50 dark:bg-slate-900/50"
                   : "cursor-pointer"
-              } ${
-                isDragging
+                } ${isDragging
                   ? "border-primary bg-primary/5"
                   : "border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/50"
-              }`}
+                }`}
             >
               {imagePreview ? (
                 <div className="relative">
