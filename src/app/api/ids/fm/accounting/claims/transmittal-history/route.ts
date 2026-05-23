@@ -1,4 +1,4 @@
-// src/app/api/fm/claims/transmittal-history/route.ts
+// src/app/api/ids/fm/claims/transmittal-history/route.ts
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
@@ -16,10 +16,10 @@ type DirectusDetailAggRow = {
     received_at?: string | null;
     remarks?: string | null;
     customer_memo_id?:
-        | number
-        | string
-        | null
-        | {
+    | number
+    | string
+    | null
+    | {
         id?: number | string | null;
         memo_number?: string | null;
         reason?: string | null;
@@ -205,7 +205,7 @@ async function fetchIsClaimedMap(
     return map;
 }
 
-// GET /api/fm/claims/transmittal-history?q=&status=&date_from=&date_to=&page=&limit=
+// GET /api/ids/fm/claims/transmittal-history?q=&status=&date_from=&date_to=&page=&limit=
 export async function GET(req: NextRequest) {
     try {
         const url = new URL(req.url);
@@ -422,8 +422,8 @@ export async function GET(req: NextRequest) {
             const statusNorm = normalizeStatus(t?.status);
 
             let details: Array<HistoryDetail & { __isClaimed: boolean }> = (tId
-                    ? byTrnId.get(tId) ?? []
-                    : []
+                ? byTrnId.get(tId) ?? []
+                : []
             ).map((d) => {
                 const memo = d?.customer_memo_id;
                 const memoObj = memo && typeof memo === "object" ? memo : null;

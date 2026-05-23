@@ -1,4 +1,4 @@
-import {  NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
 export const runtime = "nodejs";
@@ -38,7 +38,7 @@ export async function GET() {
         return NextResponse.json(data);
 
     } catch (err: unknown) {
-        console.error("[BFF] GET /api/fm/treasury/denominations failed:", err);
+        console.error("[BFF] GET /api/ids/fm/treasury/denominations failed:", err);
         return NextResponse.json({
             message: "BFF Error",
             detail: (err instanceof Error ? err.message : String(err))

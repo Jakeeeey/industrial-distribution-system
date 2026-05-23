@@ -199,7 +199,7 @@ export default function AddAssetModal({ onLocalAppend }: AddAssetModalProps) {
       const formData = new FormData();
       formData.append("file", compressedFile);
 
-      const res = await fetch("/api/fm/asset-management/asset-image-upload", {
+      const res = await fetch("/api/ids/fm/asset-management/asset-image-upload", {
         method: "POST",
         body: formData,
       });
@@ -241,7 +241,7 @@ export default function AddAssetModal({ onLocalAppend }: AddAssetModalProps) {
         item_image: finalImageValue,
       };
 
-      const res = await fetch("/api/fm/asset-management", {
+      const res = await fetch("/api/ids/fm/asset-management", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(submissionData),

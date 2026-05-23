@@ -36,7 +36,7 @@ export function AddPaymentTermDialog({ onSuccess, currentUserId }: AddPaymentTer
     setIsLoading(true);
 
     try {
-      const res = await fetch("/api/fm/accounting/supplier-management/payment-terms", {
+      const res = await fetch("/api/ids/fm/accounting/supplier-management/payment-terms", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -41,7 +41,7 @@ export async function getLookups(params?: {
       units: Unit[];
       suppliers?: Supplier[];
     };
-  }>(`/api/fm/product-pricing/printables/lookups${qs ? `?${qs}` : ""}`);
+  }>(`/api/ids/fm/product-pricing/printables/lookups${qs ? `?${qs}` : ""}`);
 }
 
 export async function getProducts(params: {
@@ -58,6 +58,6 @@ export async function getProducts(params: {
     if (v) sp.set(k, v);
   }
   return http<{ data: ProductRow[] }>(
-    `/api/fm/product-pricing/printables?${sp.toString()}`,
+    `/api/ids/fm/product-pricing/printables?${sp.toString()}`,
   );
 }

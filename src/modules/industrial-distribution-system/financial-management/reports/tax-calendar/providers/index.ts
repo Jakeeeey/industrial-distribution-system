@@ -1,7 +1,7 @@
 // providers/index.ts - Tax Calendar API provider
 import type { TaxActivityForm, TaxActivity } from '../types';
 
-const API_BASE_URL = '/api/fm/reports/tax-calendar';
+const API_BASE_URL = '/api/ids/fm/reports/tax-calendar';
 
 /**
  * Parse error response safely
@@ -25,20 +25,20 @@ async function parseErrorResponse(res: Response): Promise<string> {
 export async function fetchTaxActivities(): Promise<TaxActivity[]> {
   try {
     console.log('[TAX-CAL] Fetching tax activities from:', API_BASE_URL);
-    
-    const res = await fetch(API_BASE_URL, { 
+
+    const res = await fetch(API_BASE_URL, {
       credentials: 'include',
       headers: {
         'Accept': 'application/json',
       }
     });
-    
+
     console.log('[TAX-CAL] Response status:', res.status);
-    
+
     if (!res.ok) {
       const errorMsg = await parseErrorResponse(res);
       console.error('[TAX-CAL] API error:', errorMsg, 'Status:', res.status);
-      
+
       // Handle specific status codes
       if (res.status === 401) {
         throw new Error('Unauthorized: Please log in again');
@@ -49,15 +49,15 @@ export async function fetchTaxActivities(): Promise<TaxActivity[]> {
       if (res.status >= 500) {
         throw new Error(`Server error: ${errorMsg}`);
       }
-      
+
       throw new Error(errorMsg);
     }
-    
+
     const contentType = res.headers.get('content-type');
     if (!contentType?.includes('application/json')) {
       throw new Error('Invalid response format: expected JSON');
     }
-    
+
     const data = await res.json();
     console.log('[TAX-CAL] Fetch successful, received:', data);
     return Array.isArray(data) ? data : (data.data ?? []);
@@ -82,12 +82,12 @@ export async function createTaxActivity(form: TaxActivityForm): Promise<TaxActiv
       },
       body: JSON.stringify(form),
     });
-    
+
     if (!res.ok) {
       const error = await res.json().catch(() => ({}));
       throw new Error(error.message || `HTTP ${res.status}`);
     }
-    
+
     const data = await res.json();
     return data.data ?? data;
   } catch (error) {
@@ -110,12 +110,12 @@ export async function updateTaxActivity(id: string, form: TaxActivityForm): Prom
       },
       body: JSON.stringify(form),
     });
-    
+
     if (!res.ok) {
       const error = await res.json().catch(() => ({}));
       throw new Error(error.message || `HTTP ${res.status}`);
     }
-    
+
     const data = await res.json();
     return data.data ?? data;
   } catch (error) {
@@ -136,7 +136,7 @@ export async function deleteTaxActivity(id: string): Promise<void> {
         'Accept': 'application/json',
       },
     });
-    
+
     if (!res.ok) {
       const error = await res.json().catch(() => ({}));
       throw new Error(error.message || `HTTP ${res.status}`);
