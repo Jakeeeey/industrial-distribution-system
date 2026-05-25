@@ -7,13 +7,14 @@ import React, {
 	useEffect,
 	useState,
 } from "react";
-import type { CompetitorPriceEntry, CompetitorRef } from "../types";
+import type { CompetitorPriceEntry, CompetitorRef, ProductRef } from "../types";
 
 // ─── Context Shape ────────────────────────────────────────────────────────────
 
 interface CompetitorPriceListContextType {
 	entries: CompetitorPriceEntry[];
 	competitors: CompetitorRef[];
+	products: ProductRef[];
 	isLoading: boolean;
 	isError: boolean;
 	error: Error | null;
@@ -35,6 +36,7 @@ export function CompetitorPriceListFetchProvider({
 }): React.ReactNode {
 	const [entries, setEntries] = useState<CompetitorPriceEntry[]>([]);
 	const [competitors, setCompetitors] = useState<CompetitorRef[]>([]);
+	const [products, setProducts] = useState<ProductRef[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
 	const [isError, setIsError] = useState(false);
 	const [error, setError] = useState<Error | null>(null);
@@ -106,8 +108,24 @@ export function CompetitorPriceListFetchProvider({
 					? (competitorsData as CompetitorRef[])
 					: [];
 
+			const uniqueProducts: ProductRef[] = [];
+			const seenNames = new Set<string>();
+			productsList.forEach((p) => {
+				const name = p.product_name?.trim();
+				if (name && !seenNames.has(name)) {
+					seenNames.add(name);
+					uniqueProducts.push({
+						product_id: p.product_id,
+						product_name: name,
+						priceA: p.priceA,
+						price_per_unit: p.price_per_unit
+					});
+				}
+			});
+
 			setEntries(normalizedEntries);
 			setCompetitors(competitorList);
+			setProducts(uniqueProducts);
 		} catch (err) {
 			setIsError(true);
 			setError(err instanceof Error ? err : new Error(String(err)));
@@ -126,6 +144,7 @@ export function CompetitorPriceListFetchProvider({
 			value: {
 				entries,
 				competitors,
+				products,
 				isLoading,
 				isError,
 				error,

@@ -4,8 +4,9 @@ import { useMemo, useState } from "react";
 import {
 	DEFAULT_FILTERS,
 	type CompetitorPriceEntry,
-	type MarketSnapshot,
+	type PriceIntelligenceSnapshot,
 	type PriceListFilters,
+	type ProductRef,
 } from "../types";
 import { useCompetitorPriceListContext } from "../providers/fetchproviders";
 import {
@@ -23,6 +24,7 @@ export interface UseCompetitorPriceListReturn {
 	// Raw data
 	entries: CompetitorPriceEntry[];
 	competitors: CompetitorRef[];
+	products: ProductRef[];
 	isLoading: boolean;
 	isError: boolean;
 	error: Error | null;
@@ -30,13 +32,14 @@ export interface UseCompetitorPriceListReturn {
 
 	// Filter state
 	filters: PriceListFilters;
+	activeProductId: string;
 	setFilter: <K extends keyof PriceListFilters>(key: K, value: PriceListFilters[K]) => void;
 	resetFilters: () => void;
 	hasActiveFilters: boolean;
 
 	// Computed
 	filteredEntries: CompetitorPriceEntry[];
-	marketSnapshot: MarketSnapshot;
+	marketSnapshot: PriceIntelligenceSnapshot;
 	provinces: LocationOption[];
 	municipalities: LocationOption[];
 	barangays: LocationOption[];
@@ -45,10 +48,12 @@ export interface UseCompetitorPriceListReturn {
 }
 
 export function useCompetitorPriceList(): UseCompetitorPriceListReturn {
-	const { entries, competitors, isLoading, isError, error, refetch } =
+	const { entries, competitors, products, isLoading, isError, error, refetch } =
 		useCompetitorPriceListContext();
 
 	const [filters, setFilters] = useState<PriceListFilters>(DEFAULT_FILTERS);
+
+	const activeProductId = filters.productId;
 
 	const setFilter = <K extends keyof PriceListFilters>(
 		key: K,
@@ -88,6 +93,10 @@ export function useCompetitorPriceList(): UseCompetitorPriceListReturn {
 
 	const filteredEntries = useMemo<CompetitorPriceEntry[]>(() => {
 		let result = entries;
+
+		if (activeProductId) {
+			result = result.filter((e) => e.product_name === activeProductId);
+		}
 
 		if (filters.search) {
 			const s = filters.search.toLowerCase();
@@ -138,11 +147,11 @@ export function useCompetitorPriceList(): UseCompetitorPriceListReturn {
 		);
 
 		return result;
-	}, [entries, filters]);
+	}, [entries, filters, activeProductId]);
 
 	// ─── Analytics (derived from filtered data) ───────────────────────────────
 
-	const marketSnapshot = useMemo<MarketSnapshot>(
+	const marketSnapshot = useMemo<PriceIntelligenceSnapshot>(
 		() => computeMarketSnapshot(filteredEntries),
 		[filteredEntries]
 	);
@@ -165,11 +174,13 @@ export function useCompetitorPriceList(): UseCompetitorPriceListReturn {
 	return {
 		entries,
 		competitors,
+		products,
 		isLoading,
 		isError,
 		error,
 		refetch,
 		filters,
+		activeProductId,
 		setFilter,
 		resetFilters,
 		hasActiveFilters,

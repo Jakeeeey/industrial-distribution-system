@@ -43,6 +43,7 @@ export interface CompetitorPriceEntry {
 
 export interface PriceListFilters {
 	search: string;
+	productId: string;       // "" = all
 	competitorId: string;    // "" = all
 	province: string;
 	municipality: string;
@@ -54,6 +55,7 @@ export interface PriceListFilters {
 
 export const DEFAULT_FILTERS: PriceListFilters = {
 	search: "",
+	productId: "",
 	competitorId: "",
 	province: "",
 	municipality: "",
@@ -65,7 +67,7 @@ export const DEFAULT_FILTERS: PriceListFilters = {
 
 // ─── Analytics ────────────────────────────────────────────────────────────────
 
-export interface MarketSnapshot {
+export interface PriceIntelligenceSnapshot {
 	avgPrice: number;
 	minPrice: number;
 	maxPrice: number;
