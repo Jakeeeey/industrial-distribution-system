@@ -1,0 +1,158 @@
+import { CityDealer } from "../types";
+
+const DUMMY_DATA: CityDealer[] = [
+  {
+    id: "1",
+    name: "City Dealer: Santo Tomas Hub",
+    assignedPersonnel: [
+      { id: "p1", name: "Juan Dela Cruz", barangay: "Brgy. Poblacion" },
+      { id: "p2", name: "Maria Santos", barangay: "Brgy. Casilagan" },
+    ],
+    totalFullTanksGivenEver: 2000,
+    totalEmptyTanksReturnedEver: 1800,
+    missingTanks: 100,
+    unpaidBalance: 112500.0,
+    createdAt: "2024-05-01T10:00:00Z",
+  },
+  {
+    id: "2",
+    name: "City Dealer: Tubao Hub",
+    assignedPersonnel: [
+      { id: "p3", name: "Pedro Penduko", barangay: "Brgy. Rizal" },
+      { id: "p4", name: "Ana Reyes", barangay: "Brgy. Francia Sur" },
+    ],
+    totalFullTanksGivenEver: 1500,
+    totalEmptyTanksReturnedEver: 1100,
+    missingTanks: 50,
+    unpaidBalance: 45000.0,
+    createdAt: "2024-05-02T11:00:00Z",
+  },
+  {
+    id: "3",
+    name: "City Dealer: San Fernando Hub",
+    assignedPersonnel: [
+      { id: "p5", name: "Luis Garcia", barangay: "Brgy. Dolores" },
+      { id: "p6", name: "Carla Mendoza", barangay: "Brgy. San Agustin" },
+    ],
+    totalFullTanksGivenEver: 3200,
+    totalEmptyTanksReturnedEver: 3000,
+    missingTanks: 200,
+    unpaidBalance: 98000.0,
+    createdAt: "2024-05-03T09:30:00Z",
+  },
+  {
+    id: "4",
+    name: "City Dealer: Bauang Hub",
+    assignedPersonnel: [
+      { id: "p7", name: "Ramon Bautista", barangay: "Brgy. Central East" },
+      { id: "p8", name: "Elena Cruz", barangay: "Brgy. Payocpoc Sur" },
+    ],
+    totalFullTanksGivenEver: 1800,
+    totalEmptyTanksReturnedEver: 1500,
+    missingTanks: 300,
+    unpaidBalance: 67000.0,
+    createdAt: "2024-05-04T14:20:00Z",
+  },
+  {
+    id: "5",
+    name: "City Dealer: Agoo Hub",
+    assignedPersonnel: [
+      { id: "p9", name: "Victor Lopez", barangay: "Brgy. San Nicolas" },
+      { id: "p10", name: "Sofia Ramos", barangay: "Brgy. Sta. Barbara" },
+    ],
+    totalFullTanksGivenEver: 2500,
+    totalEmptyTanksReturnedEver: 2300,
+    missingTanks: 200,
+    unpaidBalance: 120000.0,
+    createdAt: "2024-05-05T08:15:00Z",
+  },
+  {
+    id: "6",
+    name: "City Dealer: Rosario Hub",
+    assignedPersonnel: [
+      { id: "p11", name: "Daniel Torres", barangay: "Brgy. Subusub" },
+      { id: "p12", name: "Patricia Lim", barangay: "Brgy. Poblacion East" },
+    ],
+    totalFullTanksGivenEver: 1400,
+    totalEmptyTanksReturnedEver: 1000,
+    missingTanks: 400,
+    unpaidBalance: 53000.0,
+    createdAt: "2024-05-06T16:45:00Z",
+  },
+  {
+    id: "7",
+    name: "City Dealer: Aringay Hub",
+    assignedPersonnel: [
+      { id: "p13", name: "Mark Villanueva", barangay: "Brgy. Sta. Lucia" },
+      { id: "p14", name: "Angela Flores", barangay: "Brgy. San Benito Norte" },
+    ],
+    totalFullTanksGivenEver: 2100,
+    totalEmptyTanksReturnedEver: 2000,
+    missingTanks: 100,
+    unpaidBalance: 75000.0,
+    createdAt: "2024-05-07T12:00:00Z",
+  },
+  {
+    id: "8",
+    name: "City Dealer: Caba Hub",
+    assignedPersonnel: [
+      { id: "p15", name: "Joseph Navarro", barangay: "Brgy. San Carlos" },
+      { id: "p16", name: "Michelle Aquino", barangay: "Brgy. San Cornelio" },
+    ],
+    totalFullTanksGivenEver: 1700,
+    totalEmptyTanksReturnedEver: 1400,
+    missingTanks: 300,
+    unpaidBalance: 61000.0,
+    createdAt: "2024-05-08T10:10:00Z",
+  },
+  {
+    id: "9",
+    name: "City Dealer: Bacnotan Hub",
+    assignedPersonnel: [
+      { id: "p17", name: "Ricardo Dalisay", barangay: "Brgy. Quirino" },
+    ],
+    totalFullTanksGivenEver: 900,
+    totalEmptyTanksReturnedEver: 850,
+    missingTanks: 50,
+    unpaidBalance: 12000.0,
+    createdAt: "2024-05-09T09:00:00Z",
+  },
+  {
+    id: "10",
+    name: "City Dealer: Luna Hub",
+    assignedPersonnel: [
+      { id: "p18", name: "Benjie Paras", barangay: "Brgy. Victoria" },
+    ],
+    totalFullTanksGivenEver: 1100,
+    totalEmptyTanksReturnedEver: 1000,
+    missingTanks: 100,
+    unpaidBalance: 25000.0,
+    createdAt: "2024-05-10T14:00:00Z",
+  },
+  {
+    id: "11",
+    name: "City Dealer: Bangar Hub",
+    assignedPersonnel: [
+      { id: "p19", name: "Jimmy Santos", barangay: "Brgy. General Luna" },
+    ],
+    totalFullTanksGivenEver: 800,
+    totalEmptyTanksReturnedEver: 700,
+    missingTanks: 100,
+    unpaidBalance: 15000.0,
+    createdAt: "2024-05-11T11:20:00Z",
+  },
+  {
+    id: "12",
+    name: "City Dealer: Santol Hub",
+    assignedPersonnel: [
+      { id: "p20", name: "Wally Bayola", barangay: "Brgy. Corro-oy" },
+    ],
+    totalFullTanksGivenEver: 500,
+    totalEmptyTanksReturnedEver: 480,
+    missingTanks: 20,
+    unpaidBalance: 5000.0,
+    createdAt: "2024-05-12T15:30:00Z",
+  },
+];
+
+export default DUMMY_DATA;

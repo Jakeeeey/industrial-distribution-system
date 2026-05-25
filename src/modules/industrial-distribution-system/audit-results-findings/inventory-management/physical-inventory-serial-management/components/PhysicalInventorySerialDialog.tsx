@@ -728,6 +728,7 @@ export function PhysicalInventorySerialDialog(props: Props) {
                     void handleRegistrationSuccess(serials);
                 }}
                 onClear={() => setPendingSerials([])}
+                onRemoveRow={(serial) => setPendingSerials((prev) => prev.filter((s) => s !== serial))}
             />
         </Dialog>
     );
