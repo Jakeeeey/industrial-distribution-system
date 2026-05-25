@@ -44,6 +44,7 @@ import { formatPeso, formatEntryDate, resolveCompetitorName } from "../utils/ana
 interface PriceListTableProps {
 	data: CompetitorPriceEntry[];
 	isLoading?: boolean;
+	onRowClick?: (competitorId: string, productName: string) => void;
 }
 
 // ─── Row Detail Panel ─────────────────────────────────────────────────────────
@@ -139,7 +140,7 @@ function TableSkeleton() {
 
 // ─── Table Component ──────────────────────────────────────────────────────────
 
-export function PriceListTable({ data, isLoading = false }: PriceListTableProps) {
+export function PriceListTable({ data, isLoading = false, onRowClick }: PriceListTableProps) {
 	const [sorting, setSorting] = React.useState<SortingState>([
 		{ id: "created_at", desc: true },
 	]);
@@ -155,7 +156,21 @@ export function PriceListTable({ data, isLoading = false }: PriceListTableProps)
 					<button
 						onClick={(e) => {
 							e.stopPropagation();
+							const wasExpanded = row.getIsExpanded();
 							row.toggleExpanded();
+
+							if (onRowClick) {
+								if (wasExpanded) {
+									onRowClick("", "");
+								} else {
+									const entry = row.original;
+									const compId = typeof entry.competitor_id === "object" && entry.competitor_id !== null
+										? String(entry.competitor_id.id)
+										: String(entry.competitor_id);
+									const productName = entry.product_name || "";
+									onRowClick(compId, productName);
+								}
+							}
 						}}
 						className="flex items-center justify-center h-6 w-6 rounded hover:bg-muted transition-colors"
 						aria-label={row.getIsExpanded() ? "Collapse row" : "Expand row"}
@@ -173,7 +188,7 @@ export function PriceListTable({ data, isLoading = false }: PriceListTableProps)
 			},
 			...priceListColumns,
 		],
-		[]
+		[onRowClick]
 	);
 
 	// eslint-disable-next-line react-hooks/incompatible-library
@@ -182,12 +197,25 @@ export function PriceListTable({ data, isLoading = false }: PriceListTableProps)
 		columns: columnsWithExpand,
 		state: { sorting, expanded },
 		onSortingChange: setSorting,
-		onExpandedChange: setExpanded,
+		onExpandedChange: (updater) => {
+			setExpanded((prev) => {
+				const next = (typeof updater === "function" ? updater(prev) : updater) as Record<string, boolean>;
+				const prevRecord = prev as Record<string, boolean>;
+				const keys = Object.keys(next);
+				const activeKeys = keys.filter((k) => next[k]);
+				if (activeKeys.length <= 1) return next;
+
+				const newKey = activeKeys.find((k) => !prevRecord[k]);
+				return newKey ? { [newKey]: true } : {};
+			});
+		},
 		getCoreRowModel: getCoreRowModel(),
 		getSortedRowModel: getSortedRowModel(),
 		getPaginationRowModel: getPaginationRowModel(),
 		getExpandedRowModel: getExpandedRowModel(),
 		getRowCanExpand: () => true,
+		getRowId: (row) => String(row.id),
+		autoResetExpanded: false,
 		initialState: { pagination: { pageSize: 20 } },
 	});
 
@@ -223,7 +251,22 @@ export function PriceListTable({ data, isLoading = false }: PriceListTableProps)
 											"cursor-pointer transition-colors hover:bg-muted/40",
 											row.getIsExpanded() && "bg-muted/20"
 										)}
-										onClick={() => row.toggleExpanded()}
+										onClick={() => {
+											const wasExpanded = row.getIsExpanded();
+											row.toggleExpanded();
+											if (onRowClick) {
+												if (wasExpanded) {
+													onRowClick("", "");
+												} else {
+													const entry = row.original;
+													const compId = typeof entry.competitor_id === "object" && entry.competitor_id !== null
+														? String(entry.competitor_id.id)
+														: String(entry.competitor_id);
+													const productName = entry.product_name || "";
+													onRowClick(compId, productName);
+												}
+											}
+										}}
 									>
 										{row.getVisibleCells().map((cell) => (
 											<TableCell key={cell.id} className="py-2.5 text-sm">

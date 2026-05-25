@@ -39,6 +39,7 @@ export interface UseCompetitorPriceListReturn {
 
 	// Computed
 	filteredEntries: CompetitorPriceEntry[];
+	chartFilteredEntries: CompetitorPriceEntry[];
 	marketSnapshot: PriceIntelligenceSnapshot;
 	provinces: LocationOption[];
 	municipalities: LocationOption[];
@@ -149,6 +150,54 @@ export function useCompetitorPriceList(): UseCompetitorPriceListReturn {
 		return result;
 	}, [entries, filters, activeProductId]);
 
+	const chartFilteredEntries = useMemo<CompetitorPriceEntry[]>(() => {
+		let result = entries;
+
+		if (activeProductId) {
+			result = result.filter((e) => e.product_name === activeProductId);
+		}
+
+		if (filters.search) {
+			const s = filters.search.toLowerCase();
+			result = result.filter((entry) => {
+				const competitorName =
+					typeof entry.competitor_id === "object" && entry.competitor_id !== null
+						? entry.competitor_id.name
+						: String(entry.competitor_id);
+				return [
+					competitorName,
+					entry.province,
+					entry.municipality,
+					entry.barangay,
+					entry.source_type,
+					entry.size,
+					String(entry.product_id),
+				]
+					.filter(Boolean)
+					.some((v) => String(v).toLowerCase().includes(s));
+			});
+		}
+
+		if (filters.province) {
+			result = result.filter((e) => e.province === filters.province);
+		}
+		if (filters.municipality) {
+			result = result.filter((e) => e.municipality === filters.municipality);
+		}
+		if (filters.barangay) {
+			result = result.filter((e) => e.barangay === filters.barangay);
+		}
+		if (filters.sourceType) {
+			result = result.filter((e) => e.source_type === filters.sourceType);
+		}
+
+		result = result.filter((e) =>
+			isWithinDateRange(e, filters.dateFrom, filters.dateTo)
+		);
+
+		return result;
+	}, [entries, filters, activeProductId]);
+
 	// ─── Analytics (derived from filtered data) ───────────────────────────────
 
 	const marketSnapshot = useMemo<PriceIntelligenceSnapshot>(
@@ -185,6 +234,7 @@ export function useCompetitorPriceList(): UseCompetitorPriceListReturn {
 		resetFilters,
 		hasActiveFilters,
 		filteredEntries,
+		chartFilteredEntries,
 		marketSnapshot,
 		provinces,
 		municipalities,
