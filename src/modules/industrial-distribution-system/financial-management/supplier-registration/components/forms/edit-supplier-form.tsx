@@ -140,7 +140,7 @@ export function EditSupplierForm({
         formData.append("folder_name", "supplier_profile_image");
 
         const uploadRes = await fetch(
-          "/api/supplier-registration/supplier-image-upload",
+          "/api/ids/supplier-registration/supplier-image-upload",
           {
             method: "POST",
             body: formData,
@@ -159,7 +159,7 @@ export function EditSupplierForm({
       }
 
       const response = await fetch(
-        `/api/supplier-registration/suppliers/${supplier.id}`,
+        `/api/ids/supplier-registration/suppliers/${supplier.id}`,
         {
           method: "PATCH",
           headers: {
@@ -608,11 +608,10 @@ export function EditSupplierForm({
                       setIsDragging(true);
                     }}
                     onDragLeave={() => setIsDragging(false)}
-                    className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 cursor-pointer transition-colors ${
-                      isDragging
+                    className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 cursor-pointer transition-colors ${isDragging
                         ? "border-primary bg-primary/5"
                         : "border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/50"
-                    }`}
+                      }`}
                   >
                     {imagePreview ? (
                       <div className="relative">

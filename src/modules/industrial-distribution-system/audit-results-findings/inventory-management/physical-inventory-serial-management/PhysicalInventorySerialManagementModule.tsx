@@ -159,13 +159,15 @@ function kpiCardTone(value: number): string {
 
 function buildRunningInventoryCacheKey(input: {
     branchName: string;
-    supplierShortcut: string;
+    supplierShortcut?: string;
     productCategory?: string;
+    cutOffDate?: string | null;
 }): string {
     return [
         input.branchName.trim().toLowerCase(),
-        input.supplierShortcut.trim().toLowerCase(),
+        (input.supplierShortcut ?? "__all__").trim().toLowerCase(),
         (input.productCategory ?? "__all__").trim().toLowerCase(),
+        (input.cutOffDate ?? "__no_cutoff__").trim().toLowerCase(),
     ].join("::");
 }
 
@@ -559,7 +561,7 @@ export function PhysicalInventorySerialManagementModule(props: Props) {
 
     const refreshRunningInventoryReadModel = React.useCallback(
         async (
-            nextFilters: PhysicalInventoryFiltersType,
+            nextFilters: PhysicalInventoryFiltersType & { cutOffDate?: string | null },
             nextLookup?: ProductLookupBundle | null,
         ): Promise<RunningInventoryRow[]> => {
             const activeLookup = nextLookup ?? lookupBundle;
@@ -583,6 +585,7 @@ export function PhysicalInventorySerialManagementModule(props: Props) {
                 branches,
                 suppliers,
                 lookup: activeLookup,
+                cutOffDate: nextFilters.cutOffDate,
             });
 
             const cacheKey = buildRunningInventoryCacheKey(params);
@@ -784,6 +787,7 @@ export function PhysicalInventorySerialManagementModule(props: Props) {
                             branches: nextBranches,
                             suppliers: nextSuppliers,
                             lookup: nextLookup,
+                            cutOffDate: existingHeader.cutOff_date,
                         });
 
                         const cacheKey = buildRunningInventoryCacheKey(params);
@@ -950,6 +954,7 @@ export function PhysicalInventorySerialManagementModule(props: Props) {
             supplier_id: filters.supplier_id,
             category_id: filters.category_id,
             price_type_id: filters.price_type_id,
+            cutOffDate: header?.cutOff_date,
         });
     }, [
         filters.branch_id,
@@ -959,6 +964,7 @@ export function PhysicalInventorySerialManagementModule(props: Props) {
         isBootLoading,
         lookupBundle,
         refreshRunningInventoryReadModel,
+        header?.cutOff_date,
     ]);
 
     React.useEffect(() => {
@@ -1111,6 +1117,7 @@ export function PhysicalInventorySerialManagementModule(props: Props) {
                 branches,
                 suppliers,
                 lookup: lookupBundle,
+                cutOffDate: savedHeader.cutOff_date,
             });
 
             const runningInventoryCacheKey = buildRunningInventoryCacheKey(
@@ -1330,7 +1337,7 @@ export function PhysicalInventorySerialManagementModule(props: Props) {
                 await Promise.all([
                     fetchPhysicalInventoryDetails(header.id),
                     refreshSerialCountMap(header.id),
-                    refreshRunningInventoryReadModel(filters),
+                    refreshRunningInventoryReadModel({ ...filters, cutOffDate: header.cutOff_date }),
                 ]);
 
             setDetailRows(nextDetails);

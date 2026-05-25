@@ -20,7 +20,7 @@ export function useSupplierDetails(supplierId: number | null) {
       setError(null);
 
       const response = await fetch(
-        `/api/supplier-registration/suppliers/${id}`,
+        `/api/ids/supplier-registration/suppliers/${id}`,
       );
 
       if (!response.ok) {
