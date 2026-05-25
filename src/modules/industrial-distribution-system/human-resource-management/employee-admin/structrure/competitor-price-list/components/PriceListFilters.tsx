@@ -22,14 +22,17 @@ import type {
 	CompetitorRef,
 	LocationOption,
 	PriceListFilters,
+	ProductRef,
 } from "../types";
 
 interface PriceListFiltersProps {
 	filters: PriceListFilters;
+	activeProductId: string;
 	setFilter: <K extends keyof PriceListFilters>(key: K, value: PriceListFilters[K]) => void;
 	resetFilters: () => void;
 	hasActiveFilters: boolean;
 	competitors: CompetitorRef[];
+	products: ProductRef[];
 	provinces: LocationOption[];
 	municipalities: LocationOption[];
 	barangays: LocationOption[];
@@ -39,19 +42,21 @@ const SOURCE_TYPES = ["Household", "Sari-Sari", "Eatery"] as const;
 
 export function PriceListFilters({
 	filters,
+	activeProductId,
 	setFilter,
 	resetFilters,
 	hasActiveFilters,
 	competitors,
+	products,
 	provinces,
 	municipalities,
 	barangays,
 }: PriceListFiltersProps) {
 	return (
 		<Card className="border shadow-sm">
-			<CardContent className="pt-4 pb-4">
-				{/* Row 1: Search + Competitor + Source */}
-				<div className="flex flex-wrap items-center gap-2 mb-2">
+			<CardContent className="pt-4 pb-4 space-y-4">
+				{/* Row 1: Search + Date Range*/}
+				<div className="flex flex-wrap items-center gap-2">
 					{/* Search */}
 					<div className="relative flex-1 min-w-[220px]">
 						<Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -62,119 +67,6 @@ export function PriceListFilters({
 							className="pl-8 h-9"
 						/>
 					</div>
-
-					{/* Competitor */}
-					<Select
-						value={filters.competitorId || "all"}
-						onValueChange={(v) => setFilter("competitorId", v === "all" ? "" : v)}
-					>
-						<SelectTrigger className="h-9 w-52">
-							<SelectValue placeholder="All Competitors" />
-						</SelectTrigger>
-						<SelectContent>
-							<SelectItem value="all">All Competitors</SelectItem>
-							{competitors.map((c) => (
-								<SelectItem key={c.id} value={String(c.id)}>
-									{c.name}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-
-					{/* Source Type */}
-					<Select
-						value={filters.sourceType || "all"}
-						onValueChange={(v) => setFilter("sourceType", v === "all" ? "" : v)}
-					>
-						<SelectTrigger className="h-9 w-40">
-							<SelectValue placeholder="All Sources" />
-						</SelectTrigger>
-						<SelectContent>
-							<SelectItem value="all">All Sources</SelectItem>
-							{SOURCE_TYPES.map((s) => (
-								<SelectItem key={s} value={s}>
-									{s}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-
-					{/* Reset */}
-					{hasActiveFilters && (
-						<Button
-							variant="ghost"
-							size="sm"
-							onClick={resetFilters}
-							className="h-9 px-3 text-muted-foreground hover:text-foreground"
-						>
-							<X className="mr-1.5 h-3.5 w-3.5" />
-							Reset
-						</Button>
-					)}
-				</div>
-
-				{/* Row 2: Location cascade + Date range */}
-				<div className="flex flex-wrap items-center gap-2">
-					{/* Province */}
-					<Select
-						value={filters.province || "all"}
-						onValueChange={(v) => setFilter("province", v === "all" ? "" : v)}
-					>
-						<SelectTrigger className="h-9 w-48">
-							<SelectValue placeholder="All Provinces" />
-						</SelectTrigger>
-						<SelectContent>
-							{provinces.map((p) => (
-								<SelectItem key={p.value || "__all"} value={p.value || "all"}>
-									{p.label}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-
-					{/* Municipality */}
-					<Select
-						value={filters.municipality || "all"}
-						onValueChange={(v) => setFilter("municipality", v === "all" ? "" : v)}
-						disabled={!filters.province}
-					>
-						<SelectTrigger className="h-9 w-48">
-							<SelectValue
-								placeholder={
-									filters.province ? "All Municipalities" : "Select province first"
-								}
-							/>
-						</SelectTrigger>
-						<SelectContent>
-							{municipalities.map((m) => (
-								<SelectItem key={m.value || "__all"} value={m.value || "all"}>
-									{m.label}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-
-					{/* Barangay */}
-					<Select
-						value={filters.barangay || "all"}
-						onValueChange={(v) => setFilter("barangay", v === "all" ? "" : v)}
-						disabled={!filters.municipality}
-					>
-						<SelectTrigger className="h-9 w-48">
-							<SelectValue
-								placeholder={
-									filters.municipality ? "All Barangays" : "Select municipality first"
-								}
-							/>
-						</SelectTrigger>
-						<SelectContent>
-							{barangays.map((b) => (
-								<SelectItem key={b.value || "__all"} value={b.value || "all"}>
-									{b.label}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
 
 					{/* Date From */}
 					<Popover>
@@ -229,6 +121,140 @@ export function PriceListFilters({
 							/>
 						</PopoverContent>
 					</Popover>
+
+					{/* Reset */}
+					{hasActiveFilters && (
+						<Button
+							variant="ghost"
+							size="sm"
+							onClick={resetFilters}
+							className="h-9 px-3 text-muted-foreground hover:text-foreground"
+						>
+							<X className="mr-1.5 h-3.5 w-3.5" />
+							Reset
+						</Button>
+					)}
+				</div>
+
+				{/* Row 2: Product + Competitors + Sources */}
+				<div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+					{/* Product */}
+					<Select
+						value={activeProductId || "all"}
+						onValueChange={(v) => setFilter("productId", v === "all" ? "" : v)}
+					>
+						<SelectTrigger className="h-9 w-full">
+							<SelectValue placeholder="Select Product" />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="all">All Products</SelectItem>
+							{products.map((p) => (
+								<SelectItem key={p.product_name} value={p.product_name}>
+									{p.product_name}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+
+					{/* Competitor */}
+					<Select
+						value={filters.competitorId || "all"}
+						onValueChange={(v) => setFilter("competitorId", v === "all" ? "" : v)}
+					>
+						<SelectTrigger className="h-9 w-full">
+							<SelectValue placeholder="All Competitors" />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="all">All Competitors</SelectItem>
+							{competitors.map((c) => (
+								<SelectItem key={c.id} value={String(c.id)}>
+									{c.name}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+
+					{/* Source Type */}
+					<Select
+						value={filters.sourceType || "all"}
+						onValueChange={(v) => setFilter("sourceType", v === "all" ? "" : v)}
+					>
+						<SelectTrigger className="h-9 w-full">
+							<SelectValue placeholder="All Sources" />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="all">All Sources</SelectItem>
+							{SOURCE_TYPES.map((s) => (
+								<SelectItem key={s} value={s}>
+									{s}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</div>
+
+				{/* Row 3: Address Cascade (Province, Municipality, Barangay) */}
+				<div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+					{/* Province */}
+					<Select
+						value={filters.province || "all"}
+						onValueChange={(v) => setFilter("province", v === "all" ? "" : v)}
+					>
+						<SelectTrigger className="h-9 w-full">
+							<SelectValue placeholder="All Provinces" />
+						</SelectTrigger>
+						<SelectContent>
+							{provinces.map((p) => (
+								<SelectItem key={p.value || "__all"} value={p.value || "all"}>
+									{p.label}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+
+					{/* Municipality */}
+					<Select
+						value={filters.municipality || "all"}
+						onValueChange={(v) => setFilter("municipality", v === "all" ? "" : v)}
+						disabled={!filters.province}
+					>
+						<SelectTrigger className="h-9 w-full">
+							<SelectValue
+								placeholder={
+									filters.province ? "All Municipalities" : "Select province first"
+								}
+							/>
+						</SelectTrigger>
+						<SelectContent>
+							{municipalities.map((m) => (
+								<SelectItem key={m.value || "__all"} value={m.value || "all"}>
+									{m.label}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+
+					{/* Barangay */}
+					<Select
+						value={filters.barangay || "all"}
+						onValueChange={(v) => setFilter("barangay", v === "all" ? "" : v)}
+						disabled={!filters.municipality}
+					>
+						<SelectTrigger className="h-9 w-full">
+							<SelectValue
+								placeholder={
+									filters.municipality ? "All Barangays" : "Select municipality first"
+								}
+							/>
+						</SelectTrigger>
+						<SelectContent>
+							{barangays.map((b) => (
+								<SelectItem key={b.value || "__all"} value={b.value || "all"}>
+									{b.label}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
 				</div>
 			</CardContent>
 		</Card>

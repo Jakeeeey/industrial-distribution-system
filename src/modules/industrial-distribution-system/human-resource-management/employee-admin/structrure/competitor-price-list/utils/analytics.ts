@@ -1,7 +1,7 @@
 import type {
 	CompetitorPriceEntry,
 	LocationOption,
-	MarketSnapshot,
+	PriceIntelligenceSnapshot,
 	PriceListFilters,
 	ProvinceStat,
 	SourceStat,
@@ -55,7 +55,7 @@ function getCompetitorId(entry: CompetitorPriceEntry): number {
 }
 // ─── Market Snapshot ──────────────────────────────────────────────────────────
 
-export function computeMarketSnapshot(entries: CompetitorPriceEntry[]): MarketSnapshot {
+export function computeMarketSnapshot(entries: CompetitorPriceEntry[]): PriceIntelligenceSnapshot {
 	if (entries.length === 0) {
 		return {
 			avgPrice: 0,

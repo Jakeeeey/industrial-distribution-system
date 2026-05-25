@@ -22,11 +22,13 @@ import { Separator } from "@/components/ui/separator";
 function CompetitorPriceListContent() {
 	const {
 		competitors,
+		products,
 		isLoading,
 		isError,
 		error,
 		refetch,
 		filters,
+		activeProductId,
 		setFilter,
 		resetFilters,
 		hasActiveFilters,
@@ -103,10 +105,12 @@ function CompetitorPriceListContent() {
 				<div className="flex-1 min-w-0 space-y-4">
 					<PriceListFilters
 						filters={filters}
+						activeProductId={activeProductId}
 						setFilter={setFilter}
 						resetFilters={resetFilters}
 						hasActiveFilters={hasActiveFilters}
 						competitors={competitors}
+						products={products}
 						provinces={provinces}
 						municipalities={municipalities}
 						barangays={barangays}

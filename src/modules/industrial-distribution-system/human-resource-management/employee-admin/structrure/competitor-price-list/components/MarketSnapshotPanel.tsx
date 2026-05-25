@@ -11,12 +11,12 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import type { MarketSnapshot, ProvinceStat, SourceStat } from "../types";
+import type { PriceIntelligenceSnapshot, ProvinceStat, SourceStat } from "../types";
 import { formatPeso } from "../utils/analytics";
 import { cn } from "@/lib/utils";
 
 interface MarketSnapshotPanelProps {
-	snapshot: MarketSnapshot;
+	snapshot: PriceIntelligenceSnapshot;
 	provinceStats: ProvinceStat[];
 	sourceStats: SourceStat[];
 }
@@ -129,7 +129,7 @@ export function MarketSnapshotPanel({
 				<CardHeader className="pb-2 pt-4 px-4">
 					<CardTitle className="text-sm font-bold flex items-center gap-2">
 						<BarChart3 className="h-4 w-4 text-primary" />
-						Market Snapshot
+						Price Intelligence Snapshot
 					</CardTitle>
 				</CardHeader>
 				<CardContent className="px-4 pb-4">

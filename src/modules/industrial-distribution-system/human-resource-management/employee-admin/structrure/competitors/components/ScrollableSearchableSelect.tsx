@@ -40,7 +40,7 @@ export function ScrollableSearchableSelect({
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
+            <PopoverTrigger className="w-full" asChild>
                 <Button
                     variant="outline"
                     role="combobox"
@@ -56,20 +56,24 @@ export function ScrollableSearchableSelect({
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                <Command>
-                    <CommandInput placeholder={`Search ${placeholder.toLowerCase()}...`} />
+            <PopoverContent
+                className="p-0"
+                style={{ width: "var(--radix-popover-trigger-width)" }}
+                align="start"
+            >
+                <Command className="w-full">
+                    <CommandInput placeholder={`Search ${placeholder.toLowerCase()}...`} className="w-full" />
                     <div
-                        className="max-h-64 overflow-y-auto overscroll-contain"
+                        className="max-h-64 overflow-y-auto overscroll-contain w-full"
                         onWheel={(event) => {
                             event.stopPropagation();
                             const target = event.currentTarget;
                             target.scrollTop += event.deltaY;
                         }}
                     >
-                        <CommandList className="max-h-none overflow-visible">
+                        <CommandList className="max-h-none overflow-visible w-full">
                             <CommandEmpty>No results found.</CommandEmpty>
-                            <CommandGroup>
+                            <CommandGroup className="w-full">
                                 {options.map((opt) => (
                                     <CommandItem
                                         key={opt.value}
