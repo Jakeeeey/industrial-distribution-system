@@ -11,6 +11,7 @@ import { CompetitorInformationFetchProvider } from "./providers/fetchProvider";
 import { useCompetitors } from "./hooks/useCompetitors";
 import { CompetitorTable } from "./components/CompetitorTable";
 import type { CompetitorFormData } from "./types";
+import { Separator } from "@/components/ui/separator";
 
 function CompetitorInformationContent() {
 	const {
@@ -67,8 +68,11 @@ function CompetitorInformationContent() {
 	}
 
 	return (
-		<div className="space-y-6">
-			<div className="flex items-center justify-between">
+		// 🚀 STANDARD SHADCN DASHBOARD LAYOUT
+		<div className="flex-1 space-y-4 p-4 md:p-8 pt-6 animate-in fade-in duration-500">
+
+			{/* HEADER SECTION */}
+			<div className="flex flex-col sm:flex-row sm:items-center justify-between space-y-2 sm:space-y-0">
 				<div>
 					<h1 className="text-3xl font-bold tracking-tight">
 						Competitor Management
@@ -87,6 +91,7 @@ function CompetitorInformationContent() {
 					Refresh
 				</Button>
 			</div>
+			<Separator className="my-4" />
 
 			<CompetitorTable
 				data={competitors}

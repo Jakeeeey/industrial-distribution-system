@@ -23,14 +23,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-    DropdownMenu,
-    DropdownMenuCheckboxItem,
-    DropdownMenuContent,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
     Calendar as CalendarIcon,
-    ChevronDown,
     ChevronLeft,
     ChevronRight,
     ChevronsLeft,
@@ -237,12 +230,7 @@ export function CompetitorTable({
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center justify-end">
-                <Button onClick={() => setCreateDialogOpen(true)}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Competitor
-                </Button>
-            </div>
+
 
             <Card className="border shadow-sm">
                 <CardContent className="pt-4">
@@ -367,8 +355,13 @@ export function CompetitorTable({
                         </PopoverContent>
                     </Popover>
                 </div>
-
-                <DropdownMenu>
+                <div className="flex items-center justify-end">
+                    <Button onClick={() => setCreateDialogOpen(true)}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Competitor
+                    </Button>
+                </div>
+                {/* <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button variant="outline" className="ml-auto">
                             Columns <ChevronDown className="ml-2 h-4 w-4" />
@@ -391,7 +384,7 @@ export function CompetitorTable({
                                 </DropdownMenuCheckboxItem>
                             ))}
                     </DropdownMenuContent>
-                </DropdownMenu>
+                </DropdownMenu> */}
             </div>
             <div className="rounded-md border shadow-sm">
                 <Table>
@@ -403,9 +396,9 @@ export function CompetitorTable({
                                         {header.isPlaceholder
                                             ? null
                                             : flexRender(
-                                                  header.column.columnDef.header,
-                                                  header.getContext()
-                                              )}
+                                                header.column.columnDef.header,
+                                                header.getContext()
+                                            )}
                                     </TableHead>
                                 ))}
                             </TableRow>

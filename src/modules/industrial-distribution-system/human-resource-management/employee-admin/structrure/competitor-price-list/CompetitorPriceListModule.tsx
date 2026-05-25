@@ -12,6 +12,7 @@ import { PriceListFilters } from "./components/PriceListFilters";
 import { PriceListTable } from "./components/PriceListTable";
 import { MarketSnapshotPanel } from "./components/MarketSnapshotPanel";
 import { PriceTrendChart } from "./components/PriceTrendChart";
+import { Separator } from "@/components/ui/separator";
 
 // src/app/api/ids/hrm/employee-admin/structure/competitor
 // src/app/api/ids/hrm/employee-admin/structure/competitor-price-list
@@ -68,9 +69,11 @@ function CompetitorPriceListContent() {
 	}
 
 	return (
-		<div className="space-y-5">
-			{/* ─── Header ───────────────────────────────────────────────────── */}
-			<div className="flex items-center justify-between">
+		// 🚀 STANDARD SHADCN DASHBOARD LAYOUT
+		<div className="flex-1 space-y-4 p-4 md:p-8 pt-6 animate-in fade-in duration-500">
+
+			{/* HEADER SECTION */}
+			<div className="flex flex-col sm:flex-row sm:items-center justify-between space-y-2 sm:space-y-0">
 				<div>
 					<h1 className="text-3xl font-bold tracking-tight">
 						Competitor Price Intelligence
@@ -92,6 +95,7 @@ function CompetitorPriceListContent() {
 					Refresh
 				</Button>
 			</div>
+			<Separator className="my-4"/>
 
 			{/* ─── Main Layout: Table + Analytics ──────────────────────────── */}
 			<div className="flex gap-5 items-start">

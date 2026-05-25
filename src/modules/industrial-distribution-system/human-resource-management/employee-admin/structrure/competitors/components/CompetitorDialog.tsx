@@ -166,7 +166,7 @@ export function CompetitorDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-155 overflow-hidden p-0 rounded-2xl border-2 shadow-2xl animate-in fade-in zoom-in-95">
+            <DialogContent className="sm:max-w-155 w-1/2 overflow-hidden p-0 rounded-2xl border-2 shadow-2xl animate-in fade-in zoom-in-95">
                 <div className="bg-linear-to-r from-primary/10 via-background to-primary/5 p-6 pb-4">
                     <DialogHeader>
                         <div className="flex items-center gap-3 mb-1">

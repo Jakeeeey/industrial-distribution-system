@@ -50,7 +50,7 @@ export function resolveCompetitorName(entry: CompetitorPriceEntry): string {
 }
 function getCompetitorId(entry: CompetitorPriceEntry): number {
 	return typeof entry.competitor_id === "object" && entry.competitor_id !== null
-		? (entry.competitor_id as any).id
+		? entry.competitor_id.id
 		: entry.competitor_id;
 }
 // ─── Market Snapshot ──────────────────────────────────────────────────────────
