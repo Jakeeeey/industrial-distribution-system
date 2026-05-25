@@ -234,57 +234,17 @@ export function CompetitorTable({
 
             <Card className="border shadow-sm">
                 <CardContent className="pt-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <div className="flex-1 min-w-50">
-                            <div className="relative">
-                                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                                <Input
-                                    placeholder="Search competitors..."
-                                    value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
-                                    className="pl-8"
-                                />
-                            </div>
+                    {/* Row 1: Search + Reset */}
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                        <div className="relative flex-1 min-w-[220px]">
+                            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                placeholder="Search competitors..."
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                className="pl-8 h-10 w-full"
+                            />
                         </div>
-
-                        <ScrollableSearchableSelect
-                            options={nameOptions}
-                            value={nameFilter}
-                            onValueChange={(val) => setNameFilter(val)}
-                            placeholder="Filter by name"
-                            className="h-10 w-56 justify-between"
-                        />
-
-                        <ScrollableSearchableSelect
-                            options={provinceOptions}
-                            value={provinceFilter}
-                            onValueChange={(val) => {
-                                setProvinceFilter(val);
-                                setCityFilter("");
-                                setBarangayFilter("");
-                            }}
-                            placeholder="Filter by province"
-                            className="h-10 w-56 justify-between"
-                        />
-
-                        <ScrollableSearchableSelect
-                            options={cityOptions}
-                            value={cityFilter}
-                            onValueChange={(val) => {
-                                setCityFilter(val);
-                                setBarangayFilter("");
-                            }}
-                            placeholder="Filter by city"
-                            className="h-10 w-56 justify-between"
-                        />
-
-                        <ScrollableSearchableSelect
-                            options={barangayOptions}
-                            value={barangayFilter}
-                            onValueChange={(val) => setBarangayFilter(val)}
-                            placeholder="Filter by barangay"
-                            className="h-10 w-56 justify-between"
-                        />
 
                         {hasActiveFilters && (
                             <Button
@@ -305,6 +265,54 @@ export function CompetitorTable({
                             </Button>
                         )}
                     </div>
+
+                    {/* Row 2: Selectors */}
+                    <div className="flex flex-col xl:flex-row gap-2">
+                        {/* Group 1: Name Filter */}
+                        <div className="flex-1 xl:max-w-xs w-full">
+                            <ScrollableSearchableSelect
+                                options={nameOptions}
+                                value={nameFilter}
+                                onValueChange={(val) => setNameFilter(val)}
+                                placeholder="Filter by name"
+                                className="h-10 w-full justify-between"
+                            />
+                        </div>
+
+                        {/* Group 2: Address Cascade (Province, City, Barangay) */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 flex-1 xl:flex-[1.5]">
+                            <ScrollableSearchableSelect
+                                options={provinceOptions}
+                                value={provinceFilter}
+                                onValueChange={(val) => {
+                                    setProvinceFilter(val);
+                                    setCityFilter("");
+                                    setBarangayFilter("");
+                                }}
+                                placeholder="Filter by province"
+                                className="h-10 w-full justify-between"
+                            />
+
+                            <ScrollableSearchableSelect
+                                options={cityOptions}
+                                value={cityFilter}
+                                onValueChange={(val) => {
+                                    setCityFilter(val);
+                                    setBarangayFilter("");
+                                }}
+                                placeholder="Filter by city"
+                                className="h-10 w-full justify-between"
+                            />
+
+                            <ScrollableSearchableSelect
+                                options={barangayOptions}
+                                value={barangayFilter}
+                                onValueChange={(val) => setBarangayFilter(val)}
+                                placeholder="Filter by barangay"
+                                className="h-10 w-full justify-between"
+                            />
+                        </div>
+                    </div>
                 </CardContent>
             </Card>
 
@@ -315,7 +323,7 @@ export function CompetitorTable({
                             <Button
                                 variant="outline"
                                 className={cn(
-                                    "h-10 w-40 justify-start text-left font-normal",
+                                    "h-10 w-50 justify-start text-left font-normal",
                                     !dateFrom && "text-muted-foreground"
                                 )}
                             >
@@ -337,7 +345,7 @@ export function CompetitorTable({
                             <Button
                                 variant="outline"
                                 className={cn(
-                                    "h-10 w-40 justify-start text-left font-normal",
+                                    "h-10 w-50 justify-start text-left font-normal",
                                     !dateTo && "text-muted-foreground"
                                 )}
                             >
@@ -457,10 +465,7 @@ export function CompetitorTable({
                             </SelectContent>
                         </Select>
                     </div>
-                    <div className="flex w-25 items-center justify-center text-sm font-bold">
-                        Page {table.getState().pagination.pageIndex + 1} of{" "}
-                        {table.getPageCount()}
-                    </div>
+
                     <div className="flex items-center space-x-2">
                         <Button
                             variant="outline"
@@ -480,6 +485,10 @@ export function CompetitorTable({
                             <span className="sr-only">Go to previous page</span>
                             <ChevronLeft className="h-4 w-4" />
                         </Button>
+                        <div className="flex items-center justify-center text-sm font-bold">
+                            {table.getState().pagination.pageIndex + 1} /{" "}
+                            {table.getPageCount()}
+                        </div>
                         <Button
                             variant="outline"
                             className="h-8 w-8 p-0 rounded-lg"

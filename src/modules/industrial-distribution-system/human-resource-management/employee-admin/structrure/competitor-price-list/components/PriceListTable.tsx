@@ -93,11 +93,11 @@ function RowDetailPanel({ entry }: { entry: CompetitorPriceEntry }) {
 						className={cn(
 							"text-xs font-bold px-2 py-0.5 rounded-full border",
 							entry.price_vs_us === "higher" &&
-								"bg-rose-500/10 text-rose-600 border-rose-200",
+							"bg-rose-500/10 text-rose-600 border-rose-200",
 							entry.price_vs_us === "match" &&
-								"bg-slate-500/10 text-slate-600 border-slate-200",
+							"bg-slate-500/10 text-slate-600 border-slate-200",
 							entry.price_vs_us === "lower" &&
-								"bg-emerald-500/10 text-emerald-600 border-emerald-200"
+							"bg-emerald-500/10 text-emerald-600 border-emerald-200"
 						)}
 					>
 						{entry.price_vs_us === "higher"
@@ -206,9 +206,9 @@ export function PriceListTable({ data, isLoading = false }: PriceListTableProps)
 										{header.isPlaceholder
 											? null
 											: flexRender(
-													header.column.columnDef.header,
-													header.getContext()
-												)}
+												header.column.columnDef.header,
+												header.getContext()
+											)}
 									</TableHead>
 								))}
 							</TableRow>
@@ -281,7 +281,7 @@ export function PriceListTable({ data, isLoading = false }: PriceListTableProps)
 							value={`${table.getState().pagination.pageSize}`}
 							onValueChange={(v) => table.setPageSize(Number(v))}
 						>
-							<SelectTrigger className="h-8 w-16 rounded-md">
+							<SelectTrigger className="h-8 w-20 rounded-md">
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent side="top">
@@ -294,10 +294,7 @@ export function PriceListTable({ data, isLoading = false }: PriceListTableProps)
 						</Select>
 					</div>
 
-					<div className="text-sm font-medium text-muted-foreground">
-						Page {table.getState().pagination.pageIndex + 1} /{" "}
-						{table.getPageCount() || 1}
-					</div>
+
 
 					<div className="flex items-center gap-1">
 						<Button
@@ -316,6 +313,10 @@ export function PriceListTable({ data, isLoading = false }: PriceListTableProps)
 						>
 							<ChevronLeft className="h-4 w-4" />
 						</Button>
+						<div className="text-sm font-medium text-muted-foreground">
+							{table.getState().pagination.pageIndex + 1} /{" "}
+							{table.getPageCount() || 1}
+						</div>
 						<Button
 							variant="outline"
 							className="h-8 w-8 p-0 rounded-md"
