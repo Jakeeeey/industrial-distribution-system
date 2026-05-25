@@ -1,6 +1,6 @@
-import {useState, useEffect, useCallback} from "react";
-import {UnpaidInvoice, SettlementAllocation, PaymentHistory} from "../../types";
-import {fetchProvider} from "../../providers/fetchProvider";
+import { useState, useEffect, useCallback } from "react";
+import { UnpaidInvoice, SettlementAllocation, PaymentHistory } from "../../types";
+import { fetchProvider } from "../../providers/fetchProvider";
 
 export interface RawCashBucket {
     detailId?: number; // 🚀 Explicit DB ID
@@ -103,7 +103,7 @@ export function useSettlement(pouchId: string | number) {
             setWallet([]);
             setCredits([]);
 
-            const pouch = await fetchProvider.get<RawTreasuryPouch>(`/api/fm/treasury/collections/${pouchId}`);
+            const pouch = await fetchProvider.get<RawTreasuryPouch>(`/api/ids/fm/treasury/collections/${pouchId}`);
             if (!pouch) return;
 
             setDocNo(pouch.docNo || pouchId.toString());
@@ -116,11 +116,11 @@ export function useSettlement(pouchId: string | number) {
             const currentSalesmanId = pouch.salesmanId || null;
             setSalesmanId(currentSalesmanId);
 
-            const salesmen = await fetchProvider.get<RawSalesman[]>("/api/fm/treasury/salesmen");
+            const salesmen = await fetchProvider.get<RawSalesman[]>("/api/ids/fm/treasury/salesmen");
             setSalesmanName(salesmen?.find(s => s.id === currentSalesmanId)?.salesmanName || `Owner ID: ${currentSalesmanId}`);
 
             try {
-                const fetchedFindings = await fetchProvider.get<GeneralFinding[]>("/api/fm/treasury/collections/findings");
+                const fetchedFindings = await fetchProvider.get<GeneralFinding[]>("/api/ids/fm/treasury/collections/findings");
                 setFindings(fetchedFindings || []);
             } catch (e) {
                 console.warn("Could not load findings", e);
@@ -178,7 +178,7 @@ export function useSettlement(pouchId: string | number) {
             }
 
             try {
-                const memos = await fetchProvider.get<RawMemoOrReturn[]>(`/api/fm/treasury/memos/available?salesmanId=${currentSalesmanId}`);
+                const memos = await fetchProvider.get<RawMemoOrReturn[]>(`/api/ids/fm/treasury/memos/available?salesmanId=${currentSalesmanId}`);
                 memos?.forEach(m => {
                     const remainingMemoAmount = (m.amount || 0) - (m.appliedAmount || 0);
                     if (remainingMemoAmount > 0) {
@@ -197,7 +197,7 @@ export function useSettlement(pouchId: string | number) {
             }
 
             try {
-                const returns = await fetchProvider.get<RawMemoOrReturn[]>(`/api/fm/treasury/returns/available?salesmanId=${currentSalesmanId}`);
+                const returns = await fetchProvider.get<RawMemoOrReturn[]>(`/api/ids/fm/treasury/returns/available?salesmanId=${currentSalesmanId}`);
                 returns?.forEach(r => {
                     if (!r.isApplied) {
                         newCredits.push({
@@ -295,7 +295,7 @@ export function useSettlement(pouchId: string | number) {
             if (!dbId) return alert("Database ID missing. Cannot update.");
 
             try {
-                const endpoint = item.type === "EWT" ? `/api/fm/treasury/ewts/${dbId}` : `/api/fm/treasury/adjustments/${dbId}`;
+                const endpoint = item.type === "EWT" ? `/api/ids/fm/treasury/ewts/${dbId}` : `/api/ids/fm/treasury/adjustments/${dbId}`;
                 const payload = item.type === "EWT" ? {
                     amount: updatedFields.originalAmount,
                     referenceNo: updatedFields.customerName
@@ -313,12 +313,12 @@ export function useSettlement(pouchId: string | number) {
             }
         }
 
-        setWallet(prev => prev.map(w => w.id === itemId ? {...w, ...updatedFields} : w));
+        setWallet(prev => prev.map(w => w.id === itemId ? { ...w, ...updatedFields } : w));
 
         if (updatedFields.originalAmount !== undefined) {
             setAllocations(prev => prev.map(a => {
                 if (a.sourceTempId === itemId && a.amountApplied > updatedFields.originalAmount!) {
-                    return {...a, amountApplied: updatedFields.originalAmount!};
+                    return { ...a, amountApplied: updatedFields.originalAmount! };
                 }
                 return a;
             }));
@@ -335,7 +335,7 @@ export function useSettlement(pouchId: string | number) {
             if (!dbId) return alert("Database ID missing. Cannot delete.");
 
             try {
-                const endpoint = type === "EWT" ? `/api/fm/treasury/ewts/${dbId}` : `/api/fm/treasury/adjustments/${dbId}`;
+                const endpoint = type === "EWT" ? `/api/ids/fm/treasury/ewts/${dbId}` : `/api/ids/fm/treasury/adjustments/${dbId}`;
                 await fetchProvider.delete(endpoint);
             } catch (e) {
                 console.error("Delete failed", e);
@@ -351,7 +351,7 @@ export function useSettlement(pouchId: string | number) {
     const addToCart = (invoice: Partial<UnpaidInvoice>) => {
         const safeId = invoice.id || (invoice as unknown as { invoiceId: number }).invoiceId;
         if (safeId && !cartInvoices.some(inv => inv.id === safeId)) {
-            setCartInvoices(prev => [...prev, {...invoice, id: safeId} as UnpaidInvoice]);
+            setCartInvoices(prev => [...prev, { ...invoice, id: safeId } as UnpaidInvoice]);
         }
     };
 
@@ -375,7 +375,7 @@ export function useSettlement(pouchId: string | number) {
         setIsLoadingRoute(true);
         try {
             const data = await fetchProvider.get<UnpaidInvoice[]>(
-                `/api/fm/treasury/collections/route-invoices?salesmanId=${salesmanId}&date=${collectionDate}`
+                `/api/ids/fm/treasury/collections/route-invoices?salesmanId=${salesmanId}&date=${collectionDate}`
             );
 
             const cleanResults = (data || []).filter(inv => !cartInvoices.some(cartInv => cartInv.id === (inv.id || (inv as unknown as {
@@ -582,7 +582,7 @@ export function useSettlement(pouchId: string | number) {
                 }))
             };
 
-            await fetchProvider.post(`/api/fm/treasury/collections/${pouchId}/allocate`, payload);
+            await fetchProvider.post(`/api/ids/fm/treasury/collections/${pouchId}/allocate`, payload);
             alert("Settlement Saved Successfully!");
             await fetchData();
         } catch (err) {

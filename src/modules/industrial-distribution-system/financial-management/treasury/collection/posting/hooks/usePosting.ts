@@ -65,7 +65,7 @@ export function usePosting() {
         setIsLoading(true);
         try {
             // 🚀 Perfectly typed GET request
-            const data = await fetchProvider.get<RawQueueItem[]>("/api/fm/treasury/collections/posting-queue");
+            const data = await fetchProvider.get<RawQueueItem[]>("/api/ids/fm/treasury/collections/posting-queue");
 
             const formattedQueue: PostingQueueItem[] = (data || []).map((item) => ({
                 id: item.id || 0,
@@ -98,7 +98,7 @@ export function usePosting() {
         setSelectedPouch(null);
         try {
             // 1. Fetch the deep anatomical breakdown
-            const details = await fetchProvider.get<Partial<TreasuryPouchDetail>>(`/api/fm/treasury/collections/${id}`);
+            const details = await fetchProvider.get<Partial<TreasuryPouchDetail>>(`/api/ids/fm/treasury/collections/${id}`);
 
             // 2. Find the perfectly formatted summary data from our queue
             const queueSummaryData = queue.find(q => q.id === id);
@@ -129,7 +129,7 @@ export function usePosting() {
 
         setIsPosting(true);
         try {
-            await fetchProvider.post(`/api/fm/treasury/collections/${id}/post`, {});
+            await fetchProvider.post(`/api/ids/fm/treasury/collections/${id}/post`, {});
             alert(`Pouch ${docNo} has been successfully posted to the General Ledger!`);
             setIsReviewSheetOpen(false);
             await fetchQueue();

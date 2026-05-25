@@ -1,4 +1,4 @@
-// src/app/api/fm/chart-of-accounts/route.ts
+// src/app/api/ids/fm/chart-of-accounts/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";

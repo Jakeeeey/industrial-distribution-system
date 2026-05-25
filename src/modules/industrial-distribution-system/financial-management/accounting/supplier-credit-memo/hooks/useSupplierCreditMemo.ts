@@ -12,7 +12,7 @@ import type {
   MemoFilters,
 } from "../types";
 
-const API_PATH = "/api/fm/accounting/supplier-credit-memo";
+const API_PATH = "/api/ids/fm/accounting/supplier-credit-memo";
 
 const DEFAULT_FILTERS: MemoFilters = {
   search: "",
@@ -248,9 +248,9 @@ export function useCreateMemo() {
         throw new Error(
           String(
             jsonObj?.message ||
-              jsonObj?.error ||
-              (jsonObj?.errors as unknown[])?.[0] ||
-              `HTTP ${res.status}`,
+            jsonObj?.error ||
+            (jsonObj?.errors as unknown[])?.[0] ||
+            `HTTP ${res.status}`,
           ),
         );
       }

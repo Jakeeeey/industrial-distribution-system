@@ -12,7 +12,7 @@ export async function fetchCompanyProfile(): Promise<CompanyProfile | null> {
 
 export async function fetchForPaymentTransmittals(): Promise<TransmittalRow[]> {
   const res = await fetch(
-    `/api/fm/accounting/claims/for-payments/transmittals?status=FOR%20PAYMENT`,
+    `/api/ids/fm/accounting/claims/for-payments/transmittals?status=FOR%20PAYMENT`,
     {
       cache: "no-store",
     },
@@ -26,7 +26,7 @@ export async function fetchTransmittalDetails(
   transmittalId: number,
 ): Promise<TransmittalDetailRow[]> {
   const res = await fetch(
-    `/api/fm/accounting/claims/for-payments/transmittal-details?transmittal_id=${transmittalId}`,
+    `/api/ids/fm/accounting/claims/for-payments/transmittal-details?transmittal_id=${transmittalId}`,
     {
       cache: "no-store",
     },
@@ -42,7 +42,7 @@ export async function updateCustomerMemoFlags(args: {
   isClaimed: 0 | 1;
 }): Promise<void> {
   const res = await fetch(
-    `/api/fm/accounting/claims/for-payments/customer-memo-flags`,
+    `/api/ids/fm/accounting/claims/for-payments/customer-memo-flags`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -64,7 +64,7 @@ export async function markTransmittalPosted(args: {
   excludedMemoIds: number[];
 }): Promise<void> {
   const res = await fetch(
-    `/api/fm/accounting/claims/for-payments/transmittal-status`,
+    `/api/ids/fm/accounting/claims/for-payments/transmittal-status`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },

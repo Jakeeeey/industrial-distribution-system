@@ -218,12 +218,12 @@ export default function ExpenseApprovalModal({
   const salesman = detail?.salesman;
   const userName = salesman?.user
     ? [
-        salesman.user.user_fname,
-        salesman.user.user_mname,
-        salesman.user.user_lname,
-      ]
-        .filter(Boolean)
-        .join(" ")
+      salesman.user.user_fname,
+      salesman.user.user_mname,
+      salesman.user.user_lname,
+    ]
+      .filter(Boolean)
+      .join(" ")
     : (salesman?.salesman_name ?? "—");
 
   return (
@@ -460,11 +460,11 @@ export default function ExpenseApprovalModal({
                                 />
                                 {Number(localAmounts[expense.id]) !==
                                   Number(expense.amount) && (
-                                  <span className="text-[9px] text-amber-600 font-bold uppercase italic animate-in fade-in slide-in-from-right-1">
-                                    Orig:{" "}
-                                    {formatCurrency(Number(expense.amount))}
-                                  </span>
-                                )}
+                                    <span className="text-[9px] text-amber-600 font-bold uppercase italic animate-in fade-in slide-in-from-right-1">
+                                      Orig:{" "}
+                                      {formatCurrency(Number(expense.amount))}
+                                    </span>
+                                  )}
                               </div>
                             </TableCell>
                             <TableCell className="text-center">
@@ -476,7 +476,7 @@ export default function ExpenseApprovalModal({
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           setPreviewUrl(
-                                            `/api/fm/expense-assets?id=${expense.attachment_url}`,
+                                            `/api/ids/fm/expense-assets?id=${expense.attachment_url}`,
                                           );
                                         }}
                                         className="inline-flex p-1.5 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all shadow-sm cursor-pointer"
