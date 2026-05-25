@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useStockAdjustment } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/hooks/useStockAdjustment";
 import { StockAdjustmentList } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/components/StockAdjustmentList";
 import { StockAdjustmentForm } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/components/forms/StockAdjustmentForm";
@@ -9,11 +9,29 @@ import { ModuleSkeleton } from "@/components/shared/ModuleSkeleton";
 import ErrorPage from "@/components/shared/ErrorPage";
 
 export default function StockAdjustmentModule() {
-  const { data, isLoading, error, refresh, filters } = useStockAdjustment();
+  const { 
+    data, 
+    totalItems,
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    pageSize,
+    setPageSize,
+    isLoading, 
+    error, 
+    refresh, 
+    resetFilters,
+    filters 
+  } = useStockAdjustment();
   // Form-specific data is fetched independently inside StockAdjustmentForm
   // via `useStockAdjustmentForm` — no duplicate list fetch.
   const [view, setView] = useState<"list" | "create" | "edit" | "detail">("list");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+
+  // Smooth scroll to top when view changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [view]);
 
   if (isLoading && data.length === 0) {
     return <ModuleSkeleton hasTabs={false} rowCount={6} />;
@@ -55,6 +73,13 @@ export default function StockAdjustmentModule() {
       {view === "list" && (
         <StockAdjustmentList
           data={data}
+          totalItems={totalItems}
+          currentPage={currentPage}
+          setCurrentPage={setCurrentPage}
+          totalPages={totalPages}
+          pageSize={pageSize}
+          setPageSize={setPageSize}
+          resetFilters={resetFilters}
           onCreate={handleCreate}
           onEdit={handleEdit}
           onDetail={handleDetail}
