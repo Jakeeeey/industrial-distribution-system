@@ -68,7 +68,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         // Patching Layer: Supplemental data for Consolidated Documents & Physical Inventory Counts
         if (Array.isArray(data) && parentId) {
             try {
-                const { fetchConsolidationItems, fetchPHCountsForTracing, fetchAllFamilyPHs, getFamilyUnit } = await import("@/modules/audit-results-findings/traceability-compliance/product-tracing/service");
+                const { fetchConsolidationItems, fetchPHCountsForTracing, fetchAllFamilyPHs, getFamilyUnit } = await import("@/modules/industrial-distribution-system/audit-results-findings/traceability-compliance/product-tracing/service");
                 const famUnit = await getFamilyUnit(parentId);
 
                 // 0. Proactively fetch ALL relevant PH documents for this family/branch from Directus.

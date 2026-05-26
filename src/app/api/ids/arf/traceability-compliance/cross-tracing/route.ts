@@ -91,7 +91,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         // 3. Optimized Patching Layer (Consolidation & Physical Inventory Counts)
         if (movementsData.length > 0) {
             try {
-                const { fetchConsolidationItems, fetchPHCountsForTracing, getFamilyUnit } = await import("@/modules/audit-results-findings/traceability-compliance/product-tracing/service");
+                const { fetchConsolidationItems, fetchPHCountsForTracing, getFamilyUnit } = await import("@/modules/industrial-distribution-system/audit-results-findings/traceability-compliance/product-tracing/service");
                 const famUnit = await getFamilyUnit(parentId);
 
                 const consolidationCache = new Map<string, unknown[]>();
@@ -140,7 +140,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
                                     items = await fetchConsolidationItems(row.docNo, parentId, null, null, token, productName);
                                     if (items) consolidationCache.set(docN, items);
                                 }
-                                const totalQty = items.reduce((sum, item) => {
+                                const totalQty = (items || []).reduce((sum, item) => {
                                     const isCancelled = item.remarks?.toUpperCase() === "CANCELLED" || item.sales_invoice === "No Invoice" || item.order_status === "No Invoice";
                                     if (isCancelled) return sum;
                                     return sum + (item.quantity || 0);
