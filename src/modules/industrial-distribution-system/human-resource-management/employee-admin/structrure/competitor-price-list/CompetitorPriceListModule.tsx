@@ -40,6 +40,11 @@ function CompetitorPriceListContent() {
     barangays,
   } = useCompetitorPriceList();
 
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const [chartFocusCompetitorId, setChartFocusCompetitorId] =
     React.useState<string>("");
   const [chartFocusProductId, setChartFocusProductId] =
@@ -161,6 +166,26 @@ function CompetitorPriceListContent() {
     );
   }
 
+  if (!mounted) {
+    return (
+      <div className="flex-1 space-y-4 p-4 md:p-8 pt-6 animate-pulse">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between space-y-2 sm:space-y-0">
+          <div className="h-8 w-64 bg-muted rounded" />
+          <div className="h-9 w-24 bg-muted rounded" />
+        </div>
+        <div className="h-[1px] w-full bg-muted my-4" />
+        <div className="flex gap-5 items-start">
+          <div className="flex-1 min-w-0 space-y-4">
+            <div className="h-32 bg-muted rounded" />
+            <div className="h-96 bg-muted rounded" />
+            <div className="h-64 bg-muted rounded" />
+          </div>
+          <div className="w-72 shrink-0 h-[600px] bg-muted rounded" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     // 🚀 STANDARD SHADCN DASHBOARD LAYOUT
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6 animate-in fade-in duration-500">
@@ -210,6 +235,8 @@ function CompetitorPriceListContent() {
             data={chartEntries}
             competitorId={selectedCompetitorId}
             competitorName={selectedCompetitorName}
+            dateFrom={filters.dateFrom}
+            dateTo={filters.dateTo}
           />
 
           <PriceListTable

@@ -18,6 +18,16 @@ import {
 } from "../utils/analytics";
 import type { CompetitorRef, LocationOption, ProvinceStat, SourceStat } from "../types";
 
+const getInitialFilters = (): PriceListFilters => {
+	const now = new Date();
+	const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+	return {
+		...DEFAULT_FILTERS,
+		dateFrom: startOfMonth,
+		dateTo: now,
+	};
+};
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export interface UseCompetitorPriceListReturn {
@@ -52,7 +62,7 @@ export function useCompetitorPriceList(): UseCompetitorPriceListReturn {
 	const { entries, competitors, products, isLoading, isError, error, refetch } =
 		useCompetitorPriceListContext();
 
-	const [filters, setFilters] = useState<PriceListFilters>(DEFAULT_FILTERS);
+	const [filters, setFilters] = useState<PriceListFilters>(getInitialFilters);
 
 	const activeProductId = filters.productId;
 
@@ -75,19 +85,48 @@ export function useCompetitorPriceList(): UseCompetitorPriceListReturn {
 		});
 	};
 
-	const resetFilters = () => setFilters(DEFAULT_FILTERS);
+	const resetFilters = () => {
+		const now = new Date();
+		const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+		setFilters({
+			...DEFAULT_FILTERS,
+			dateFrom: startOfMonth,
+			dateTo: now,
+		});
+	};
 
 	const hasActiveFilters = useMemo(() => {
-		return (
+		const hasNonDateFilters =
 			!!filters.search ||
 			!!filters.competitorId ||
 			!!filters.province ||
 			!!filters.municipality ||
 			!!filters.barangay ||
-			!!filters.sourceType ||
-			!!filters.dateFrom ||
-			!!filters.dateTo
-		);
+			!!filters.sourceType;
+
+		if (hasNonDateFilters) return true;
+
+		// If no other filters, check if the dates are different from "this month" default
+		if (!filters.dateFrom || !filters.dateTo) {
+			return true;
+		}
+
+		const now = new Date();
+		const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+		startOfMonth.setHours(0, 0, 0, 0);
+
+		const from = new Date(filters.dateFrom);
+		from.setHours(0, 0, 0, 0);
+
+		if (from.getTime() !== startOfMonth.getTime()) return true;
+
+		const to = new Date(filters.dateTo);
+		const isToToday =
+			to.getFullYear() === now.getFullYear() &&
+			to.getMonth() === now.getMonth() &&
+			to.getDate() === now.getDate();
+
+		return !isToToday;
 	}, [filters]);
 
 	// ─── Filter Entries (client-side post-fetch) ──────────────────────────────
