@@ -12,7 +12,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { NavUser } from "@/components/shared/app-sidebar/nav-user";
 
 import { cookies } from "next/headers";
-import { CompetitorInformationModule } from "@/modules/industrial-distribution-system/human-resource-management/employee-admin/structrure/competitors";
+import { CompetitorInformationModule } from "@/modules/industrial-distribution-system/customer-relationship-management/competitor-information/competitors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
