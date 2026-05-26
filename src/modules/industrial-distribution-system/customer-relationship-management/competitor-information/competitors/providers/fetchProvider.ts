@@ -67,7 +67,7 @@ export function CompetitorInformationFetchProvider({
 			setIsError(false);
 
 			const res = await fetch(
-				"/api/ids/hrm/employee-admin/structure/competitor",
+				"/api/ids/crm/competitor-information/competitors",
 				{ cache: "no-store" }
 			);
 
@@ -90,7 +90,7 @@ export function CompetitorInformationFetchProvider({
 	const createCompetitor = useCallback(
 		async (data: CompetitorFormData) => {
 			const res = await fetch(
-				"/api/ids/hrm/employee-admin/structure/competitor",
+				"/api/ids/crm/competitor-information/competitors",
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -106,7 +106,7 @@ export function CompetitorInformationFetchProvider({
 	const updateCompetitor = useCallback(
 		async (id: number, data: CompetitorFormData) => {
 			const res = await fetch(
-				"/api/ids/hrm/employee-admin/structure/competitor",
+				"/api/ids/crm/competitor-information/competitors",
 				{
 					method: "PATCH",
 					headers: { "Content-Type": "application/json" },

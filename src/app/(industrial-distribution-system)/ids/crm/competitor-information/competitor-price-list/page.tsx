@@ -14,7 +14,7 @@ import { cookies } from "next/headers";
 
 // ✅ Wire the module you asked for
 
-import { CompetitorPriceListModule } from "@/modules/industrial-distribution-system/human-resource-management/employee-admin/structrure/competitor-price-list";
+import { CompetitorPriceListModule } from "@/modules/industrial-distribution-system/customer-relationship-management/competitor-information/competitor-price-list";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
