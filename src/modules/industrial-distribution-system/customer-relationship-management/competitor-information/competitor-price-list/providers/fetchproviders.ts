@@ -27,7 +27,7 @@ const CompetitorPriceListContext = createContext<
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
-const API_BASE = "/api/ids/hrm/employee-admin/structure/competitor-price-list";
+const API_BASE = "/api/ids/crm/competitor-information/competitor-price-list";
 
 export function CompetitorPriceListFetchProvider({
 	children,

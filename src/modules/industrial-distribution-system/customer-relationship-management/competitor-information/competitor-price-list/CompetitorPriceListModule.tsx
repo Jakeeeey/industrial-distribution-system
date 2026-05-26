@@ -49,6 +49,12 @@ function CompetitorPriceListContent() {
     React.useState<string>("");
   const [chartFocusProductId, setChartFocusProductId] =
     React.useState<string>("");
+  // Tracks what kind of row was last clicked so the chart auto-configures:
+  // "competitor" → product mode (show all products of that competitor)
+  // "product"    → all-competitors mode (show all competitors for that product)
+  const [chartFocusMode, setChartFocusMode] = React.useState<
+    "competitor" | "product" | null
+  >(null);
 
   // Sync chartFocusCompetitorId with filters.competitorId when filter is set explicitly
   React.useEffect(() => {
@@ -69,6 +75,7 @@ function CompetitorPriceListContent() {
     if (!filters.competitorId && !filters.productId && !filters.search) {
       setChartFocusCompetitorId("");
       setChartFocusProductId("");
+      setChartFocusMode(null);
     }
   }, [filters.competitorId, filters.productId, filters.search]);
 
@@ -101,7 +108,7 @@ function CompetitorPriceListContent() {
       result = result.filter((entry) => {
         const id =
           typeof entry.competitor_id === "object" &&
-          entry.competitor_id !== null
+            entry.competitor_id !== null
             ? String(entry.competitor_id.id)
             : String(entry.competitor_id);
         return id === activeCompId;
@@ -237,24 +244,40 @@ function CompetitorPriceListContent() {
             competitorName={selectedCompetitorName}
             dateFrom={filters.dateFrom}
             dateTo={filters.dateTo}
+            focusMode={chartFocusMode}
           />
 
           <PriceListTable
             data={filteredEntries}
             isLoading={isLoading}
-            onRowClick={(competitorId, productName) => {
-              if (productName) {
-                setChartFocusProductId(productName);
-                setFilter("productId", "");
-              } else {
-                setChartFocusProductId("");
-              }
-
-              if (competitorId) {
+            onRowClick={(competitorId, productName, groupMode) => {
+              if (competitorId && !productName) {
+                // ── Competitor group header expanded ──────────────────────────
+                // Chart: show all products of this competitor vs our price
                 setChartFocusCompetitorId(competitorId);
+                setChartFocusProductId("");
+                setFilter("productId", "");
                 setFilter("competitorId", "");
-              } else {
+                setChartFocusMode("competitor");
+              } else if (!competitorId && productName) {
+                // ── Product group header expanded ─────────────────────────────
+                // Chart: show all competitors for this product vs our price
+                setChartFocusProductId(productName);
                 setChartFocusCompetitorId("");
+                setFilter("productId", "");
+                setChartFocusMode("product");
+              } else if (competitorId && productName) {
+                // ── Sub-row clicked (specific competitor + product) ───────────
+                setChartFocusProductId(productName);
+                setChartFocusCompetitorId(competitorId);
+                setFilter("productId", "");
+                setFilter("competitorId", "");
+                setChartFocusMode(groupMode === "product" ? "product" : "competitor");
+              } else {
+                // ── Collapsed / cleared ───────────────────────────────────────
+                setChartFocusCompetitorId("");
+                setChartFocusProductId("");
+                setChartFocusMode(null);
               }
             }}
           />

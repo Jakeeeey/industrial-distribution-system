@@ -93,3 +93,44 @@ export interface SourceStat {
 	sourceType: SourceType;
 	count: number;
 }
+
+export interface MarketIntelligenceKPIs {
+	// 1. Market Activity
+	latestEntryDate: string;
+	activeDays: number;
+	avgDailyCaptures: number;
+	peakCaptureDay: string;
+
+	// 2. Most Active Competitor
+	mostActiveCompetitorName: string;
+	mostActiveCompetitorCount: number;
+	mostActiveCompetitorShare: number;
+
+	// 3. Market Coverage
+	productsTracked: number;
+	provincesCovered: number;
+	municipalitiesCovered: number;
+	barangaysCovered: number;
+
+	// 4. Competitive Pressure
+	undercuttingRate: number;
+	parityRate: number;
+	premiumRate: number;
+
+	// 5. Market Volatility
+	volatilityLevel: "Low" | "Medium" | "High";
+	priceStability: "Very Stable" | "Stable" | "Moderate" | "Volatile";
+	spreadConsistency: "High" | "Moderate" | "Low";
+
+	// 6. Price Outlier
+	outlierAmount: number;
+	outlierProduct: string;
+	outlierCompetitor: string;
+
+	// 7. Recent Trend
+	recentPeriodDays: number;
+	recentAvgChange: number;
+	recentHigherChange: number;
+	recentLowerChange: number;
+}
+

@@ -45,6 +45,12 @@ interface PriceTrendChartProps {
   competitorName?: string;
   dateFrom?: Date;
   dateTo?: Date;
+  /** Controls which direction the chart auto-configures when a row is clicked:
+   * - "competitor" → product mode (show products of the focused competitor vs our price)
+   * - "product"    → all-competitors mode (show all competitors for the focused product vs our price)
+   * - null/undefined → no auto-config, user controls via the toolbar toggle
+   */
+  focusMode?: "competitor" | "product" | null;
 }
 
 // ─── Analytics View Type ─────────────────────────────────────────────────────
@@ -156,6 +162,8 @@ function buildSnapshotBarData(
   data: CompetitorPriceEntry[],
   barMode: BarMode,
   sortOrder: SortOrder,
+  isProductMode: boolean,
+  competitorId?: string,
 ): {
   barData: BarEntry[];
   ourPrice: number | null;
@@ -165,34 +173,52 @@ function buildSnapshotBarData(
     return { barData: [], ourPrice: null, marketAvg: 0 };
   }
 
+  // Filter by competitor if in product mode
+  const filteredData = isProductMode && competitorId
+    ? data.filter((e) => resolveCompetitorId(e) === competitorId)
+    : data;
+
   // Determine our price from first entry that has it
-  const ourPriceEntry = data.find((e) => e.our_price != null);
+  const ourPriceEntry = filteredData.find((e) => e.our_price != null);
   const ourPrice = ourPriceEntry?.our_price ?? null;
 
-  // Group competitor prices by name → average
-  const grouped = new Map<string, number[]>();
-  for (const entry of data) {
-    const name = resolveCompetitorName(entry);
-    if (!grouped.has(name)) grouped.set(name, []);
-    grouped.get(name)!.push(Number(entry.price));
+  // Group competitor prices by product name (in product mode) or competitor name (in competitor mode)
+  const grouped = new Map<string, { prices: number[]; ourPrices: number[] }>();
+  for (const entry of filteredData) {
+    const name = isProductMode
+      ? (entry.product_name || `Product #${entry.product_id}`)
+      : resolveCompetitorName(entry);
+    
+    if (!grouped.has(name)) {
+      grouped.set(name, { prices: [], ourPrices: [] });
+    }
+    const group = grouped.get(name)!;
+    group.prices.push(Number(entry.price));
+    if (entry.our_price != null) {
+      group.ourPrices.push(Number(entry.our_price));
+    }
   }
 
   let colorIndex = 0;
   const rows: BarEntry[] = [];
 
-  grouped.forEach((prices, name) => {
-    const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
+  grouped.forEach((group, name) => {
+    const avg = group.prices.reduce((a, b) => a + b, 0) / group.prices.length;
+    const prodOurPrice = group.ourPrices.length > 0
+      ? group.ourPrices.reduce((a, b) => a + b, 0) / group.ourPrices.length
+      : null;
+
     rows.push({
       name,
       price: Number(avg.toFixed(2)),
-      delta: ourPrice != null ? Number((avg - ourPrice).toFixed(2)) : null,
+      delta: prodOurPrice != null ? Number((avg - prodOurPrice).toFixed(2)) : (ourPrice != null ? Number((avg - ourPrice).toFixed(2)) : null),
       isOurs: false,
       colorIndex: colorIndex++,
     });
   });
 
-  // Add "Our Price" as a special highlighted bar
-  if (ourPrice != null) {
+  // Add "Our Price" as a special highlighted bar (only in non-product mode)
+  if (!isProductMode && ourPrice != null) {
     rows.push({
       name: "Our Price ★",
       price: ourPrice,
@@ -303,6 +329,8 @@ interface CustomLineTooltipProps {
   showAllCompetitors: boolean;
   activeCompetitor?: { key: string; name: string };
   competitorSeries: Array<{ id: string; key: string; name: string }>;
+  productSeries?: Array<{ id: string; key: string; name: string }>;
+  isProductMode?: boolean;
   chartConfig: ChartConfig;
   hoveredLineKey: string | null;
   setHoveredLineKey: (key: string | null) => void;
@@ -317,6 +345,8 @@ function CustomLineTooltip({
   showAllCompetitors,
   activeCompetitor,
   competitorSeries,
+  productSeries = [],
+  isProductMode = false,
   chartConfig,
   hoveredLineKey,
   chartData,
@@ -327,7 +357,12 @@ function CustomLineTooltip({
   if (!dataRow) return null;
   const activeKeys = new Set<string>();
 
-  if (analyticsView === "spread") {
+  if (isProductMode) {
+    productSeries.forEach((s) => activeKeys.add(s.key));
+    if (analyticsView === "comparison" || analyticsView === "indexed") {
+      activeKeys.add("ourPrice");
+    }
+  } else if (analyticsView === "spread") {
     if (showAllCompetitors) {
       competitorSeries.forEach((s) => activeKeys.add(s.key));
     } else {
@@ -368,7 +403,9 @@ function CustomLineTooltip({
         name = "Market Average";
         color = "hsl(var(--muted-foreground))";
       } else {
-        const series = competitorSeries.find((s) => s.key === key);
+        const series = isProductMode
+          ? productSeries.find((s) => s.key === key)
+          : competitorSeries.find((s) => s.key === key);
         if (series) {
           name = series.name;
           color = chartConfig[key]?.color || color;
@@ -521,15 +558,19 @@ function SnapshotBarChart({
   barMode,
   sortOrder,
   competitorName,
+  isProductMode,
+  competitorId,
 }: {
   data: CompetitorPriceEntry[];
   barMode: BarMode;
   sortOrder: SortOrder;
   competitorName?: string;
+  isProductMode: boolean;
+  competitorId?: string;
 }) {
   const { barData, ourPrice, marketAvg } = useMemo(
-    () => buildSnapshotBarData(data, barMode, sortOrder),
-    [data, barMode, sortOrder],
+    () => buildSnapshotBarData(data, barMode, sortOrder, isProductMode, competitorId),
+    [data, barMode, sortOrder, isProductMode, competitorId],
   );
 
   const dynamicBarSize = useMemo(() => {
@@ -708,6 +749,7 @@ export function PriceTrendChart({
   competitorName,
   dateFrom,
   dateTo,
+  focusMode,
 }: PriceTrendChartProps) {
   const [showAllCompetitors, setShowAllCompetitors] = useState(false);
   const [analyticsView, setAnalyticsView] =
@@ -728,6 +770,25 @@ export function PriceTrendChart({
       setAnalyticsView("comparison");
     }
   }, [showAllCompetitors, analyticsView]);
+
+  // Auto-reset showAllCompetitors based on focusMode:
+  // - "product"    → force showAllCompetitors = true  (all competitors for the focused product)
+  // - "competitor" → force showAllCompetitors = false (products of the focused competitor)
+  // - null         → no override, user controls via the toolbar toggle
+  React.useEffect(() => {
+    if (focusMode === "product") {
+      setShowAllCompetitors(true);
+    } else if (focusMode === "competitor") {
+      setShowAllCompetitors(false);
+    }
+  }, [focusMode]);
+
+  // When a competitor is focused, auto-reset showAllCompetitors to false to enter product comparison mode
+  React.useEffect(() => {
+    if (competitorId) {
+      setShowAllCompetitors(false);
+    }
+  }, [competitorId]);
 
   const getLineProps = (key: string, baseColor: string, baseWidth = 2, hasDots = true) => {
     const isHovered = hoveredLineKey === key;
@@ -802,10 +863,12 @@ export function PriceTrendChart({
   };
 
 
-  const { chartData, chartConfig, competitorSeries } = useMemo(() => {
+  const { chartData, chartConfig, competitorSeries, productSeries, isProductMode } = useMemo(() => {
     if (!data || data.length === 0) {
-      return { chartData: [], chartConfig: {}, competitorSeries: [] };
+      return { chartData: [], chartConfig: {}, competitorSeries: [], productSeries: [], isProductMode: false };
     }
+
+    const isProductMode = !!competitorId && !showAllCompetitors;
 
     const competitorSeries = Array.from(
       new Map(
@@ -823,19 +886,47 @@ export function PriceTrendChart({
       ).values(),
     ).sort((a, b) => a.name.localeCompare(b.name));
 
+    // In product mode, we filter the data to only include entries for this competitor,
+    // and the series are the products of this competitor.
+    const productSeries = isProductMode
+      ? Array.from(
+          new Map(
+            data
+              .filter((entry) => resolveCompetitorId(entry) === competitorId)
+              .map((entry) => {
+                const name = entry.product_name || `Product #${entry.product_id}`;
+                const key = `product_${name.replace(/[^a-zA-Z0-9]/g, "_")}`;
+                return [
+                  name,
+                  {
+                    id: name,
+                    key,
+                    name,
+                  },
+                ];
+              }),
+          ).values(),
+        ).sort((a, b) => a.name.localeCompare(b.name))
+      : [];
+
+    const activeSeriesList = isProductMode ? productSeries : competitorSeries;
+
     // Group entries by date
     const grouped = new Map<
       string,
       {
         ourPrices: number[];
         competitorPrices: number[];
-        individualCompetitors: Map<string, number[]>;
+        individualSeries: Map<string, number[]>;
       }
     >();
 
-    // ─── DEBUG: raw entry our_price field ───
+    // We only process entries for the focused competitor if in product mode
+    const entriesToProcess = isProductMode
+      ? data.filter((entry) => resolveCompetitorId(entry) === competitorId)
+      : data;
 
-    data.forEach((entry) => {
+    entriesToProcess.forEach((entry) => {
       const dateObj = parseEntryDate(entry.created_at);
       if (!dateObj) return;
 
@@ -865,7 +956,7 @@ export function PriceTrendChart({
         grouped.set(dateKey, {
           ourPrices: [],
           competitorPrices: [],
-          individualCompetitors: new Map(),
+          individualSeries: new Map(),
         });
       }
       const dateMap = grouped.get(dateKey)!;
@@ -878,13 +969,16 @@ export function PriceTrendChart({
         dateMap.competitorPrices.push(price);
       }
 
-      // Collect competitor price individually (use stable key)
-      const competitorKey = getCompetitorKey(resolveCompetitorId(entry));
-      if (!dateMap.individualCompetitors.has(competitorKey)) {
-        dateMap.individualCompetitors.set(competitorKey, []);
+      // Collect price individually based on mode (product key vs competitor key)
+      const seriesKey = isProductMode
+        ? `product_${(entry.product_name || `Product #${entry.product_id}`).replace(/[^a-zA-Z0-9]/g, "_")}`
+        : getCompetitorKey(resolveCompetitorId(entry));
+
+      if (!dateMap.individualSeries.has(seriesKey)) {
+        dateMap.individualSeries.set(seriesKey, []);
       }
       if (isValidPrice) {
-        dateMap.individualCompetitors.get(competitorKey)!.push(price);
+        dateMap.individualSeries.get(seriesKey)!.push(price);
       }
 
       // Collect our price if available
@@ -905,8 +999,8 @@ export function PriceTrendChart({
       dateRangeEnd = new Date(dateTo);
     }
 
-    if (data && data.length > 0) {
-      const parsedDates = data
+    if (entriesToProcess && entriesToProcess.length > 0) {
+      const parsedDates = entriesToProcess
         .map((entry) => parseEntryDate(entry.created_at))
         .filter((d): d is Date => d !== null);
 
@@ -938,7 +1032,7 @@ export function PriceTrendChart({
             grouped.set(dateKey, {
               ourPrices: [],
               competitorPrices: [],
-              individualCompetitors: new Map(),
+              individualSeries: new Map(),
             });
           }
           current.setDate(current.getDate() + 1);
@@ -965,7 +1059,7 @@ export function PriceTrendChart({
             grouped.set(dateKey, {
               ourPrices: [],
               competitorPrices: [],
-              individualCompetitors: new Map(),
+              individualSeries: new Map(),
             });
           }
           current.setDate(current.getDate() + 7);
@@ -986,7 +1080,7 @@ export function PriceTrendChart({
             grouped.set(dateKey, {
               ourPrices: [],
               competitorPrices: [],
-              individualCompetitors: new Map(),
+              individualSeries: new Map(),
             });
           }
           current.setMonth(current.getMonth() + 1);
@@ -1005,7 +1099,7 @@ export function PriceTrendChart({
             grouped.set(dateKey, {
               ourPrices: [],
               competitorPrices: [],
-              individualCompetitors: new Map(),
+              individualSeries: new Map(),
             });
           }
           current.setFullYear(current.getFullYear() + 1);
@@ -1051,7 +1145,7 @@ export function PriceTrendChart({
           year: "numeric",
         });
       }
-      const { ourPrices, competitorPrices, individualCompetitors } =
+      const { ourPrices, competitorPrices, individualSeries } =
         grouped.get(dateKey)!;
 
       const row: Record<string, string | number | boolean | undefined> = {
@@ -1073,7 +1167,7 @@ export function PriceTrendChart({
           Math.max(...competitorPrices) - Math.min(...competitorPrices);
       }
 
-      individualCompetitors.forEach((prices, key) => {
+      individualSeries.forEach((prices, key) => {
         row[key] = prices.reduce((a, b) => a + b, 0) / prices.length;
       });
 
@@ -1082,7 +1176,7 @@ export function PriceTrendChart({
 
     // Interpolate missing values for each key in baseData to render continuous lines/dots
     const keysToInterpolate = ["ourPrice", "competitorPrice", "minPrice", "maxPrice", "rangeDiff"];
-    competitorSeries.forEach((series) => keysToInterpolate.push(series.key));
+    activeSeriesList.forEach((series) => keysToInterpolate.push(series.key));
 
     keysToInterpolate.forEach((key) => {
       const validIndices: number[] = [];
@@ -1143,7 +1237,7 @@ export function PriceTrendChart({
         if (row.rangeDiff !== undefined)
           newRow.rangeDiff = Number(Number(row.rangeDiff).toFixed(2));
 
-        competitorSeries.forEach((series) => {
+        activeSeriesList.forEach((series) => {
           if (row[series.key] !== undefined) {
             newRow[series.key] = Number(Number(row[series.key]).toFixed(2));
           }
@@ -1176,7 +1270,7 @@ export function PriceTrendChart({
             );
           }
 
-          competitorSeries.forEach((series) => {
+          activeSeriesList.forEach((series) => {
             if (row[series.key] !== undefined) {
               newRow[series.key] = Number(
                 (
@@ -1199,7 +1293,7 @@ export function PriceTrendChart({
     } else if (analyticsView === "indexed") {
       let baseOur: number | null = null;
       let baseComp: number | null = null;
-      const baseCompetitors: Record<string, number> = {};
+      const baseSeries: Record<string, number> = {};
 
       for (const row of baseData) {
         if (baseOur === null && row.ourPrice !== undefined) {
@@ -1210,14 +1304,14 @@ export function PriceTrendChart({
           const val = Number(row.competitorPrice);
           if (Number.isFinite(val) && val > 0) baseComp = val;
         }
-        competitorSeries.forEach((series) => {
+        activeSeriesList.forEach((series) => {
           if (
-            baseCompetitors[series.key] === undefined &&
+            baseSeries[series.key] === undefined &&
             row[series.key] !== undefined
           ) {
             const val = Number(row[series.key]);
             if (Number.isFinite(val) && val > 0)
-              baseCompetitors[series.key] = val;
+              baseSeries[series.key] = val;
           }
         });
       }
@@ -1243,8 +1337,8 @@ export function PriceTrendChart({
           }
         }
 
-        competitorSeries.forEach((series) => {
-          const baseVal = baseCompetitors[series.key];
+        activeSeriesList.forEach((series) => {
+          const baseVal = baseSeries[series.key];
           if (baseVal !== undefined && row[series.key] !== undefined) {
             const val = Number(row[series.key]);
             const indexed = (val / baseVal) * 100;
@@ -1288,7 +1382,14 @@ export function PriceTrendChart({
       ? competitorSeries.find((series) => series.id === competitorId)
       : undefined;
 
-    if (showAllCompetitors) {
+    if (isProductMode) {
+      productSeries.forEach((series, index) => {
+        chartConfig[series.key] = {
+          label: series.name,
+          color: getCompetitorColor(index),
+        };
+      });
+    } else if (showAllCompetitors) {
       competitorSeries.forEach((series, index) => {
         chartConfig[series.key] = {
           label: series.name,
@@ -1308,7 +1409,7 @@ export function PriceTrendChart({
       };
     }
 
-    return { chartData: transformedData, chartConfig, competitorSeries };
+    return { chartData: transformedData, chartConfig, competitorSeries, productSeries, isProductMode };
   }, [data, competitorId, showAllCompetitors, analyticsView, granularity, dateFrom, dateTo]);
 
   const activeCompetitor = useMemo(() => {
@@ -1325,13 +1426,15 @@ export function PriceTrendChart({
   }, [activeCompetitor, competitorSeries]);
 
   const dynamicBarSize = useMemo(() => {
-    const numBars = showAllCompetitors ? competitorSeries.length + 1 : (activeCompetitor ? 3 : 2);
+    const numBars = isProductMode
+      ? productSeries.length
+      : (showAllCompetitors ? competitorSeries.length + 1 : (activeCompetitor ? 3 : 2));
     const numDates = chartData.length || 1;
     if (numDates <= 3) {
       return Math.max(24, Math.min(80, 360 / (numBars * numDates)));
     }
     return Math.max(12, Math.min(48, 180 / numBars));
-  }, [showAllCompetitors, competitorSeries.length, activeCompetitor, chartData.length]);
+  }, [showAllCompetitors, competitorSeries.length, productSeries.length, isProductMode, activeCompetitor, chartData.length]);
 
   if (chartData.length === 0 && analyticsView !== "snapshot") {
     return null;
@@ -1475,7 +1578,7 @@ export function PriceTrendChart({
                   disabled
                   title="Not available in Snapshot mode"
                 >
-                  Market Avg
+                  {competitorId ? "Product Trends" : "Market Avg"}
                 </Button>
                 <Button
                   variant={showAllCompetitors ? "secondary" : "ghost"}
@@ -1496,6 +1599,8 @@ export function PriceTrendChart({
             barMode={barMode}
             sortOrder={sortOrder}
             competitorName={competitorName}
+            isProductMode={isProductMode}
+            competitorId={competitorId}
           />
 
           {/* Legend pills */}
@@ -1546,8 +1651,39 @@ export function PriceTrendChart({
   const renderInteractiveLegend = () => {
     return (
       <div className="flex flex-wrap items-center justify-center gap-4 mt-4 pt-3 border-t">
+        {/* Product Mode Series Pills */}
+        {isProductMode &&
+          productSeries.map((series, index) => {
+            const color = getCompetitorColor(index);
+            const isHovered = hoveredLineKey === series.key;
+            return (
+              <div
+                key={series.id}
+                className={`flex items-center gap-2 px-2 py-1 rounded-md cursor-pointer transition-all duration-200 ${
+                  isHovered ? "scale-105" : "hover:bg-muted"
+                }`}
+                style={{
+                  backgroundColor: isHovered ? `${color}15` : undefined
+                }}
+                onMouseEnter={() => setHoveredLineKey(series.key)}
+                onMouseLeave={() => setHoveredLineKey(null)}
+              >
+                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: color }} />
+                <span
+                  className="text-xs font-medium transition-all"
+                  style={{
+                    color: isHovered ? color : "hsl(var(--muted-foreground))",
+                    fontWeight: isHovered ? "bold" : "medium"
+                  }}
+                >
+                  {series.name}
+                </span>
+              </div>
+            );
+          })}
+
         {/* Our Price Legend Pill */}
-        {analyticsView !== "spread" && (
+        {(!isProductMode || analyticsView === "comparison" || analyticsView === "indexed") && analyticsView !== "spread" && (
           <div
             className={`flex items-center gap-2 px-2 py-1 rounded-md cursor-pointer transition-all duration-200 ${
               hoveredLineKey === "ourPrice" ? "bg-primary/10 scale-105" : "hover:bg-muted"
@@ -1564,7 +1700,7 @@ export function PriceTrendChart({
           </div>
         )}
 
-        {analyticsView === "spread" && (
+        {!isProductMode && analyticsView === "spread" && (
           <div
             className={`flex items-center gap-2 px-2 py-1 rounded-md cursor-pointer transition-all duration-200 ${
               hoveredLineKey === "ourBaseline" ? "bg-primary/10 scale-105" : "hover:bg-muted"
@@ -1582,7 +1718,7 @@ export function PriceTrendChart({
         )}
 
         {/* Market Average Legend Pill */}
-        {!showAllCompetitors && (
+        {!isProductMode && !showAllCompetitors && (
           <div
             className={`flex items-center gap-2 px-2 py-1 rounded-md cursor-pointer transition-all duration-200 ${
               hoveredLineKey === "competitorPrice" ? "bg-muted-foreground/10 scale-105" : "hover:bg-muted"
@@ -1600,7 +1736,7 @@ export function PriceTrendChart({
         )}
 
         {/* Active Competitor Pill */}
-        {!showAllCompetitors && activeCompetitor && (
+        {!isProductMode && !showAllCompetitors && activeCompetitor && (
           <div
             className={`flex items-center gap-2 px-2 py-1 rounded-md cursor-pointer transition-all duration-200 ${
               hoveredLineKey === activeCompetitor.key ? "scale-105" : "hover:bg-muted"
@@ -1625,7 +1761,7 @@ export function PriceTrendChart({
         )}
 
         {/* All Competitors Pills */}
-        {showAllCompetitors &&
+        {!isProductMode && showAllCompetitors &&
           competitorSeries.map((series, index) => {
             const color = getCompetitorColor(index);
             const isHovered = hoveredLineKey === series.key;
@@ -1695,6 +1831,8 @@ export function PriceTrendChart({
                   showAllCompetitors={showAllCompetitors}
                   activeCompetitor={activeCompetitor}
                   competitorSeries={competitorSeries}
+                  productSeries={productSeries}
+                  isProductMode={isProductMode}
                   chartConfig={chartConfig}
                   hoveredLineKey={hoveredLineKey}
                   setHoveredLineKey={setHoveredLineKey}
@@ -1719,7 +1857,22 @@ export function PriceTrendChart({
             />
 
             {/* LINE MODE — spread series */}
-            {chartType === "line" && showAllCompetitors &&
+            {chartType === "line" && isProductMode &&
+              productSeries.map((series, index) => (
+                <Line
+                  key={series.id}
+                  type="monotone"
+                  dataKey={series.key}
+                  connectNulls
+                  name={series.name}
+                  strokeDasharray="3 3"
+                  onMouseEnter={() => setHoveredLineKey(series.key)}
+                  onMouseLeave={() => setHoveredLineKey(null)}
+                  {...getLineProps(series.key, getCompetitorColor(index), 1.5, true)}
+                />
+              ))}
+
+            {chartType === "line" && !isProductMode && showAllCompetitors &&
               competitorSeries.map((series, index) => (
                 <Line
                   key={series.id}
@@ -1734,7 +1887,7 @@ export function PriceTrendChart({
                 />
               ))}
 
-            {chartType === "line" && !showAllCompetitors && (
+            {chartType === "line" && !isProductMode && (
               <Line
                 type="monotone"
                 dataKey="ourBaseline"
@@ -1747,7 +1900,7 @@ export function PriceTrendChart({
               />
             )}
 
-            {chartType === "line" && !showAllCompetitors && (
+            {chartType === "line" && !isProductMode && !showAllCompetitors && (
               <Line
                 type="monotone"
                 dataKey="competitorPrice"
@@ -1760,7 +1913,7 @@ export function PriceTrendChart({
               />
             )}
 
-            {chartType === "line" && !showAllCompetitors && activeCompetitor && (
+            {chartType === "line" && !isProductMode && !showAllCompetitors && activeCompetitor && (
               <Line
                 key={activeCompetitor.id}
                 type="monotone"
@@ -1774,7 +1927,19 @@ export function PriceTrendChart({
             )}
 
             {/* BAR MODE — spread series */}
-            {chartType === "bar" && showAllCompetitors &&
+            {chartType === "bar" && isProductMode &&
+              productSeries.map((series, index) => (
+                <Bar
+                  key={series.id}
+                  dataKey={series.key}
+                  name={series.name}
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={dynamicBarSize}
+                  {...getBarProps(series.key, getCompetitorColor(index))}
+                />
+              ))}
+
+            {chartType === "bar" && !isProductMode && showAllCompetitors &&
               competitorSeries.map((series, index) => (
                 <Bar
                   key={series.id}
@@ -1786,7 +1951,7 @@ export function PriceTrendChart({
                 />
               ))}
 
-            {chartType === "bar" && !showAllCompetitors && (
+            {chartType === "bar" && !isProductMode && !showAllCompetitors && (
               <Bar
                 dataKey="competitorPrice"
                 name="Market Average"
@@ -1796,7 +1961,7 @@ export function PriceTrendChart({
               />
             )}
 
-            {chartType === "bar" && !showAllCompetitors && activeCompetitor && (
+            {chartType === "bar" && !isProductMode && !showAllCompetitors && activeCompetitor && (
               <Bar
                 key={activeCompetitor.id}
                 dataKey={activeCompetitor.key}
@@ -1840,6 +2005,8 @@ export function PriceTrendChart({
                   showAllCompetitors={showAllCompetitors}
                   activeCompetitor={activeCompetitor}
                   competitorSeries={competitorSeries}
+                  productSeries={productSeries}
+                  isProductMode={isProductMode}
                   chartConfig={chartConfig}
                   hoveredLineKey={hoveredLineKey}
                   setHoveredLineKey={setHoveredLineKey}
@@ -1848,8 +2015,23 @@ export function PriceTrendChart({
               }
             />
 
+            {/* LINE MODE — product series */}
+            {chartType === "line" && isProductMode &&
+              productSeries.map((series, index) => (
+                <Line
+                  key={series.id}
+                  type="monotone"
+                  dataKey={series.key}
+                  connectNulls
+                  name={series.name}
+                  onMouseEnter={() => setHoveredLineKey(series.key)}
+                  onMouseLeave={() => setHoveredLineKey(null)}
+                  {...getLineProps(series.key, getCompetitorColor(index), 1.5, true)}
+                />
+              ))}
+
             {/* LINE MODE — indexed series */}
-            {chartType === "line" && showAllCompetitors &&
+            {chartType === "line" && !isProductMode && showAllCompetitors &&
               competitorSeries.map((series, index) => (
                 <Line
                   key={series.id}
@@ -1876,7 +2058,7 @@ export function PriceTrendChart({
               />
             )}
 
-            {chartType === "line" && !showAllCompetitors && (
+            {chartType === "line" && !isProductMode && !showAllCompetitors && (
               <Line
                 type="monotone"
                 dataKey="competitorPrice"
@@ -1889,7 +2071,7 @@ export function PriceTrendChart({
               />
             )}
 
-            {chartType === "line" && !showAllCompetitors && activeCompetitor && (
+            {chartType === "line" && !isProductMode && !showAllCompetitors && activeCompetitor && (
               <Line
                 key={activeCompetitor.id}
                 type="monotone"
@@ -1902,8 +2084,21 @@ export function PriceTrendChart({
               />
             )}
 
+            {/* BAR MODE — product series */}
+            {chartType === "bar" && isProductMode &&
+              productSeries.map((series, index) => (
+                <Bar
+                  key={series.id}
+                  dataKey={series.key}
+                  name={series.name}
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={dynamicBarSize}
+                  {...getBarProps(series.key, getCompetitorColor(index))}
+                />
+              ))}
+
             {/* BAR MODE — indexed series */}
-            {chartType === "bar" && showAllCompetitors &&
+            {chartType === "bar" && !isProductMode && showAllCompetitors &&
               competitorSeries.map((series, index) => (
                 <Bar
                   key={series.id}
@@ -1925,7 +2120,7 @@ export function PriceTrendChart({
               />
             )}
 
-            {chartType === "bar" && !showAllCompetitors && (
+            {chartType === "bar" && !isProductMode && !showAllCompetitors && (
               <Bar
                 dataKey="competitorPrice"
                 name="Market Average"
@@ -1935,7 +2130,7 @@ export function PriceTrendChart({
               />
             )}
 
-            {chartType === "bar" && !showAllCompetitors && activeCompetitor && (
+            {chartType === "bar" && !isProductMode && !showAllCompetitors && activeCompetitor && (
               <Bar
                 key={activeCompetitor.id}
                 dataKey={activeCompetitor.key}
@@ -1979,6 +2174,8 @@ export function PriceTrendChart({
                   showAllCompetitors={showAllCompetitors}
                   activeCompetitor={activeCompetitor}
                   competitorSeries={competitorSeries}
+                  productSeries={productSeries}
+                  isProductMode={isProductMode}
                   chartConfig={chartConfig}
                   hoveredLineKey={hoveredLineKey}
                   setHoveredLineKey={setHoveredLineKey}
@@ -1988,7 +2185,7 @@ export function PriceTrendChart({
             />
 
             {/* Stacked Range Area (show only when competitor is focused or All Competitors) */}
-            {(showAllCompetitors || !!activeCompetitor) && (
+            {!isProductMode && (showAllCompetitors || !!activeCompetitor) && (
               <Area
                 type="monotone"
                 dataKey="minPrice"
@@ -2000,7 +2197,7 @@ export function PriceTrendChart({
                 name="Market Min"
               />
             )}
-            {(showAllCompetitors || !!activeCompetitor) && (
+            {!isProductMode && (showAllCompetitors || !!activeCompetitor) && (
               <Area
                 type="monotone"
                 dataKey="rangeDiff"
@@ -2013,7 +2210,7 @@ export function PriceTrendChart({
               />
             )}
 
-            {activeCompetitor && (
+            {!isProductMode && activeCompetitor && (
               <Line
                 type="monotone"
                 dataKey={activeCompetitor.key}
@@ -2026,27 +2223,31 @@ export function PriceTrendChart({
             )}
 
             {/* Our Price Line */}
-            <Line
-              type="monotone"
-              dataKey="ourPrice"
-              connectNulls
-              name="Our Price"
-              onMouseEnter={() => setHoveredLineKey("ourPrice")}
-              onMouseLeave={() => setHoveredLineKey(null)}
-              {...getLineProps("ourPrice", "hsl(var(--primary))", 2.5, true)}
-            />
+            {!isProductMode && (
+              <Line
+                type="monotone"
+                dataKey="ourPrice"
+                connectNulls
+                name="Our Price"
+                onMouseEnter={() => setHoveredLineKey("ourPrice")}
+                onMouseLeave={() => setHoveredLineKey(null)}
+                {...getLineProps("ourPrice", "hsl(var(--primary))", 2.5, true)}
+              />
+            )}
 
             {/* Market Average Line */}
-            <Line
-              type="monotone"
-              dataKey="competitorPrice"
-              strokeDasharray="6 4"
-              connectNulls
-              name="Market Average"
-              onMouseEnter={() => setHoveredLineKey("competitorPrice")}
-              onMouseLeave={() => setHoveredLineKey(null)}
-              {...getLineProps("competitorPrice", "hsl(var(--muted-foreground))", 2, true)}
-            />
+            {!isProductMode && (
+              <Line
+                type="monotone"
+                dataKey="competitorPrice"
+                strokeDasharray="6 4"
+                connectNulls
+                name="Market Average"
+                onMouseEnter={() => setHoveredLineKey("competitorPrice")}
+                onMouseLeave={() => setHoveredLineKey(null)}
+                {...getLineProps("competitorPrice", "hsl(var(--muted-foreground))", 2, true)}
+              />
+            )}
           </ComposedChart>
         );
       case "comparison":
@@ -2082,6 +2283,8 @@ export function PriceTrendChart({
                   showAllCompetitors={showAllCompetitors}
                   activeCompetitor={activeCompetitor}
                   competitorSeries={competitorSeries}
+                  productSeries={productSeries}
+                  isProductMode={isProductMode}
                   chartConfig={chartConfig}
                   hoveredLineKey={hoveredLineKey}
                   setHoveredLineKey={setHoveredLineKey}
@@ -2090,8 +2293,23 @@ export function PriceTrendChart({
               }
             />
 
+            {/* LINE MODE — product series */}
+            {chartType === "line" && isProductMode &&
+              productSeries.map((series, index) => (
+                <Line
+                  key={series.id}
+                  type="monotone"
+                  dataKey={series.key}
+                  connectNulls
+                  name={series.name}
+                  onMouseEnter={() => setHoveredLineKey(series.key)}
+                  onMouseLeave={() => setHoveredLineKey(null)}
+                  {...getLineProps(series.key, getCompetitorColor(index), 1.5, true)}
+                />
+              ))}
+
             {/* LINE MODE — comparison series */}
-            {chartType === "line" && showAllCompetitors &&
+            {chartType === "line" && !isProductMode && showAllCompetitors &&
               competitorSeries.map((series, index) => (
                 <Line
                   key={series.id}
@@ -2119,7 +2337,7 @@ export function PriceTrendChart({
               />
             )}
 
-            {chartType === "line" && !showAllCompetitors && (
+            {chartType === "line" && !isProductMode && !showAllCompetitors && (
               <Line
                 type="monotone"
                 dataKey="competitorPrice"
@@ -2132,7 +2350,7 @@ export function PriceTrendChart({
               />
             )}
 
-            {chartType === "line" && !showAllCompetitors && activeCompetitor && (
+            {chartType === "line" && !isProductMode && !showAllCompetitors && activeCompetitor && (
               <Line
                 key={activeCompetitor.id}
                 type="monotone"
@@ -2145,8 +2363,21 @@ export function PriceTrendChart({
               />
             )}
 
+            {/* BAR MODE — product series */}
+            {chartType === "bar" && isProductMode &&
+              productSeries.map((series, index) => (
+                <Bar
+                  key={series.id}
+                  dataKey={series.key}
+                  name={series.name}
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={dynamicBarSize}
+                  {...getBarProps(series.key, getCompetitorColor(index))}
+                />
+              ))}
+
             {/* BAR MODE — comparison series */}
-            {chartType === "bar" && showAllCompetitors &&
+            {chartType === "bar" && !isProductMode && showAllCompetitors &&
               competitorSeries.map((series, index) => (
                 <Bar
                   key={series.id}
@@ -2169,7 +2400,7 @@ export function PriceTrendChart({
               />
             )}
 
-            {chartType === "bar" && !showAllCompetitors && (
+            {chartType === "bar" && !isProductMode && !showAllCompetitors && (
               <Bar
                 dataKey="competitorPrice"
                 name="Market Average"
@@ -2179,7 +2410,7 @@ export function PriceTrendChart({
               />
             )}
 
-            {chartType === "bar" && !showAllCompetitors && activeCompetitor && (
+            {chartType === "bar" && !isProductMode && !showAllCompetitors && activeCompetitor && (
               <Bar
                 key={activeCompetitor.id}
                 dataKey={activeCompetitor.key}
@@ -2199,11 +2430,13 @@ export function PriceTrendChart({
       <CardHeader className="flex flex-col lg:flex-row items-start lg:items-center justify-between pb-4 gap-4">
         <div className="space-y-1">
           <CardTitle className="text-lg font-bold">Market Position</CardTitle>
-          <CardDescription>
+        <CardDescription>
             {analyticsView === "comparison"
-              ? competitorName
-                ? `Comparison: Our Price vs ${competitorName}`
-                : "Compare OUR Price vs competitors and market average"
+              ? focusMode === "product"
+                ? `All competitors' prices for the selected product vs our price`
+                : competitorName
+                  ? `Comparison: Our Price vs ${competitorName}`
+                  : "Compare OUR Price vs competitors and market average"
               : analyticsView === "spread"
                 ? "Price gap: Competitor Price − Our Price (Above 0 means competitor is more expensive)"
                 : analyticsView === "indexed"
