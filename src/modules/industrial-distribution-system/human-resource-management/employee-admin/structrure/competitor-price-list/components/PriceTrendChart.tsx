@@ -30,7 +30,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  ArrowDownUp,
   BarChart2,
   LineChart as LineChartIcon,
 } from "lucide-react";
@@ -717,7 +716,7 @@ export function PriceTrendChart({
 
   // Bar chart sub-state
   const [barMode, setBarMode] = useState<BarMode>("ranked");
-  const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
+  const [sortOrder] = useState<SortOrder>("asc");
 
   // Line chart interactive hover state
   const [hoveredLineKey, setHoveredLineKey] = useState<string | null>(null);
