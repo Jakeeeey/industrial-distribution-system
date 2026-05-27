@@ -138,7 +138,7 @@ export function SerialInputModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[95vw] sm:max-w-[500px] border-none shadow-2xl overflow-hidden p-0 bg-card max-h-[95vh] sm:max-h-[90vh] flex flex-col">
-        <div className="bg-blue-600 dark:bg-blue-700 p-4 sm:p-6 text-white shadow-inner shrink-0">
+        <div className="bg-primary p-4 sm:p-6 text-white shadow-inner shrink-0">
           <DialogHeader>
             <div className="flex items-center gap-3 mb-2">
               <div className="bg-white/20 dark:bg-black/20 p-2 rounded-lg backdrop-blur-md">
@@ -167,13 +167,13 @@ export function SerialInputModal({
                   value={currentInput}
                   onChange={(e) => setCurrentInput(e.target.value.toUpperCase())}
                   onKeyDown={handleKeyDown}
-                   className="flex-1 h-11 border-blue-500/20 focus:border-blue-500 focus:ring-blue-500/20 rounded-xl"
+                   className="flex-1 h-11 border-primary/20 focus:border-primary focus:ring-primary/20 rounded-xl"
                   disabled={isValidating}
                 />
                 <Button 
                   onClick={() => handleAddSerial(currentInput)}
                   disabled={isValidating || !currentInput.trim()}
-                  className="h-11 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg shadow-blue-500/10 transition-all gap-2"
+                  className="h-11 px-4 bg-primary hover:bg-primary/90 text-white rounded-xl shadow-lg shadow-primary/10 transition-all gap-2"
                 >
                   {isValidating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                   Add
@@ -186,10 +186,10 @@ export function SerialInputModal({
               </div>
             </div>
 
-            <div className="flex flex-col items-center justify-center py-4 px-4 border-2 border-dashed border-blue-500/10 bg-blue-500/5 dark:bg-blue-500/5 rounded-2xl space-y-2">
+            <div className="flex flex-col items-center justify-center py-4 px-4 border-2 border-dashed border-primary/10 bg-primary/[0.03] rounded-2xl space-y-2">
                <div className="flex items-center gap-2">
-                  <Wifi className="h-4 w-4 text-blue-500 animate-pulse" />
-                  <span className="text-xs font-black uppercase tracking-widest text-blue-500">
+                  <Wifi className="h-4 w-4 text-primary animate-pulse" />
+                  <span className="text-xs font-black uppercase tracking-widest text-primary">
                     Ready for Manual Input
                   </span>
                </div>
@@ -240,7 +240,7 @@ export function SerialInputModal({
               <h3 className="text-xs font-black text-muted-foreground/60 uppercase tracking-[0.2em]">
                 Serial List
               </h3>
-              <Badge variant="outline" className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800/30 px-3 py-1 font-black rounded-lg">
+              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 px-3 py-1 font-black rounded-lg">
                 {serials.length} SERIALS
               </Badge>
             </div>
@@ -295,7 +295,7 @@ export function SerialInputModal({
             type="button"
             onClick={handleSave}
             disabled={serials.length === 0}
-            className="flex-1 h-11 font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/10 rounded-xl transition-all"
+            className="flex-1 h-11 font-bold bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/10 rounded-xl transition-all"
           >
             Confirm {serials.length} Serials
           </Button>

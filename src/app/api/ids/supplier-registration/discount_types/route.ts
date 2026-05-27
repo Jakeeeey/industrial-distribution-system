@@ -2,7 +2,7 @@ import { fetchAllDiscountTypes } from "@/modules/industrial-distribution-system/
 import { NextResponse } from "next/server";
 
 /**
- * GET /api/supplier-registration/discount-types
+ * GET /api/ids/supplier-registration/discount_types
  * Fetch all discount types
  */
 export async function GET() {

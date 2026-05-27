@@ -82,13 +82,6 @@ export const stockAdjustmentService = {
       }
     }
 
-    if (params?.search) {
-      filters._or = [
-        { doc_no: { _icontains: params.search } },
-        { remarks: { _icontains: params.search } }
-      ];
-    }
-
     if (Object.keys(filters).length > 0) {
       query += `&filter=${encodeURIComponent(JSON.stringify(filters))}`;
     }
@@ -100,9 +93,47 @@ export const stockAdjustmentService = {
 
     const docNos = headers.map(h => h.doc_no);
     const itemsRes = await directusFetch<{ data: RawItem[] }>(
-      `${DIRECTUS_URL}/items/stock_adjustment?filter={"doc_no":{"_in":${JSON.stringify(docNos)}}}&fields=doc_no,quantity,product_id.price_per_unit,product_id.cost_per_unit,unit_id.unit_name&limit=-1`
+      `${DIRECTUS_URL}/items/stock_adjustment?filter={"doc_no":{"_in":${JSON.stringify(docNos)}}}&fields=doc_no,quantity,product_id.product_id,product_id.price_per_unit,product_id.cost_per_unit,unit_id.unit_name&limit=-1`
     );
     const allItems = itemsRes.data || [];
+
+    // Collect all product IDs to infer supplier mappings
+    const productIds = Array.from(
+      new Set(
+        allItems
+          .map((item) => {
+            return typeof item.product_id === "object" ? item.product_id?.product_id : item.product_id;
+          })
+          .filter(Boolean)
+      )
+    );
+
+    const productToSupplierMap = new Map<number, { id: number; supplier_name: string }>();
+    if (productIds.length > 0) {
+      try {
+        const ppsRes = await directusFetch<{
+          data: Array<{
+            product_id: number | { product_id: number } | null;
+            supplier_id: { id: number; supplier_name: string } | null;
+          }>;
+        }>(
+          `${DIRECTUS_URL}/items/product_per_supplier?filter={"product_id":{"_in":${JSON.stringify(
+            productIds
+          )}}}&fields=product_id,supplier_id.id,supplier_id.supplier_name&limit=-1`
+        );
+        ppsRes.data?.forEach((pps) => {
+          const pId = pps.product_id && typeof pps.product_id === "object" ? pps.product_id?.product_id : pps.product_id;
+          if (pId && pps.supplier_id) {
+            productToSupplierMap.set(Number(pId), {
+              id: pps.supplier_id.id,
+              supplier_name: pps.supplier_id.supplier_name,
+            });
+          }
+        });
+      } catch (err) {
+        console.error("Failed to fetch product supplier mappings for headers:", err);
+      }
+    }
 
     const itemsMap = new Map<string, RawItem[]>();
     allItems.forEach((item: RawItem) => {
@@ -110,19 +141,52 @@ export const stockAdjustmentService = {
       itemsMap.get(item.doc_no)!.push(item);
     });
 
-    return headers.map(header => {
+    const mappedHeaders = headers.map(header => {
       const headerItems = itemsMap.get(header.doc_no) || [];
       const totalAmount = headerItems.reduce((sum: number, item: RawItem) => {
         const cost = item.product_id?.cost_per_unit || item.product_id?.price_per_unit || 0;
         return sum + ((item.quantity || 0) * cost);
       }, 0);
 
+      // Try to resolve supplier_id from header, fallback to inferring it from items
+      let resolvedSupplier = header.supplier_id;
+      if (!resolvedSupplier || resolvedSupplier === 0) {
+        const firstWithSupplier = headerItems.find(item => {
+          const pId = typeof item.product_id === 'object' ? item.product_id?.product_id : item.product_id;
+          return pId && productToSupplierMap.has(Number(pId));
+        });
+        if (firstWithSupplier) {
+          const pId = typeof firstWithSupplier.product_id === 'object' ? firstWithSupplier.product_id?.product_id : firstWithSupplier.product_id;
+          resolvedSupplier = productToSupplierMap.get(Number(pId));
+        }
+      }
+
       return {
         ...header,
+        supplier_id: resolvedSupplier,
         items: headerItems,
         amount: totalAmount > 0 ? totalAmount : (Number(header.amount) || 0)
       };
     });
+
+    if (params?.search) {
+      const query = params.search.toLowerCase();
+      return mappedHeaders.filter(h => {
+        const docNo = h.doc_no || "";
+        const remarks = h.remarks || "";
+        const branchName = (h.branch_id && typeof h.branch_id === "object" ? h.branch_id.branch_name : "") || "";
+        const supplierName = (h.supplier_id && typeof h.supplier_id === "object" ? h.supplier_id.supplier_name : "") || "";
+        
+        return (
+          docNo.toLowerCase().includes(query) ||
+          remarks.toLowerCase().includes(query) ||
+          branchName.toLowerCase().includes(query) ||
+          supplierName.toLowerCase().includes(query)
+        );
+      });
+    }
+
+    return mappedHeaders;
   },
 
   /**
@@ -213,10 +277,39 @@ export const stockAdjustmentService = {
       };
     });
 
+    let attachments: Record<string, unknown>[] = [];
+    try {
+      if (itemIds.length > 0) {
+        const attachmentsRes = await directusFetch<{ data: Record<string, unknown>[] }>(
+          `${DIRECTUS_URL}/items/stock_adjustment_attachment?filter={"stock_adjustment_id":{"_in":${JSON.stringify(itemIds)}}}&limit=-1`
+        );
+        attachments = attachmentsRes.data || [];
+
+        const fileIds = attachments.map(a => typeof a.attachment === 'string' ? a.attachment as string : null).filter(Boolean);
+        if (fileIds.length > 0) {
+          try {
+            const filesRes = await directusFetch<{ data: Record<string, unknown>[] }>(
+              `${DIRECTUS_URL}/files?filter={"id":{"_in":${JSON.stringify(fileIds)}}}&fields=id,type,filename_download,filesize`
+            );
+            const filesMap = new Map((filesRes.data || []).map(f => [f.id, f]));
+            attachments = attachments.map(a => ({
+              ...a,
+              attachment: filesMap.get(a.attachment as string) || a.attachment
+            }));
+          } catch (fileErr) {
+            console.warn("Failed to fetch file metadata:", fileErr);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to fetch stock adjustment attachments:", err);
+    }
+
     return {
       ...header,
       items: itemsWithSerials,
       amount: totalAmount > 0 ? totalAmount : (Number(header.amount) || 0),
+      stock_adjustment_attachment: attachments,
     } as unknown as StockAdjustmentDetail;
   },
 
@@ -417,6 +510,13 @@ export const stockAdjustmentService = {
   async create(payload: { header: Record<string, unknown>; items: StockAdjustmentItem[]; userId?: number }) {
     const { header, items } = payload;
 
+    let finalRemarks = String(header.remarks || "").trim();
+    // Clean any existing supplier tags to be safe
+    finalRemarks = finalRemarks.replace(/\s*\[SUPPLIER_ID:\s*(\d+)\]/g, "").trim();
+    if (header.supplier_id) {
+      finalRemarks = `${finalRemarks}\n[SUPPLIER_ID: ${header.supplier_id}]`.trim();
+    }
+
     const headerRes = await directusFetch<{ data: { id: number } }>(`${DIRECTUS_URL}/items/stock_adjustment_header`, {
       method: "POST",
       body: JSON.stringify({
@@ -424,7 +524,7 @@ export const stockAdjustmentService = {
         branch_id: header.branch_id,
         supplier_id: header.supplier_id,
         type: header.type,
-        remarks: header.remarks,
+        remarks: finalRemarks,
         amount: header.amount || items.reduce((acc: number, item: StockAdjustmentItem) => acc + (item.quantity * (item.cost_per_unit || 0)), 0),
         isPosted: 0,
         created_by: payload.userId,
@@ -471,6 +571,22 @@ export const stockAdjustmentService = {
       });
     }
 
+    // Save attachments
+    if (header.stock_adjustment_attachment && Array.isArray(header.stock_adjustment_attachment) && header.stock_adjustment_attachment.length > 0) {
+      const firstItemId = createdItems[0]?.id;
+      if (firstItemId) {
+        const atts = (header.stock_adjustment_attachment as Record<string, unknown>[]).map((att) => ({
+          stock_adjustment_id: firstItemId,
+          attachment: att.attachment && typeof att.attachment === 'object' ? (att.attachment as Record<string, unknown>).id : att.attachment,
+          created_by: payload.userId
+        }));
+        await directusFetch(`${DIRECTUS_URL}/items/stock_adjustment_attachment`, {
+          method: "POST",
+          body: JSON.stringify(atts),
+        }).catch(err => console.error("Failed to save attachments:", err));
+      }
+    }
+
     return headerRes.data;
   },
 
@@ -478,11 +594,17 @@ export const stockAdjustmentService = {
    * Update an existing Stock Adjustment
    */
   async update(id: number, payload: { header: Record<string, unknown>; items: StockAdjustmentItem[]; userId?: number }) {
+    let finalRemarks = String(payload.header.remarks || "").trim();
+    finalRemarks = finalRemarks.replace(/\s*\[SUPPLIER_ID:\s*(\d+)\]/g, "").trim();
+    if (payload.header.supplier_id) {
+      finalRemarks = `${finalRemarks}\n[SUPPLIER_ID: ${payload.header.supplier_id}]`.trim();
+    }
+
     const headerPayload = {
       doc_no: payload.header.doc_no,
       type: payload.header.type,
       branch_id: Number(payload.header.branch_id),
-      remarks: payload.header.remarks,
+      remarks: finalRemarks,
       supplier_id: payload.header.supplier_id ? Number(payload.header.supplier_id) : null,
       amount: Number(payload.header.amount),
     };
@@ -493,9 +615,27 @@ export const stockAdjustmentService = {
     });
 
     const existingItemsRes = await directusFetch<{ data: { id: number }[] }>(
-      `${DIRECTUS_URL}/items/stock_adjustment?filter={"doc_no":{"_eq":"${payload.header.doc_no}"}}&fields=id`
+      `${DIRECTUS_URL}/items/stock_adjustment?filter={"stock_adjustment_id":{"_eq":${id}}}&fields=id`
     );
     const itemIds = existingItemsRes.data.map((i: { id: number }) => i.id);
+
+    // Delete old attachments first using old item IDs (cascade delete)
+    if (itemIds.length > 0) {
+      try {
+        const existingAttRes = await directusFetch<{ data: { id: number }[] }>(
+          `${DIRECTUS_URL}/items/stock_adjustment_attachment?filter={"stock_adjustment_id":{"_in":${JSON.stringify(itemIds)}}}&fields=id&limit=-1`
+        );
+        const attIds = existingAttRes.data.map(a => a.id);
+        if (attIds.length > 0) {
+          await directusFetch(`${DIRECTUS_URL}/items/stock_adjustment_attachment`, {
+            method: "DELETE",
+            body: JSON.stringify(attIds),
+          });
+        }
+      } catch (err) {
+        console.warn("Failed to delete old attachments during update:", err);
+      }
+    }
 
     if (itemIds.length > 0) {
       await directusFetch(`${DIRECTUS_URL}/items/stock_adjustment`, {
@@ -543,6 +683,22 @@ export const stockAdjustmentService = {
       });
     }
 
+    // Save new attachments
+    if (payload.header.stock_adjustment_attachment && Array.isArray(payload.header.stock_adjustment_attachment) && payload.header.stock_adjustment_attachment.length > 0) {
+      const firstItemId = createdItems[0]?.id;
+      if (firstItemId) {
+        const atts = (payload.header.stock_adjustment_attachment as Record<string, unknown>[]).map((att) => ({
+          stock_adjustment_id: firstItemId,
+          attachment: att.attachment && typeof att.attachment === 'object' ? (att.attachment as Record<string, unknown>).id : att.attachment,
+          created_by: payload.userId
+        }));
+        await directusFetch(`${DIRECTUS_URL}/items/stock_adjustment_attachment`, {
+          method: "POST",
+          body: JSON.stringify(atts),
+        }).catch(err => console.error("Failed to update attachments:", err));
+      }
+    }
+
     return { success: true };
   },
 
@@ -572,6 +728,25 @@ export const stockAdjustmentService = {
       `${DIRECTUS_URL}/items/stock_adjustment?filter={"doc_no":{"_eq":"${docNo}"}}&fields=id`
     );
     const itemIds = itemsRes.data.map((i: { id: number }) => i.id);
+
+    // Delete attachments using item IDs (FK references stock_adjustment.id)
+    if (itemIds.length > 0) {
+      try {
+        const attRes = await directusFetch<{ data: { id: number }[] }>(
+          `${DIRECTUS_URL}/items/stock_adjustment_attachment?filter={"stock_adjustment_id":{"_in":${JSON.stringify(itemIds)}}}&fields=id&limit=-1`
+        );
+        const attIds = attRes.data.map(a => a.id);
+        if (attIds.length > 0) {
+          await directusFetch(`${DIRECTUS_URL}/items/stock_adjustment_attachment`, {
+            method: "DELETE",
+            body: JSON.stringify(attIds),
+          });
+        }
+      } catch (err) {
+        console.warn("Failed to delete attachments during stock adjustment deletion:", err);
+      }
+    }
+
     if (itemIds.length > 0) {
       await directusFetch(`${DIRECTUS_URL}/items/stock_adjustment`, {
         method: "DELETE",
