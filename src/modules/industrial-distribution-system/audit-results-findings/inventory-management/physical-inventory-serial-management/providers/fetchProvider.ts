@@ -819,7 +819,7 @@ export async function updatePhysicalInventoryDetailsBulk(
     const json = await apiPatch<
         { updates: BulkPhysicalInventoryDetailUpdateItem[] },
         DirectusBulkItemsResponse<PhysicalInventoryDetailRow>
-    >(`/api/arf/inventory-management/physical-inventory/details/bulk`, { updates });
+    >(`/api/ids/arf/inventory-management/physical-inventory/details/bulk`, { updates });
 
     return Array.isArray(json.data) ? json.data : [];
 }
