@@ -1,4 +1,4 @@
-import { dispatchPlanService } from "@/modules/supply-chain-management/warehouse-management/consolidation/pre-dispatch-plan/services/dispatch-plan";
+import { dispatchPlanService } from "@/modules/industrial-distribution-system/supply-chain-management/warehouse-management/consolidation/pre-dispatch-plan/services/dispatch-plan";
 import { NextRequest, NextResponse } from "next/server";
 
 /**

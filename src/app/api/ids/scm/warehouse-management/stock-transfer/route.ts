@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { 
-  getEnrichedTransfers, 
-  getEnrichedProducts, 
-  createTransfer, 
-  updateTransferStatus 
-} from "@/modules/supply-chain-management/warehouse-management/stock-transfer/services/stock-transfer.service";
-import * as repo from "@/modules/supply-chain-management/warehouse-management/stock-transfer/services/stock-transfer.repo";
-import type { 
-  CreateTransferPayload, 
-  UpdateTransferPayload 
-} from "@/modules/supply-chain-management/warehouse-management/stock-transfer/types/stock-transfer.types";
+import {
+  getEnrichedTransfers,
+  getEnrichedProducts,
+  createTransfer,
+  updateTransferStatus
+} from "@/modules/industrial-distribution-system/supply-chain-management/warehouse-management/stock-transfer/services/stock-transfer.service";
+import * as repo from "@/modules/industrial-distribution-system/supply-chain-management/warehouse-management/stock-transfer/services/stock-transfer.repo";
+import type {
+  CreateTransferPayload,
+  UpdateTransferPayload
+} from "@/modules/industrial-distribution-system/supply-chain-management/warehouse-management/stock-transfer/types/stock-transfer.types";
 
 export const dynamic = "force-dynamic";
 
@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as CreateTransferPayload;
     // Note: In a real app, we'd get the actual user ID from the session
-    const result = await createTransfer(body); 
+    const result = await createTransfer(body);
     return NextResponse.json(result, { status: 201 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";

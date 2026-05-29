@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { updateTransferStatus } from "@/modules/supply-chain-management/warehouse-management/stock-transfer/services/stock-transfer.service";
+import { updateTransferStatus } from "@/modules/industrial-distribution-system/supply-chain-management/warehouse-management/stock-transfer/services/stock-transfer.service";
 
 export const dynamic = "force-dynamic";
 
@@ -13,9 +13,9 @@ export async function PATCH(request: NextRequest) {
 
     const { success } = await updateTransferStatus({ ids, status });
 
-    return NextResponse.json({ 
-      success, 
-      count: ids.length 
+    return NextResponse.json({
+      success,
+      count: ids.length
     });
   } catch (error: unknown) {
     console.error("[Manual Dispatch API Error]:", error);
