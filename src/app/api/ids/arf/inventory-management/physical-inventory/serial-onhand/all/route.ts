@@ -1,4 +1,4 @@
-// src/app/api/arf/inventory-management/physical-inventory/serial-onhand/all/route.ts
+// src/app/api/ids/arf/inventory-management/physical-inventory/serial-onhand/all/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -6,11 +6,13 @@ export const dynamic = "force-dynamic";
 
 const SPRING_API_BASE_URL = process.env.SPRING_API_BASE_URL;
 const COOKIE_NAME = "vos_access_token";
+const AUTH_DISABLED = process.env.NEXT_PUBLIC_AUTH_DISABLED === "true";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
     const token = req.cookies.get(COOKIE_NAME)?.value;
 
-    if (!token) {
+    // When auth is disabled (dev mode), skip the token check
+    if (!AUTH_DISABLED && !token) {
         return NextResponse.json(
             { ok: false, message: "Unauthorized: Missing access token" },
             { status: 401 },
@@ -35,57 +37,43 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
             );
         }
 
-        // We try the Spring API endpoint without the 'serial' parameter to see if it returns all
-        // Some Spring endpoints in this project use '/all' suffix, some use filters
-        // We'll try the base endpoint first with just branchId
+        // Fetch all serials for a branch using the filter endpoint without a serialNumber
         const targetUrl = new URL(
             `${SPRING_API_BASE_URL.replace(/\/$/, "")}/api/v-serial-onhand/filter`,
         );
 
         targetUrl.searchParams.set("branchId", branchId);
 
+        const headers: Record<string, string> = {
+            Accept: "application/json",
+        };
+
+        if (token) {
+            headers["Authorization"] = `Bearer ${token}`;
+            headers["Cookie"] = `vos_access_token=${token}`;
+        }
+
         const springRes = await fetch(targetUrl.toString(), {
             method: "GET",
-            headers: {
-                Authorization: `Bearer ${token}`,
-                Accept: "application/json",
-            },
+            headers,
             cache: "no-store",
         });
 
         if (!springRes.ok) {
-            // If the base endpoint fails without serial, try the /all suffix (common pattern)
-            const fallbackUrl = new URL(
-                `${SPRING_API_BASE_URL.replace(/\/$/, "")}/api/v-serial-onhand`,
-            );
-            fallbackUrl.searchParams.set("branchId", branchId);
-
-            const fallbackRes = await fetch(fallbackUrl.toString(), {
-                method: "GET",
+            const text = await springRes.text();
+            return new NextResponse(text || "Bulk Serial on-hand fetch failed.", {
+                status: springRes.status,
                 headers: {
-                    Authorization: `Bearer ${token}`,
-                    Accept: "application/json",
+                    "Content-Type":
+                        springRes.headers.get("content-type") ?? "application/json",
                 },
-                cache: "no-store",
             });
-
-            if (!fallbackRes.ok) {
-                const text = await fallbackRes.text();
-                return new NextResponse(text || "Bulk Serial on-hand fetch failed.", {
-                    status: fallbackRes.status,
-                    headers: {
-                        "Content-Type":
-                            fallbackRes.headers.get("content-type") ?? "application/json",
-                    },
-                });
-            }
-
-            const data = await fallbackRes.json();
-            return NextResponse.json({ ok: true, data });
         }
 
         const data = await springRes.json();
-        return NextResponse.json({ ok: true, data });
+        // Normalize: Spring may return a single object or an array
+        const normalized = Array.isArray(data) ? data : [data].filter(Boolean);
+        return NextResponse.json({ ok: true, data: normalized });
     } catch (error) {
         const message =
             error instanceof Error ? error.message : "Bulk Serial on-hand fetch failed.";
