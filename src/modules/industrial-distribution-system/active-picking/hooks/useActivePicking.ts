@@ -28,7 +28,7 @@ export function useActivePicking(userId: number | null = null) {
             if (!res.ok) throw new Error("Failed to fetch branches");
             const data = await res.json();
             setBranches(data);
-        } catch (error) {
+        } catch {
             toast.error("Failed to load branches");
         } finally {
             setIsLoadingBranches(false);
@@ -45,7 +45,7 @@ export function useActivePicking(userId: number | null = null) {
             setTotalPickings(data.meta.total);
             setPage(targetPage);
             setSearchQuery(search);
-        } catch (error) {
+        } catch {
             toast.error("Failed to load pickings");
         } finally {
             setIsLoadingPickings(false);
@@ -60,7 +60,7 @@ export function useActivePicking(userId: number | null = null) {
             if (!res.ok) throw new Error("Failed to fetch details");
             const data = await res.json();
             setDetails(data);
-        } catch (error) {
+        } catch {
             toast.error("Failed to load picking details");
             setDetails([]);
         } finally {
@@ -75,7 +75,7 @@ export function useActivePicking(userId: number | null = null) {
             if (!res.ok) throw new Error("Failed to fetch serials");
             const data = await res.json();
             setSerialsMap(prev => ({ ...prev, [detailId]: data }));
-        } catch (error) {
+        } catch {
             // Ignore error or handle silently
         } finally {
             setIsLoadingSerials(prev => ({ ...prev, [detailId]: false }));
@@ -139,7 +139,7 @@ export function useActivePicking(userId: number | null = null) {
 
             toast.success("Serial matched and picked successfully");
             return true;
-        } catch (error) {
+        } catch {
             toast.error("Network error while processing serial");
             return false;
         } finally {

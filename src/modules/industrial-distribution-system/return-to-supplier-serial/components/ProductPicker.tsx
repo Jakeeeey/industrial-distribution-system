@@ -4,7 +4,6 @@ import React, { useState, useMemo } from "react";
 import {
   Search,
   Plus,
-  Minus,
   Trash2,
   Loader2,
   PackageOpen,
@@ -78,7 +77,6 @@ export function ProductPicker({
   addedProducts,
   onAdd,
   onRemove,
-  onUpdateQty,
   onClearAll,
   onBarcodeScan,
   isLoading = false, // ✅ Defaults to false
@@ -227,9 +225,6 @@ export function ProductPicker({
                         const cartItem = addedProducts.find(
                           (i) => i.id === variant.id,
                         );
-                        const currentQty = cartItem ? cartItem.quantity : 0;
-                        const maxStock = Number(variant.stock || 0);
-                        const isMaxed = currentQty >= maxStock;
 
                         return (
                           <div
@@ -253,7 +248,7 @@ export function ProductPicker({
                                 <span className="text-muted-foreground">
                                   Stock:{" "}
                                   <span className="font-bold text-foreground">
-                                    {maxStock}
+                                    {variant.stock || 0}
                                   </span>
                                 </span>
                                 {variant.discountType && (
@@ -323,8 +318,6 @@ export function ProductPicker({
             ) : (
               <div className="space-y-3">
                 {addedProducts.map((item) => {
-                  const maxStock = Number(item.stock || 0);
-                  const isMaxed = item.quantity >= maxStock;
 
                   return (
                     <div

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -30,15 +30,14 @@ import {
   Loader2,
   Check,
   ChevronsUpDown,
-  ScanLine,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useReturnCreationData } from "../hooks/useReturnCreationData";
-import { createTransaction, lookupRfid } from "../providers/fetchProviders";
+import { createTransaction } from "../providers/fetchProviders";
 import { ProductPicker } from "./ProductPicker";
 import { ReturnReviewPanel } from "./ReturnReviewPanel";
 import { calculateLineItem } from "../utils/calculations";
-import { validateBarcode, detectScanType } from "../utils/barcodeUtils";
+import { validateBarcode } from "../utils/barcodeUtils";
 import { useGlobalScanner } from "../hooks/useGlobalScanner";
 import type { 
   CartItem, 
@@ -84,9 +83,6 @@ export function CreateReturnModal({
 
   // RFID scanning state
   // Scanning state
-  const [lastScannedRfid, setLastScannedRfid] = useState("");
-  const [rfidScanning, setRfidScanning] = useState(false);
-  const rfidInputRef = useRef<HTMLInputElement>(null);
 
   const filteredSuppliers = useMemo(() => {
     if (!supplierSearch) return refs.suppliers;
@@ -263,12 +259,7 @@ export function CreateReturnModal({
     }
   }, [selection.supplierId, selection.branchId, loadInventory]);
 
-  // Auto-focus RFID input when ready
-  useEffect(() => {
-    if (selection.supplierId && selection.branchId) {
-      rfidInputRef.current?.focus();
-    }
-  }, [selection.supplierId, selection.branchId]);
+
 
   const addToCart = useCallback((p_raw: unknown, qty = 0) => {
     const p = p_raw as Product;
@@ -296,135 +287,7 @@ export function CreateReturnModal({
   /**
    * Handles RFID scan: looks up the tag → finds the product → adds to cart.
    * Each scan creates a unique line item with qty=1.
-   */
-  const handleRfidScan = useCallback(
-    async (rfidTag: string) => {
-      if (!rfidTag.trim()) return;
-      if (!selection.branchId) {
-        toast.error("Select a Branch first before scanning RFID.");
-        return;
-      }
-
-      // Validate: 24-character limit
-      if (rfidTag.length > 24) {
-        toast.error("Invalid RFID", {
-          description: `RFID tag must be 24 characters or fewer (received ${rfidTag.length}).`,
-        });
-        return;
-      }
-
-      // Check for duplicate RFID already in cart
-      if (cart.some((i) => i.rfid_tag === rfidTag)) {
-        toast.warning("Duplicate RFID", {
-          description: `RFID "${rfidTag}" is already in the cart.`,
-        });
-        return;
-      }
-
-      setRfidScanning(true);
-      setLastScannedRfid(rfidTag);
-
-      try {
-        const result = await lookupRfid(rfidTag, Number(selection.branchId));
-
-        if (!result || !result.productId) {
-          toast.error("RFID Not Found", {
-            description: `No on-hand product found for RFID "${rfidTag}" at this branch.`,
-          });
-          return;
-        }
-
-        // Find product in LOADED inventory (Filtered by Supplier + Branch)
-        const productIdNumeric = Number(result.productId);
-        const invRecord = inventory.find(
-          (r) => r.product_id === productIdNumeric,
-        );
-
-        if (!invRecord) {
-          toast.error("Supplier Mismatch", {
-            description: `Product associated with RFID "${rfidTag}" does not belong to the selected Supplier or is out of stock.`,
-          });
-          return;
-        }
-
-        // Validate: only order 3 (largest unit) eligible for RFID scanning
-        const matchedUnit = refs.units.find(
-          (u) => u.unit_name === invRecord.unit_name,
-        );
-        if (!matchedUnit || matchedUnit.order !== 3) {
-          toast.error("Not Eligible for RFID", {
-            description: `"${invRecord.unit_name}" (order ${matchedUnit?.order ?? "?"}) is not eligible for RFID scanning. Only the largest unit (order 3) is allowed.`,
-          });
-          return;
-        }
-
-        // Build the cart item from inventory
-        const product = {
-          id: String(productIdNumeric),
-          productId: productIdNumeric,
-          code: invRecord.product_code || "N/A",
-          name: invRecord.product_name,
-          unit: invRecord.unit_name,
-          unitCount: invRecord.unit_count,
-          stock: invRecord.running_inventory,
-          price: invRecord.price,
-          uom_id: matchedUnit.unit_id,
-          supplierDiscount: 0,
-          rfid_tag: rfidTag,
-          parentId: invRecord.familyId || null,
-          discountTypeId: undefined as number | undefined,
-        };
-
-        // Inherit supplier discount if available
-        const connection = refs.connections.find(
-          (c) => c.product_id === productIdNumeric && c.supplier_id === Number(selection.supplierId),
-        );
-        if (connection?.discount_type) {
-          const discountTypeObj = refs.discountTypes.find(
-            (dt) => String(dt.id) === String(connection.discount_type)
-          );
-          if (discountTypeObj) {
-            product.discountTypeId = discountTypeObj.id;
-            const lineIds = refs.linePerDiscountType
-              .filter((lpd) => String(lpd.type_id) === String(discountTypeObj.id))
-              .map((lpd) => lpd.line_id);
-            
-            if (lineIds.length > 0) {
-              const discountObj = refs.lineDiscounts.find(
-                (d) => String(d.id) === String(lineIds[0])
-              );
-              if (discountObj) {
-                product.supplierDiscount = parseFloat(discountObj.percentage) / 100;
-              }
-            }
-          }
-        }
-
-        addToCart(product, 1);
-
-        toast.success("RFID Scanned", {
-          description: `Added "${product.name}" (RFID: ${rfidTag})`,
-        });
-
-        // Auto-clear the displayed scan value after 2 seconds
-        setTimeout(() => {
-          setLastScannedRfid("");
-        }, 2000);
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Failed to look up RFID tag.";
-        toast.error("RFID Scan Error", {
-          description: message,
-        });
-      } finally {
-        setRfidScanning(false);
-        // Automatically refocus for the next scan after the element is re-enabled
-        setTimeout(() => {
-          rfidInputRef.current?.focus();
-        }, 100);
-      }
-    },
-    [selection.branchId, selection.supplierId, cart, inventory, refs, addToCart],
-  );
+     );
 
   /**
    * Handles Barcode scan: finds the product in current inventory/references → adds to cart.
@@ -506,14 +369,9 @@ export function CreateReturnModal({
     }
   });
 
-  // Clear RFID display when modal closes or resets
-  useEffect(() => {
-    if (!isOpen) {
-      setLastScannedRfid("");
-    }
-  }, [isOpen]);
 
-  const updateCart = (id: string, field: keyof CartItem, val: string | number | undefined | null) => {
+
+  const updateCart = (id: string, field: keyof CartItem, val: string | number | string[] | undefined | null) => {
     setCart((prev) =>
       prev.map((i) => (i.id === id ? { ...i, [field]: val } : i)),
     );
@@ -523,7 +381,6 @@ export function CreateReturnModal({
     setSelection({ supplierId: "", branchId: "", remarks: "" });
     setCart([]);
     setShowPicker(false);
-    setLastScannedRfid(""); // Reset scan display
     onClose();
   };
 

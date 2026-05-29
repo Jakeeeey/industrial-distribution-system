@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect, useState, useMemo, useCallback } from "react";
 import { toast } from "sonner";
-import { Printer, X, Loader2, Save, Send, Plus, ScanLine } from "lucide-react";
+import { Printer, X, Loader2, Save, Send, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -18,10 +18,9 @@ import type {
 import {
   getTransactionDetails,
   updateTransaction,
-  lookupRfid,
 } from "../providers/fetchProviders";
 import { useGlobalScanner } from "../hooks/useGlobalScanner";
-import { validateBarcode, detectScanType } from "../utils/barcodeUtils";
+import { validateBarcode } from "../utils/barcodeUtils";
 import { PrintableReturnSlip } from "./PrintableReturnSlip";
 import { ReturnReviewPanel } from "./ReturnReviewPanel";
 import { ProductPicker } from "./ProductPicker";
@@ -63,10 +62,7 @@ export function ReturnDetailsModal({
   );
   const [currentBranchId, setCurrentBranchId] = useState<number | null>(null);
 
-  // Scanning state
-  const [lastScannedRfid, setLastScannedRfid] = useState("");
-  const [rfidScanning, setRfidScanning] = useState(false);
-  const rfidInputRef = useRef<HTMLInputElement>(null);
+
 
   // 1. Initialize Data
   useEffect(() => {
@@ -327,101 +323,7 @@ export function ReturnDetailsModal({
     });
   }, []);
 
-  const handleRfidScan = useCallback(
-    async (rfidTag: string) => {
-      if (!rfidTag.trim() || !isEditable) return;
-      if (!currentBranchId) {
-        return;
-      }
 
-      if (rfidTag.length > 24) {
-        toast.error("Invalid RFID", { description: "RFID tag must be <= 24 chars." });
-        return;
-      }
-
-      if (items.some((i) => i.rfid_tag === rfidTag)) {
-        toast.warning("Duplicate RFID", { description: `RFID "${rfidTag}" is already added.` });
-        return;
-      }
-
-      setLastScannedRfid(rfidTag);
-      setRfidScanning(true);
-      try {
-        const result = await lookupRfid(rfidTag, currentBranchId);
-        if (!result || !result.productId) {
-          toast.error("RFID Not Found", { description: `No product found for RFID "${rfidTag}" at this branch.` });
-          return;
-        }
-
-        const productIdNumeric = Number(result.productId);
-        const invRecord = inventory.find((r) => r.product_id === productIdNumeric);
-        
-        if (!invRecord) {
-          toast.error("Stock Error", { description: "Product not in current supplier inventory." });
-          return;
-        }
-
-        // Validate RFID eligibility (order 3)
-        const matchedUnit = refs.units.find((u) => u.unit_name === invRecord.unit_name);
-        if (!matchedUnit || matchedUnit.order !== 3) {
-          toast.error("Ineligible Unit", { description: `${invRecord.unit_name} is not eligible for RFID. (Order 3 only)` });
-          return;
-        }
-
-        const product = {
-          id: String(productIdNumeric),
-          productId: productIdNumeric,
-          code: invRecord.product_code,
-          name: invRecord.product_name,
-          unit: invRecord.unit_name,
-          unitCount: invRecord.unit_count,
-          stock: invRecord.running_inventory,
-          price: invRecord.price,
-          uom_id: matchedUnit.unit_id,
-          supplierDiscount: 0,
-          rfid_tag: rfidTag,
-          parentId: invRecord.familyId || null,
-          discountTypeId: undefined as number | undefined,
-        };
-
-        // Inherit discount
-        const connection = refs.connections.find(
-          (c) =>
-            c.product_id === productIdNumeric &&
-            c.supplier_id === currentSupplierId,
-        );
-        if (connection?.discount_type) {
-          const discountTypeObj = refs.discountTypes.find(
-            (dt) => String(dt.id) === String(connection.discount_type)
-          );
-          if (discountTypeObj) {
-            product.discountTypeId = discountTypeObj.id;
-            const lineIds = refs.linePerDiscountType
-              .filter((lpd) => String(lpd.type_id) === String(discountTypeObj.id))
-              .map((lpd) => lpd.line_id);
-            
-            if (lineIds.length > 0) {
-              const discountObj = refs.lineDiscounts.find(
-                (d) => String(d.id) === String(lineIds[0])
-              );
-              if (discountObj) {
-                product.supplierDiscount = parseFloat(discountObj.percentage);
-              }
-            }
-          }
-        }
-
-        addToCartInternal(product, 1);
-        toast.success("RFID Added", { description: `Added "${product.name}"` });
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "An unknown error occurred.";
-        toast.error("Scan Error", { description: message });
-      } finally {
-        setRfidScanning(false);
-      }
-    },
-    [currentBranchId, currentSupplierId, inventory, items, refs, isEditable, addToCartInternal],
-  );
 
   const handleBarcodeScan = useCallback((barcode: string) => {
     if (!barcode.trim() || !isEditable) return;

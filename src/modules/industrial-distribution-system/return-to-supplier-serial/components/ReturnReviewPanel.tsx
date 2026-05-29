@@ -39,7 +39,7 @@ interface ReturnReviewPanelProps {
   discountTypes: DiscountType[];
   linePerDiscountType: LinePerDiscountType[];
   returnTypes: RTSReturnType[];
-  onUpdateItem: (id: string, field: keyof CartItem, value: any) => void;
+  onUpdateItem: (id: string, field: keyof CartItem, value: string | number | string[] | undefined | null) => void;
   onRemoveItem: (id: string) => void;
   remarks: string;
   setRemarks: (val: string) => void;
@@ -120,8 +120,9 @@ export function ReturnReviewPanel({
       onUpdateItem(selectedItemId, "quantity", newSerials.length);
       setSerialInput("");
       toast.success(`Serial "${sn}" verified and added.`);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to validate serial number.");
+    } catch (err: unknown) {
+      const errorObj = err as { message?: string } | null;
+      toast.error(errorObj?.message || "Failed to validate serial number.");
     } finally {
       setIsValidating(false);
     }

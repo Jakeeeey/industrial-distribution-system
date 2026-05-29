@@ -19,6 +19,16 @@ interface ProductRef {
     unit_of_measurement?: { unit_name: string };
 }
 
+interface RawProductInventory {
+    productId?: number;
+    product_id?: number;
+    branchId?: number;
+    branch_id?: number;
+    runningInventoryUnit?: number;
+    running_inventory_unit?: number;
+    quantity?: number;
+}
+
 export const ActivePickingRepo = {
     getDirectusBase() { return DIRECTUS_BASE; },
     getHeaders() { return getHeaders(); },
@@ -154,12 +164,12 @@ export const ActivePickingRepo = {
             else if (json.data && Array.isArray(json.data)) items = json.data;
 
             // Map Spring Boot fields to our ProductInventory type
-            return items.map((item: any) => ({
+            return items.map((item: RawProductInventory) => ({
                 product_id: item.productId ?? item.product_id,
                 branch_id: item.branchId ?? item.branch_id,
                 running_inventory_unit: item.runningInventoryUnit ?? item.running_inventory_unit ?? item.quantity ?? 0
             }));
-        } catch (error) {
+        } catch {
             return [];
         }
     },
@@ -288,7 +298,7 @@ export const ActivePickingRepo = {
                 }
                 
                 return [];
-            } catch (e) {
+            } catch {
                 throw new Error("NETWORK_FAILURE");
             }
         };
@@ -359,7 +369,7 @@ export const ActivePickingRepo = {
             }
             
             return null;
-        } catch (error) {
+        } catch {
             throw new Error("NETWORK_FAILURE");
         }
     }

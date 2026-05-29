@@ -250,10 +250,13 @@ export async function getSpringSerialLookup(serialNumber: string, branchId: numb
   if (!SPRING_URL) throw new Error("SPRING_API_BASE_URL is not defined");
 
   const inputSerial = serialNumber.trim().toUpperCase();
-  const extractData = (raw: any): any[] => {
+  const extractData = (raw: unknown): unknown[] => {
     if (Array.isArray(raw)) return raw;
-    if (raw?.content && Array.isArray(raw.content)) return raw.content;
-    if (raw?.data && Array.isArray(raw.data)) return raw.data;
+    if (raw && typeof raw === "object") {
+      const obj = raw as Record<string, unknown>;
+      if (obj.content && Array.isArray(obj.content)) return obj.content;
+      if (obj.data && Array.isArray(obj.data)) return obj.data;
+    }
     return [];
   };
 
@@ -294,8 +297,23 @@ export async function getSpringSerialLookup(serialNumber: string, branchId: numb
 
   if (data.length === 0) return null;
 
+  interface SpringSerialOnhandItem {
+    serialNumber?: string;
+    serial_number?: string;
+    serialNo?: string;
+    serial?: string;
+    productId?: number;
+    product_id?: number;
+    product?: {
+      id?: number;
+      product_id?: number;
+    };
+    branchId?: number;
+    branch_id?: number;
+  }
+
   // Find the exact match in the returned set
-  const onhand = data.find((item: any) => {
+  const onhand = (data as SpringSerialOnhandItem[]).find((item) => {
     const dbVal = item.serialNumber ?? item.serial_number ?? item.serialNo ?? item.serial;
     if (dbVal === undefined || dbVal === null) return false;
     
