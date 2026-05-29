@@ -311,10 +311,15 @@ export function PhysicalInventorySerialDialog(props: Props) {
                     }
 
                     // Reassign to current branch!
+                    // Status mirrors registration logic: EMPTY UOM → EMPTY, otherwise AVAILABLE
+                    const reassignStatus: import("../types").CylinderAssetRow["cylinder_status"] =
+                        (row?.unit_name ?? row?.unit_shortcut)?.toUpperCase() === "EMPTY"
+                            ? "EMPTY"
+                            : "AVAILABLE";
                     try {
                         await updateCylinderAsset(globalAsset.id, {
                             current_branch_id: branchId,
-                            cylinder_status: "AVAILABLE",
+                            cylinder_status: reassignStatus,
                         });
 
                         // Update local cache for this session
@@ -417,6 +422,8 @@ export function PhysicalInventorySerialDialog(props: Props) {
             onhandCache,
             row?.product_id,
             row?.product_name,
+            row?.unit_name,
+            row?.unit_shortcut,
             products,
         ],
     );
@@ -724,6 +731,7 @@ export function PhysicalInventorySerialDialog(props: Props) {
                 serials={pendingSerials}
                 productId={row?.product_id ?? null}
                 branchId={branchId}
+                uomName={row?.unit_name ?? row?.unit_shortcut ?? null}
                 onSuccess={(serials) => {
                     void handleRegistrationSuccess(serials);
                 }}
