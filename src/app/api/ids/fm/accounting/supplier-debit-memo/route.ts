@@ -1,4 +1,4 @@
-// src/app/api/fm/accounting/supplier-debit-memo/route.ts
+// src/app/api/ids/fm/accounting/supplier-debit-memo/route.ts
 
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
@@ -6,14 +6,14 @@ import { cookies } from 'next/headers';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const DIRECTUS_URL        = process.env.NEXT_PUBLIC_API_BASE_URL;
-const DIRECTUS_TOKEN      = process.env.DIRECTUS_STATIC_TOKEN;
-const COOKIE_NAME         = 'vos_access_token';
+const DIRECTUS_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+const DIRECTUS_TOKEN = process.env.DIRECTUS_STATIC_TOKEN;
+const COOKIE_NAME = 'vos_access_token';
 
-// ─── GET /api/fm/accounting/supplier-debit-memo ───────────────────────────────
+// ─── GET /api/ids/fm/accounting/supplier-debit-memo ───────────────────────────────
 export async function GET(request: NextRequest) {
   const cookieStore = await cookies();
-  const token       = cookieStore.get(COOKIE_NAME)?.value;
+  const token = cookieStore.get(COOKIE_NAME)?.value;
 
   if (!token) {
     return NextResponse.json(
@@ -31,9 +31,9 @@ export async function GET(request: NextRequest) {
       const res = await fetch(
         `${DIRECTUS_URL}/items/suppliers?fields=id,supplier_name,supplier_shortcut,supplier_type&filter[isActive][_eq]=1&limit=-1&sort=supplier_name`,
         {
-          method : 'GET',
+          method: 'GET',
           headers: { Authorization: `Bearer ${DIRECTUS_TOKEN}` },
-          cache  : 'no-store',
+          cache: 'no-store',
         }
       );
       if (!res.ok) return NextResponse.json({ ok: false, status: res.status }, { status: res.status });
@@ -50,9 +50,9 @@ export async function GET(request: NextRequest) {
       const res = await fetch(
         `${DIRECTUS_URL}/items/chart_of_accounts?fields=coa_id,gl_code,account_title&filter[account_title][_nnull]=true&limit=-1&sort=gl_code`,
         {
-          method : 'GET',
+          method: 'GET',
           headers: { Authorization: `Bearer ${DIRECTUS_TOKEN}` },
-          cache  : 'no-store',
+          cache: 'no-store',
         }
       );
       if (!res.ok) return NextResponse.json({ ok: false, status: res.status }, { status: res.status });
@@ -67,27 +67,27 @@ export async function GET(request: NextRequest) {
   try {
     const filter: Record<string, Record<string, unknown>> = { type: { _eq: 2 } };
 
-    const search        = searchParams.get('search');
-    const supplier_id   = searchParams.get('supplier_id');
+    const search = searchParams.get('search');
+    const supplier_id = searchParams.get('supplier_id');
     const chart_of_acct = searchParams.get('chart_of_account');
-    const status        = searchParams.get('status');
-    const date_from     = searchParams.get('date_from');
-    const date_to       = searchParams.get('date_to');
+    const status = searchParams.get('status');
+    const date_from = searchParams.get('date_from');
+    const date_to = searchParams.get('date_to');
 
-    if (supplier_id)   filter['supplier_id'] = { _eq: Number(supplier_id) };
+    if (supplier_id) filter['supplier_id'] = { _eq: Number(supplier_id) };
     if (chart_of_acct) filter['chart_of_account'] = { _eq: Number(chart_of_acct) };
-    if (status)        filter['status'] = { _eq: status };
+    if (status) filter['status'] = { _eq: status };
     if (date_from || date_to) {
       filter['date'] = {};
       if (date_from) (filter['date'] as Record<string, string>)['_gte'] = date_from;
-      if (date_to)   (filter['date'] as Record<string, string>)['_lte'] = date_to;
+      if (date_to) (filter['date'] as Record<string, string>)['_lte'] = date_to;
     }
 
     if (search) {
       (filter as Record<string, unknown>)['_or'] = [
         { memo_number: { _contains: search } },
-        { reason:      { _contains: search } },
-        { status:      { _contains: search } },
+        { reason: { _contains: search } },
+        { status: { _contains: search } },
       ];
     }
 
@@ -100,9 +100,9 @@ export async function GET(request: NextRequest) {
     const res = await fetch(
       `${DIRECTUS_URL}/items/suppliers_memo?${query}`,
       {
-        method : 'GET',
+        method: 'GET',
         headers: { Authorization: `Bearer ${DIRECTUS_TOKEN}` },
-        cache  : 'no-store',
+        cache: 'no-store',
       }
     );
 
@@ -113,7 +113,7 @@ export async function GET(request: NextRequest) {
 
     const json = await res.json();
     return NextResponse.json({
-      data:  json.data  ?? [],
+      data: json.data ?? [],
       total: json.meta?.filter_count ?? json.data?.length ?? 0,
     });
   } catch (err: unknown) {
@@ -122,11 +122,11 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ─── POST /api/fm/accounting/supplier-debit-memo ──────────────────────────────
+// ─── POST /api/ids/fm/accounting/supplier-debit-memo ──────────────────────────────
 // Inserts directly into Directus suppliers_memo with type=2, status=Available
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies();
-  const token       = cookieStore.get(COOKIE_NAME)?.value;
+  const token = cookieStore.get(COOKIE_NAME)?.value;
 
   if (!token) {
     return NextResponse.json(
@@ -153,26 +153,26 @@ export async function POST(request: NextRequest) {
     );
     const lastJson = await lastRes.json();
     const lastMemo = lastJson.data?.[0]?.memo_number ?? 'SDM-000';
-    const lastNum  = parseInt(lastMemo.replace(/\D+/g, ''), 10) || 0;
-    const memoNum  = `SDM-${String(lastNum + 1).padStart(3, '0')}`;
+    const lastNum = parseInt(lastMemo.replace(/\D+/g, ''), 10) || 0;
+    const memoNum = `SDM-${String(lastNum + 1).padStart(3, '0')}`;
 
     const payload = {
-      memo_number:      memoNum,
-      type:             2,
-      status:           'Available',
-      supplier_id:      Number(supplier_id),
+      memo_number: memoNum,
+      type: 2,
+      status: 'Available',
+      supplier_id: Number(supplier_id),
       chart_of_account: Number(chart_of_account),
       date,
-      amount:           Number(amount),
-      reason:           reason || null,
-      encoder_id:       encoder_id || null,
+      amount: Number(amount),
+      reason: reason || null,
+      encoder_id: encoder_id || null,
     };
 
     const res = await fetch(`${DIRECTUS_URL}/items/suppliers_memo`, {
-      method:  'POST',
+      method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${DIRECTUS_TOKEN}` },
-      body:    JSON.stringify(payload),
-      cache:   'no-store',
+      body: JSON.stringify(payload),
+      cache: 'no-store',
     });
 
     if (!res.ok) {

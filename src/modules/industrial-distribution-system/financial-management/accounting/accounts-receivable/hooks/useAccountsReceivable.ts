@@ -24,17 +24,17 @@ interface UseARResult {
 }
 
 export function useAccountsReceivable(): UseARResult {
-  const [loading, setLoading]         = useState(true);
-  const [error, setError]             = useState<string | null>(null);
-  const [invoices, setInvoices]       = useState<Invoice[]>([]);
-  const [agingData, setAgingData]     = useState<AgingBucket[]>([
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [agingData, setAgingData] = useState<AgingBucket[]>([
     { range: '0-30 Days', amount: 0 },
     { range: '30-60 Days', amount: 0 },
     { range: '60+ Days', amount: 0 },
   ]);
-  const [branchData, setBranchData]     = useState<NamedAmount[]>([]);
+  const [branchData, setBranchData] = useState<NamedAmount[]>([]);
   const [salesmanData, setSalesmanData] = useState<NamedValue[]>([]);
-  const [metrics, setMetrics]           = useState<ARMetrics>({
+  const [metrics, setMetrics] = useState<ARMetrics>({
     totalReceivable: 0,
     totalOutstanding: 0,
     overdueInvoices: [],
@@ -48,11 +48,11 @@ export function useAccountsReceivable(): UseARResult {
         // Pass a wide range so all historical records are returned from the backend
         const params = new URLSearchParams({
           startDate: '2020-01-01',
-          endDate:   new Date().toISOString().split('T')[0],
+          endDate: new Date().toISOString().split('T')[0],
         });
 
         const res = await fetch(
-          `/api/fm/accounting/accounts-receivable?${params}`,
+          `/api/ids/fm/accounting/accounts-receivable?${params}`,
           { credentials: 'include' }
         );
         if (!res.ok) throw new Error(`Request failed: ${res.status} ${res.statusText}`);
@@ -67,8 +67,8 @@ export function useAccountsReceivable(): UseARResult {
           : (result.data ?? result.content ?? result.transactions ?? []);
 
         const { invoices, agingData, branchMap, salesmanMap } = transformInvoices(rows);
-        const metrics      = deriveMetrics(invoices, branchMap);
-        const branchData   = mapToSortedArray(branchMap, 8);
+        const metrics = deriveMetrics(invoices, branchMap);
+        const branchData = mapToSortedArray(branchMap, 8);
         const salesmanData = Object.entries(salesmanMap)
           .map(([name, value]) => ({ name, value }))
           .sort((a, b) => b.value - a.value)

@@ -2,7 +2,7 @@
 
 import type { DeliveryTermRow, DeliveryTermPayload } from "../types";
 
-const API_BASE = "/api/fm/accounting/supplier-management/delivery-terms";
+const API_BASE = "/api/ids/fm/accounting/supplier-management/delivery-terms";
 
 interface ListResponse {
   data?: DeliveryTermRow[];
@@ -90,7 +90,7 @@ export async function checkDeliveryNameExists(deliveryName: string, excludeId?: 
   );
   const data = await safeJson(res);
   if (!res.ok) return false;
-  
+
   const rows = (data as ListResponse)?.data ?? [];
   return rows.some(
     (row) => row.delivery_name.toLowerCase() === deliveryName.toLowerCase() && row.id !== excludeId
@@ -106,7 +106,7 @@ export async function getCurrentUserId(): Promise<number | null> {
     });
 
     console.log("📡 /api/auth/me response status:", res.status);
-    
+
     if (!res.ok) {
       console.warn("❌ /api/auth/me returned non-OK status:", res.status);
       const errorData = await res.json();
@@ -118,10 +118,10 @@ export async function getCurrentUserId(): Promise<number | null> {
 
     const data = (await res.json()) as Record<string, unknown>;
     console.log("📊 /api/auth/me full response data:", JSON.stringify(data, null, 2));
-    
+
     // Try multiple possible ID field names
     let userId: number | null = null;
-    
+
     if (typeof data.id === "number") {
       userId = data.id;
       console.log("✅ Found userId via data.id:", userId);
@@ -159,9 +159,9 @@ export async function fetchUserInfo(userId: number): Promise<UserInfo | null> {
   try {
     console.log(`🔄 Fetching user info for userId: ${userId}`);
     const res = await fetch(`/api/auth/users/${userId}`);
-    
+
     console.log(`📡 /api/auth/users/${userId} response status:`, res.status);
-    
+
     if (!res.ok) {
       console.warn(`❌ /api/auth/users/${userId} returned status ${res.status}`);
       return null;
@@ -169,7 +169,7 @@ export async function fetchUserInfo(userId: number): Promise<UserInfo | null> {
 
     const data = (await res.json()) as UserInfo;
     console.log(`✅ User ${userId} data:`, data);
-    
+
     userCache.set(userId, data);
     return data;
   } catch (e) {

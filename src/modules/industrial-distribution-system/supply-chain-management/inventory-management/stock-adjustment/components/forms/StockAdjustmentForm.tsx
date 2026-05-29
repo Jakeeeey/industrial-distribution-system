@@ -1,24 +1,28 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { useForm, useFieldArray, useWatch, Control, UseFormSetValue } from "react-hook-form";
+import { useForm, useFieldArray, useWatch, Control, UseFormSetValue, useFormState, FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Plus,
   Trash2,
   Save,
-  AlertCircle,
-  Tag,
   ArrowLeft,
   Package,
   Send,
+  Search,
+  Minus,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Paperclip,
+  Tag
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { SerialInputModal } from "../modals/SerialInputModal";
 import {
   StockAdjustmentFormSchema,
   StockAdjustmentFormValues,
-  StockAdjustmentProduct,
   StockAdjustmentItem,
 } from "../../types/stock-adjustment.schema";
 import { useStockAdjustmentForm } from "../../hooks/useStockAdjustmentForm";
@@ -46,6 +50,9 @@ import {
   ComboboxItem,
   ComboboxEmpty,
 } from "@/components/ui/combobox";
+import { ProductSelectionModal } from "../modals/ProductSelectionModal";
+import { AttachmentUpload } from "../AttachmentUpload";
+import { SerialInputModal } from "../modals/SerialInputModal";
 
 // ——————————————————————————————————————————————————————————————————————————————
 interface StockAdjustmentFormProps {
@@ -55,299 +62,159 @@ interface StockAdjustmentFormProps {
 }
 
 // ——————————————————————————————————————————————————————————————————————————————
-// Memoised item row (renders only when *its own* data changes)
-interface ItemRowProps {
+// Table row for the main form
+interface ProductTableRowProps {
   index: number;
   control: Control<StockAdjustmentFormValues>;
-  productOptions: { value: string; label: string; item: StockAdjustmentProduct }[];
-  isProductsLoading: boolean;
-  isLoadingDetails: boolean;
-  onProductSelect: (index: number, product: StockAdjustmentProduct) => void;
   onRemove: (index: number) => void;
   setValue: UseFormSetValue<StockAdjustmentFormValues>;
   onOpenSerialInput: (index: number) => void;
   isReadOnly?: boolean;
 }
 
-const StockAdjustmentItemRow = React.memo(function StockAdjustmentItemRow({
+const ProductTableRow = React.memo(function ProductTableRow({
   index,
   control,
-  productOptions,
-  isProductsLoading,
-  isLoadingDetails,
-  onProductSelect,
   onRemove,
   setValue,
   onOpenSerialInput,
   isReadOnly = false,
-}: ItemRowProps) {
-  // useWatch subscribes to specific fields — only this row re-renders when its own data changes.
+}: ProductTableRowProps) {
   const product_name = useWatch({ control, name: `items.${index}.product_name` });
-  const productId = useWatch({ control, name: `items.${index}.product_id` });
-  const unitName = useWatch({ control, name: `items.${index}.unit_name` });
-  const quantity = useWatch({ control, name: `items.${index}.quantity` });
+  const product_code = useWatch({ control, name: `items.${index}.product_code` });
+  const unitName    = useWatch({ control, name: `items.${index}.unit_name` });
+  const quantity    = useWatch({ control, name: `items.${index}.quantity` });
   const costPerUnit = useWatch({ control, name: `items.${index}.cost_per_unit` });
+  const brandName   = useWatch({ control, name: `items.${index}.brand_name` });
   const isSerialized = useWatch({ control, name: `items.${index}.is_serialized` });
   const serialNumbers = useWatch({ control, name: `items.${index}.serial_numbers` });
-  const brandName = useWatch({ control, name: `items.${index}.brand_name` });
-  const barcode = useWatch({ control, name: `items.${index}.barcode` });
-  const description = useWatch({ control, name: `items.${index}.description` });
 
-  const [productSearch, setProductSearch] = useState("");
-  const [productInputValue, setProductInputValue] = useState(product_name || "");
-
-  // Synchronize input value (e.g. for Edit mode) during render if name changed
-  // This avoids the 'cascading renders' lint error from useEffect
-  const [prevProductName, setPrevProductName] = useState(product_name);
-  if (product_name !== prevProductName) {
-    setPrevProductName(product_name);
-    if (!productSearch) {
-      setProductInputValue(product_name || "");
-    }
-  }
-
-  const dbId = useWatch({ control, name: `items.${index}.db_id` });
+  const { errors } = useFormState({ control });
+  const rowError = Array.isArray(errors.items)
+    ? (errors.items[index] as FieldErrors<StockAdjustmentItem>)
+    : undefined;
 
   const totalCost = Number(quantity || 0) * Number(costPerUnit || 0);
 
+  const handleUpdateQuantity = (delta: number) => {
+    if (isSerialized) return; // Quantities of serialized items are controlled by serial number list
+    const currentQty = Number(quantity || 0);
+    const newQty = Math.max(1, currentQty + delta);
+    setValue(`items.${index}.quantity`, newQty, { shouldValidate: true });
+  };
+
   return (
-    <div
-      className={`border-b last:border-0 p-6 space-y-4 transition-colors duration-200 relative ${isSerialized ? "bg-blue-50/10 dark:bg-blue-900/10 border-blue-200/30 dark:border-blue-800/20" : "border-border/50"
-        }`}
-    >
-      {/* Per-row loading overlay for Serial/inventory lookup */}
-      {isLoadingDetails && (
-        <div className="absolute inset-0 bg-background/60 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-md">
-          <div className="flex items-center gap-3 bg-background border border-border shadow-sm px-4 py-2.5 rounded-lg">
-            <div className="h-4 w-4 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
-            <span className="text-xs font-bold text-muted-foreground">Checking serial data...</span>
-          </div>
+    <tr className={`border-b border-border/50 hover:bg-muted/10 transition-colors bg-card ${isSerialized ? "bg-primary/[0.02]" : ""}`}>
+      <td className="p-3 text-xs text-muted-foreground text-center font-bold w-12 border-r border-border/50">{index + 1}</td>
+      <td className="p-3">
+        <span className="text-xs font-bold text-foreground">{brandName || "—"}</span>
+      </td>
+      <td className="p-3 min-w-[250px]">
+        <div className="flex flex-col">
+          <span className="text-xs font-bold text-foreground leading-tight">{product_name || "—"}</span>
+          <span className="text-[10px] text-muted-foreground font-mono mt-0.5">{product_code}</span>
+          
+          {/* Cylinder Serials List inside the line item grid */}
+          {isSerialized && serialNumbers && serialNumbers.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1.5 max-w-sm">
+              {serialNumbers.map((sn, snIdx) => (
+                <Badge key={snIdx} variant="outline" className="font-mono text-[8px] px-1 bg-primary/5 text-primary border-primary/20 rounded">
+                  {sn}
+                </Badge>
+              ))}
+            </div>
+          )}
         </div>
-      )}
-      <div className="flex items-start gap-4">
-        {/* Product Selection */}
-        <div className="flex-[3] space-y-2">
-          <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-            Product <span className="text-red-500">*</span>
-          </Label>
-          <Combobox
-            value={String(productId || "")}
-            onValueChange={(val: string | null) => {
-              if (!val) {
-                setProductInputValue("");
-                return;
-              }
-              const product = productOptions.find(
-                (p) => String(p.value) === val
-              )?.item;
-              if (product) {
-                setProductInputValue(product.product_name);
-                onProductSelect(index, product);
-              }
-            }}
-            inputValue={productInputValue}
-            onInputValueChange={(v: string) => {
-              // base-ui fires this with the raw ID after selection — show the product name instead
-              const matched = productOptions.find(p => String(p.value) === v);
-              if (matched) {
-                setProductInputValue(matched.item.product_name);
-                setProductSearch("");
-              } else {
-                setProductInputValue(v);
-                setProductSearch(v);
-              }
-            }}
-          >
-            <ComboboxInput
-              placeholder="Select Product"
-              disabled={isProductsLoading || isReadOnly || !!dbId}
-              showClear
-            />
-            <ComboboxContent>
-              <ComboboxList>
-                {(() => {
-                  const filtered = productOptions.filter(opt =>
-                    opt.label.toLowerCase().includes(productSearch.toLowerCase()) ||
-                    opt.item.product_code?.toLowerCase().includes(productSearch.toLowerCase())
-                  );
-                  if (filtered.length === 0) return <ComboboxEmpty>No products found.</ComboboxEmpty>;
-                  return filtered.map((option) => {
-                    const p = option.item;
-                    return (
-                      <ComboboxItem key={option.value} value={option.value}>
-                        <div className="flex items-center justify-between w-full gap-4 min-w-[300px]">
-                          <div className="flex flex-col">
-                            <span className="font-medium text-foreground line-clamp-1 text-xs">
-                              {p.product_name}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[9px] text-muted-foreground font-mono">
-                                {p.product_code}
-                              </span>
-                              {p.unit_name && (
-                                <>
-                                  <span className="text-[9px] text-muted-foreground/30">•</span>
-                                  <span className="text-[9px] font-bold text-blue-600 uppercase tracking-tight bg-blue-50 dark:bg-blue-900/20 px-1 rounded">
-                                    {p.unit_name}
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          {p.is_serialized && (
-                            <div className="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 px-1 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 shrink-0">
-                              <Tag className="h-2 w-2 fill-blue-700 dark:fill-blue-400" />
-                              SERIALIZED
-                            </div>
-                          )}
-                        </div>
-                      </ComboboxItem>
-                    );
-                  });
-                })()}
-              </ComboboxList>
-            </ComboboxContent>
-          </Combobox>
-        </div>
+      </td>
+      <td className="p-3">
+        <span className="text-xs font-bold text-foreground">
+          ₱{Number(costPerUnit || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </span>
+      </td>
+      <td className="p-3">
+        <span className="text-[10px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded uppercase shrink-0">
+          {unitName || "-"}
+        </span>
+      </td>
+      <td className="p-3 w-40">
+        <div className="flex items-center gap-2">
+          {isReadOnly || isSerialized ? (
+            <span className="text-xs font-bold px-3 py-1 bg-muted rounded-md border border-border/50 h-7 flex items-center justify-center min-w-[40px] shrink-0 select-none">
+              {quantity}
+            </span>
+          ) : (
+            <div className="flex items-center gap-0 w-min bg-background border border-border rounded-md overflow-hidden shrink-0">
+              <button 
+                type="button"
+                className="w-7 h-7 flex items-center justify-center hover:bg-muted text-muted-foreground disabled:opacity-50 transition-colors"
+                onClick={() => handleUpdateQuantity(-1)}
+                disabled={Number(quantity || 0) <= 1}
+              >
+                <Minus className="h-3 w-3" />
+              </button>
+              <input
+                type="number"
+                value={quantity === 0 ? "" : quantity}
+                onChange={(e) => {
+                  let val = parseInt(e.target.value, 10);
+                  if (isNaN(val) || val < 1) val = 1;
+                  setValue(`items.${index}.quantity`, val, { shouldValidate: true });
+                }}
+                className="w-12 h-7 text-center text-xs font-bold border-x border-border focus:outline-none focus:ring-0 bg-transparent p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                min={1}
+              />
+              <button 
+                type="button"
+                className="w-7 h-7 flex items-center justify-center hover:bg-muted text-muted-foreground transition-colors"
+                onClick={() => handleUpdateQuantity(1)}
+              >
+                <Plus className="h-3 w-3" />
+              </button>
+            </div>
+          )}
 
-        {/* Unit */}
-        <div className="flex-1 space-y-2">
-          <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-            Unit
-          </Label>
-          <div className="h-10 w-full bg-muted/30 border border-border rounded-md flex items-center px-3 text-sm text-muted-foreground font-medium overflow-hidden">
-            <span className="truncate">{unitName || "-"}</span>
-          </div>
-        </div>
-
-        {/* Qty */}
-        <div className="flex-1 space-y-2">
-          <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-            Qty <span className="text-red-500">*</span>
-          </Label>
-          <Input
-            type="number"
-            value={isSerialized ? (serialNumbers?.length || 0) : (quantity ?? "")}
-            onChange={(e) => {
-              if (isSerialized) return; // Prevent manual change if serialized
-              setValue(
-                `items.${index}.quantity`,
-                e.target.value === "" ? 0 : Number(e.target.value)
-              )
-            }}
-            readOnly={isReadOnly || isSerialized}
-            className={`h-10 border-input focus:ring-blue-500 rounded-md text-sm ${isReadOnly || isSerialized
-              ? "bg-muted text-muted-foreground cursor-not-allowed font-bold"
-              : ""
-              }`}
-            min={0}
-          />
-        </div>
-
-        {/* Serial Input Trigger */}
-        {isSerialized && (
-          <div className="flex items-end pb-0.5">
+          {/* Trigger Serial modal */}
+          {isSerialized && (
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={() => onOpenSerialInput(index)}
-              className="h-10 border-blue-200 dark:border-blue-800/50 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40 hover:border-blue-300 dark:hover:border-blue-700 font-bold gap-2 px-3 transition-all duration-200 shadow-sm"
+              className="h-7 border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 hover:border-primary/30 font-bold gap-1 px-2.5 py-0.5 rounded transition-all duration-200 shadow-sm shrink-0 text-[10px]"
             >
-              <Tag className="h-4 w-4" />
-              Serial Numbers
+              <Tag className="h-3 w-3 fill-primary" />
+              Serials
             </Button>
-          </div>
+          )}
+        </div>
+        
+        {rowError?.quantity && (
+          <p className="text-[10px] text-red-500 font-bold mt-1">{rowError.quantity.message}</p>
         )}
-
-        {/* Cost/Unit */}
-        <div className="flex-1 space-y-2">
-          <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-            Cost/Unit
-          </Label>
-          <Input
-            value={`₱${Number(costPerUnit || 0).toFixed(2)}`}
-            className="h-10 border-input bg-muted/30 rounded-md text-sm"
-            readOnly
-          />
-        </div>
-
-        {/* Total Cost */}
-        <div className="flex-1 space-y-2">
-          <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-            Total Cost
-          </Label>
-          <div className="h-10 border border-blue-100/20 dark:border-blue-900/20 bg-blue-50/30 dark:bg-blue-900/10 rounded-md flex items-center px-3 font-bold text-blue-600 text-sm">
-            ₱
-            {Number(totalCost || 0).toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
-          </div>
-        </div>
-
-        {/* Delete */}
-        <div className="pt-8">
+        {rowError?.serial_numbers && (
+          <p className="text-[10px] text-red-500 font-bold mt-1">{rowError.serial_numbers.message}</p>
+        )}
+      </td>
+      <td className="p-3">
+        <span className="text-xs font-bold text-primary">
+          ₱{Number(totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </span>
+      </td>
+      <td className="p-3 text-center w-16">
+        {!isReadOnly && (
           <Button
             type="button"
             variant="ghost"
             size="icon"
             onClick={() => onRemove(index)}
-            disabled={isReadOnly || !!dbId}
-            className={`shrink-0 self-end mb-0.5 rounded-full transition-all ${isReadOnly ? "hidden" : "hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-500 text-muted-foreground/50"
-              } ${!!dbId && !isReadOnly ? "opacity-50 cursor-not-allowed grayscale" : ""}`}
-            title={!!dbId && !isReadOnly ? "Existing items cannot be deleted" : "Remove item"}
+            className="h-7 w-7 rounded-full text-red-400/50 hover:text-red-600 hover:bg-red-50 transition-all mx-auto"
+            title="Remove item"
           >
             <Trash2 className="h-4 w-4" />
           </Button>
-        </div>
-      </div>
-
-      {/* Metadata Section */}
-      {productId ? (
-        <div className="flex flex-col gap-2 pt-1">
-          <div className="flex items-center gap-6 text-[11px] text-muted-foreground font-medium">
-            <span className="flex items-center gap-1">
-              <span className="text-muted-foreground/70 font-bold uppercase tracking-tighter">
-                Brand:
-              </span>{" "}
-              {brandName || "N/A"}
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="text-muted-foreground/70 font-bold uppercase tracking-tighter">
-                Barcode:
-              </span>{" "}
-              {barcode || "N/A"}
-            </span>
-          </div>
-
-          {isSerialized && (
-            <div className="flex items-center gap-2 bg-blue-50/80 dark:bg-blue-900/20 border border-blue-100/50 dark:border-blue-800/30 w-fit px-2.5 py-1 rounded-md">
-              <Tag className="h-3 w-3 text-blue-500 fill-blue-500" />
-              <span className="text-[10px] font-black text-blue-700 dark:text-blue-500">
-                {(serialNumbers?.length || 0)} Serial Number(s) added
-              </span>
-            </div>
-          )}
-
-          <p className="text-[11px] text-muted-foreground/60 italic font-medium">
-            {description || "No description available."}
-          </p>
-        </div>
-      ) : null}
-
-      {/* Remarks Section */}
-      <div className="space-y-2">
-        <Label className="text-xs font-bold text-muted-foreground">Item Remarks</Label>
-        <Input
-          placeholder="Enter remarks for this item..."
-          value={useWatch({ control, name: `items.${index}.remarks` }) || ""}
-          onChange={(e) => setValue(`items.${index}.remarks`, e.target.value)}
-          className="h-10 border-input focus:ring-blue-500 rounded-md text-sm bg-background"
-          readOnly={isReadOnly}
-        />
-      </div>
-    </div>
+        )}
+      </td>
+    </tr>
   );
 });
 
@@ -355,11 +222,9 @@ const StockAdjustmentItemRow = React.memo(function StockAdjustmentItemRow({
 function FormSummary({
   control,
   fieldCount,
-  isSerialLoading,
 }: {
   control: Control<StockAdjustmentFormValues>;
   fieldCount: number;
-  isSerialLoading: boolean;
 }) {
   const items = useWatch({ control, name: "items" });
 
@@ -394,12 +259,23 @@ function FormSummary({
             {totalQuantity} units
           </span>
         </div>
+        {serializedItemsCount > 0 && (
+          <>
+            <div className="h-px bg-border w-full" />
+            <div className="flex justify-between items-center text-sm">
+              <span className="font-bold text-primary">Serialized Items:</span>
+              <span className="font-bold text-primary/80">
+                {serializedItemsCount} product(s)
+              </span>
+            </div>
+          </>
+        )}
         <div className="h-px bg-border w-full" />
         <div className="flex justify-between items-center pt-1">
           <span className="font-bold text-muted-foreground text-sm">
             Total Amount:
           </span>
-          <span className="text-xl font-bold text-blue-600 dark:text-blue-400">
+          <span className="text-xl font-bold text-primary">
             ₱
             {Number(totalAmount || 0).toLocaleString(undefined, {
               minimumFractionDigits: 2,
@@ -407,56 +283,6 @@ function FormSummary({
             })}
           </span>
         </div>
-
-        {(serializedItemsCount > 0 || isSerialLoading) && (
-          <>
-            <div className="h-px bg-border w-full" />
-            <div className="flex justify-between items-center text-sm">
-              <span className="font-bold text-blue-600 dark:text-blue-400">
-                Serialized Items:
-              </span>
-              {isSerialLoading ? (
-                <div className="flex items-center gap-2">
-                  <Skeleton className="h-4 w-16 bg-blue-100/20 dark:bg-blue-900/20 animate-pulse" />
-                  <span className="text-[10px] text-blue-400 animate-pulse">
-                    Checking...
-                  </span>
-                </div>
-              ) : (
-                <span className="font-bold text-blue-700 dark:text-blue-400">
-                  {serializedItemsCount} product(s)
-                </span>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ——————————————————————————————————————————————————————————————————————————————
-function SerialBanner({ control }: { control: Control<StockAdjustmentFormValues> }) {
-  const items = useWatch({ control, name: "items" });
-  const serializedItemsCount = useMemo(() => {
-    const currentItems = (items || []) as StockAdjustmentItem[];
-    return currentItems.filter((item) => item?.is_serialized).length;
-  }, [items]);
-
-  if (serializedItemsCount === 0) return null;
-
-  return (
-    <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/30 px-6 py-4 rounded-xl flex items-start gap-4 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
-      <div className="p-2 bg-blue-100 dark:bg-blue-800/30 rounded-lg">
-        <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-      </div>
-      <div>
-        <h4 className="font-bold text-blue-900 dark:text-blue-400">
-          Serialized Items Detected
-        </h4>
-        <p className="text-sm text-blue-800 dark:text-blue-300 opacity-90 text-[11px] font-medium mt-1">
-          {serializedItemsCount} item(s) in this adjustment are serialized. Please ensure proper serial number management.
-        </p>
       </div>
     </div>
   );
@@ -472,16 +298,13 @@ export function StockAdjustmentForm({
     fetchById,
     createAdjustment,
     updateAdjustment,
-    fetchProducts,
     fetchProductsBySupplier,
     products = [],
     suppliers = [],
     isProductsLoading,
     isSuppliersLoading,
-    isSerialLoading,
     branches,
     fetchInventory,
-    fetchBranchSerialData,
     fetchBranchInventory,
     inventoryMap,
     fetchNextDocNo,
@@ -490,28 +313,24 @@ export function StockAdjustmentForm({
   } = useStockAdjustmentForm();
 
   const [loading, setLoading] = useState(false);
-  const [loadingRows, setLoadingRows] = useState<Set<number>>(new Set());
-  const [showSerialInput, setShowSerialInput] = useState(false);
   const [showPostConfirmation, setShowPostConfirmation] = useState(false);
-  const [serialContext, setSerialContext] = useState<{ index: number; productName: string } | null>(null);
-  const [isScannerPreparing, setIsScannerPreparing] = useState(false);
   const [branchInputValue, setBranchInputValue] = useState("");
   const [supplierInputValue, setSupplierInputValue] = useState("");
   const [branchSearch, setBranchSearch] = useState("");
   const [supplierSearch, setSupplierSearch] = useState("");
+  const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  const [tableSearch, setTableSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
-  // --- Memoize product options to prevent expensive re-mapping in every row ---
-  const productOptions = useMemo(() => {
-    return products.map((p) => ({
-      // Use record PK (id) for absolute uniqueness, fallback to product_id
-      value: String(p.id || p.product_id),
-      // Include unit in label to prevent CommandItem collision and help user selection
-      label: p.unit_name ? `${p.product_name} (${p.unit_name})` : p.product_name,
-      item: p
-    }));
-  }, [products]);
+  // Serial State management
+  const [showSerialInput, setShowSerialInput] = useState(false);
+  const [serialContext, setSerialContext] = useState<{ index: number; productName: string; productId: number } | null>(null);
 
   const form = useForm<StockAdjustmentFormValues>({
+    mode: "all",
     resolver: zodResolver(StockAdjustmentFormSchema),
     defaultValues: {
       doc_no: "", // Will be fetched via effect
@@ -521,30 +340,44 @@ export function StockAdjustmentForm({
       remarks: "",
       items: [],
       isPosted: false,
+      stock_adjustment_attachment: [],
     },
   });
 
-  const { fields, append, remove } = useFieldArray({
+  const { fields, remove } = useFieldArray({
     control: form.control,
     name: "items",
   });
 
-  // ——————————————————————————————————————————————————————————————————————————————
+  // Unlock body scroll/pointer-events when save/post loading clears.
   useEffect(() => {
     const unlock = () => {
-      if (document.body.style.overflow === 'hidden') {
-        document.body.style.setProperty('overflow', 'auto', 'important');
-        document.body.style.removeProperty('pointer-events');
-      }
+      document.body.style.setProperty('overflow', 'auto', 'important');
+      document.body.style.removeProperty('pointer-events');
     };
     unlock();
-    const timer = setTimeout(unlock, 1000);
-    const timer2 = setTimeout(unlock, 3000);
+    const timer = setTimeout(unlock, 300);
+    const timer2 = setTimeout(unlock, 1000);
     return () => {
       clearTimeout(timer);
       clearTimeout(timer2);
     };
   }, [loading]);
+
+  // Unlock body scroll/pointer-events when product loading clears.
+  useEffect(() => {
+    const unlock = () => {
+      document.body.style.setProperty('overflow', 'auto', 'important');
+      document.body.style.removeProperty('pointer-events');
+    };
+    unlock();
+    const timer = setTimeout(unlock, 300);
+    const timer2 = setTimeout(unlock, 1000);
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(timer2);
+    };
+  }, [isProductsLoading]);
 
   useEffect(() => {
     if (id) {
@@ -558,8 +391,6 @@ export function StockAdjustmentForm({
             ? (typeof data.supplier_id === "object" ? (data.supplier_id as { id: number }).id : data.supplier_id)
             : 0;
 
-          // If header supplier is missing, try to get it from the first item with an inferred supplier
-          // If header supplier is missing, try to get it from the first item with an inferred supplier
           if (!finalSupplierId && data.items && data.items.length > 0) {
             const firstWithInferred = data.items.find((item) => (item as StockAdjustmentItem).inferred_supplier_id);
             if (firstWithInferred) {
@@ -567,13 +398,12 @@ export function StockAdjustmentForm({
             }
           }
 
-            // Directus may return isPosted as a Buffer {type:'Buffer',data:[0|1]},
-            // a number (0 or 1), or a boolean. Normalise to a real boolean:
-            const rawPosted = data.isPosted as unknown;
-            const resolvedIsPosted =
-              rawPosted && typeof rawPosted === 'object' && 'data' in rawPosted
-                ? (rawPosted as { data: number[] }).data?.[0] === 1
-                : Number(rawPosted) === 1;
+          // Robust check for isPosted (handles boolean, number, string, or Directus Buffer)
+          const rawPosted = data.isPosted as unknown;
+          const resolvedIsPosted =
+            rawPosted && typeof rawPosted === 'object' && 'data' in rawPosted
+              ? (rawPosted as { data: number[] }).data?.[0] === 1
+              : Number(rawPosted) === 1;
 
           form.reset({
             doc_no: data.doc_no,
@@ -585,9 +415,10 @@ export function StockAdjustmentForm({
             type: data.type,
             remarks: data.remarks || "",
             isPosted: resolvedIsPosted,
+            postedAt: data.postedAt || "",
             items: data.items.map((item) => ({
               ...item,
-              product_id: String(
+              product_id: Number(
                 (item.product_id as { id?: number; product_id?: number })?.id ||
                 (item.product_id as { id?: number; product_id?: number })?.product_id ||
                 item.product_id
@@ -595,7 +426,7 @@ export function StockAdjustmentForm({
               product_name:
                 (item.product_id as { product_name?: string })?.product_name ||
                 item.product_name ||
-                "",
+                "Unknown Product",
               product_code:
                 (item.product_id as { product_code?: string })?.product_code ||
                 item.product_code ||
@@ -617,7 +448,7 @@ export function StockAdjustmentForm({
               db_id: item.id,
             })),
             posted_by: data.posted_by,
-            postedAt: data.postedAt,
+            stock_adjustment_attachment: data.stock_adjustment_attachment || [],
           });
         } catch (error) {
           toast.error("Failed to load adjustment details");
@@ -628,12 +459,9 @@ export function StockAdjustmentForm({
       };
       loadData();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, fetchById, form]);
 
-  // ——————————————————————————————————————————————————————————————————————————————
   // Auto-populate combobox display labels when editing (branch & supplier)
-  // Runs whenever branches/suppliers load OR when the form values change.
   const watchedBranchId = useWatch({ control: form.control, name: "branch_id" });
   const watchedSupplierId = useWatch({ control: form.control, name: "supplier_id" });
 
@@ -653,24 +481,21 @@ export function StockAdjustmentForm({
 
   useEffect(() => {
     if (watchedBranchId) {
-      fetchBranchSerialData(Number(watchedBranchId));
       fetchBranchInventory(Number(watchedBranchId));
     }
-  }, [watchedBranchId, fetchBranchSerialData, fetchBranchInventory]);
+  }, [watchedBranchId, fetchBranchInventory]);
 
-  // ——————————————————————————————————————————————————————————————————————————————
   useEffect(() => {
     if (!id) {
       const updateDocNo = async () => {
         const type = form.getValues("type");
         const nextDocNo = await fetchNextDocNo(type);
-        form.setValue("doc_no", nextDocNo);
+        form.setValue("doc_no", nextDocNo, { shouldValidate: true });
       };
       updateDocNo();
     }
   }, [id, fetchNextDocNo, form]);
 
-  // ——————————————————————————————————————————————————————————————————————————————
   const watchedTypeToUpdateDocNo = useWatch({ control: form.control, name: "type" });
   useEffect(() => {
     if (!id && watchedTypeToUpdateDocNo) {
@@ -682,28 +507,23 @@ export function StockAdjustmentForm({
     }
   }, [id, watchedTypeToUpdateDocNo, fetchNextDocNo, form]);
 
-  // ——————————————————————————————————————————————————————————————————————————————
   useEffect(() => {
-    if (watchedSupplierId && suppliers.length > 0) {
-      const selectedSupplier = suppliers.find(s => s.id === Number(watchedSupplierId));
-      if (selectedSupplier?.division_id === 1) {
-        fetchProductsBySupplier(Number(watchedSupplierId));
-      } else {
-        fetchProducts();
-      }
-    } else if (!watchedSupplierId) {
-      fetchProducts();
+    if (watchedSupplierId) {
+      fetchProductsBySupplier(Number(watchedSupplierId));
     }
-  }, [watchedSupplierId, suppliers, fetchProductsBySupplier, fetchProducts]);
+  }, [watchedSupplierId, fetchProductsBySupplier]);
 
-  // ——————————————————————————————————————————————————————————————————————————————
   const isFormLoading = id ? loading : false;
   const isPosted = useWatch({ control: form.control, name: "isPosted" });
   const isReadOnly = !!isPosted;
 
-  // ——————————————————————————————————————————————————————————————————————————————
   const handlePost = async () => {
     if (!id) return;
+    const isValid = await form.trigger();
+    if (!isValid) {
+      toast.error("Please fill in all required fields correctly before posting.");
+      return;
+    }
     setShowPostConfirmation(true);
   };
 
@@ -712,6 +532,8 @@ export function StockAdjustmentForm({
     if (!id) return;
     setLoading(true);
     try {
+      const currentValues = form.getValues();
+      await updateAdjustment(id, currentValues);
       await postAdjustment(id);
       toast.success("Adjustment Posted Successfully");
       onSuccess();
@@ -722,7 +544,10 @@ export function StockAdjustmentForm({
     }
   };
 
-  // ——————————————————————————————————————————————————————————————————————————————
+  const onInvalid = () => {
+    toast.error("Please fill in all required fields correctly.");
+  };
+
   const onSubmit = useCallback(
     async (values: StockAdjustmentFormValues) => {
       setLoading(true);
@@ -745,137 +570,106 @@ export function StockAdjustmentForm({
     [id, createAdjustment, updateAdjustment, onSuccess]
   );
 
-  // ——————————————————————————————————————————————————————————————————————————————
-  const handleAddProduct = useCallback(() => {
-    const supplierId = form.getValues("supplier_id");
-    if (!supplierId) {
-      toast.error("Please select a supplier first");
-      return;
-    }
-
-    append({
-      product_id: 0,
-      product_name: "",
-      product_code: "",
-      quantity: 0,
-      branch_id: form.getValues("branch_id"),
-      type: form.getValues("type"),
-      cost_per_unit: 0,
-      unit_name: "-",
-      remarks: "",
-      serial_numbers: [],
-      serial_count: 0,
-    });
-  }, [append, form]);
-
-  const handleSerialSave = useCallback((serials: string[]) => {
-    if (serialContext) {
-      const { index } = serialContext;
-      form.setValue(`items.${index}.serial_numbers`, serials, { shouldValidate: true });
-      form.setValue(`items.${index}.serial_count`, serials.length, { shouldValidate: true });
-      form.setValue(`items.${index}.quantity`, serials.length, { shouldValidate: true });
-      setSerialContext(null);
-    }
-  }, [serialContext, form]);
-
-  // ——————————————————————————————————————————————————————————————————————————————
-  const handleProductSelect = useCallback(
-    async (index: number, product: StockAdjustmentProduct) => {
-      if (!product) return;
-
-      const selectionId = String(product.id || product.product_id);
-      const productId = product.product_id || product.id;
-
-      const currentProductId = form.getValues(`items.${index}.product_id`);
-      const isNewSelection = String(currentProductId) !== String(selectionId);
-
-      form.setValue(`items.${index}.product_id`, selectionId);
-      form.setValue(`items.${index}.product_name`, product.product_name);
-      form.setValue(`items.${index}.product_code`, product.product_code);
-      form.setValue(`items.${index}.cost_per_unit`, product.cost_per_unit || product.price_per_unit || 0);
-      form.setValue(`items.${index}.unit_name`, product.unit_name || "pcs");
-      form.setValue(`items.${index}.brand_name`, product.brand_name || "N/A");
-      form.setValue(`items.${index}.barcode`, product.barcode || "N/A");
-      form.setValue(`items.${index}.description`, product.description || "No description available.");
-      form.setValue(`items.${index}.unit_order`, product.unit_of_measurement?.order || 1);
-      form.setValue(`items.${index}.is_serialized`, !!product.is_serialized);
-
-      if (product.is_serialized) {
-        form.setValue(`items.${index}.quantity`, 0);
-      }
-
-      const cachedStock = inventoryMap.get(Number(productId)) ?? 0;
-      form.setValue(`items.${index}.current_stock`, cachedStock);
-
-      form.setValue(`items.${index}.is_serialized`, !!product.is_serialized);
-      form.setValue(`items.${index}.serial_count`, 0);
-
-      // --- Scanner Logic (Only for new user selections, NOT initial load) ---
-      if (product.is_serialized && isNewSelection && !loading) {
-        setSerialContext({ index, productName: product.product_name || "Product" });
-        setIsScannerPreparing(true);
-
-        toast.info(`Serial Input Required`, {
-          description: `Preparing serial input for ${product.product_name}...`,
-          duration: 1500,
-          icon: <Tag className="h-4 w-4 text-blue-500" />,
-        });
-
-        const timer = setTimeout(() => {
-          setIsScannerPreparing(false);
-          setShowSerialInput(true);
-        }, 300);
-        return () => clearTimeout(timer);
-      }
-
-      (async () => {
-        try {
-          const branchId = form.getValues("branch_id");
-          const currentStock = await (cachedStock === 0
-            ? fetchInventory(productId, branchId)
-            : Promise.resolve(cachedStock));
-
-          form.setValue(`items.${index}.current_stock`, currentStock);
-
-        } catch (err) {
-          console.error("Background fetch error:", err);
-        } finally {
-          setLoadingRows((prev) => {
-            const next = new Set(prev);
-            next.delete(index);
-            return next;
-          });
+  const handleConfirmModalItems = useCallback(
+    (newItems: StockAdjustmentItem[]) => {
+      const branchId = form.getValues("branch_id");
+      const currentType = form.getValues("type");
+      
+      const mapped = newItems.map((item) => ({
+        ...item,
+        branch_id: branchId,
+        type: currentType
+      }));
+      
+      form.setValue("items", mapped, { shouldValidate: true });
+      
+      // Async stock fetch
+      mapped.forEach((item, idx) => {
+        const pid = Number(item.product_id);
+        const cachedStock = inventoryMap.get(pid) ?? 0;
+        if (cachedStock === 0) {
+           fetchInventory(pid, branchId).then(stock => {
+              form.setValue(`items.${idx}.current_stock`, stock);
+           }).catch(console.error);
+        } else {
+           form.setValue(`items.${idx}.current_stock`, cachedStock);
         }
-      })();
+      });
     },
-    [fetchInventory, form, inventoryMap, loading]
+    [form, fetchInventory, inventoryMap]
   );
-
-  const handleOpenSerialInput = useCallback((index: number) => {
-    const productName = form.getValues(`items.${index}.product_name`) ?? "Product";
-    setSerialContext({ index, productName });
-
-    setIsScannerPreparing(true);
-    toast.info(`Opening Serial Input`, {
-      description: `Preparing serial input for ${productName}...`,
-      duration: 1500,
-    });
-
-    setTimeout(() => {
-      setIsScannerPreparing(false);
-      setShowSerialInput(true);
-    }, 600);
-  }, [form]);
 
   const watchedBranchIdForSelect = useWatch({ control: form.control, name: "branch_id" });
   const watchedSupplierIdForSelect = useWatch({ control: form.control, name: "supplier_id" });
   const watchedType = useWatch({ control: form.control, name: "type" });
+  const watchedItemsList = useWatch({ control: form.control, name: "items" });
+
+  const filteredFields = useMemo(() => {
+    return fields.map((field, index) => ({ field, index })).filter(({ index }) => {
+      if (!tableSearch.trim()) return true;
+      const s = tableSearch.toLowerCase();
+      const item = watchedItemsList?.[index];
+      return (
+        item?.product_name?.toLowerCase().includes(s) ||
+        item?.product_code?.toLowerCase().includes(s) ||
+        item?.barcode?.toLowerCase().includes(s) ||
+        item?.brand_name?.toLowerCase().includes(s)
+      );
+    });
+  }, [fields, tableSearch, watchedItemsList]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredFields.length / rowsPerPage));
+  const paginatedFields = useMemo(() => {
+    const startIndex = (currentPage - 1) * rowsPerPage;
+    return filteredFields.slice(startIndex, startIndex + rowsPerPage);
+  }, [filteredFields, currentPage, rowsPerPage]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalPages, currentPage]);
+
+  // Open Serial number modal
+  const handleOpenSerialInput = useCallback((index: number) => {
+    const item = form.getValues(`items.${index}`);
+    if (item && item.product_name) {
+      setSerialContext({
+        index,
+        productName: item.product_name,
+        productId: Number(item.product_id)
+      });
+      setShowSerialInput(true);
+    }
+  }, [form]);
+
+  // Save Serial values back to line item
+  const handleSerialSave = useCallback((serials: string[]) => {
+    if (serialContext) {
+      const { index } = serialContext;
+      form.setValue(`items.${index}.serial_numbers`, serials, { shouldValidate: true });
+      form.setValue(`items.${index}.quantity`, serials.length, { shouldValidate: true });
+    }
+  }, [serialContext, form]);
+
+  const excludeSerialsList = useMemo(() => {
+    if (serialContext === null) return [];
+    const { index } = serialContext;
+    const currentItems = form.getValues("items") || [];
+    const excludeList: string[] = [];
+    currentItems.forEach((item, idx) => {
+      if (idx !== index && item.serial_numbers && Array.isArray(item.serial_numbers)) {
+        excludeList.push(...item.serial_numbers);
+      }
+    });
+    return excludeList;
+  }, [serialContext, form]);
 
   return (
     <div className="flex flex-col gap-6 p-8 max-w-7xl mx-auto w-full bg-background">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-3">
-          <div className="bg-blue-600 p-2 rounded-lg shadow-sm">
+          <div className="bg-primary p-2 rounded-lg shadow-sm">
             <Package className="h-6 w-6 text-white" />
           </div>
           <div>
@@ -908,8 +702,8 @@ export function StockAdjustmentForm({
             <Badge
               variant="outline"
               className={`px-3 py-1 font-bold shadow-sm ${isPosted
-                ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:blue-400 border-blue-200 dark:border-blue-800/50 uppercase tracking-wider'
-                : 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:amber-400 border-amber-200 dark:border-amber-800/50 uppercase tracking-wider'
+                ? 'bg-primary/10 text-primary border-primary/20 uppercase tracking-wider'
+                : 'bg-amber-50 text-amber-700 border-amber-200 uppercase tracking-wider'
                 }`}
             >
               {isPosted ? 'Posted' : 'Draft / Unposted'}
@@ -922,18 +716,24 @@ export function StockAdjustmentForm({
 
         {isPosted && (
           <div className="flex items-center gap-6 mt-2 animate-in fade-in slide-in-from-left-2 duration-300">
-            <div className="flex items-center gap-2 bg-blue-50/50 dark:bg-blue-900/10 px-3 py-1.5 rounded-lg border border-blue-100 dark:border-blue-800/30">
-              <span className="text-[10px] uppercase font-black text-blue-400">Posted At:</span>
-              <span className="text-xs font-bold text-blue-700 dark:text-blue-300">
+            <div className="flex items-center gap-2 bg-primary/5 px-3 py-1.5 rounded-lg border border-primary/10">
+              <span className="text-[10px] uppercase font-black text-primary/70">Posted At:</span>
+              <span className="text-xs font-bold text-primary">
                 {form.getValues().postedAt ? format(new Date(form.getValues().postedAt as string), "MMMM d, yyyy, hh:mm a") : "-"}
               </span>
             </div>
-            <div className="flex items-center gap-2 bg-blue-50/50 dark:bg-blue-900/10 px-3 py-1.5 rounded-lg border border-blue-100 dark:border-blue-800/30">
-              <span className="text-[10px] uppercase font-black text-blue-400">Posted By:</span>
-              <span className="text-xs font-bold text-blue-700 dark:text-blue-300">
+            <div className="flex items-center gap-2 bg-primary/5 px-3 py-1.5 rounded-lg border border-primary/10">
+              <span className="text-[10px] uppercase font-black text-primary/70">Posted By:</span>
+              <span className="text-xs font-bold text-primary">
                 {(() => {
                   const postedBy = form.getValues("posted_by");
-                  return typeof postedBy === 'object' ? `${postedBy?.user_fname} ${postedBy?.user_lname}` : postedBy || "System User";
+                  if (typeof postedBy === 'object' && postedBy !== null) {
+                    const fname = postedBy.user_fname || "";
+                    const lname = postedBy.user_lname || "";
+                    const fullName = `${fname} ${lname}`.trim();
+                    return fullName || "System User";
+                  }
+                  return postedBy || "System User";
                 })()}
               </span>
             </div>
@@ -941,29 +741,7 @@ export function StockAdjustmentForm({
         )}
       </div>
 
-      <SerialBanner control={form.control} />
-
-      {isScannerPreparing && (
-        <div className="fixed inset-0 bg-background/40 backdrop-blur-[1px] z-[100] flex items-center justify-center animate-in fade-in duration-300">
-          <Card className="w-full max-w-sm border-none shadow-2xl bg-card/90 overflow-hidden p-0 backdrop-blur-md">
-            <div className="bg-blue-600 h-1.5 w-full">
-              <div className="bg-blue-400 h-full animate-[loading_1.5s_infinite_linear]" style={{ width: '40%' }} />
-            </div>
-            <CardContent className="p-8 flex flex-col items-center gap-4">
-              <div className="relative">
-                <div className="h-16 w-16 rounded-full border-4 border-muted border-t-blue-500 animate-spin" />
-                <Tag className="h-6 w-6 text-blue-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-              </div>
-              <div className="text-center space-y-1">
-                <h3 className="font-bold text-foreground">Preparing Serial Input</h3>
-                <p className="text-sm text-muted-foreground">Please wait a moment...</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-6">
         <Card className="border-border shadow-sm bg-card">
           <CardHeader className="bg-card border-b border-border py-4 px-6">
             <CardTitle className="text-base font-bold text-foreground">
@@ -1022,8 +800,8 @@ export function StockAdjustmentForm({
                     <ComboboxList>
                       {(() => {
                         const filtered = branches.filter(b =>
-                           b.branch_name.toLowerCase().includes(branchSearch.toLowerCase()) ||
-                           (b.branch_code ?? "").toLowerCase().includes(branchSearch.toLowerCase())
+                          b.branch_name.toLowerCase().includes(branchSearch.toLowerCase()) ||
+                          (b.branch_code ?? "").toLowerCase().includes(branchSearch.toLowerCase())
                         );
                         if (filtered.length === 0) return <ComboboxEmpty>No branches found.</ComboboxEmpty>;
                         return filtered.map(b => {
@@ -1127,13 +905,13 @@ export function StockAdjustmentForm({
                 value={watchedType}
                 onValueChange={(v) => form.setValue("type", v as "IN" | "OUT")}
                 className="flex gap-4 pt-1"
-                disabled={isReadOnly}
+                disabled={isReadOnly || !!id}
               >
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem
                     value="IN"
                     id="type-in"
-                    className="border-blue-500 text-blue-600 h-4 w-4"
+                    className="border-primary text-primary h-4 w-4"
                   />
                   <Label htmlFor="type-in" className="text-sm font-bold text-foreground/80">
                     Stock In
@@ -1143,7 +921,7 @@ export function StockAdjustmentForm({
                   <RadioGroupItem
                     value="OUT"
                     id="type-out"
-                    className="border-input text-blue-600 h-4 w-4"
+                    className="border-input text-primary h-4 w-4"
                   />
                   <Label htmlFor="type-out" className="text-sm font-bold text-foreground/80">
                     Stock Out
@@ -1165,7 +943,7 @@ export function StockAdjustmentForm({
                 id="remarks"
                 {...form.register("remarks")}
                 placeholder="Additional information about this adjustment..."
-                className="min-h-[120px] bg-background border-input focus:ring-blue-500 rounded-xl p-4 text-sm"
+                className="min-h-[120px] bg-background border-input focus:ring-primary rounded-xl p-4 text-sm"
                 disabled={isReadOnly}
               />
             </div>
@@ -1173,94 +951,223 @@ export function StockAdjustmentForm({
         </Card>
 
         <Card className="border-border shadow-sm bg-card">
-          <CardHeader className="bg-card border-b border-border flex flex-row items-center justify-between py-4 px-6">
-            <CardTitle className="text-base font-bold text-foreground">
-              Product Items
-            </CardTitle>
-            <Button
-              type="button"
-              onClick={handleAddProduct}
-              disabled={!watchedSupplierIdForSelect || isReadOnly}
-              className={`${(!watchedSupplierIdForSelect || isReadOnly)
-                ? "bg-muted text-muted-foreground border-border"
-                : "bg-blue-600 hover:bg-blue-700 text-white"
-                } font-bold h-9 px-4 rounded-lg shadow-sm flex items-center gap-2 text-sm transition-all`}
-            >
-              <Plus className="h-4 w-4" />
-              Add Product
-            </Button>
+          <CardHeader className="bg-card border-b border-border py-4 px-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <CardTitle className="text-base font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+                <Package className="w-5 h-5 text-primary" />
+                Product Items
+              </CardTitle>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="relative w-full md:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  type="text"
+                  placeholder="Search products in cart..."
+                  value={tableSearch}
+                  onChange={(e) => {
+                    setTableSearch(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="pl-9 h-9 text-sm border-input"
+                />
+              </div>
+              {!isReadOnly && (
+                <Button
+                  type="button"
+                  onClick={() => setIsModalOpen(true)}
+                  disabled={!watchedSupplierIdForSelect}
+                  className="font-bold h-9 px-4 rounded-full shadow-sm flex items-center gap-2 text-sm transition-all border-primary/20 text-primary bg-primary/5 hover:bg-primary/10 shrink-0"
+                  variant="outline"
+                >
+                  <Plus className="h-4 w-4" />
+                  ADD MORE PRODUCTS
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <div className="min-w-[1000px]">
-                {isFormLoading || (isProductsLoading && fields.length === 0) ? (
-                  <div className="p-6 space-y-6">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="flex gap-4">
-                        <Skeleton className="h-10 flex-[3]" />
-                        <Skeleton className="h-10 flex-1" />
-                        <Skeleton className="h-10 flex-1" />
-                        <Skeleton className="h-10 flex-1" />
-                        <Skeleton className="h-10 flex-1" />
-                        <Skeleton className="h-10 flex-1" />
-                        <Skeleton className="h-10 flex-1" />
-                      </div>
-                    ))}
+            {isFormLoading ? (
+              <div className="p-6 space-y-6">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex gap-4">
+                    <Skeleton className="h-10 flex-[3]" />
+                    <Skeleton className="h-10 flex-1" />
+                    <Skeleton className="h-10 flex-1" />
+                    <Skeleton className="h-10 flex-1" />
                   </div>
-                ) : fields.length === 0 ? (
-                  <div className="bg-muted/10 border-2 border-dashed border-border rounded-xl p-16 text-center">
-                    <div className="flex justify-center mb-4">
-                      <div className={`p-5 rounded-full border border-dashed ${watchedSupplierIdForSelect ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800/50" : "bg-muted border-border"
-                        }`}>
-                        <Package className={`h-10 w-10 ${watchedSupplierIdForSelect ? "text-blue-400" : "text-muted-foreground/30"
-                          }`} />
-                      </div>
-                    </div>
-                    <h3 className="text-lg font-bold text-foreground mb-1">
-                      {watchedSupplierIdForSelect ? "Ready to add products" : "Supplier required"}
-                    </h3>
-                    <p className="text-muted-foreground font-medium max-w-xs mx-auto text-sm">
-                      {watchedSupplierIdForSelect
-                        ? "Click 'Add Product' to start building your adjustment from this supplier."
-                        : "Select a supplier first to see the products linked to them."}
-                    </p>
-                    {form.formState.errors.items &&
-                      form.formState.errors.items.message && (
-                        <p className="text-sm text-red-500 font-bold mt-4">
-                          {form.formState.errors.items.message}
-                        </p>
-                      )}
+                ))}
+              </div>
+            ) : fields.length === 0 ? (
+              <div className="bg-muted/10 border-2 border-dashed border-border rounded-xl m-6 p-16 text-center">
+                <div className="flex justify-center mb-4">
+                  <div className="p-5 rounded-full border border-dashed bg-muted border-border">
+                    <Package className="h-10 w-10 text-muted-foreground/30" />
                   </div>
-                ) : (
-                  <div className="p-0">
-                    {fields.map((field, index) => (
-                      <StockAdjustmentItemRow
-                        key={field.id}
-                        index={index}
-                        control={form.control}
-                        productOptions={productOptions}
-                        isProductsLoading={isProductsLoading}
-                        isLoadingDetails={loadingRows.has(index)}
-                        onProductSelect={handleProductSelect}
-                        onRemove={remove}
-                        setValue={form.setValue}
-                        onOpenSerialInput={handleOpenSerialInput}
-                        isReadOnly={isReadOnly}
-                      />
-                    ))}
-                  </div>
+                </div>
+                <h3 className="text-lg font-bold text-foreground mb-1">
+                  {watchedSupplierIdForSelect ? "Empty Cart" : "Supplier required"}
+                </h3>
+                <p className="text-muted-foreground font-medium max-w-xs mx-auto text-sm">
+                  {watchedSupplierIdForSelect
+                    ? "Click \"ADD MORE PRODUCTS\" to browse and add items."
+                    : "Select a supplier first to browse and add products."}
+                </p>
+                {form.formState.errors.items && form.formState.errors.items.message && (
+                  <p className="text-sm text-red-500 font-bold mt-4">
+                    {form.formState.errors.items.message}
+                  </p>
                 )}
               </div>
-            </div>
+            ) : (
+              <div className="overflow-x-auto min-h-[300px]">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-[10px] font-bold uppercase text-muted-foreground bg-muted/40 border-b border-border">
+                    <tr>
+                      <th className="p-3 text-center w-12 border-r border-border/50">#</th>
+                      <th className="p-3">Brand</th>
+                      <th className="p-3">Product Name</th>
+                      <th className="p-3">Price</th>
+                      <th className="p-3">UOM</th>
+                      <th className="p-3 w-40">Qty</th>
+                      <th className="p-3">Net Total</th>
+                      <th className="p-3 text-center w-16">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedFields.length === 0 && tableSearch ? (
+                      <tr>
+                        <td colSpan={8} className="p-8 text-center text-sm text-muted-foreground">
+                          No products found matching &quot;{tableSearch}&quot;.
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedFields.map(({ field, index }) => (
+                        <ProductTableRow
+                          key={field.id}
+                          index={index}
+                          control={form.control}
+                          onRemove={(idx) => setDeletingIndex(idx)}
+                          setValue={form.setValue}
+                          onOpenSerialInput={handleOpenSerialInput}
+                          isReadOnly={isReadOnly}
+                        />
+                      ))
+                    )}
+                  </tbody>
+                </table>
+                <div className="p-4 bg-muted/10 border-t border-border/50 text-sm font-medium text-muted-foreground flex justify-between items-center">
+                  <span>{filteredFields.length} total rows</span>
+                  <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs">Rows per page</span>
+                      <select 
+                        className="h-8 border border-border rounded-md bg-card px-2 text-xs focus:outline-none"
+                        value={rowsPerPage}
+                        onChange={(e) => {
+                          setRowsPerPage(Number(e.target.value));
+                          setCurrentPage(1);
+                        }}
+                      >
+                        <option value={5}>5</option>
+                        <option value={10}>10</option>
+                        <option value={20}>20</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                      </select>
+                    </div>
+                    <span className="text-xs font-bold text-foreground">Page {currentPage} of {totalPages}</span>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground bg-card"
+                        disabled={currentPage === 1}
+                        onClick={() => setCurrentPage(1)}
+                      >
+                        <ChevronsLeft className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground bg-card"
+                        disabled={currentPage === 1}
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground bg-card"
+                        disabled={currentPage === totalPages}
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground bg-card"
+                        disabled={currentPage === totalPages}
+                        onClick={() => setCurrentPage(totalPages)}
+                      >
+                        <ChevronsRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Summary Block */}
             <FormSummary
               control={form.control}
               fieldCount={fields.length}
-              isSerialLoading={isSerialLoading}
             />
           </CardContent>
         </Card>
+
+        {/* Attachments Card */}
+        <Card className="border border-border/50 shadow-sm bg-card">
+          <CardHeader className="bg-card border-b border-border/50 py-4 px-6">
+            <CardTitle className="text-base font-bold text-foreground flex items-center gap-2">
+              <Paperclip className="h-4 w-4 text-primary" />
+              Attachments
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6">
+            <AttachmentUpload
+              value={form.watch("stock_adjustment_attachment") || []}
+              onChange={(atts) => form.setValue("stock_adjustment_attachment", atts, { shouldValidate: true })}
+              disabled={isReadOnly}
+            />
+            {form.formState.errors.stock_adjustment_attachment?.message && (
+              <p className="text-xs text-red-500 font-bold mt-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                {String(form.formState.errors.stock_adjustment_attachment.message)}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <ProductSelectionModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          supplierName={
+            suppliers.find((s) => String(s.id) === String(watchedSupplierIdForSelect))?.supplier_name || ""
+          }
+          branchName={
+            branches?.find((b) => String(b.id) === String(watchedBranchIdForSelect))?.branch_name || ""
+          }
+          products={products}
+          isLoading={isProductsLoading}
+          initialSelectedItems={form.getValues("items")}
+          onConfirm={handleConfirmModalItems}
+        />
 
         <div className="flex items-center justify-end gap-3 pb-8">
           <Button
@@ -1272,34 +1179,18 @@ export function StockAdjustmentForm({
             Cancel
           </Button>
           {!isReadOnly && (
-            <div className="flex flex-col items-end gap-1">
-              <Button
-                type="submit"
-                disabled={loading}
-                onClick={() => {
-                  const errors = form.formState.errors;
-                  if (Object.keys(errors).length > 0) {
-                    console.error("Form Validation Errors:", errors);
-                    toast.error("Please fix the validation errors before saving.", {
-                      description: "Check required fields like Branch, Supplier, or Product details."
-                    });
-                  }
-                }}
-                className="h-10 px-8 font-bold bg-blue-600 hover:bg-blue-700 text-white gap-2 shadow-sm rounded-lg"
-              >
-                {loading ? (
-                  <span className="animate-spin mr-2">â—Œ</span>
-                ) : (
-                  <Save className="h-4 w-4" />
-                )}
-                {id ? "Update Adjustment" : "Save Adjustment"}
-              </Button>
-              {Object.keys(form.formState.errors).length > 0 && (
-                <p className="text-[10px] text-red-500 font-bold animate-pulse">
-                  {Object.keys(form.formState.errors).length} validation error(s) detected
-                </p>
+            <Button
+              type="submit"
+              disabled={loading}
+              className="h-10 px-8 font-bold bg-primary hover:bg-primary/90 text-white gap-2 shadow-sm rounded-lg"
+            >
+              {loading ? (
+                <span className="animate-spin mr-2">⟳</span>
+              ) : (
+                <Save className="h-4 w-4" />
               )}
-            </div>
+              {id ? "Update Adjustment" : "Save Adjustment"}
+            </Button>
           )}
 
           {id && !isReadOnly && (
@@ -1310,7 +1201,7 @@ export function StockAdjustmentForm({
               className="h-10 px-8 font-bold bg-green-600 hover:bg-green-700 text-white gap-2 shadow-sm rounded-lg animate-in fade-in zoom-in-95 duration-200"
             >
               {loading ? (
-                <span className="animate-spin mr-2">â—Œ</span>
+                <span className="animate-spin mr-2">⟳</span>
               ) : (
                 <Send className="h-4 w-4" />
               )}
@@ -1320,31 +1211,28 @@ export function StockAdjustmentForm({
         </div>
       </form>
 
-      {serialContext && (
+      {/* Serial Input Modal container */}
+      {showSerialInput && serialContext && (
         <SerialInputModal
           open={showSerialInput}
           onOpenChange={setShowSerialInput}
           productName={serialContext.productName}
           onSave={handleSerialSave}
-          type={form.getValues("type")}
           initialSerials={form.getValues(`items.${serialContext.index}.serial_numbers`) || []}
-          excludeSerials={(form.getValues("items") || [])
-            .filter((_, idx) => idx !== serialContext.index)
-            .flatMap(item => item.serial_numbers || [])
-          }
-          branchId={Number(form.getValues("branch_id"))}
-          productId={Number(form.getValues(`items.${serialContext.index}.product_id`))}
+          type={watchedType}
+          branchId={watchedBranchIdForSelect}
+          productId={serialContext.productId}
           validateSerial={validateSerialAvailability}
+          excludeSerials={excludeSerialsList}
         />
       )}
-
 
       {/* Post Confirmation Modal */}
       <AlertDialog open={showPostConfirmation} onOpenChange={setShowPostConfirmation}>
         <AlertDialogContent className="max-w-md bg-card p-6 rounded-xl shadow-2xl border-none">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-xl font-bold text-foreground flex items-center gap-2">
-              <Send className="h-5 w-5 text-blue-600" />
+              <Send className="h-5 w-5 text-primary" />
               Confirm Post Adjustment
             </AlertDialogTitle>
             <AlertDialogDescription className="text-muted-foreground py-4">
@@ -1363,9 +1251,53 @@ export function StockAdjustmentForm({
             </Button>
             <Button
               onClick={confirmPost}
-              className="flex-1 h-11 font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-100 dark:shadow-none rounded-lg"
+              className="flex-1 h-11 font-bold bg-primary hover:bg-primary/90 text-white shadow-md shadow-primary/20 dark:shadow-none rounded-lg"
             >
               Confirm and Post
+            </Button>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Item Delete Confirmation */}
+      <AlertDialog
+        open={deletingIndex !== null}
+        onOpenChange={(open) => !open && setDeletingIndex(null)}
+      >
+        <AlertDialogContent className="max-w-md bg-card p-6 rounded-xl shadow-2xl border-none">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-xl font-bold text-foreground flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-red-600" />
+              Remove Item
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground py-4">
+              Are you sure you want to remove this item from the adjustment list?
+              {deletingIndex !== null && form.getValues(`items.${deletingIndex}.db_id`) && (
+                <span className="block mt-2 font-bold text-red-500/80">
+                  Note: This is an existing record. Removing it will delete it from this adjustment once you save.
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex items-center gap-3 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setDeletingIndex(null)}
+              className="flex-1 h-11 font-bold text-muted-foreground border-border hover:bg-muted rounded-lg"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (deletingIndex !== null) {
+                  remove(deletingIndex);
+                  setDeletingIndex(null);
+                  toast.success("Item removed from list");
+                }
+              }}
+              className="flex-1 h-11 font-bold bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-100 dark:shadow-none rounded-lg"
+            >
+              Confirm and Remove
             </Button>
           </div>
         </AlertDialogContent>
@@ -1373,4 +1305,3 @@ export function StockAdjustmentForm({
     </div>
   );
 }
-

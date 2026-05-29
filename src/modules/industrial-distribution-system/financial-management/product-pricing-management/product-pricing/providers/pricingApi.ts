@@ -20,11 +20,11 @@ type ProductsMeta = {
 };
 
 export async function getPriceTypes() {
-  return http<{ data: PriceType[] }>("/api/fm/product-pricing/price-types");
+  return http<{ data: PriceType[] }>("/api/ids/fm/product-pricing/price-types");
 }
 
 export async function createPriceType(data: Partial<PriceType>) {
-  return http<{ data: PriceType }>("/api/fm/product-pricing/price-types", {
+  return http<{ data: PriceType }>("/api/ids/fm/product-pricing/price-types", {
     method: "POST",
     body: JSON.stringify(data),
   });
@@ -32,7 +32,7 @@ export async function createPriceType(data: Partial<PriceType>) {
 
 export async function updatePriceType(id: number, data: Partial<PriceType>) {
   return http<{ data: PriceType }>(
-    `/api/fm/product-pricing/price-types/${id}`,
+    `/api/ids/fm/product-pricing/price-types/${id}`,
     {
       method: "PATCH",
       body: JSON.stringify(data),
@@ -41,7 +41,7 @@ export async function updatePriceType(id: number, data: Partial<PriceType>) {
 }
 
 export async function deletePriceType(id: number) {
-  return http<{ ok: boolean }>(`/api/fm/product-pricing/price-types/${id}`, {
+  return http<{ ok: boolean }>(`/api/ids/fm/product-pricing/price-types/${id}`, {
     method: "DELETE",
   });
 }
@@ -67,7 +67,7 @@ export async function getLookups(params?: {
       units: Unit[];
       suppliers?: Supplier[];
     };
-  }>(`/api/fm/product-pricing/lookups${qs ? `?${qs}` : ""}`);
+  }>(`/api/ids/fm/product-pricing/lookups${qs ? `?${qs}` : ""}`);
 }
 
 export async function getProducts(params: {
@@ -97,7 +97,7 @@ export async function getProducts(params: {
   }
 
   return http<{ data: ProductRow[]; meta: ProductsMeta }>(
-    `/api/fm/product-pricing/products?${sp.toString()}`,
+    `/api/ids/fm/product-pricing/products?${sp.toString()}`,
   );
 }
 
@@ -126,20 +126,20 @@ export async function getPrintProducts(params: {
   }
 
   return http<{ data: ProductRow[] }>(
-    `/api/fm/product-pricing/print/products?${sp.toString()}`,
+    `/api/ids/fm/product-pricing/print/products?${sp.toString()}`,
   );
 }
 
 export async function getPricesForProducts(productIds: number[]) {
   const sp = new URLSearchParams({ product_ids: productIds.join(",") });
   return http<{ data: PriceRow[] }>(
-    `/api/fm/product-pricing/prices?${sp.toString()}`,
+    `/api/ids/fm/product-pricing/prices?${sp.toString()}`,
   );
 }
 
 export async function upsertPrices(lines: UpsertLine[]) {
   return http<{ ok: boolean; affected: number }>(
-    `/api/fm/product-pricing/prices-upsert`,
+    `/api/ids/fm/product-pricing/prices-upsert`,
     {
       method: "POST",
       body: JSON.stringify({ lines }),
@@ -158,7 +158,7 @@ export async function createPriceChangeRequests(
     created: number;
     skipped_duplicates?: number;
     skipped_existing_pending?: number;
-  }>(`/api/fm/product-pricing/price-change-requests/bulk`, {
+  }>(`/api/ids/fm/product-pricing/price-change-requests/bulk`, {
     method: "POST",
     body: JSON.stringify({ items }),
   });
@@ -168,7 +168,7 @@ export async function bulkUpdateProducts(
   items: { product_id: number; cost_per_unit: number | null }[],
 ) {
   return http<{ ok: boolean; affected: number }>(
-    `/api/fm/product-pricing/products/bulk-patch`,
+    `/api/ids/fm/product-pricing/products/bulk-patch`,
     {
       method: "POST",
       body: JSON.stringify({ items }),
@@ -187,7 +187,7 @@ export async function createCostChangeRequests(
     created: number;
     skipped_duplicates?: number;
     skipped_existing_pending?: number;
-  }>(`/api/fm/product-pricing/cost-change-requests/bulk`, {
+  }>(`/api/ids/fm/product-pricing/cost-change-requests/bulk`, {
     method: "POST",
     body: JSON.stringify({ items }),
   });

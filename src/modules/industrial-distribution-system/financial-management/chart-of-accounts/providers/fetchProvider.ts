@@ -14,7 +14,7 @@ import type {
   UserRow,
 } from "../types";
 
-const API = "/api/fm/chart-of-accounts";
+const API = "/api/ids/fm/chart-of-accounts";
 
 async function safeJson(res: Response) {
   const ct = res.headers.get("content-type") || "";

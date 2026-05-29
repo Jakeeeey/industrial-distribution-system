@@ -1,4 +1,4 @@
-// src/app/api/fm/printables/lookups/route.ts
+// src/app/api/ids/fm/printables/lookups/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -140,7 +140,7 @@ export async function GET(req: NextRequest) {
                 activeSuppliersParams.set("limit", "-1");
                 activeSuppliersParams.set("fields", "supplier_id");
                 activeSuppliersParams.set("filter[product_id][is_serialized][_eq]", "1");
-                
+
                 const activeSuppliersJson = await fetchDirectus<{ data: { supplier_id: number }[] }>(
                     `${DIRECTUS_URL}/items/${PRODUCT_PER_SUPPLIER}?${activeSuppliersParams.toString()}`
                 );
@@ -178,7 +178,7 @@ export async function GET(req: NextRequest) {
             const directIds = (ppsJson.data ?? [])
                 .map((r) => Number(r.product_id))
                 .filter(n => Number.isFinite(n) && n > 0);
-            
+
             if (directIds.length === 0) {
                 return NextResponse.json({ data: { categories: [], brands: [], units: [], suppliers } });
             }
@@ -192,7 +192,7 @@ export async function GET(req: NextRequest) {
                 .filter(n => Number.isFinite(n) && n > 0);
 
             universeProductIds = Array.from(new Set([...directIds, ...childIds]));
-            
+
             if (universeProductIds.length === 0) {
                 return NextResponse.json({ data: { categories: [], brands: [], units: [], suppliers } });
             }

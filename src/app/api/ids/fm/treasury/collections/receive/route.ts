@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
 
     } catch (err: unknown) {
         // 🚀 This logs the error to your VS Code terminal so you can see it!
-        console.error("[BFF] POST /api/fm/treasury/collections/receive failed:", err);
+        console.error("[BFF] POST /api/ids/fm/treasury/collections/receive failed:", err);
 
         return NextResponse.json({
             message: "BFF Error",

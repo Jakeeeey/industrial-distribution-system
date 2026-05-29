@@ -136,7 +136,7 @@ export default function EditAssetModal({
 
       setPreviewUrl(
         asset.item_image
-          ? `/api/fm/asset-management/asset-image-view?id=${asset.item_image}`
+          ? `/api/ids/fm/asset-management/asset-image-view?id=${asset.item_image}`
           : null,
       );
     }
@@ -184,7 +184,7 @@ export default function EditAssetModal({
     const formData = new FormData();
     formData.append("file", compressedFile);
 
-    const res = await fetch("/api/fm/asset-management/asset-image-upload", {
+    const res = await fetch("/api/ids/fm/asset-management/asset-image-upload", {
       method: "POST",
       body: formData,
     });

@@ -1,4 +1,4 @@
-// src/app/api/fm/treasury/bulk-approval/route.ts
+// src/app/api/ids/fm/treasury/bulk-approval/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import {
@@ -390,13 +390,13 @@ export async function GET(req: NextRequest) {
           payee_name:
             Number(d.transaction_type) === 2
               ? userMap[Number(d.encoder_id)] ||
-                userMap[Number(d.payee)] ||
-                supplierMap[Number(d.payee)] ||
-                `Salesman #${d.encoder_id || d.payee || "?"}`
+              userMap[Number(d.payee)] ||
+              supplierMap[Number(d.payee)] ||
+              `Salesman #${d.encoder_id || d.payee || "?"}`
               : supplierMap[Number(d.payee)] ||
-                userMap[Number(d.payee)] ||
-                userMap[Number(d.encoder_id)] ||
-                `Unknown Payee`,
+              userMap[Number(d.payee)] ||
+              userMap[Number(d.encoder_id)] ||
+              `Unknown Payee`,
           encoder_name:
             userMap[Number(d.encoder_id)] || `User #${d.encoder_id}`,
           total_amount: d.total_amount,
@@ -415,10 +415,10 @@ export async function GET(req: NextRequest) {
             divMetadata[Number(d.division_id)]?.approversPerLevel ?? {}, // for debugging
           my_vote: myVote
             ? {
-                status: myVote.status,
-                created_at: myVote.created_at,
-                version: myVote.version,
-              }
+              status: myVote.status,
+              created_at: myVote.created_at,
+              version: myVote.version,
+            }
             : null,
           can_vote:
             (levelsByDivision[Number(d.division_id)] || []).includes(
@@ -660,11 +660,11 @@ export async function GET(req: NextRequest) {
           level: lvl,
           vote: vote
             ? {
-                status: String(vote.status ?? ""),
-                remarks: vote.remarks ? String(vote.remarks) : null,
-                created_at: String(vote.created_at ?? ""),
-                version: Number(vote.version),
-              }
+              status: String(vote.status ?? ""),
+              remarks: vote.remarks ? String(vote.remarks) : null,
+              created_at: String(vote.created_at ?? ""),
+              version: Number(vote.version),
+            }
             : null,
         });
       }
@@ -705,7 +705,7 @@ export async function GET(req: NextRequest) {
         let snapshot = { old_total: 0, new_total: 0 };
         try {
           snapshot = JSON.parse(String(l.payload_snapshot || "{}"));
-        } catch {}
+        } catch { }
 
         const pLogs = rawPayableLogs
           .filter((p) => Number(p.log_id) === Number(l.log_id))
@@ -749,13 +749,13 @@ export async function GET(req: NextRequest) {
           payee_name:
             Number(draft.transaction_type) === 2
               ? userMap[Number(draft.encoder_id)] ||
-                userMap[Number(draft.payee)] ||
-                supplierMap[Number(draft.payee)] ||
-                `Salesman #${draft.encoder_id || draft.payee || "?"}`
+              userMap[Number(draft.payee)] ||
+              supplierMap[Number(draft.payee)] ||
+              `Salesman #${draft.encoder_id || draft.payee || "?"}`
               : supplierMap[Number(draft.payee)] ||
-                userMap[Number(draft.payee)] ||
-                userMap[Number(draft.encoder_id)] ||
-                `Unknown Payee`,
+              userMap[Number(draft.payee)] ||
+              userMap[Number(draft.encoder_id)] ||
+              `Unknown Payee`,
           encoder_name:
             userMap[Number(draft.encoder_id)] || `User #${draft.encoder_id}`,
           current_tier: currentTier,
@@ -778,9 +778,9 @@ export async function GET(req: NextRequest) {
                   typeof (p as unknown as DirectusDisbursementPayableDraft)
                     .expense_id === "object"
                   ? (
-                      (p as unknown as DirectusDisbursementPayableDraft)
-                        .expense_id as { attachment_url?: string }
-                    ).attachment_url
+                    (p as unknown as DirectusDisbursementPayableDraft)
+                      .expense_id as { attachment_url?: string }
+                  ).attachment_url
                   : null,
               ) ||
               resolveAttachmentId(
@@ -788,9 +788,9 @@ export async function GET(req: NextRequest) {
                   typeof (p as unknown as DirectusDisbursementPayableDraft)
                     .expense_id === "object"
                   ? (
-                      (p as unknown as DirectusDisbursementPayableDraft)
-                        .expense_id as { attatchment_url?: string }
-                    ).attatchment_url
+                    (p as unknown as DirectusDisbursementPayableDraft)
+                      .expense_id as { attatchment_url?: string }
+                  ).attatchment_url
                   : null,
               ) ||
               null,
@@ -805,11 +805,11 @@ export async function GET(req: NextRequest) {
           : ((levelsByDivision[draftDivId] || [])[0] ?? myLevel),
         my_vote: myVote
           ? {
-              status: String(myVote.status ?? ""),
-              remarks: myVote.remarks ? String(myVote.remarks) : null,
-              created_at: String(myVote.created_at ?? ""),
-              version: Number(myVote.version),
-            }
+            status: String(myVote.status ?? ""),
+            remarks: myVote.remarks ? String(myVote.remarks) : null,
+            created_at: String(myVote.created_at ?? ""),
+            version: Number(myVote.version),
+          }
           : null,
         can_vote:
           (levelsByDivision[draftDivId] || []).includes(currentTier) && !myVote,
@@ -823,8 +823,8 @@ export async function GET(req: NextRequest) {
       const divisionDraftQueries = myDivisionIds.map((divId) =>
         directusFetch(
           `/items/disbursement_draft?filter[division_id][_eq]=${divId}` +
-            `&fields=id,doc_no,payee,total_amount,remarks,status,approval_version,transaction_date,date_created,encoder_id,division_id,transaction_type` +
-            `&sort=-id&limit=-1`,
+          `&fields=id,doc_no,payee,total_amount,remarks,status,approval_version,transaction_date,date_created,encoder_id,division_id,transaction_type` +
+          `&sort=-id&limit=-1`,
         ),
       );
       const draftResults = await Promise.all(divisionDraftQueries);
@@ -974,13 +974,13 @@ export async function GET(req: NextRequest) {
             payee_name:
               Number(d.transaction_type) === 2
                 ? userMap[Number(d.encoder_id)] ||
-                  userMap[Number(d.payee)] ||
-                  supplierMap[Number(d.payee)] ||
-                  `Salesman #${d.encoder_id || d.payee || "?"}`
+                userMap[Number(d.payee)] ||
+                supplierMap[Number(d.payee)] ||
+                `Salesman #${d.encoder_id || d.payee || "?"}`
                 : supplierMap[Number(d.payee)] ||
-                  userMap[Number(d.payee)] ||
-                  userMap[Number(d.encoder_id)] ||
-                  `Unknown Payee`,
+                userMap[Number(d.payee)] ||
+                userMap[Number(d.encoder_id)] ||
+                `Unknown Payee`,
             encoder_name:
               userMap[Number(d.encoder_id)] || `User #${d.encoder_id}`,
             total_amount: d.total_amount,
@@ -1489,7 +1489,7 @@ export async function POST(req: NextRequest) {
 
         const liveId = Number(
           (liveDisbRes.data as { data?: Record<string, unknown> })?.data?.id ??
-            0,
+          0,
         );
         if (!liveId)
           return json(

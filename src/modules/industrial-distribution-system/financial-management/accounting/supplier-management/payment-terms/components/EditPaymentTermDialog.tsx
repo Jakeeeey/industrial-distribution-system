@@ -74,7 +74,7 @@ export function EditPaymentTermDialog({
   async function onSubmit(values: FormValues) {
     try {
       setIsSubmitting(true);
-      const response = await fetch(`/api/fm/accounting/supplier-management/payment-terms/${term.id}`, {
+      const response = await fetch(`/api/ids/fm/accounting/supplier-management/payment-terms/${term.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(values),
@@ -123,7 +123,7 @@ export function EditPaymentTermDialog({
                 <FormItem>
                   <FormLabel>Description</FormLabel>
                   <FormControl>
-                    <Textarea 
+                    <Textarea
                       placeholder="Optional description..."
                       className="min-h-24 max-h-48 resize-y overflow-y-auto [field-sizing:fixed]"
                       {...field}

@@ -2,7 +2,7 @@
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-export const API_BASE = "/api/fm/accounting/supplier-debit-memo";
+export const API_BASE = "/api/ids/fm/accounting/supplier-debit-memo";
 
 export const MEMO_STATUSES: string[] = ["Available", "Applied"];
 

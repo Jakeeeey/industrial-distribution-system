@@ -1,4 +1,4 @@
-// src/app/api/fm/reports/tax-calendar/route.ts
+// src/app/api/ids/fm/reports/tax-calendar/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { randomUUID } from 'crypto';
@@ -6,16 +6,16 @@ import { randomUUID } from 'crypto';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const DIRECTUS_URL   = process.env.NEXT_PUBLIC_API_BASE_URL;
+const DIRECTUS_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 const DIRECTUS_TOKEN = process.env.DIRECTUS_STATIC_TOKEN;
-const COOKIE_NAME    = 'vos_access_token';
+const COOKIE_NAME = 'vos_access_token';
 
-// ─── GET /api/fm/reports/tax-calendar ─────────────────────────────────────────
+// ─── GET /api/ids/fm/reports/tax-calendar ─────────────────────────────────────────
 // Prefix with _ to signal intentionally unused (satisfies @typescript-eslint/no-unused-vars)
 // Prefix with _ to signal intentionally unused (satisfies @typescript-eslint/no-unused-vars)
 export async function GET() {
   const cookieStore = await cookies();
-  const token       = cookieStore.get(COOKIE_NAME)?.value;
+  const token = cookieStore.get(COOKIE_NAME)?.value;
   if (!token) {
     return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
   }
@@ -40,10 +40,10 @@ export async function GET() {
   }
 }
 
-// ─── POST /api/fm/reports/tax-calendar ────────────────────────────────────────
+// ─── POST /api/ids/fm/reports/tax-calendar ────────────────────────────────────────
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies();
-  const token       = cookieStore.get(COOKIE_NAME)?.value;
+  const token = cookieStore.get(COOKIE_NAME)?.value;
   if (!token) return NextResponse.json({ ok: false, message: 'Unauthorized' }, { status: 401 });
 
   try {
@@ -55,9 +55,9 @@ export async function POST(request: NextRequest) {
     }
 
     const res = await fetch(`${DIRECTUS_URL}/items/tax_activities`, {
-      method:  'POST',
+      method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${DIRECTUS_TOKEN}` },
-      body:    JSON.stringify({
+      body: JSON.stringify({
         id: randomUUID(),
         title,
         description: description || null,
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
     const json = await res.json() as Record<string, unknown>;
     if (!res.ok) {
       const errors = json?.errors as Record<string, unknown>[] | undefined;
-      const msg    = errors?.[0]?.message ? String(errors[0].message) : 'Failed to create';
+      const msg = errors?.[0]?.message ? String(errors[0].message) : 'Failed to create';
       return NextResponse.json({ ok: false, message: msg }, { status: res.status });
     }
 

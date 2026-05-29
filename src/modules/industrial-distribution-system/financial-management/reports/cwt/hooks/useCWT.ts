@@ -28,10 +28,10 @@ export function useCWT(): UseCWTResult {
         // Pass a wide range so all historical records are returned from the backend
         const params = new URLSearchParams({
           startDate: '2020-01-01',
-          endDate:   new Date().toISOString().split('T')[0],
+          endDate: new Date().toISOString().split('T')[0],
         });
 
-        const res = await fetch(`/api/fm/reports/cwt?${params}`, { credentials: 'include' });
+        const res = await fetch(`/api/ids/fm/reports/cwt?${params}`, { credentials: 'include' });
         const contentType = res.headers.get('content-type');
         if (!contentType?.includes('application/json')) {
           throw new TypeError('Backend returned HTML instead of JSON. Check the API path.');

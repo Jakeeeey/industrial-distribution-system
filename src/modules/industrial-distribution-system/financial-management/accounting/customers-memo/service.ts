@@ -11,7 +11,7 @@ import {
   DetailedMemo,
 } from "./types";
 
-const API_BASE = "/api/fm/accounting/customer-credit-memo/customers-memo";
+const API_BASE = "/api/ids/fm/accounting/customer-credit-memo/customers-memo";
 
 export async function fetchSuppliers(): Promise<Supplier[]> {
   const res = await fetch(`${API_BASE}?action=suppliers`);

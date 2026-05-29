@@ -1,6 +1,6 @@
 // src/modules/user-expense-limit/utils/index.ts
 
-export const API_BASE = "/api/fm/treasury/budgeting/user-expense-limit";
+export const API_BASE = "/api/ids/fm/treasury/budgeting/user-expense-limit";
 
 export function formatPeso(amount: number | string): string {
   return `₱${Number(amount).toLocaleString("en-PH", {

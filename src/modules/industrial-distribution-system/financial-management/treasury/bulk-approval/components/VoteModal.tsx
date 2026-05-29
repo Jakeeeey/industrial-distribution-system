@@ -291,13 +291,13 @@ export default function VoteModal({
                 </span>
                 {(currentTotalAmount !== Number(draft.total_amount) ||
                   isAnyItemModified) && (
-                  <Badge
-                    variant="secondary"
-                    className="h-5 px-1.5 bg-amber-500/10 text-amber-600 border-none uppercase font-black text-[9px] tracking-tighter align-top"
-                  >
-                    MODIFIED
-                  </Badge>
-                )}
+                    <Badge
+                      variant="secondary"
+                      className="h-5 px-1.5 bg-amber-500/10 text-amber-600 border-none uppercase font-black text-[9px] tracking-tighter align-top"
+                    >
+                      MODIFIED
+                    </Badge>
+                  )}
               </div>
             </div>
           </div>
@@ -484,12 +484,12 @@ export default function VoteModal({
                                       </span>
                                       {Number(p.amount) !==
                                         Number(originalAmount) && (
-                                        <span className="text-[8px] line-through text-muted-foreground/30 tabular-nums">
-                                          {formatCurrency(
-                                            Number(originalAmount),
-                                          )}
-                                        </span>
-                                      )}
+                                          <span className="text-[8px] line-through text-muted-foreground/30 tabular-nums">
+                                            {formatCurrency(
+                                              Number(originalAmount),
+                                            )}
+                                          </span>
+                                        )}
                                     </div>
                                   )}
                                 </td>
@@ -507,7 +507,7 @@ export default function VoteModal({
                                             onClick={(e) => {
                                               e.stopPropagation();
                                               setPreviewUrl(
-                                                `/api/fm/expense-assets?id=${p.attachment_url}`,
+                                                `/api/ids/fm/expense-assets?id=${p.attachment_url}`,
                                               );
                                             }}
                                             className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-primary/5 text-primary hover:bg-primary hover:text-white transition-all shadow-sm border border-primary/10"
@@ -730,11 +730,10 @@ export default function VoteModal({
               {my_vote && (
                 <div
                   className={`flex items-center gap-3 p-3 rounded-xl mb-3 border-2 font-bold text-xs shadow-sm
-                  ${
-                    my_vote.status === "APPROVED"
+                  ${my_vote.status === "APPROVED"
                       ? "bg-emerald-50 border-emerald-100 text-emerald-800"
                       : "bg-red-50 border-red-100 text-red-800"
-                  }`}
+                    }`}
                 >
                   <div
                     className={`h-8 w-8 rounded-lg flex items-center justify-center
@@ -805,11 +804,10 @@ export default function VoteModal({
                     <div className="space-y-3 animate-in fade-in zoom-in-95 duration-300">
                       <div
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest
-                        ${
-                          confirmAction === "APPROVED"
+                        ${confirmAction === "APPROVED"
                             ? "bg-emerald-600 text-white shadow-md"
                             : "bg-red-600 text-white shadow-md"
-                        }`}
+                          }`}
                       >
                         {confirmAction === "APPROVED" ? (
                           <CheckCircle2 className="h-4 w-4" />
@@ -872,10 +870,9 @@ export default function VoteModal({
                       <div className="flex gap-2">
                         <Button
                           className={`flex-1 h-11 rounded-xl font-black text-sm gap-2 shadow-lg transition-all border-b-2
-                            ${
-                              confirmAction === "APPROVED"
-                                ? "bg-emerald-700 hover:bg-emerald-800 text-white border-emerald-900"
-                                : "bg-red-700 hover:bg-red-800 text-white border-red-900"
+                            ${confirmAction === "APPROVED"
+                              ? "bg-emerald-700 hover:bg-emerald-800 text-white border-emerald-900"
+                              : "bg-red-700 hover:bg-red-800 text-white border-red-900"
                             }`}
                           onClick={handleVote}
                           disabled={

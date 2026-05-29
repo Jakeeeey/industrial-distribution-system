@@ -64,7 +64,7 @@ type SupplierRepApiRow = {
 ========================= */
 
 export async function searchSuppliers(q: string, signal?: AbortSignal): Promise<PickItem[]> {
-    const url = `/api/fm/accounting/claims/generate-transmitter/suppliers-search?q=${encodeURIComponent(q)}`;
+    const url = `/api/ids/fm/accounting/claims/generate-transmitter/suppliers-search?q=${encodeURIComponent(q)}`;
 
     const json = await getJson<{ data?: unknown }>(url, signal);
     const list = Array.isArray(json.data) ? json.data : [];
@@ -92,7 +92,7 @@ export async function searchSupplierRepresentatives(
     const term = String(q ?? "").trim();
 
     const base =
-        `/api/fm/accounting/claims/generate-transmitter/supplier-representatives` +
+        `/api/ids/fm/accounting/claims/generate-transmitter/supplier-representatives` +
         `?supplier_id=${encodeURIComponent(String(supplierId))}`;
 
     // attach q only when typed
@@ -120,7 +120,7 @@ export async function fetchAvailableCCMsBySupplier(
     supplierId: number,
     signal?: AbortSignal
 ): Promise<CCMRow[]> {
-    const url = `/api/fm/accounting/claims/generate-transmitter/ccm-available?supplier_id=${encodeURIComponent(
+    const url = `/api/ids/fm/accounting/claims/generate-transmitter/ccm-available?supplier_id=${encodeURIComponent(
         String(supplierId)
     )}`;
 
@@ -137,7 +137,7 @@ export async function createTransmittal(payload: {
     customer_memo_ids: number[];
 }): Promise<CreateTransmittalResult> {
     const json = await postJson<{ data?: unknown }>(
-        "/api/fm/accounting/claims/generate-transmitter/transmittals",
+        "/api/ids/fm/accounting/claims/generate-transmitter/transmittals",
         payload
     );
 

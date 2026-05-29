@@ -62,7 +62,7 @@ export default function SettlementMasterList() {
         const fetchSettlementQueue = async () => {
             setIsLoading(true);
             try {
-                const data = await fetchProvider.get<SettlementQueueItem[]>("/api/fm/treasury/collections/settlement-queue");
+                const data = await fetchProvider.get<SettlementQueueItem[]>("/api/ids/fm/treasury/collections/settlement-queue");
                 setCollections(data || []);
             } catch (error: unknown) {
                 console.error("Fetch Error:", error instanceof Error ? error.message : "Unknown error");
@@ -159,11 +159,11 @@ export default function SettlementMasterList() {
                     </div>
                     <div className="flex flex-col px-4 border-r border-border/50">
                         <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Total Pouch Value</span>
-                        <span className="text-lg font-mono font-black text-primary">₱{stats.totalFloat.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                        <span className="text-lg font-mono font-black text-primary">₱{stats.totalFloat.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                     </div>
                     <div className="flex flex-col pl-4 pr-2">
                         <span className="text-[10px] font-black uppercase text-orange-600 tracking-widest">Unsettled Float</span>
-                        <span className="text-lg font-mono font-black text-orange-600">₱{stats.unsettledFloat.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                        <span className="text-lg font-mono font-black text-orange-600">₱{stats.unsettledFloat.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                     </div>
                 </div>
             </div>
@@ -225,7 +225,7 @@ export default function SettlementMasterList() {
                     setDateRangeMode("all");
                     setActiveOperationTab("All");
                 }} className="h-10 w-10 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors" title="Clear Filters">
-                    <FilterX size={18}/>
+                    <FilterX size={18} />
                 </Button>
             </div>
 
@@ -239,11 +239,10 @@ export default function SettlementMasterList() {
 
                     <button
                         onClick={() => setActiveOperationTab("All")}
-                        className={`px-4 py-1.5 rounded-full text-[11px] font-black tracking-wider transition-all border ${
-                            activeOperationTab === "All"
+                        className={`px-4 py-1.5 rounded-full text-[11px] font-black tracking-wider transition-all border ${activeOperationTab === "All"
                                 ? 'bg-primary text-primary-foreground border-primary shadow-md scale-105'
                                 : 'bg-background hover:bg-muted text-muted-foreground border-border hover:border-foreground/20'
-                        }`}
+                            }`}
                     >
                         All ({collections.length})
                     </button>
@@ -254,11 +253,10 @@ export default function SettlementMasterList() {
                             <button
                                 key={operation}
                                 onClick={() => setActiveOperationTab(operation)}
-                                className={`px-4 py-1.5 rounded-full text-[11px] font-black tracking-wider transition-all border whitespace-nowrap ${
-                                    activeOperationTab === operation
+                                className={`px-4 py-1.5 rounded-full text-[11px] font-black tracking-wider transition-all border whitespace-nowrap ${activeOperationTab === operation
                                         ? 'bg-primary text-primary-foreground border-primary shadow-md scale-105'
                                         : 'bg-background hover:bg-muted text-muted-foreground border-border hover:border-foreground/20'
-                                }`}
+                                    }`}
                             >
                                 {operation} ({count})
                             </button>
@@ -308,16 +306,16 @@ export default function SettlementMasterList() {
 
                                 let statusColor = "bg-slate-100 text-slate-600 border-slate-200";
                                 let rowBg = "hover:bg-muted/50";
-                                let icon = <Hourglass size={12} className="mr-1.5"/>;
+                                let icon = <Hourglass size={12} className="mr-1.5" />;
 
                                 if (status === "Balanced") {
                                     statusColor = "bg-emerald-100 text-emerald-700 border-emerald-300 shadow-[inset_0_1px_2px_rgba(0,0,0,0.05)]";
                                     rowBg = "bg-emerald-50/20 hover:bg-emerald-50/50 dark:bg-emerald-950/10 dark:hover:bg-emerald-950/20";
-                                    icon = <CheckCircle2 size={12} className="mr-1.5 text-emerald-600" strokeWidth={3}/>;
+                                    icon = <CheckCircle2 size={12} className="mr-1.5 text-emerald-600" strokeWidth={3} />;
                                 } else if (status === "In Progress") {
                                     statusColor = "bg-orange-100 text-orange-700 border-orange-300";
                                     rowBg = "bg-orange-50/20 hover:bg-orange-50/50 dark:bg-orange-950/10 dark:hover:bg-orange-950/20";
-                                    icon = <Loader2 size={12} className="mr-1.5 animate-spin text-orange-600" strokeWidth={3}/>;
+                                    icon = <Loader2 size={12} className="mr-1.5 animate-spin text-orange-600" strokeWidth={3} />;
                                 }
 
                                 return (
@@ -343,18 +341,18 @@ export default function SettlementMasterList() {
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <span className="font-mono font-bold text-muted-foreground text-xs">₱</span>
-                                            <span className="font-mono font-black text-sm text-foreground">{pouchTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                                            <span className="font-mono font-black text-sm text-foreground">{pouchTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                         </TableCell>
                                         <TableCell className="text-right pr-10">
                                             <span className={`font-mono font-bold text-xs ${status === 'Balanced' ? 'text-emerald-600/70' : 'text-orange-600/70'}`}>₱</span>
                                             <span className={`font-mono font-black text-sm ${status === 'Balanced' ? 'text-emerald-600' : 'text-orange-600'}`}>
-                                                {remaining.toLocaleString(undefined, {minimumFractionDigits: 2})}
+                                                {remaining.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                             </span>
                                         </TableCell>
                                         <TableCell className="pr-6">
                                             <div className="flex justify-end opacity-0 group-hover:opacity-100 transition-opacity translate-x-4 group-hover:translate-x-0 duration-200">
                                                 <Button size="icon" variant="ghost" className={`h-8 w-8 rounded-full ${status === 'Balanced' ? 'text-emerald-600 hover:bg-emerald-100' : 'text-primary hover:bg-primary/10'}`}>
-                                                    <ChevronRight size={16} strokeWidth={3}/>
+                                                    <ChevronRight size={16} strokeWidth={3} />
                                                 </Button>
                                             </div>
                                         </TableCell>

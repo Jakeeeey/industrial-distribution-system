@@ -23,20 +23,20 @@ async function http<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export async function listDiscountTypes(): Promise<DiscountTypeRow[]> {
-  const res = await http<{ success: boolean; data: DiscountTypeRow[] }>("/api/fm/file-management/discount/discount-type");
+  const res = await http<{ success: boolean; data: DiscountTypeRow[] }>("/api/ids/fm/file-management/discount/discount-type");
   return res.data ?? [];
 }
 
 export async function listLineDiscounts(): Promise<LineDiscountRow[]> {
   const res = await http<{ success: boolean; data: LineDiscountRow[] }>(
-    "/api/fm/file-management/discount/discount-type?resource=line-discounts",
+    "/api/ids/fm/file-management/discount/discount-type?resource=line-discounts",
   );
   return res.data ?? [];
 }
 
 export async function createDiscountType(payload: DiscountTypeUpsert): Promise<void> {
   // ✅ MUST include line_ids so API can write line_per_discount_type rows
-  await http("/api/fm/file-management/discount/discount-type", {
+  await http("/api/ids/fm/file-management/discount/discount-type", {
     method: "POST",
     body: JSON.stringify({
       discount_type: payload.discount_type,
@@ -46,7 +46,7 @@ export async function createDiscountType(payload: DiscountTypeUpsert): Promise<v
 }
 
 export async function updateDiscountType(payload: DiscountTypeUpsert): Promise<void> {
-  await http("/api/fm/file-management/discount/discount-type", {
+  await http("/api/ids/fm/file-management/discount/discount-type", {
     method: "PUT",
     body: JSON.stringify({
       id: payload.id,
@@ -57,7 +57,7 @@ export async function updateDiscountType(payload: DiscountTypeUpsert): Promise<v
 }
 
 export async function deleteDiscountType(id: number): Promise<void> {
-  await http(`/api/fm/file-management/discount/discount-type?id=${encodeURIComponent(String(id))}`, {
+  await http(`/api/ids/fm/file-management/discount/discount-type?id=${encodeURIComponent(String(id))}`, {
     method: "DELETE",
   });
 }

@@ -87,7 +87,7 @@ export async function fetchForReceivingTransmittals(
   if (args.q) sp.set("q", args.q);
   if (args.supplier_id) sp.set("supplier_id", String(args.supplier_id));
 
-  const url = `/api/fm/accounting/claims/for-receiving/transmittal-send-to-payment?${sp.toString()}`;
+  const url = `/api/ids/fm/accounting/claims/for-receiving/transmittal-send-to-payment?${sp.toString()}`;
   const json = await getJson<{ data: TransmittalRow[] }>(url, signal);
   return json.data ?? [];
 }
@@ -100,7 +100,7 @@ export async function fetchTransmittalDetails(
   transmittalId: number,
   signal?: AbortSignal,
 ): Promise<TransmittalDetailRow[]> {
-  const url = `/api/fm/accounting/claims/for-receiving/transmit-details?transmittal_id=${encodeURIComponent(
+  const url = `/api/ids/fm/accounting/claims/for-receiving/transmit-details?transmittal_id=${encodeURIComponent(
     String(transmittalId),
   )}`;
   const json = await getJson<{ data: TransmittalDetailRow[] }>(url, signal);
@@ -115,7 +115,7 @@ export async function removeDetailLine(
   detail_id: number,
   signal?: AbortSignal,
 ): Promise<{ ok: boolean }> {
-  const url = `/api/fm/accounting/claims/for-receiving/transmittal-receive-line?detail_id=${encodeURIComponent(
+  const url = `/api/ids/fm/accounting/claims/for-receiving/transmittal-receive-line?detail_id=${encodeURIComponent(
     String(detail_id),
   )}`;
   const json = await deleteJson<{ data?: { ok: boolean } }>(url, signal);
@@ -131,7 +131,7 @@ export async function sendTransmittalToPayment(
   signal?: AbortSignal,
 ): Promise<{ ok: boolean }> {
   const json = await postJson<{ data: { ok: boolean } }>(
-    "/api/fm/accounting/claims/for-receiving/transmittal-send-to-payment",
+    "/api/ids/fm/accounting/claims/for-receiving/transmittal-send-to-payment",
     { transmittal_id },
     signal,
   );
@@ -162,7 +162,7 @@ export async function fetchAvailableCCMs(
   if (args.excludeIds?.length)
     params.set("exclude_ids", args.excludeIds.join(","));
 
-  const url = `/api/fm/accounting/claims/for-receiving/ccm?${params.toString()}`;
+  const url = `/api/ids/fm/accounting/claims/for-receiving/ccm?${params.toString()}`;
 
   type AvailableCCM = {
     id: number;
@@ -188,7 +188,7 @@ export async function addCCMsToTransmittal(
   signal?: AbortSignal,
 ): Promise<void> {
   await postJson<unknown>(
-    "/api/fm/accounting/claims/for-receiving/transmit-details",
+    "/api/ids/fm/accounting/claims/for-receiving/transmit-details",
     {
       claims_transmittal_id: transmittalId,
       customer_memo_ids: customerMemoIds,
@@ -210,7 +210,7 @@ export async function markDetailReceived(
   signal?: AbortSignal,
 ): Promise<{ ok: boolean; remaining: number }> {
   const json = await postJson<{ data: { ok: boolean; remaining: number } }>(
-    "/api/fm/accounting/claims/for-receiving/transmittal-receive-line",
+    "/api/ids/fm/accounting/claims/for-receiving/transmittal-receive-line",
     payload,
     signal,
   );
