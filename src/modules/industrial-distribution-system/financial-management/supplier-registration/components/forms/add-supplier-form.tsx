@@ -125,7 +125,7 @@ export function AddSupplierForm({ onSuccess, onCancel }: AddSupplierFormProps) {
         formData.append("folder_name", "supplier_profile_image");
 
         const uploadRes = await fetch(
-          "/api/supplier-registration/supplier-image-upload",
+          "/api/ids/supplier-registration/supplier-image-upload",
           {
             method: "POST",
             body: formData,
@@ -141,7 +141,7 @@ export function AddSupplierForm({ onSuccess, onCancel }: AddSupplierFormProps) {
         imageId = uploadResult.data?.id || "";
       }
 
-      const response = await fetch("/api/supplier-registration/suppliers", {
+      const response = await fetch("/api/ids/supplier-registration/suppliers", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -589,11 +589,10 @@ export function AddSupplierForm({ onSuccess, onCancel }: AddSupplierFormProps) {
                       setIsDragging(true);
                     }}
                     onDragLeave={() => setIsDragging(false)}
-                    className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 cursor-pointer transition-colors ${
-                      isDragging
-                        ? "border-primary bg-primary/5"
-                        : "border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/50"
-                    }`}
+                    className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 cursor-pointer transition-colors ${isDragging
+                      ? "border-primary bg-primary/5"
+                      : "border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/50"
+                      }`}
                   >
                     {imagePreview ? (
                       <div className="relative">
