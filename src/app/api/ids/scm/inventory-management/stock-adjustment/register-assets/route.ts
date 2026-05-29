@@ -16,7 +16,7 @@ export async function POST(req: Request) {
       throw new Error("Directus configuration missing");
     }
 
-    const url = `${directusBase.replace(/\/$/, "")}/items/cylinder_assets`;
+    const url = `${directusBase.replace(/\/$/, "")}/items/cylinder_assets_draft`;
 
     const res = await fetch(url, {
       method: "POST",

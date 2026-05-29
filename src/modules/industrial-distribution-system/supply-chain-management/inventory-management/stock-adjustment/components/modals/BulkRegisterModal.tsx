@@ -29,6 +29,10 @@ interface BulkRegisterModalProps {
   serials: string[];
   productId: number;
   branchId: number;
+  /** The product's Unit of Measure name (e.g. "EMPTY" or "FULL"). Used to
+   *  determine draft cylinder_status: EMPTY UOM → "EMPTY", all others → "AVAILABLE"
+   *  ("FULL" is not a valid enum in cylinder_assets_draft so it maps to AVAILABLE). */
+  unitName?: string;
   onSuccess: () => void;
 }
 
@@ -45,6 +49,7 @@ export function BulkRegisterModal({
   serials,
   productId,
   branchId,
+  unitName,
   onSuccess,
 }: BulkRegisterModalProps) {
   const [data, setData] = useState<RegisterData[]>([]);
@@ -81,14 +86,34 @@ export function BulkRegisterModal({
   };
 
   const handleRegister = async () => {
+    const parsedBranchId = branchId ? Number(branchId) : 0;
+    const parsedProductId = productId ? Number(productId) : 0;
+
+    if (!parsedBranchId) {
+      toast.error("Branch is required for cylinder registration. Please select a branch first.");
+      return;
+    }
+
+    if (!parsedProductId) {
+      toast.error("Product is required for cylinder registration.");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
+      // Draft status mapping:
+      //   EMPTY UOM → "EMPTY"  (valid enum value in cylinder_assets_draft)
+      //   FULL UOM  → "AVAILABLE" ("FULL" is not in the draft enum; correct status
+      //                            is applied on post via stock-adjustment-service)
+      const isEmptyUom = unitName?.trim().toUpperCase() === "EMPTY";
+      const draftStatus = isEmptyUom ? "EMPTY" : "AVAILABLE";
+
       const payload = data.map((item) => ({
-        product_id: productId,
+        product_id: parsedProductId,
         serial_number: item.serial,
-        cylinder_status: "AVAILABLE",
+        cylinder_status: draftStatus,
         cylinder_condition: item.condition,
-        current_branch_id: branchId,
+        current_branch_id: parsedBranchId,
         expiration_date: item.expiration || null,
         tare_weight: item.tare || "0.00",
       }));
@@ -99,7 +124,7 @@ export function BulkRegisterModal({
         body: JSON.stringify({ assets: payload }),
       });
 
-      const result = await res.json();
+      const result = await res.json().catch(() => ({ error: `Server error ${res.status}` }));
       if (!res.ok) throw new Error(result.error || "Failed to register assets");
 
       toast.success(`Successfully registered ${serials.length} cylinders`);
