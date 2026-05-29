@@ -1,3 +1,4 @@
+// src/app/api/ids/arf/inventory-management/physical-inventory/serial-onhand/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -5,9 +6,13 @@ export const dynamic = "force-dynamic";
 
 const SPRING_API_BASE_URL = process.env.SPRING_API_BASE_URL;
 const COOKIE_NAME = "vos_access_token";
+const AUTH_DISABLED = process.env.NEXT_PUBLIC_AUTH_DISABLED === "true";
 
 type SpringSerialOnhandRow = {
+    id?: number;
     productId: number;
+    branchId?: number;
+    serialNumber?: string;
 };
 
 type SerialOnhandResult = {
@@ -17,6 +22,7 @@ type SerialOnhandResult = {
 };
 
 function toProductItem(payload: unknown): SpringSerialOnhandRow | null {
+    // Spring returns a single object: { id, productId, branchId, serialNumber }
     if (Array.isArray(payload) && payload.length > 0) {
         const first = payload[0];
         if (
@@ -25,9 +31,7 @@ function toProductItem(payload: unknown): SpringSerialOnhandRow | null {
             "productId" in first &&
             Number.isFinite(Number((first as { productId: unknown }).productId))
         ) {
-            return {
-                productId: Number((first as { productId: unknown }).productId),
-            };
+            return first as SpringSerialOnhandRow;
         }
     }
 
@@ -37,9 +41,7 @@ function toProductItem(payload: unknown): SpringSerialOnhandRow | null {
         "productId" in payload &&
         Number.isFinite(Number((payload as { productId: unknown }).productId))
     ) {
-        return {
-            productId: Number((payload as { productId: unknown }).productId),
-        };
+        return payload as SpringSerialOnhandRow;
     }
 
     return null;
@@ -48,7 +50,8 @@ function toProductItem(payload: unknown): SpringSerialOnhandRow | null {
 export async function GET(req: NextRequest): Promise<NextResponse> {
     const token = req.cookies.get(COOKIE_NAME)?.value;
 
-    if (!token) {
+    // When auth is disabled (dev mode), skip the token check
+    if (!AUTH_DISABLED && !token) {
         return NextResponse.json(
             { ok: false, message: "Unauthorized: Missing access token" },
             { status: 401 },
@@ -81,6 +84,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
             );
         }
 
+        // Correct Spring Boot endpoint: /api/v-serial-onhand/filter?serialNumber=...&branchId=...
         const targetUrl = new URL(
             `${SPRING_API_BASE_URL.replace(/\/$/, "")}/api/v-serial-onhand/filter`,
         );
@@ -88,12 +92,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         targetUrl.searchParams.set("serialNumber", serial);
         targetUrl.searchParams.set("branchId", branchId);
 
+        const headers: Record<string, string> = {
+            Accept: "application/json",
+        };
+
+        if (token) {
+            headers["Authorization"] = `Bearer ${token}`;
+            headers["Cookie"] = `vos_access_token=${token}`;
+        }
+
         const springRes = await fetch(targetUrl.toString(), {
             method: "GET",
-            headers: {
-                Authorization: `Bearer ${token}`,
-                Accept: "application/json",
-            },
+            headers,
             cache: "no-store",
         });
 
@@ -109,7 +119,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
             });
         }
 
-        const parsed: unknown = text ? JSON.parse(text) : [];
+        const parsed: unknown = text ? JSON.parse(text) : null;
         const item = toProductItem(parsed);
 
         const result: SerialOnhandResult = {

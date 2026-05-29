@@ -16,6 +16,7 @@ type Props = {
     serials: string[];
     productId: number | null;
     branchId: number | null;
+    uomName: string | null;
     onOpenChange: (open: boolean) => void;
     onSuccess: (serials: string[]) => void;
     onClear?: () => void;
@@ -23,7 +24,7 @@ type Props = {
 };
 
 export function RegisterCylinderAssetModal(props: Props) {
-    const { open, serials, productId, branchId, onOpenChange, onSuccess, onClear, onRemoveRow } = props;
+    const { open, serials, productId, branchId, uomName, onOpenChange, onSuccess, onClear, onRemoveRow } = props;
 
     // individual row states
     const [rows, setRows] = React.useState<Record<string, {
@@ -133,12 +134,16 @@ export function RegisterCylinderAssetModal(props: Props) {
         try {
             setIsSaving(true);
             
+            // Derive status from UOM: EMPTY products are registered as EMPTY cylinders
+            const resolvedStatus: CylinderAssetUpsertPayload["cylinder_status"] =
+                uomName?.toUpperCase() === "EMPTY" ? "EMPTY" : "AVAILABLE";
+
             const payloads: CylinderAssetUpsertPayload[] = serials.map((serial) => {
                 const data = rows[serial];
                 return {
                     product_id: productId,
                     serial_number: serial,
-                    cylinder_status: "AVAILABLE",
+                    cylinder_status: resolvedStatus,
                     cylinder_condition: data?.condition ?? "GOOD",
                     current_branch_id: branchId,
                     expiration_date: data?.expirationDate ? data.expirationDate : null,
