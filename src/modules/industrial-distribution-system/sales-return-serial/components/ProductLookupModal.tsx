@@ -411,7 +411,7 @@ export function ProductLookupModal({
       <DialogContent
         className={cn(
           "flex flex-col p-0 overflow-hidden bg-background border-0 shadow-2xl [&>button]:hidden",
-          "h-[90vh] w-[95vw] max-w-[1400px]! z-200",
+          "h-[90vh] w-[95vw] max-w-[1400px]! z-200 overflow-hidden",
         )}
       >
         {/* --- HEADER --- */}
@@ -443,12 +443,12 @@ export function ProductLookupModal({
         </div>
 
         {/* --- CONTENT BODY --- */}
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-col lg:flex-row flex-1 overflow-y-auto lg:overflow-hidden">
           {/* LEFT PANEL: FILTERS & GRID */}
-          <div className="flex-1 flex flex-col bg-muted/50 min-w-0">
+          <div className="flex-1 flex flex-col bg-muted/50 min-w-0 h-fit lg:h-full lg:overflow-hidden">
             {/* Filter Section */}
             <div className="p-5 bg-background border-b border-border shadow-sm z-10 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 {/* 1. Product Name (FIRST) */}
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
@@ -642,7 +642,7 @@ export function ProductLookupModal({
             </div>
 
             {/* Scrollable Grid */}
-            <div className="flex-1 overflow-y-auto p-5 bg-muted/30">
+            <div className="p-5 bg-muted/30 lg:flex-1 lg:overflow-y-auto">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-5 pb-4">
                 {isLoading && (
                   <>
@@ -802,7 +802,7 @@ export function ProductLookupModal({
           </div>
 
           {/* RIGHT PANEL: SELECTED SUMMARY (SIDEBAR) */}
-          <div className="w-[380px] bg-background border-l border-border flex flex-col h-full shadow-2xl z-30">
+          <div className="w-full lg:w-[380px] h-fit lg:h-full bg-background border-t lg:border-t-0 lg:border-l border-border flex flex-col shadow-2xl z-30 shrink-0">
             {/* Sidebar Header */}
             <div className="p-5 border-b border-border bg-muted/30">
               <div className="flex justify-between items-end mb-1">

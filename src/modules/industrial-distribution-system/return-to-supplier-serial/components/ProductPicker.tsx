@@ -130,9 +130,9 @@ export function ProductPicker({
   if (!isVisible) return null;
 
   return (
-    <div className="flex h-full w-full bg-muted/20 overflow-hidden">
+    <div className="flex flex-col lg:flex-row h-full w-full bg-muted/20 overflow-hidden">
       {/* LEFT SIDE: BROWSE PRODUCTS */}
-      <div className="flex-1 flex flex-col h-full min-h-0 border-r bg-muted/20">
+      <div className="flex-1 flex flex-col h-full min-h-0 border-b lg:border-b-0 lg:border-r bg-muted/20">
         {/* Search Header */}
         <div className="p-6 bg-background border-b shrink-0 z-10">
           <div className="flex justify-between items-center mb-4">
@@ -290,7 +290,7 @@ export function ProductPicker({
       </div>
 
       {/* RIGHT SIDE: SELECTED ITEMS (CART) */}
-      <div className="w-[400px] bg-card flex flex-col h-full min-h-0 max-h-full overflow-hidden shadow-xl z-20 border-l">
+      <div className="w-full lg:w-[400px] h-[320px] lg:h-full bg-card flex flex-col min-h-0 max-h-full overflow-hidden shadow-xl z-20 border-t lg:border-t-0 lg:border-l">
         <div className="p-5 border-b flex justify-between items-center bg-card shrink-0">
           <div className="flex items-center gap-2 font-bold text-sm uppercase tracking-wide">
             <span className="h-2 w-2 rounded-full bg-primary"></span>

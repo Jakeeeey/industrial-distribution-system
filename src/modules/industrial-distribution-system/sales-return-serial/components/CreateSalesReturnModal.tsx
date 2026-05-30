@@ -772,7 +772,7 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
           <div className="bg-background p-5 rounded-lg border border-border shadow-sm relative">
             <div className="absolute top-0 left-0 w-1 h-full bg-primary rounded-l-lg"></div>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-5 gap-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-5 gap-y-4">
               <div className="space-y-1.5 relative" ref={salesmanWrapperRef}>
                 <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Salesman <span className="text-destructive">*</span></label>
                 {isLoadingForm ? (
@@ -828,7 +828,9 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
                 {isLoadingForm ? (
                   <div className="h-9 w-full bg-muted animate-pulse rounded-md border border-border"></div>
                 ) : (
-                  <div className="h-9 w-full bg-muted/20 border border-border rounded-md px-3 flex items-center text-sm font-medium text-foreground italic shadow-sm">{branchName || "-"}</div>
+                  <div className="h-9 w-full bg-muted/20 border border-border rounded-md px-3 flex items-center text-sm font-medium text-foreground italic shadow-sm overflow-hidden" title={branchName || "-"}>
+                    <span className="truncate">{branchName || "-"}</span>
+                  </div>
                 )}
               </div>
               <div className="space-y-1.5">
@@ -841,7 +843,9 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
               </div>
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Received Date</label>
-                <div className="h-9 w-full bg-muted/20 border border-border rounded-md px-3 flex items-center text-sm font-medium text-muted-foreground italic shadow-sm opacity-60">(Auto-generated)</div>
+                <div className="h-9 w-full bg-muted/20 border border-border rounded-md px-3 flex items-center text-sm font-medium text-muted-foreground italic shadow-sm opacity-60 overflow-hidden" title="Auto-generated">
+                  <span className="truncate">(Auto-generated)</span>
+                </div>
               </div>
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Price Type <span className="text-destructive">*</span></label>
@@ -856,7 +860,7 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
                   </Select>
                 )}
               </div>
-              <div className="flex items-center space-x-2 pt-2 col-span-2 lg:col-span-4 translate-y-2">
+              <div className="flex items-center space-x-2 pt-2 col-span-1 sm:col-span-2 lg:col-span-4 translate-y-2">
                 <Checkbox id="create-isThirdParty" checked={isThirdParty} onCheckedChange={c => setIsThirdParty(c as boolean)} className="data-[state=checked]:bg-primary border-border" />
                 <label htmlFor="create-isThirdParty" className="text-sm font-medium text-foreground cursor-pointer select-none">Third Party Transaction</label>
               </div>
@@ -935,9 +939,9 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
 
           {selectedRowIndex !== null && items[selectedRowIndex] && (
             <div className="bg-background rounded-lg border-2 border-primary/20 shadow-md p-5 mb-6 animate-in slide-in-from-bottom-4 duration-300">
-              <div className="flex justify-between items-center mb-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
                 <h4 className="font-bold text-foreground flex items-center gap-2 text-base"><div className="bg-emerald-500/10 p-1.5 rounded text-emerald-600"><ScanLine className="h-5 w-5" /></div>Serial Management for: <span className="text-primary underline decoration-primary/30 underline-offset-4">{items[selectedRowIndex].description}</span></h4>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
                   <SerialInputSection onAdd={(serial) => handleAddSerial(serial)} disabled={isValidatingSerial} />
                   <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 px-3 py-1 font-bold">{items[selectedRowIndex].serialNumbers?.length || 0} TOTAL</Badge>
                 </div>
