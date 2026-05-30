@@ -327,7 +327,7 @@ export function StockAdjustmentForm({
 
   // Serial State management
   const [showSerialInput, setShowSerialInput] = useState(false);
-  const [serialContext, setSerialContext] = useState<{ index: number; productName: string; productId: number } | null>(null);
+  const [serialContext, setSerialContext] = useState<{ index: number; productName: string; productId: number; unitName?: string } | null>(null);
 
   const form = useForm<StockAdjustmentFormValues>({
     mode: "all",
@@ -408,9 +408,9 @@ export function StockAdjustmentForm({
           form.reset({
             doc_no: data.doc_no,
             branch_id:
-              typeof data.branch_id === "object"
-                ? data.branch_id?.id
-                : (data.branch_id || 0),
+              data.branch_id && typeof data.branch_id === "object"
+                ? (data.branch_id as { id?: number; branch_id?: number }).id || (data.branch_id as { id?: number; branch_id?: number }).branch_id || 0
+                : (Number(data.branch_id) || 0),
             supplier_id: finalSupplierId,
             type: data.type,
             remarks: data.remarks || "",
@@ -637,7 +637,8 @@ export function StockAdjustmentForm({
       setSerialContext({
         index,
         productName: item.product_name,
-        productId: Number(item.product_id)
+        productId: Number(item.product_id),
+        unitName: item.unit_name || undefined
       });
       setShowSerialInput(true);
     }
@@ -1224,6 +1225,7 @@ export function StockAdjustmentForm({
           productId={serialContext.productId}
           validateSerial={validateSerialAvailability}
           excludeSerials={excludeSerialsList}
+          unitName={serialContext.unitName}
         />
       )}
 

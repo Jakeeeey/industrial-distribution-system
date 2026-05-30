@@ -220,8 +220,8 @@ export function useStockAdjustmentForm() {
         items: values.items,
       }),
     });
-    const result = await response.json();
-    if (result.error) throw new Error(result.error);
+    const result = await response.json().catch(() => ({ error: `Server error ${response.status}` }));
+    if (!response.ok || result.error) throw new Error(result.error || `Request failed (${response.status})`);
     return result.data;
   }, []);
 
@@ -245,8 +245,8 @@ export function useStockAdjustmentForm() {
         items: values.items,
       }),
     });
-    const result = await response.json();
-    if (result.error) throw new Error(result.error);
+    const result = await response.json().catch(() => ({ error: `Server error ${response.status}` }));
+    if (!response.ok || result.error) throw new Error(result.error || `Request failed (${response.status})`);
     return result.data;
   }, []);
 
@@ -254,8 +254,8 @@ export function useStockAdjustmentForm() {
     const response = await fetch(`/api/ids/scm/inventory-management/stock-adjustment/${id}/post`, {
       method: "POST",
     });
-    const result = await response.json();
-    if (result.error) throw new Error(result.error);
+    const result = await response.json().catch(() => ({ error: `Server error ${response.status}` }));
+    if (!response.ok || result.error) throw new Error(result.error || `Request failed (${response.status})`);
     return result.data;
   }, []);
 
