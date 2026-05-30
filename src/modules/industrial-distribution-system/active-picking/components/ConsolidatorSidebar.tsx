@@ -31,7 +31,8 @@ export function ConsolidatorSidebar() {
         fetchPickings, 
         activePickingId, 
         fetchDetails,
-        searchQuery
+        searchQuery,
+        branches
     } = useActivePickingContext();
     
     const [localSearch, setLocalSearch] = useState(searchQuery);
@@ -157,7 +158,9 @@ export function ConsolidatorSidebar() {
                                     </span>
                                 </div>
                                 <div className="text-[10px] text-muted-foreground flex justify-between items-center border-t pt-2 mt-1">
-                                    <span className="bg-muted px-1.5 py-0.5 rounded">Branch: {picking.branch_id}</span>
+                                    <span className="bg-muted px-1.5 py-0.5 rounded">
+                                        Branch: {branches.find(b => b.id === picking.branch_id)?.branch_name || picking.branch_id}
+                                    </span>
                                     <span className="font-mono">{picking.created_at ? formatToPHT(picking.created_at, "MMM dd, yyyy") : ''}</span>
                                 </div>
                             </Card>

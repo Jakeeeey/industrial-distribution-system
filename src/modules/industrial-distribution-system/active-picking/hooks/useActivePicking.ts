@@ -186,6 +186,7 @@ export function useActivePicking(userId: number | null = null) {
         fetchPickings,
         
         activePickingId,
+        setActivePickingId,
         details,
         isLoadingDetails,
         fetchDetails,

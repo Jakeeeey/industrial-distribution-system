@@ -16,10 +16,21 @@ import {
     RefreshCcw,
     Save,
     ClipboardList,
-    Plus
+    Plus,
+    ArrowLeft
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export function PickingWorkbench() {
     const {
@@ -33,11 +44,14 @@ export function PickingWorkbench() {
         isLoadingSerials,
         fetchSerials,
         removeSerial,
-        completePicking
+        completePicking,
+        setActivePickingId
     } = useActivePickingContext();
 
     const [serialInput, setSerialInput] = useState("");
     const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({});
+    const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+    const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
 
     const activePicking = pickings.find(p => p.id === activePickingId);
@@ -97,26 +111,32 @@ export function PickingWorkbench() {
             <Card className="shrink-0 border-primary/20 shadow-sm">
                 <CardContent className="p-4 md:p-6">
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                        <div>
-                            <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
-                                {activePicking?.consolidator_no}
-                                <Badge variant="outline" className="ml-2 bg-purple-50 text-purple-700 border-purple-200 uppercase tracking-tighter">
-                                    {activePicking?.status}
-                                </Badge>
-                            </h2>
-                            <p className="text-muted-foreground text-sm">
-                                Enter serial numbers to automatically match and fulfill items.
-                            </p>
+                        <div className="flex items-center gap-3">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="md:hidden h-8 w-8 -ml-2"
+                                onClick={() => setActivePickingId(null)}
+                            >
+                                <ArrowLeft className="h-5 w-5 text-muted-foreground" />
+                            </Button>
+                            <div>
+                                <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
+                                    {activePicking?.consolidator_no}
+                                    <Badge variant="outline" className="ml-2 bg-purple-50 text-purple-700 border-purple-200 uppercase tracking-tighter">
+                                        {activePicking?.status}
+                                    </Badge>
+                                </h2>
+                                <p className="text-muted-foreground text-sm">
+                                    Enter serial numbers to automatically match and fulfill items.
+                                </p>
+                            </div>
                         </div>
                         <div className="flex items-center gap-2">
                             <Button
                                 variant="outline"
                                 className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 flex items-center gap-2 font-bold"
-                                onClick={() => {
-                                    toast.success("Progress saved successfully", {
-                                        description: "All scans are secured in the database."
-                                    });
-                                }}
+                                onClick={() => setShowSaveConfirm(true)}
                             >
                                 <Save className="h-4 w-4" />
                                 Save Progress
@@ -124,7 +144,7 @@ export function PickingWorkbench() {
                             <Button
                                 variant="default"
                                 className="bg-green-600 hover:bg-green-700 shadow-md flex items-center gap-2 font-bold"
-                                onClick={handleComplete}
+                                onClick={() => setShowCompleteConfirm(true)}
                             >
                                 <CheckCircle2 className="h-4 w-4" />
                                 Finish & Complete
@@ -318,6 +338,56 @@ export function PickingWorkbench() {
                     <span>Enter any on-hand serial number to automatically match it to its product row.</span>
                 </div>
             </div>
+
+            {/* Save Progress Confirmation Modal */}
+            <AlertDialog open={showSaveConfirm} onOpenChange={setShowSaveConfirm}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Save Picking Progress?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Are you sure you want to save your current picking progress? All current scanned items and serial mapping inputs will be securely maintained.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={() => {
+                                setShowSaveConfirm(false);
+                                toast.success("Progress saved successfully", {
+                                    description: "All scans are secured in the database."
+                                });
+                            }}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold"
+                        >
+                            Save Progress
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Finish & Complete Confirmation Modal */}
+            <AlertDialog open={showCompleteConfirm} onOpenChange={setShowCompleteConfirm}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Complete Picking Order?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Are you sure you want to finish and complete this picking order? This will finalize the items and update the consolidator order status.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={async () => {
+                                setShowCompleteConfirm(false);
+                                await handleComplete();
+                            }}
+                            className="bg-green-600 hover:bg-green-700 text-white font-bold"
+                        >
+                            Finish & Complete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }
