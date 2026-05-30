@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   X,
   Plus,
+  Minus,
   Trash2,
   Save,
   ChevronDown,
@@ -13,6 +14,7 @@ import {
   CheckCircle,
   ScanLine,
   Loader2,
+  Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -154,12 +156,15 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
   const [isThirdParty, setIsThirdParty] = useState(false);
   // Success Modal State
   const [isSuccessOpen, setSuccessOpen] = useState(false);
+  const [isCreateConfirmOpen, setIsCreateConfirmOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // UI State for Validation
   const [returnTypeError, setReturnTypeError] = useState(false);
   const [orderError, setOrderError] = useState(false);
   const [invoiceError, setInvoiceError] = useState(false);
+  const [salesmanError, setSalesmanError] = useState(false);
+  const [customerError, setCustomerError] = useState(false);
 
   // Bottom Form Fields
   const [orderNo, setOrderNo] = useState("");
@@ -204,6 +209,12 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
   const [items, setItems] = useState<SalesReturnItem[]>([]);
   const [isProductLookupOpen, setIsProductLookupOpen] = useState(false);
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
+
+  // --- PRODUCT SEARCH STATE ---
+  const [productSearch, setProductSearch] = useState("");
+  const [serialSearch, setSerialSearch] = useState("");
+  const productsSectionRef = useRef<HTMLDivElement>(null);
+  const cardRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
   // --- 5. BRANCH LOCK STATE ---
   const [lockedBranchId, setLockedBranchId] = useState<number | null>(null);
@@ -310,6 +321,7 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
     const linkedBranch = branches.find((b) => b.id === salesman.branchId);
     setBranchName(linkedBranch ? linkedBranch.name : "");
     setIsSalesmanOpen(false);
+    setSalesmanError(false);
     setOrderNo("");
     setOrderSearch("");
     setInvoiceNo("");
@@ -321,6 +333,7 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
     setCustomerSearch(customer.name);
     setCustomerCode(customer.code || "");
     setIsCustomerOpen(false);
+    setCustomerError(false);
     setOrderNo("");
     setOrderSearch("");
     setInvoiceNo("");
@@ -396,9 +409,8 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
         const row = next[selectedRowIndex];
         if (!row) return prev;
 
-        const isSerialized = row.isSerialized === 1 || row.isSerialized === true;
         const newSerials = [...(row.serialNumbers || []), serial];
-        const newQty = isSerialized ? newSerials.length : row.quantity;
+        const newQty = newSerials.length;
         const unitPrice = Number(row.unitPrice) || 0;
         const grossAmount = Math.round(unitPrice * newQty * 100) / 100;
         
@@ -574,6 +586,8 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
   }, [selectedSalesmanId, salesmen, selectedCustomerId, customers]);
 
   const resetForm = () => {
+    setSalesmanError(false);
+    setCustomerError(false);
     setItems([]);
     setReturnDate(new Date().toISOString().split("T")[0]);
     setSelectedSalesmanId("");
@@ -600,28 +614,84 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
   const filteredOrders = invoiceOptions.filter((inv) => inv.order_id.toLowerCase().includes(orderSearch.toLowerCase()));
 
   const handleOpenProductLookup = () => {
+    setSalesmanError(false);
+    setCustomerError(false);
     if (!returnDate) { toast.error("Please select a Return Date."); return; }
-    if (!selectedSalesmanId) { toast.error("Please select a Salesman."); return; }
-    if (!selectedCustomerId) { toast.error("Please select a Customer."); return; }
+    if (!selectedSalesmanId) {
+      setSalesmanError(true);
+      salesmanWrapperRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      toast.error("Please select a Salesman.");
+      return;
+    }
+    if (!selectedCustomerId) {
+      setCustomerError(true);
+      customerWrapperRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      toast.error("Please select a Customer.");
+      return;
+    }
     setIsProductLookupOpen(true);
   };
 
-  const handleCreateReturn = async () => {
+  const handleCreateReturn = () => {
     setReturnTypeError(false);
     setOrderError(false);
     setInvoiceError(false);
+    setSalesmanError(false);
+    setCustomerError(false);
 
     if (!returnDate) { toast.error("Return Date is required."); return; }
-    if (items.length === 0) { toast.error("Please add at least one product."); return; }
+    if (!selectedSalesmanId) {
+      setSalesmanError(true);
+      salesmanWrapperRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      toast.error("Salesman is required.");
+      return;
+    }
+    if (!selectedCustomerId) {
+      setCustomerError(true);
+      customerWrapperRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      toast.error("Customer is required.");
+      return;
+    }
+    if (items.length === 0) {
+      productsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      toast.error("Please add at least one product.");
+      return;
+    }
     if (isBranchLockedError) { toast.error("Invalid Branch."); return; }
-    if (!orderNo.trim()) { toast.error("Order No. is required."); setOrderError(true); return; }
-    if (!invoiceNo.trim()) { toast.error("Invoice No. is required."); setInvoiceError(true); return; }
+    if (!orderNo.trim()) {
+      setOrderError(true);
+      orderWrapperRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      toast.error("Order No. is required.");
+      return;
+    }
+    if (!invoiceNo.trim()) {
+      setInvoiceError(true);
+      invoiceWrapperRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      toast.error("Invoice No. is required.");
+      return;
+    }
 
-    const invalidItems = items.some((item) => !item.returnType || item.returnType === "");
-    if (invalidItems) { toast.error("Please select a Return Type for all items."); setReturnTypeError(true); return; }
+    const invalidItemIndex = items.findIndex((item) => !item.returnType || item.returnType === "");
+    if (invalidItemIndex !== -1) {
+      setReturnTypeError(true);
+      const invalidCardEl = cardRefs.current.get(invalidItemIndex);
+      if (invalidCardEl) {
+        invalidCardEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else {
+        productsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      toast.error("Please select a Return Type for all items.");
+      return;
+    }
 
+    // Success! Open confirmation modal before proceeding
+    setIsCreateConfirmOpen(true);
+  };
+
+  const handleConfirmCreate = async () => {
     try {
       setIsSubmitting(true);
+      setIsCreateConfirmOpen(false);
       const selectedSalesmanObj = salesmen.find((s) => s.id.toString() === selectedSalesmanId);
       const branchId = selectedSalesmanObj ? selectedSalesmanObj.branchId : null;
 
@@ -659,67 +729,41 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
   };
 
   const handleAddProducts = (newItems: Partial<SalesReturnItem>[]) => {
-    setItems((prev) => {
-      const updated = [...prev];
-
-      newItems.forEach((item) => {
+    setItems(() => {
+      return newItems.map((item) => {
         const rawId = item.product_id || item.productId || item.id;
-        if (!rawId) return;
-
         const productId = Number(rawId);
         const unit = item.unit || "Pcs";
         const unitPrice = Math.round(Number(item.unitPrice || 0) * 100) / 100;
         
         const isSerialized = item.isSerialized === 1 || item.isSerialized === true;
-        const incomingQty = isSerialized ? 0 : (item.quantity || 1);
-
-        const existingIndex = updated.findIndex((i) => 
-          i.productId === productId && 
-          i.unit === unit && 
-          Math.round(i.unitPrice * 100) / 100 === unitPrice
-        );
-
-        if (existingIndex >= 0) {
-          // CLONE to avoid direct mutation
-          const existing = { ...updated[existingIndex] };
-          if (!isSerialized) {
-            existing.quantity += incomingQty;
-          }
-          existing.grossAmount = Math.round(existing.quantity * existing.unitPrice * 100) / 100;
-          if (existing.discountType) {
-            const opt = lineDiscountOptions.find((d) => d.id.toString() === existing.discountType?.toString());
-            if (opt) existing.discountAmount = Math.round(existing.grossAmount * (parseFloat(opt.total_percent) / 100) * 100) / 100;
-          }
-          existing.totalAmount = Math.round((existing.grossAmount - existing.discountAmount) * 100) / 100;
-          updated[existingIndex] = existing;
-        } else {
-          const initialGross = Math.round(unitPrice * incomingQty * 100) / 100;
-          let discAmt = 0;
-          if (item.discountType) {
-            const opt = lineDiscountOptions.find((d: API_LineDiscount) => d.id.toString() === item.discountType?.toString());
-            if (opt) discAmt = Math.round(initialGross * (parseFloat(opt.total_percent) / 100) * 100) / 100;
-          }
-          
-          updated.push({
-            ...item,
-            productId,
-            code: item.code || "N/A",
-            description: item.description || "Unknown Item",
-            unit,
-            quantity: incomingQty,
-            unitPrice,
-            grossAmount: initialGross,
-            discountType: item.discountType || "",
-            discountAmount: discAmt,
-            totalAmount: Math.round((initialGross - discAmt) * 100) / 100,
-            reason: item.reason || "",
-            returnType: item.returnType || "",
-            serialNumbers: item.serialNumbers || [],
-            isSerialized: isSerialized,
-          } as SalesReturnItem);
+        const quantity = 0;
+        const grossAmount = 0;
+        
+        let discAmt = 0;
+        if (item.discountType) {
+          const opt = lineDiscountOptions.find((d) => d.id.toString() === item.discountType?.toString());
+          if (opt) discAmt = Math.round(grossAmount * (parseFloat(opt.total_percent) / 100) * 100) / 100;
         }
+        
+        return {
+          ...item,
+          productId,
+          code: item.code || "N/A",
+          description: item.description || "Unknown Item",
+          unit,
+          quantity,
+          unitPrice,
+          grossAmount,
+          discountType: item.discountType || "",
+          discountAmount: discAmt,
+          totalAmount: Math.round((grossAmount - discAmt) * 100) / 100,
+          reason: item.reason || "",
+          returnType: item.returnType || "",
+          serialNumbers: item.serialNumbers || [],
+          isSerialized: isSerialized,
+        } as SalesReturnItem;
       });
-      return updated;
     });
   };
 
@@ -780,7 +824,19 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
                 ) : (
                   <div className="relative group">
                     <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary" />
-                    <input type="text" className="w-full h-9 border border-border rounded-md text-sm pl-9 pr-8 bg-background outline-none focus:ring-2 focus:border-primary shadow-sm" placeholder="Search Salesman..." value={salesmanSearch} onChange={e => { setSalesmanSearch(e.target.value); setIsSalesmanOpen(true); }} onFocus={() => setIsSalesmanOpen(true)} />
+                    <input
+                      type="text"
+                      className={cn(
+                        "w-full h-9 border rounded-md text-sm pl-9 pr-8 bg-background outline-none focus:ring-2 shadow-sm",
+                        salesmanError
+                          ? "border-destructive bg-destructive/5 ring-1 ring-destructive"
+                          : "border-border focus:border-primary"
+                      )}
+                      placeholder="Search Salesman..."
+                      value={salesmanSearch}
+                      onChange={e => { setSalesmanSearch(e.target.value); setIsSalesmanOpen(true); }}
+                      onFocus={() => setIsSalesmanOpen(true)}
+                    />
                     <ChevronDown className="h-4 w-4 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   </div>
                 )}
@@ -805,7 +861,19 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
                 ) : (
                   <div className="relative group">
                     <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary" />
-                    <input type="text" className="w-full h-9 border border-border rounded-md text-sm pl-9 pr-8 bg-background outline-none focus:ring-2 focus:border-primary shadow-sm" placeholder="Search Customer..." value={customerSearch} onChange={e => { setCustomerSearch(e.target.value); setIsCustomerOpen(true); }} onFocus={() => setIsCustomerOpen(true)} />
+                    <input
+                      type="text"
+                      className={cn(
+                        "w-full h-9 border rounded-md text-sm pl-9 pr-8 bg-background outline-none focus:ring-2 shadow-sm",
+                        customerError
+                          ? "border-destructive bg-destructive/5 ring-1 ring-destructive"
+                          : "border-border focus:border-primary"
+                      )}
+                      placeholder="Search Customer..."
+                      value={customerSearch}
+                      onChange={e => { setCustomerSearch(e.target.value); setIsCustomerOpen(true); }}
+                      onFocus={() => setIsCustomerOpen(true)}
+                    />
                     <ChevronDown className="h-4 w-4 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   </div>
                 )}
@@ -867,116 +935,196 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
             </div>
           </div>
 
-          <div className="bg-background rounded-lg border border-border shadow-sm overflow-hidden flex flex-col">
-            <div className="flex justify-between items-center px-5 py-4 bg-background border-b border-border">
-              <h3 className="font-bold text-foreground flex items-center gap-2"><div className="bg-primary/10 p-1.5 rounded text-primary"><Calculator className="h-4 w-4" /></div>Products Summary</h3>
-              <div className="flex items-center gap-3">
-                <Button size="sm" onClick={handleOpenProductLookup} className="bg-primary hover:bg-primary text-white shadow-primary/20 shadow-md h-9"><Plus className="h-4 w-4 mr-1.5" /> Add Product</Button>
-                {isBranchLockedError && <Button size="sm" variant="destructive" onClick={handleClearItems} className="shadow-md h-9 gap-2">Clear All Items</Button>}
+          <div ref={productsSectionRef} className="bg-background rounded-lg border border-border shadow-sm overflow-hidden flex flex-col">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 px-5 py-4 bg-background border-b border-border">
+              <h3 className="font-bold text-foreground flex items-center gap-2"><div className="bg-primary/10 p-1.5 rounded text-primary"><Calculator className="h-4 w-4" /></div>Products Summary <Badge variant="outline" className="ml-1 text-xs font-bold">{items.length}</Badge></h3>
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <div className="relative flex-1 sm:flex-initial">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search products..."
+                    className="h-9 pl-9 pr-3 w-full sm:w-48 text-sm border-border"
+                    value={productSearch}
+                    onChange={(e) => {
+                      setProductSearch(e.target.value);
+                      // Auto-scroll to first match
+                      if (e.target.value.trim()) {
+                        const query = e.target.value.toLowerCase();
+                        const matchIdx = items.findIndex(item =>
+                          item.description.toLowerCase().includes(query) ||
+                          item.code.toLowerCase().includes(query)
+                        );
+                        if (matchIdx !== -1) {
+                          const el = cardRefs.current.get(matchIdx);
+                          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+                        }
+                      }
+                    }}
+                  />
+                </div>
+                <Button size="sm" onClick={handleOpenProductLookup} className="bg-primary hover:bg-primary text-white shadow-primary/20 shadow-md h-9 shrink-0"><Plus className="h-4 w-4 mr-1.5" /> Add Product</Button>
+                {isBranchLockedError && <Button size="sm" variant="destructive" onClick={handleClearItems} className="shadow-md h-9 gap-2 shrink-0">Clear All Items</Button>}
               </div>
             </div>
-            <div className="overflow-x-auto relative pb-4">
-              <table className="w-full text-sm text-left min-w-[1500px]">
-                <thead>
-                  <tr className="bg-primary text-white">
-                    <th className="px-3 py-3 font-semibold text-xs uppercase tracking-wider w-28">Code</th>
-                    <th className="px-3 py-3 font-semibold text-xs uppercase tracking-wider">Description</th>
-                    <th className="px-3 py-3 font-semibold text-xs uppercase tracking-wider w-20">Unit</th>
-                    <th className="px-3 py-3 font-semibold text-xs uppercase tracking-wider w-28 text-center">Qty</th>
-                    <th className="px-3 py-3 font-semibold text-xs uppercase tracking-wider w-32 text-right">Unit Price</th>
-                    <th className="px-3 py-3 font-semibold text-xs uppercase tracking-wider w-32 text-right">Gross</th>
-                    <th className="px-3 py-3 font-semibold text-xs uppercase tracking-wider w-40">Disc. Type</th>
-                    <th className="px-3 py-3 font-semibold text-xs uppercase tracking-wider w-36 text-right">Disc. Amt</th>
-                    <th className="px-3 py-3 font-semibold text-xs uppercase tracking-wider w-40 text-right">Total</th>
-                    <th className="px-3 py-3 font-semibold text-xs uppercase tracking-wider w-48">Reason</th>
-                    <th className="px-3 py-3 font-semibold text-xs uppercase tracking-wider w-48">Return Type</th>
-                    <th className="sticky right-0 z-10 px-2 py-3 w-12 bg-primary"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {items.length === 0 ? (
-                    <tr><td colSpan={12} className="px-6 py-16 text-center text-muted-foreground bg-muted/30"><div className="flex flex-col items-center gap-2"><FileText className="h-8 w-8 text-muted-foreground mb-1" /><p>No items added yet.</p><span className="text-xs">Click &ldquo;Add Product&rdquo; to browse catalog.</span></div></td></tr>
-                  ) : items.map((item, idx) => (
-                    <tr key={idx} onClick={() => setSelectedRowIndex(idx)} className={cn("hover:bg-muted/10 transition-colors duration-200 border-b border-border cursor-pointer group", selectedRowIndex === idx && "bg-primary/5 ring-1 ring-inset ring-primary/20")}>
-                      <td className="px-4 py-2 font-mono text-sm text-foreground"><div className="flex items-center gap-2">{selectedRowIndex === idx ? <div className="w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_rgba(var(--primary),0.5)] animate-pulse" /> : <div className="w-2 h-2 rounded-full bg-muted-foreground/20" />}<span>{item.code}</span></div></td>
-                      <td className="px-4 py-2 text-foreground font-medium">{item.description}</td>
-                      <td className="px-4 py-2"><Badge variant="outline" className="bg-background">{item.unit}</Badge></td>
-                      <td className="px-4 py-2 text-center" onClick={e => e.stopPropagation()}>
-                        <div className="flex flex-col items-center gap-1">
-                          {item.isSerialized === 1 || item.isSerialized === true ? (
-                            <Badge variant="outline" className="font-bold min-w-[40px] flex justify-center border-primary/40 bg-primary/10 text-primary shadow-sm">{item.quantity}</Badge>
+            <div className="max-h-[500px] overflow-y-auto p-4 space-y-3 bg-muted/20">
+              {items.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <FileText className="h-8 w-8 text-muted-foreground mb-2" />
+                  <p className="text-muted-foreground">No items added yet.</p>
+                  <span className="text-xs text-muted-foreground">Click &ldquo;Add Product&rdquo; to browse catalog.</span>
+                </div>
+              ) : items.map((item, idx) => {
+                const isSearchMatch = productSearch.trim() !== "" && (
+                  item.description.toLowerCase().includes(productSearch.toLowerCase()) ||
+                  item.code.toLowerCase().includes(productSearch.toLowerCase())
+                );
+                return (
+                  <div
+                    key={idx}
+                    ref={(el) => { if (el) cardRefs.current.set(idx, el); else cardRefs.current.delete(idx); }}
+                    onClick={() => setSelectedRowIndex(idx)}
+                    className={cn(
+                      "bg-background border rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group",
+                      selectedRowIndex === idx && "ring-2 ring-primary border-primary",
+                      isSearchMatch && selectedRowIndex !== idx && "ring-2 ring-amber-400/60 border-amber-400 bg-amber-50/10",
+                      returnTypeError && (!item.returnType || item.returnType === "") && "ring-2 ring-destructive border-destructive",
+                      !isSearchMatch && selectedRowIndex !== idx && "border-border"
+                    )}
+                  >
+                    {/* Main Grid: Columns 1 to 5 */}
+                    <div className="grid grid-cols-12 gap-4 items-center">
+                      {/* Column 1: Product Name & Code */}
+                      <div className="col-span-12 md:col-span-4 min-w-0">
+                        <div className="flex items-start gap-2">
+                          {selectedRowIndex === idx ? (
+                            <div className="w-2 h-2 mt-1.5 rounded-full bg-primary shadow-[0_0_8px_rgba(var(--primary),0.5)] animate-pulse shrink-0" />
                           ) : (
-                            <input 
-                              type="number" 
-                              className="w-16 h-8 text-center border border-border rounded bg-background text-sm font-bold focus:ring-1 focus:ring-primary outline-none"
-                              value={item.quantity}
-                              onChange={e => handleItemChange(idx, "quantity", Math.max(1, parseInt(e.target.value) || 0))}
-                            />
+                            <div className="w-2 h-2 mt-1.5 rounded-full bg-muted-foreground/20 shrink-0" />
                           )}
+                          <div className="min-w-0">
+                            <h4 className="text-sm font-semibold text-foreground leading-tight line-clamp-2">{item.description}</h4>
+                            <span className="text-[11px] text-muted-foreground font-mono">Code: {item.code}</span>
+                          </div>
                         </div>
-                      </td>
-                      <td className="px-3 py-2 text-right text-sm whitespace-nowrap">₱{item.unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                      <td className="px-3 py-2 text-right text-muted-foreground font-mono text-sm whitespace-nowrap">₱{item.grossAmount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                      <td className="px-4 py-2" onClick={e => e.stopPropagation()}>
-                        <Select value={item.discountType?.toString() || "none"} onValueChange={val => handleItemChange(idx, "discountType", val === "none" ? "" : val)}>
-                          <SelectTrigger className="w-full h-8 px-2 text-sm border-border bg-background"><SelectValue placeholder="None" /></SelectTrigger>
-                          <SelectContent className="z-[200]"><SelectItem value="none">None</SelectItem>{lineDiscountOptions.map(opt => <SelectItem key={opt.id} value={opt.id.toString()}>{opt.discount_type}</SelectItem>)}</SelectContent>
-                        </Select>
-                      </td>
-                      <td className="px-4 py-2 text-right text-muted-foreground font-mono text-sm whitespace-nowrap">₱{item.discountAmount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                      <td className="px-3 py-2 text-right font-bold text-sm text-foreground whitespace-nowrap">₱{item.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                      <td className="px-4 py-2" onClick={e => e.stopPropagation()}><ReasonInputSection value={item.reason || ""} onChange={val => handleItemChange(idx, "reason", val)} /></td>
-                      <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
-                        <SearchableSelect value={item.returnType || ""} onValueChange={val => { handleItemChange(idx, "returnType", val); setReturnTypeError(false); }} options={returnTypeOptions.map(t => ({ value: t.type_name, label: t.type_name }))} placeholder="Select type" className={cn("h-8 text-sm px-2", returnTypeError && (!item.returnType || item.returnType === "") && "border-destructive ring-1 ring-destructive/30 bg-destructive/5 text-destructive")} />
-                      </td>
-                      <td className="sticky right-0 z-10 px-2 py-2 text-center bg-background border-l border-transparent group-hover:border-primary/20"><button onClick={e => { e.stopPropagation(); setItems(prev => prev.filter((_, i) => i !== idx)); if (selectedRowIndex === idx) setSelectedRowIndex(null); }} className="text-destructive/70 hover:text-destructive h-7 w-7 rounded-md flex items-center justify-center transition-colors"><Trash2 className="h-4 w-4" /></button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </div>
+
+                      {/* Column 2: Quantity & Unit */}
+                      <div className="col-span-4 md:col-span-2 flex flex-col items-center justify-center gap-1" onClick={e => e.stopPropagation()}>
+                        <Badge variant="outline" className="font-bold min-w-[40px] flex justify-center border-primary/40 bg-primary/10 text-primary shadow-sm">
+                          {item.quantity}
+                        </Badge>
+                        <span className="text-[10px] text-muted-foreground font-medium">({item.unit})</span>
+                      </div>
+
+                      {/* Column 3: Gross, Disc Type, Disc Amount */}
+                      <div className="col-span-8 md:col-span-3 flex flex-col items-end text-right gap-1" onClick={e => e.stopPropagation()}>
+                        <span className="text-xs text-muted-foreground">Gross: <span className="font-mono font-semibold">₱{item.grossAmount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-muted-foreground">Disc:</span>
+                          <span className="text-xs text-destructive font-mono font-semibold">-₱{item.discountAmount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                          <Select value={item.discountType?.toString() || "none"} onValueChange={val => handleItemChange(idx, "discountType", val === "none" ? "" : val)}>
+                            <SelectTrigger className="h-6 w-16 px-1.5 text-[10px] border-border bg-background"><SelectValue placeholder="-" /></SelectTrigger>
+                            <SelectContent className="z-[200]"><SelectItem value="none">None</SelectItem>{lineDiscountOptions.map(opt => <SelectItem key={opt.id} value={opt.id.toString()}>{opt.discount_type}</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      {/* Column 4: Total */}
+                      <div className="col-span-10 md:col-span-2 text-right md:pl-3 md:border-l border-border">
+                        <span className="text-base font-bold text-foreground tabular-nums">₱{item.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      </div>
+
+                      {/* Column 5: Trash (Delete) */}
+                      <div className="col-span-2 md:col-span-1 flex justify-end" onClick={e => e.stopPropagation()}>
+                        <button
+                          onClick={e => { e.stopPropagation(); setItems(prev => prev.filter((_, i) => i !== idx)); if (selectedRowIndex === idx) setSelectedRowIndex(null); }}
+                          className="bg-destructive/10 hover:bg-destructive text-destructive hover:text-white h-8 w-8 rounded-md flex items-center justify-center transition-all duration-200 active:scale-95 shrink-0"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Bottom Section: Return Type + Reason */}
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mt-3 pt-3 border-t border-border" onClick={e => e.stopPropagation()}>
+                      <div className="md:col-span-5 flex items-center gap-2 w-full">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Return Type:</span>
+                        <SearchableSelect
+                          value={item.returnType || ""}
+                          onValueChange={val => { handleItemChange(idx, "returnType", val); setReturnTypeError(false); }}
+                          options={returnTypeOptions.map(t => ({ value: t.type_name, label: t.type_name }))}
+                          placeholder="Select type"
+                          className={cn("h-8 text-sm px-2 flex-1", returnTypeError && (!item.returnType || item.returnType === "") && "border-destructive ring-1 ring-destructive/30 bg-destructive/5 text-destructive")}
+                        />
+                      </div>
+                      <div className="md:col-span-7 flex items-center gap-2 w-full">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reason:</span>
+                        <div className="flex-1">
+                          <ReasonInputSection value={item.reason || ""} onChange={val => handleItemChange(idx, "reason", val)} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
           {selectedRowIndex !== null && items[selectedRowIndex] && (
             <div className="bg-background rounded-lg border-2 border-primary/20 shadow-md p-5 mb-6 animate-in slide-in-from-bottom-4 duration-300">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
-                <h4 className="font-bold text-foreground flex items-center gap-2 text-base"><div className="bg-emerald-500/10 p-1.5 rounded text-emerald-600"><ScanLine className="h-5 w-5" /></div>Serial Management for: <span className="text-primary underline decoration-primary/30 underline-offset-4">{items[selectedRowIndex].description}</span></h4>
-                <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-4">
+                <h4 className="font-bold text-foreground flex items-center gap-2 text-base shrink-0"><div className="bg-emerald-500/10 p-1.5 rounded text-emerald-600"><ScanLine className="h-5 w-5" /></div>Serial Management for: <span className="text-primary underline decoration-primary/30 underline-offset-4">{items[selectedRowIndex].description}</span></h4>
+                <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+                  {/* Serial Search Input */}
+                  <div className="relative w-full sm:w-48">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      placeholder="Search serials..."
+                      className="h-8 pl-9 pr-3 text-xs border-border bg-background"
+                      value={serialSearch}
+                      onChange={(e) => setSerialSearch(e.target.value)}
+                    />
+                  </div>
                   <SerialInputSection onAdd={(serial) => handleAddSerial(serial)} disabled={isValidatingSerial} />
-                  <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 px-3 py-1 font-bold">{items[selectedRowIndex].serialNumbers?.length || 0} TOTAL</Badge>
+                  <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 px-3 py-1 font-bold shrink-0">{items[selectedRowIndex].serialNumbers?.length || 0} TOTAL</Badge>
                 </div>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 max-h-40 overflow-y-auto p-1">
-                {(items[selectedRowIndex].serialNumbers || []).map(sn => (
-                  <div key={sn} className="flex items-center justify-between bg-muted/20 border border-border px-3 py-2 rounded-md hover:border-primary/30 transition-all group hover:shadow-sm">
-                    <span className="text-[10px] font-mono font-bold text-foreground truncate">{sn}</span>
-                    <button onClick={() => {
-                      setItems(prev => {
-                        const next = [...prev];
-                        const row = next[selectedRowIndex];
-                        const newSerials = row.serialNumbers!.filter(s => s !== sn);
-                        const isSerialized = row.isSerialized === 1 || row.isSerialized === true;
-                        const newQty = isSerialized ? newSerials.length : row.quantity;
-                        const gross = Math.round(row.unitPrice * newQty * 100) / 100;
-                        let discAmt = 0;
-                        if (row.discountType) {
-                          const opt = lineDiscountOptions.find(d => d.id.toString() === row.discountType?.toString());
-                          if (opt) discAmt = Math.round(gross * (parseFloat(opt.total_percent) / 100) * 100) / 100;
-                        }
-                        next[selectedRowIndex] = { 
-                          ...row, 
-                          serialNumbers: newSerials, 
-                          quantity: newQty, 
-                          grossAmount: gross, 
-                          discountAmount: discAmt, 
-                          totalAmount: Math.round((gross - discAmt) * 100) / 100 
-                        };
-                        return next;
-                      });
-                    }} className="p-1 text-destructive/50 hover:text-destructive transition-colors"><X className="h-3 w-3" /></button>
+                {(items[selectedRowIndex].serialNumbers || [])
+                  .filter(sn => sn.toLowerCase().includes(serialSearch.toLowerCase()))
+                  .map(sn => (
+                    <div key={sn} className="flex items-center justify-between bg-muted/20 border border-border px-3 py-2 rounded-md hover:border-primary/30 transition-all group hover:shadow-sm">
+                      <span className="text-[10px] font-mono font-bold text-foreground truncate">{sn}</span>
+                      <button onClick={() => {
+                        setItems(prev => {
+                          const next = [...prev];
+                          const row = next[selectedRowIndex];
+                          const newSerials = row.serialNumbers!.filter(s => s !== sn);
+                          const newQty = newSerials.length;
+                          const gross = Math.round(row.unitPrice * newQty * 100) / 100;
+                          let discAmt = 0;
+                          if (row.discountType) {
+                            const opt = lineDiscountOptions.find(d => d.id.toString() === row.discountType?.toString());
+                            if (opt) discAmt = Math.round(gross * (parseFloat(opt.total_percent) / 100) * 100) / 100;
+                          }
+                          next[selectedRowIndex] = { 
+                            ...row, 
+                            serialNumbers: newSerials, 
+                            quantity: newQty, 
+                            grossAmount: gross, 
+                            discountAmount: discAmt, 
+                            totalAmount: Math.round((gross - discAmt) * 100) / 100 
+                          };
+                          return next;
+                        });
+                      }} className="p-1 text-destructive/50 hover:text-destructive transition-colors"><X className="h-3 w-3" /></button>
+                    </div>
+                  ))}
+                {(items[selectedRowIndex].serialNumbers || []).filter(sn => sn.toLowerCase().includes(serialSearch.toLowerCase())).length === 0 && (
+                  <div className="col-span-full py-8 text-center border border-dashed rounded-lg text-muted-foreground italic">
+                    {serialSearch ? "No matching serial numbers found." : "No serial numbers entered yet."}
                   </div>
-                ))}
-                {(items[selectedRowIndex].serialNumbers || []).length === 0 && <div className="col-span-full py-8 text-center border border-dashed rounded-lg text-muted-foreground italic">No serial numbers entered yet.</div>}
+                )}
               </div>
             </div>
           )}
@@ -1038,12 +1186,26 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
         <div className="px-6 py-4 border-t border-border bg-background flex justify-between items-center">
           <Button variant="outline" onClick={handleClose} className="h-10 px-6 font-semibold border-border hover:bg-muted transition-colors">Cancel</Button>
           <div className="flex items-center gap-3">
-            <Button onClick={handleCreateReturn} disabled={isSubmitting} className="h-11 px-10 bg-primary hover:bg-primary/90 text-white font-bold shadow-lg shadow-primary/20 transition-all active:scale-95 flex items-center gap-2">{isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Save className="h-5 w-5" /> Process Sales Return</>}</Button>
+            <Button onClick={handleCreateReturn} disabled={isSubmitting} className="h-11 px-10 bg-primary hover:bg-primary/90 text-white font-bold shadow-lg shadow-primary/20 transition-all active:scale-95 flex items-center gap-2">{isSubmitting ? <><Loader2 className="h-5 w-5 animate-spin" /> Submitting...</> : <><Save className="h-5 w-5" /> Process Sales Return</>}</Button>
           </div>
         </div>
       </div>
 
-      <ProductLookupModal isOpen={isProductLookupOpen} onClose={() => setIsProductLookupOpen(false)} onConfirm={handleAddProducts} priceType={priceType} customerCode={customerCode} />
+      <ProductLookupModal isOpen={isProductLookupOpen} onClose={() => setIsProductLookupOpen(false)} onConfirm={handleAddProducts} preselectedItems={items} priceType={priceType} customerCode={customerCode} />
+
+      <Dialog open={isCreateConfirmOpen} onOpenChange={setIsCreateConfirmOpen}>
+        <DialogContent className="max-w-[400px] text-center p-8 bg-background border-border rounded-xl">
+          <div className="flex flex-col items-center gap-4">
+            <div className="bg-primary/10 p-4 rounded-full text-primary animate-pulse"><Save className="h-12 w-12" /></div>
+            <DialogTitle className="text-2xl font-bold text-foreground">Confirm Process</DialogTitle>
+            <p className="text-sm text-muted-foreground leading-relaxed">Are you sure you want to process this sales return? This action will update inventory.</p>
+            <div className="grid grid-cols-2 gap-3 w-full mt-4">
+              <Button variant="outline" onClick={() => setIsCreateConfirmOpen(false)} className="h-11 font-semibold">Cancel</Button>
+              <Button onClick={handleConfirmCreate} disabled={isSubmitting} className="h-11 bg-primary hover:bg-primary/90 text-white font-bold">{isSubmitting ? "Processing..." : "Confirm & Process"}</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isSuccessOpen} onOpenChange={setSuccessOpen}>
         <DialogContent className="max-w-[400px] text-center p-8 bg-background border-border rounded-xl">

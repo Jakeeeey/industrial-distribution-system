@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { toast } from "sonner";
 import {
   X,
   Plus,
@@ -39,6 +40,7 @@ interface Props {
   onConfirm: (items: SalesReturnItem[]) => void;
   priceType: string; // 🟢 NEW
   customerCode?: string; // 🟢 NEW: Pass selected customer code
+  preselectedItems?: SalesReturnItem[]; // 🟢 NEW
 }
 
 export function ProductLookupModal({
@@ -47,10 +49,10 @@ export function ProductLookupModal({
   onConfirm,
   priceType = "A", // 🟢 NEW
   customerCode,
+  preselectedItems,
 }: Props) {
   // --- STATES ---
-  const [searchCode, setSearchCode] = useState("");
-  const [filterName, setFilterName] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>("All");
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("All");
@@ -86,6 +88,13 @@ export function ProductLookupModal({
   const [isBrandOpen, setIsBrandOpen] = useState(false);
   const [brandSearch, setBrandSearch] = useState("All Brands");
   const brandWrapperRef = useRef<HTMLDivElement>(null);
+
+  // --- SYNC PRESELECTED ITEMS ---
+  useEffect(() => {
+    if (isOpen && preselectedItems) {
+      setSelectedItems(preselectedItems);
+    }
+  }, [isOpen, preselectedItems]);
 
   // --- 1. FETCH ALL DATA ON MOUNT ---
   useEffect(() => {
@@ -179,13 +188,10 @@ export function ProductLookupModal({
 
   const visibleProducts = products.filter((p) => {
     const matchesSearch =
-      (filterName === "" ||
-        (p.product_name || "")
-          .toLowerCase()
-          .includes(filterName.toLowerCase())) &&
-      (searchCode === "" ||
-        (p.product_code || "").includes(searchCode) ||
-        (p.barcode || "").includes(searchCode));
+      searchQuery === "" ||
+      (p.product_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (p.product_code || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (p.barcode || "").toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesBrand =
       selectedBrandId === "All" ||
@@ -207,7 +213,7 @@ export function ProductLookupModal({
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterName, searchCode, selectedSupplierId, selectedCategoryId, selectedBrandId]);
+  }, [searchQuery, selectedSupplierId, selectedCategoryId, selectedBrandId]);
 
   // 1. Group ALL visible products strictly by parent_id or product_id first
   const allGroupedProducts = useMemo(() => {
@@ -282,14 +288,11 @@ export function ProductLookupModal({
           return prevItems; 
         }
 
-        const newQuantity = currentItem.quantity + 1;
-        const newGross = newQuantity * currentItem.unitPrice;
-
         updatedItems[existingItemIndex] = {
           ...currentItem,
-          quantity: newQuantity,
-          grossAmount: newGross,
-          totalAmount: newGross - (currentItem.discountAmount || 0),
+          quantity: 0,
+          grossAmount: 0,
+          totalAmount: 0,
         };
         return updatedItems;
       } else {
@@ -300,9 +303,9 @@ export function ProductLookupModal({
           catalogData || { connections: supplierConnections }
         );
 
-        const isSerialized = product.is_serialized === 1;
-        const initialQty = isSerialized ? 0 : 1;
-        const initialGross = initialQty * selectedPrice;
+        const isSerialized = Number(product.is_serialized) === 1;
+        const initialQty = 0;
+        const initialGross = 0;
 
         const newItem: SalesReturnItem = {
           tempId: `added-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
@@ -332,6 +335,30 @@ export function ProductLookupModal({
         return [...prevItems, newItem];
       }
     });
+  };
+
+  // --- 🟢 BARCODE AUTO-ADD CHANGE HANDLER ---
+  const handleSearchChange = (val: string) => {
+    setSearchQuery(val);
+    const cleaned = val.trim();
+    if (!cleaned) return;
+
+    // Direct check if barcode or code matches exactly
+    const exactMatch = products.find(
+      (p) =>
+        (p.barcode && p.barcode.trim() === cleaned) ||
+        (p.product_code && p.product_code.trim() === cleaned)
+    );
+
+    if (exactMatch) {
+      const safePrice = resolvePrice(exactMatch, priceType);
+      const unitObj = unitsList.find((u) => u.unit_id === exactMatch.unit_of_measurement);
+      const baseUnitShortcut = unitObj ? unitObj.unit_shortcut : "pcs";
+
+      handleAddItem(exactMatch, baseUnitShortcut.toUpperCase(), safePrice);
+      setSearchQuery(""); // Clear immediately for next scan
+      toast.success(`Scanned & Added: ${exactMatch.product_name}`);
+    }
   };
 
   const updateItemQuantity = (tempId: string | undefined, change: number) => {
@@ -391,8 +418,7 @@ export function ProductLookupModal({
   };
 
   const resetFilters = () => {
-    setSearchCode("");
-    setFilterName("");
+    setSearchQuery("");
     setSelectedCategoryId("All");
     setSelectedBrandId("All");
     setSelectedSupplierId("All");
@@ -448,24 +474,22 @@ export function ProductLookupModal({
           <div className="flex-1 flex flex-col bg-muted/50 min-w-0 h-fit lg:h-full lg:overflow-hidden">
             {/* Filter Section */}
             <div className="p-5 bg-background border-b border-border shadow-sm z-10 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                {/* 1. Product Name (FIRST) */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                    Product Name
-                  </label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Filter by name..."
-                      className="h-10 text-sm pl-9 bg-muted/30 border-border focus:bg-background transition-all text-foreground"
-                      value={filterName}
-                      onChange={(e) => setFilterName(e.target.value)}
-                    />
-                  </div>
-                </div>
+              {/* Unified Search Input */}
+              <div className="relative group">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                <Input
+                  autoFocus
+                  placeholder="Search by product name, code, or scan barcode..."
+                  className="pl-10 pr-10 h-12 bg-background border-border focus:border-primary focus:ring-2 focus:ring-primary/20 text-sm shadow-sm transition-all"
+                  value={searchQuery}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                />
+                <ScanBarcode className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+              </div>
 
-                {/* 2. Supplier (SECOND) */}
+              {/* Responsive Dropdown Grid - 3 Columns (Supplier, Category, Brand) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* 1. Supplier */}
                 <div className="space-y-1.5 relative" ref={supplierWrapperRef}>
                   <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                     Supplier
@@ -523,7 +547,7 @@ export function ProductLookupModal({
                   )}
                 </div>
 
-                {/* 3. Category */}
+                {/* 2. Category */}
                 <div className="space-y-1.5 relative" ref={categoryWrapperRef}>
                   <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                     Category
@@ -575,7 +599,7 @@ export function ProductLookupModal({
                   )}
                 </div>
 
-                {/* 4. Brand */}
+                {/* 3. Brand */}
                 <div className="space-y-1.5 relative" ref={brandWrapperRef}>
                   <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                     Brand
@@ -625,19 +649,6 @@ export function ProductLookupModal({
                     </div>
                   )}
                 </div>
-              </div>
-
-              {/* Scanner */}
-              <div className="relative group">
-                <div className="absolute inset-0 bg-linear-to-r from-blue-100 to-transparent opacity-0 group-focus-within:opacity-20 rounded-md transition-opacity pointer-events-none" />
-                <ScanBarcode className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                <Input
-                  autoFocus
-                  placeholder="Scan or enter barcode / product code here..."
-                  className="pl-10 h-12 bg-background border-border focus:border-primary focus:ring-2 focus:ring-primary/20 font-mono text-sm shadow-sm transition-all"
-                  value={searchCode}
-                  onChange={(e) => setSearchCode(e.target.value)}
-                />
               </div>
             </div>
 
@@ -725,15 +736,29 @@ export function ProductLookupModal({
                                         (1 {baseUnitShortcut})
                                       </span>
                                     </div>
-                                    <Button
-                                      size="sm"
-                                      className="h-8 shadow-sm shadow-primary/20"
-                                      onClick={() =>
-                                        handleAddItem(product, baseUnitShortcut.toUpperCase(), safePrice)
-                                      }
-                                    >
-                                      <Plus className="h-3.5 w-3.5 mr-1" /> Add
-                                    </Button>
+                                    {(() => {
+                                       const cartItem = selectedItems.find(item => item.productId === product.product_id);
+                                       return cartItem ? (
+                                         <Button
+                                           size="sm"
+                                           variant="destructive"
+                                           className="h-8 shadow-sm"
+                                           onClick={() => handleRemoveItem(cartItem.tempId)}
+                                         >
+                                           <Trash2 className="h-3.5 w-3.5 mr-1" /> Remove
+                                         </Button>
+                                       ) : (
+                                         <Button
+                                           size="sm"
+                                           className="h-8 shadow-sm shadow-primary/20 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+                                           onClick={() =>
+                                             handleAddItem(product, baseUnitShortcut.toUpperCase(), safePrice)
+                                           }
+                                         >
+                                           <Plus className="h-3.5 w-3.5 mr-1" /> Add
+                                         </Button>
+                                       );
+                                     })()}
                                   </div>
                                </div>
                             );
@@ -841,11 +866,19 @@ export function ProductLookupModal({
                 </div>
               ) : (
                 <>
-                  {selectedItems.map((item, idx) => (
-                    <div
-                      key={item.tempId || idx}
-                      className="bg-background border border-border rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow relative group"
-                    >
+                  {selectedItems.map((item, idx) => {
+                    const isMatchedInCart = searchQuery && (
+                      item.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      item.code.toLowerCase().includes(searchQuery.toLowerCase())
+                    );
+                    return (
+                      <div
+                        key={item.tempId || idx}
+                        className={cn(
+                          "bg-background border rounded-lg p-4 shadow-sm hover:shadow-md transition-all relative group",
+                          isMatchedInCart ? "border-primary bg-primary/5 ring-1 ring-primary/10" : "border-border"
+                        )}
+                      >
                       <div className="flex justify-between gap-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
@@ -875,54 +908,10 @@ export function ProductLookupModal({
                         </button>
                       </div>
 
-                      {/* Controls Row */}
-                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-border">
-                          {/* Qty Stepper */}
-                          {!item.isSerialized ? (
-                            <div className="flex items-center bg-muted/30 rounded-md border border-border h-7">
-                              <button
-                                className="px-2 h-full text-muted-foreground hover:text-primary hover:bg-background rounded-l-md disabled:opacity-30 transition-colors"
-                                onClick={() => updateItemQuantity(item.tempId, -1)}
-                                disabled={item.quantity <= 1}
-                              >
-                                <Minus className="h-3 w-3" />
-                              </button>
-                              <input
-                                type="number"
-                                min={1}
-                                value={item.quantity}
-                                onChange={(e) => {
-                                  const val = parseInt(e.target.value, 10);
-                                  if (!isNaN(val) && val > 0) {
-                                    setItemQuantityDirect(item.tempId, val);
-                                  }
-                                }}
-                                className="w-10 text-center text-xs font-bold text-foreground bg-transparent border-0 outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                              />
-                              <button
-                                className="px-2 h-full text-muted-foreground hover:text-primary hover:bg-background rounded-r-md transition-colors"
-                                onClick={() => updateItemQuantity(item.tempId, 1)}
-                              >
-                                <Plus className="h-3 w-3" />
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="px-2 py-1 bg-primary/5 rounded border border-primary/10 text-[10px] font-bold text-primary uppercase tracking-tighter">
-                              Serial Driven
-                            </div>
-                          )}
-                        {/* Item Total */}
-                        <div className="text-right">
-                          <span className="block text-sm font-bold text-foreground">
-                            ₱
-                            {item.totalAmount.toLocaleString(undefined, {
-                              minimumFractionDigits: 2,
-                            })}
-                          </span>
-                        </div>
+                      {/* Controls Row and total removed for serial return flow */}
                       </div>
-                    </div>
-                  ))}
+                  );
+                })}
                 </>
               )}
             </div>
