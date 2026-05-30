@@ -671,6 +671,19 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
       return;
     }
 
+    const zeroQtyIndex = items.findIndex((item) => !item.quantity || item.quantity <= 0);
+    if (zeroQtyIndex !== -1) {
+      const zeroQtyCardEl = cardRefs.current.get(zeroQtyIndex);
+      if (zeroQtyCardEl) {
+        zeroQtyCardEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else {
+        productsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      setSelectedRowIndex(zeroQtyIndex);
+      toast.error("Item quantity is required.", { description: `"${items[zeroQtyIndex].description}" has no quantity. Please add at least one serial number.` });
+      return;
+    }
+
     const invalidItemIndex = items.findIndex((item) => !item.returnType || item.returnType === "");
     if (invalidItemIndex !== -1) {
       setReturnTypeError(true);
@@ -1017,7 +1030,7 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
                       </div>
 
                       {/* Column 3: Gross, Disc Type, Disc Amount */}
-                      <div className="col-span-8 md:col-span-3 flex flex-col items-end text-right gap-1" onClick={e => e.stopPropagation()}>
+                      <div className="col-span-8 md:col-span-3 flex flex-col items-start text-left gap-1" onClick={e => e.stopPropagation()}>
                         <span className="text-xs text-muted-foreground">Gross: <span className="font-mono font-semibold">₱{item.grossAmount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></span>
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs text-muted-foreground">Disc:</span>
@@ -1029,8 +1042,9 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
                         </div>
                       </div>
 
-                      {/* Column 4: Total */}
-                      <div className="col-span-10 md:col-span-2 text-right md:pl-3 md:border-l border-border">
+                      {/* Column 4: Net Amount */}
+                      <div className="col-span-10 md:col-span-2 text-right md:pl-3 md:border-l border-border flex flex-col items-end">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Net Amount</span>
                         <span className="text-base font-bold text-foreground tabular-nums">₱{item.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                       </div>
 
