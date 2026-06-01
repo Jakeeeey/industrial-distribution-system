@@ -1,7 +1,7 @@
 import type { Branch, User, Province, City, Barangay } from "../types";
 
 export async function fetchBranches(): Promise<{ branches: Branch[]; users: User[] }> {
-    const res = await fetch("/api/scm/inventory-management/branch-management");
+    const res = await fetch("/api/ids/scm/inventory-management/branch-management");
     if (!res.ok) throw new Error("Failed to fetch data");
     return res.json();
 }
@@ -9,14 +9,14 @@ export async function fetchBranches(): Promise<{ branches: Branch[]; users: User
 export async function fetchUsers(): Promise<User[]> {
     // This is now handled by fetchBranches or a dedicated fetchInitialData
     // For compatibility with the current hook, I'll keep it but redirect to the proxy
-    const res = await fetch("/api/scm/inventory-management/branch-management");
+    const res = await fetch("/api/ids/scm/inventory-management/branch-management");
     if (!res.ok) throw new Error("Failed to fetch users");
     const data = await res.json();
     return data.users || [];
 }
 
 export async function saveBranch(branchData: Record<string, unknown>): Promise<unknown> {
-    const res = await fetch("/api/scm/inventory-management/branch-management", {
+    const res = await fetch("/api/ids/scm/inventory-management/branch-management", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(branchData),
@@ -52,7 +52,7 @@ export async function fetchBarangays(cityCode: string): Promise<Barangay[]> {
 }
 
 export async function updateBranch(id: number, branchData: Record<string, unknown>): Promise<unknown> {
-    const res = await fetch("/api/scm/inventory-management/branch-management", {
+    const res = await fetch("/api/ids/scm/inventory-management/branch-management", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, ...branchData }),
@@ -65,7 +65,7 @@ export async function updateBranch(id: number, branchData: Record<string, unknow
 }
 
 export async function deleteBranch(id: number): Promise<unknown> {
-    const res = await fetch(`/api/scm/inventory-management/branch-management?id=${id}`, {
+    const res = await fetch(`/api/ids/scm/inventory-management/branch-management?id=${id}`, {
         method: "DELETE",
     });
     if (!res.ok) {
