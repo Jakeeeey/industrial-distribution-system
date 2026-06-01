@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Search, Package, Minus, Plus } from "lucide-react";
@@ -27,6 +27,31 @@ export function ProductSelectionModal({
 }: ProductSelectionModalProps) {
   const [catalogSearch, setCatalogSearch] = useState("");
   const [cartItems, setCartItems] = useState<StockAdjustmentItem[]>([]);
+  const [units, setUnits] = useState<{ unit_id: number; unit_name: string; unit_shortcut: string }[]>([]);
+
+  // Fetch dynamic units
+  useEffect(() => {
+    if (isOpen) {
+      fetch("/api/ids/scm/inventory-management/stock-adjustment/units")
+        .then((res) => res.json())
+        .then((result) => {
+          if (result.data) {
+            setUnits(result.data);
+          }
+        })
+        .catch((err) => console.error("Failed to fetch units in modal:", err));
+    }
+  }, [isOpen]);
+
+  const allowedUnitNames = useMemo(() => {
+    const emptyNames = units
+      .filter((u) => u.unit_name.toUpperCase() === "EMPTY" || u.unit_shortcut.toUpperCase() === "EMPTY")
+      .map((u) => u.unit_name.toUpperCase());
+    const fullNames = units
+      .filter((u) => u.unit_name.toUpperCase() === "FULL" || u.unit_shortcut.toUpperCase() === "FULL")
+      .map((u) => u.unit_name.toUpperCase());
+    return new Set([...emptyNames, ...fullNames]);
+  }, [units]);
 
   // Synchronize cart when modal opens during render
   const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
@@ -39,15 +64,23 @@ export function ProductSelectionModal({
   }
 
   const filteredProducts = useMemo(() => {
-    if (!catalogSearch.trim()) return products;
+    const activeProducts = products.filter((p) => {
+      const uomName = (p.unit_name || "").toUpperCase();
+      if (units.length > 0) {
+        return allowedUnitNames.has(uomName);
+      }
+      return uomName === "EMPTY" || uomName === "FULL";
+    });
+
+    if (!catalogSearch.trim()) return activeProducts;
     const t = catalogSearch.toLowerCase();
-    return products.filter(
+    return activeProducts.filter(
       (p) =>
         p.product_name?.toLowerCase().includes(t) ||
         p.product_code?.toLowerCase().includes(t) ||
         p.barcode?.toLowerCase().includes(t)
     );
-  }, [products, catalogSearch]);
+  }, [products, catalogSearch, units, allowedUnitNames]);
 
   const addedProductIds = useMemo(() => {
     const ids = new Set<number>();
@@ -333,7 +366,7 @@ export function ProductSelectionModal({
               </div>
               
               <Button
-                className="w-full h-12 text-sm font-bold bg-primary/60 hover:bg-primary/70 text-white shadow-sm rounded-md mb-3"
+                className="w-full h-12 text-sm font-bold bg-primary hover:bg-primary/90 disabled:bg-primary/40 disabled:opacity-50 disabled:pointer-events-none text-white shadow-sm rounded-md mb-3"
                 disabled={cartItems.length === 0}
                 onClick={() => {
                   onConfirm(cartItems);
