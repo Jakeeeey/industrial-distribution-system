@@ -19,7 +19,7 @@ export function InventoryProductCard({ product, onClick }: InventoryProductCardP
                 group relative w-full text-left rounded-xl cursor-pointer
                 border-x border-t border-t-white/60 dark:border-t-white/10 border-border/70
                 border-b-[5px] border-b-muted-foreground/30 dark:border-b-neutral-800
-                bg-gradient-to-b from-card to-muted/40 p-4 
+                bg-gradient-to-b from-card/95 to-muted/70 dark:from-neutral-900 dark:to-neutral-950 p-4 
                 shadow-md hover:shadow-lg
                 hover:-translate-y-0.5 hover:border-b-[6px]
                 active:translate-y-[3px] active:border-b-[2px] active:shadow-sm

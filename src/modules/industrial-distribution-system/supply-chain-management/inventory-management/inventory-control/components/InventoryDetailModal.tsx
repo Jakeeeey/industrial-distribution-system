@@ -204,6 +204,7 @@ export function InventoryDetailModal({
         <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
             <DialogContent
                 showCloseButton={false}
+                aria-describedby={undefined}
                 id="inventory-detail-modal"
                 className={
                     activeMode === "choice"

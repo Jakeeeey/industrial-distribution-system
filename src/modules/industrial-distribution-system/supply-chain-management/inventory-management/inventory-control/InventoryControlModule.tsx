@@ -37,9 +37,9 @@ export default function InventoryControlModule() {
     const showEmpty = !loading && !error && selectedBranchId !== null && !hasData;
 
     return (
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-5 px-4">
             {/* ── Page Title ───────────────────── */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 py-5 px-5 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <h1 className="text-xl font-bold tracking-tight">LPG Inventory Control</h1>
                     <p className="text-sm text-muted-foreground mt-0.5">
