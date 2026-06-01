@@ -71,7 +71,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         continue;
       }
 
-      const parsed = text ? JSON.parse(text) : null;
+      interface ParsedResponse {
+        productId?: unknown;
+        content?: unknown[];
+        data?: unknown[];
+      }
+
+      const parsed: unknown = text ? JSON.parse(text) : null;
 
       // Re-use logic similar to physical inventory
       let isValid = false;
@@ -79,9 +85,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         isValid = true;
       } else if (parsed && typeof parsed === "object" && "productId" in parsed) {
         isValid = true;
-      } else if (parsed && typeof parsed === "object" && Array.isArray((parsed as any).content) && (parsed as any).content.length > 0) {
+      } else if (parsed && typeof parsed === "object" && Array.isArray((parsed as ParsedResponse).content) && (parsed as ParsedResponse).content!.length > 0) {
         isValid = true;
-      } else if (parsed && typeof parsed === "object" && Array.isArray((parsed as any).data) && (parsed as any).data.length > 0) {
+      } else if (parsed && typeof parsed === "object" && Array.isArray((parsed as ParsedResponse).data) && (parsed as ParsedResponse).data!.length > 0) {
         isValid = true;
       }
 
