@@ -896,8 +896,12 @@ export const stockAdjustmentService = {
   /**
    * Fetch all branches for the dropdown
    */
-  async fetchBranches() {
-    const res = await directusFetch<{ data: { id: number; branch_name: string; branch_code: string }[] }>(`${DIRECTUS_URL}/items/branches?fields=id,branch_name,branch_code&sort=branch_name`);
+  async fetchBranches(params?: { divisionId?: number }) {
+    let url = `${DIRECTUS_URL}/items/branches?fields=id,branch_name,branch_code&sort=branch_name`;
+    if (params?.divisionId) {
+      url += `&filter[division_id][_eq]=${params.divisionId}`;
+    }
+    const res = await directusFetch<{ data: { id: number; branch_name: string; branch_code: string }[] }>(url);
     return res.data;
   },
 

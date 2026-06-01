@@ -114,7 +114,7 @@ export function SalesmanCreationView() {
       await createSalesman(draft);
       toast.success("Salesman registered successfully.");
       // Optional: redirect to listing or clear form
-      router.push("/hrm/employee-admin/structure/sales-management/salesman-qr-code");
+      router.push("ids/hrm/employee-admin/structure/sales-management/salesman-qr-code");
     } catch (e) {
       toast.error((e as Error).message ?? "Failed to save.");
     } finally {
@@ -129,12 +129,12 @@ export function SalesmanCreationView() {
   };
 
   if (!lookups && loading) {
-      return (
-        <div className="flex items-center justify-center gap-2 py-20 text-muted-foreground">
-          <Spinner className="h-5 w-5" />
-          <span>Loading metadata...</span>
-          </div>
-      )
+    return (
+      <div className="flex items-center justify-center gap-2 py-20 text-muted-foreground">
+        <Spinner className="h-5 w-5" />
+        <span>Loading metadata...</span>
+      </div>
+    )
   }
 
   return (
@@ -224,7 +224,7 @@ export function SalesmanCreationView() {
             </div>
 
             <div className="md:col-span-12 py-1">
-                <Separator />
+              <Separator />
             </div>
 
             <div className="md:col-span-12 -mt-1">
@@ -264,7 +264,7 @@ export function SalesmanCreationView() {
             </div>
 
             <div className="md:col-span-12 py-1">
-                <Separator />
+              <Separator />
             </div>
 
             <div className="md:col-span-12 -mt-1">
