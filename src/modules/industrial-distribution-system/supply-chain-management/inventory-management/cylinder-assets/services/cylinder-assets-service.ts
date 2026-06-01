@@ -49,7 +49,7 @@ export const cylinderAssetsService = {
     let customers: { customer_code: string; customer_name: string }[] = [];
 
     if (productIds.length > 0) {
-      const pRes = await directusFetch<{ data: { product_id: number; product_name: string; product_code: string }[] }>(`${DIRECTUS_URL}/items/products?fields=product_id,product_name,product_code&filter=${JSON.stringify({ product_id: { _in: productIds } })}`);
+      const pRes = await directusFetch<{ data: { product_id: number; product_name: string; product_code: string; unit_of_measurement: number | null }[] }>(`${DIRECTUS_URL}/items/products?fields=product_id,product_name,product_code,unit_of_measurement&filter=${JSON.stringify({ product_id: { _in: productIds } })}`);
       products = pRes.data || [];
     }
 
@@ -98,8 +98,13 @@ export const cylinderAssetsService = {
   },
 
   async fetchSerializedProducts() {
-    const query = `fields=product_id,product_name,product_code&filter[isActive][_eq]=1&filter[is_serialized][_eq]=1&limit=-1&sort=product_name`;
-    const res = await directusFetch<{ data: { product_id: number; product_name: string; product_code: string }[] }>(`${DIRECTUS_URL}/items/products?${query}`);
+    const filter = JSON.stringify({
+      isActive: { _eq: 1 },
+      is_serialized: { _eq: 1 },
+      unit_of_measurement: { _in: [18, 23] }, // 18 = EMPTY, 23 = FULL
+    });
+    const query = `fields=product_id,product_name,product_code,unit_of_measurement&filter=${encodeURIComponent(filter)}&limit=-1&sort=product_name`;
+    const res = await directusFetch<{ data: { product_id: number; product_name: string; product_code: string; unit_of_measurement: number | null }[] }>(`${DIRECTUS_URL}/items/products?${query}`);
     return res.data;
   },
 

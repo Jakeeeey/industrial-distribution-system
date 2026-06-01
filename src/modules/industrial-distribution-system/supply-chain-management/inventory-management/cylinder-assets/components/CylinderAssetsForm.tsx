@@ -102,15 +102,18 @@ export function CylinderAssetsForm({
       .then((d) => {
         if (d.data)
           setProducts(
-            d.data.map((p: { product_id: number; product_code: string; product_name: string }) => ({
-              value: String(p.product_id),
-              label: `${p.product_code} — ${p.product_name}`,
-            }))
+            d.data.map((p: { product_id: number; product_code: string; product_name: string; unit_of_measurement: number | null }) => {
+              const uomLabel = p.unit_of_measurement === 23 ? " (FULL)" : p.unit_of_measurement === 18 ? " (EMPTY)" : "";
+              return {
+                value: String(p.product_id),
+                label: `${p.product_code} — ${p.product_name}${uomLabel}`,
+              };
+            })
           );
       })
       .catch(console.error);
 
-    fetch("/api/ids/scm/inventory-management/stock-adjustment/branches")
+    fetch("/api/ids/scm/inventory-management/stock-adjustment/branches?division_id=1")
       .then((r) => r.json())
       .then((d) => {
         if (d.data)
@@ -238,6 +241,35 @@ export function CylinderAssetsForm({
           return;
         }
 
+        // Validate if they are transacted in v-serial-onhand
+        const serialsArr = activeRows.map((r) => ({
+          serialNumber: r.serial_number.trim(),
+          branchId: branchId ? Number(branchId) : undefined
+        }));
+        try {
+          const onhandRes = await fetch(`/api/ids/scm/inventory-management/cylinder-assets/validate-onhand`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ serials: serialsArr })
+          });
+          const onhandJson = await onhandRes.json();
+          if (onhandJson.invalidSerials && onhandJson.invalidSerials.length > 0) {
+            setApiDuplicateSerials((prev) => [...prev, ...onhandJson.invalidSerials]);
+            toast.error(
+              `Validation Failed: The following serial(s) have not yet been processed or physically received: ${onhandJson.invalidSerials.join(
+                ", "
+              )}`
+            );
+            setLoading(false);
+            return;
+          }
+        } catch (err) {
+          console.error("Failed to validate on-hand serials", err);
+          toast.error("Failed to validate serials against transacted inventory.");
+          setLoading(false);
+          return;
+        }
+
         const payloads = activeRows
           .map((r) => ({
             product_id: Number(productId),
@@ -276,7 +308,10 @@ export function CylinderAssetsForm({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[920px] max-h-[90vh] overflow-y-auto">
+      <DialogContent 
+        className="sm:max-w-[920px] max-h-[90vh] overflow-y-auto"
+        onWheel={(e) => e.stopPropagation()}
+      >
         <form onSubmit={handleSubmit}>
           <DialogHeader className="pb-2">
             <DialogTitle className="text-xl">
