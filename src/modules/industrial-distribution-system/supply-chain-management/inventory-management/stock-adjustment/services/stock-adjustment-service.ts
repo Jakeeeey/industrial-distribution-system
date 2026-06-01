@@ -6,6 +6,14 @@ import {
   StockAdjustmentProduct,
 } from "../types/stock-adjustment.schema";
 
+/** Shape of a record returned from cylinder_assets_draft */
+interface DraftCylinder {
+  id: number;
+  product_id: number;
+  cylinder_status?: string;
+  [key: string]: unknown;
+}
+
 interface RawItem {
   id?: number;
   doc_no: string;
@@ -614,8 +622,9 @@ export const stockAdjustmentService = {
       body: JSON.stringify(headerPayload),
     });
 
+    const docNo = payload.header.doc_no;
     const existingItemsRes = await directusFetch<{ data: { id: number }[] }>(
-      `${DIRECTUS_URL}/items/stock_adjustment?filter={"stock_adjustment_id":{"_eq":${id}}}&fields=id`
+      `${DIRECTUS_URL}/items/stock_adjustment?filter={"doc_no":{"_eq":"${docNo}"}}&fields=id`
     );
     const itemIds = existingItemsRes.data.map((i: { id: number }) => i.id);
 
@@ -706,6 +715,120 @@ export const stockAdjustmentService = {
    * Post (finalize) a Stock Adjustment
    */
   async postStockAdjustment(id: number, userId?: number) {
+    try {
+      const headerRes = await directusFetch<{ data: { doc_no: string } }>(
+        `${DIRECTUS_URL}/items/stock_adjustment_header/${id}?fields=doc_no`
+      );
+      const docNo = headerRes.data?.doc_no;
+
+      if (docNo) {
+        const itemsRes = await directusFetch<{
+          data: Array<{
+            id: number;
+            product_id: number | {
+              product_id: number;
+              unit_of_measurement?: { unit_name?: string } | null;
+            };
+            unit_id?: { unit_name?: string } | null;
+          }>;
+        }>(
+          `${DIRECTUS_URL}/items/stock_adjustment?filter={"doc_no":{"_eq":"${docNo}"}}&fields=id,product_id.product_id,product_id.unit_of_measurement.unit_name,unit_id.unit_name&limit=-1`
+        );
+        
+        const productUomMap = new Map<number, string>();
+        const itemIds = (itemsRes.data || []).map((item) => {
+          const isProductObject = typeof item.product_id === "object" && item.product_id !== null;
+          const pId = isProductObject
+            ? Number((item.product_id as { product_id: number }).product_id)
+            : Number(item.product_id);
+          const productUom = isProductObject
+            ? (item.product_id as { unit_of_measurement?: { unit_name?: string } | null }).unit_of_measurement?.unit_name
+            : "";
+          const uom = String(item.unit_id?.unit_name || productUom || "").toUpperCase();
+          if (pId && uom) {
+            productUomMap.set(pId, uom);
+          }
+          return item.id;
+        });
+
+        if (itemIds.length > 0) {
+          // Fetch dynamic units from Directus
+          const unitsRes = await directusFetch<{ data: { unit_id: number; unit_name: string; unit_shortcut: string }[] }>(
+            `${DIRECTUS_URL}/items/units?fields=unit_id,unit_name,unit_shortcut&limit=-1`
+          );
+          const unitsList = unitsRes.data || [];
+          const emptyUnit = unitsList.find(u => u.unit_name.toUpperCase() === "EMPTY" || u.unit_shortcut.toUpperCase() === "EMPTY");
+          const emptyName = emptyUnit ? emptyUnit.unit_name.toUpperCase() : "EMPTY";
+
+          const serialRes = await directusFetch<{ data: { serial_number: string }[] }>(
+            `${DIRECTUS_URL}/items/stock_adjustment_serial?filter={"stock_adjustment_id":{"_in":${JSON.stringify(itemIds)}}}&fields=serial_number&limit=-1`
+          );
+          const serials = (serialRes.data || []).map((s) => s.serial_number);
+
+          if (serials.length > 0) {
+            const draftRes = await directusFetch<{ data: DraftCylinder[] }>(
+              `${DIRECTUS_URL}/items/cylinder_assets_draft?filter={"serial_number":{"_in":${JSON.stringify(serials)}}}&limit=-1`
+            );
+            const draftCylinders = draftRes.data || [];
+
+            if (draftCylinders.length > 0) {
+              const cylindersToInsert = draftCylinders.map((c) => {
+                const pId = Number(c.product_id);
+                const uom = productUomMap.get(pId);
+                // Status mapping mirrors BulkRegisterModal logic:
+                //   EMPTY UOM → "EMPTY"  (cylinder is empty)
+                //   All others (incl. FULL UOM) → "AVAILABLE"
+                //   ("FULL" UOM means it's full and ready to sell, so the asset
+                //    status should be AVAILABLE, not FULL)
+                let finalStatus = (c.cylinder_status as string) || "AVAILABLE";
+                if (uom) {
+                  if (uom === emptyName) {
+                    finalStatus = "EMPTY";
+                  } else {
+                    finalStatus = "AVAILABLE";
+                  }
+                }
+
+                // Copy all properties except `id` and `acquisition_date`.
+                // `acquisition_date` is required NOT NULL in cylinder_assets but the draft
+                // table doesn't have it — always inject the posting date explicitly.
+                const postingDate = new Date().toISOString().split("T")[0];
+                const copy: Record<string, unknown> = {};
+                for (const key in c) {
+                  if (key !== "id" && key !== "acquisition_date") {
+                    copy[key] = c[key];
+                  }
+                }
+
+                const record = {
+                  ...copy,
+                  cylinder_status: finalStatus,
+                  acquisition_date: postingDate,
+                };
+
+                console.log("[Promote] cylinder record to insert:", JSON.stringify(record));
+                return record;
+              });
+
+              await directusFetch(`${DIRECTUS_URL}/items/cylinder_assets`, {
+                method: "POST",
+                body: JSON.stringify(cylindersToInsert),
+              });
+
+              const draftIdsToDelete = draftCylinders.map((c) => c.id);
+              await directusFetch(`${DIRECTUS_URL}/items/cylinder_assets_draft`, {
+                method: "DELETE",
+                body: JSON.stringify(draftIdsToDelete),
+              });
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to promote draft cylinder assets during posting:", err);
+      throw err;
+    }
+
     const res = await directusFetch<{ data: unknown }>(`${DIRECTUS_URL}/items/stock_adjustment_header/${id}`, {
       method: "PATCH",
       body: JSON.stringify({

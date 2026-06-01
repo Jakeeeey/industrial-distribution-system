@@ -28,6 +28,7 @@ interface SerialInputModalProps {
   productId?: number;
   validateSerial?: (serial: string, branchId?: number) => Promise<{ exists: boolean; location?: string }>;
   excludeSerials?: string[];
+  unitName?: string;
 }
 
 export function SerialInputModal({
@@ -41,6 +42,7 @@ export function SerialInputModal({
   productId,
   validateSerial,
   excludeSerials = [],
+  unitName,
 }: SerialInputModalProps) {
   const [serials, setSerials] = useState<string[]>(initialSerials);
   const [unregisteredSerials, setUnregisteredSerials] = useState<string[]>([]);
@@ -308,6 +310,7 @@ export function SerialInputModal({
         serials={unregisteredSerials}
         productId={productId || 0}
         branchId={branchId || 0}
+        unitName={unitName}
         onSuccess={() => {
           // After successful registration, move unregistered to registered serials
           setSerials(prev => Array.from(new Set([...prev, ...unregisteredSerials])));
