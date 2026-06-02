@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { lpgSiteService } from "../services/lpgSiteService";
-import { LpgSite, BillingMode } from "../types";
+import { LpgSite, BillingMode, MeterUnit, MeterDirection } from "../types";
 import {
   Save,
   MapPin,
   CreditCard,
   Cylinder,
   Loader2,
-  ChevronLeft
+  ChevronLeft,
+  Gauge
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,6 +64,12 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
     default_target_lpg_kg: 50.00,
     is_active: true,
     cylinders: [], // Local staging for new sites
+    meter_no: "",
+    meter_unit: "KG",
+    meter_direction: "INCREASING",
+    last_meter_reading: 0,
+    conversion_factor: 1.0,
+    last_reading_date: new Date().toISOString().split("T")[0],
   });
 
   useEffect(() => {
@@ -77,6 +84,7 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
           if (site) {
             setFormData({
               ...site,
+              meter_direction: site.meter_direction || "INCREASING",
               cylinders: site.cylinders || []
             });
           }
@@ -261,13 +269,25 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
                   <Label>Billing Mode</Label>
                   <Select
                     value={formData?.billing_mode}
-                    onValueChange={(val: BillingMode) => setFormData({ ...formData, billing_mode: val })}
+                    onValueChange={(val: BillingMode) => {
+                      let updatedUnit = formData.meter_unit;
+                      if (val === "METERED") updatedUnit = "M3";
+                      if (val === "KILO") updatedUnit = "KG";
+                      setFormData({
+                        ...formData,
+                        billing_mode: val,
+                        meter_unit: updatedUnit,
+                        meter_direction: "INCREASING"
+                      });
+                    }}
                   >
                     <SelectTrigger className="rounded-xl border-zinc-200 dark:border-zinc-800">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl border-zinc-200 dark:border-zinc-800">
+                      <SelectItem value="BOTH">BOTH (KILO & METERED)</SelectItem>
                       <SelectItem value="KILO">KILO (By Weight)</SelectItem>
+                      <SelectItem value="METERED">METERED (By Volume)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -310,6 +330,97 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
               </div>
             </CardContent>
           </Card>
+
+          {/* Meter Configuration */}
+          {(formData?.billing_mode === "METERED" || formData?.billing_mode === "BOTH") && (
+            <Card className="border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm rounded-2xl shadow-sm">
+              <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center gap-2">
+                <Gauge className="h-4 w-4 text-emerald-600" />
+                <h3 className="font-bold">Meter Configuration</h3>
+              </div>
+              <CardContent className="p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Meter Number</Label>
+                    <Input
+                      placeholder="e.g. MET-12345"
+                      value={formData?.meter_no || ""}
+                      onChange={(e) => setFormData({ ...formData, meter_no: e.target.value })}
+                      className="rounded-xl border-zinc-200 dark:border-zinc-800"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Meter Unit</Label>
+                    <Select
+                      value={formData?.meter_unit || ""}
+                      onValueChange={(val: MeterUnit) => setFormData({ ...formData, meter_unit: val })}
+                    >
+                      <SelectTrigger className="rounded-xl border-zinc-200 dark:border-zinc-800">
+                        <SelectValue placeholder="Select unit..." />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl border-zinc-200 dark:border-zinc-800">
+                        <SelectItem value="M3">M3 (Cubic Meters)</SelectItem>
+                        <SelectItem value="KG">KG (Kilograms)</SelectItem>
+                        <SelectItem value="LITER">LITER (Liters)</SelectItem>
+                        <SelectItem value="UNIT">UNIT (Units)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Meter Direction</Label>
+                    <Select
+                      value={formData?.meter_direction || "INCREASING"}
+                      disabled
+                      onValueChange={(val: MeterDirection) => setFormData({ ...formData, meter_direction: val })}
+                    >
+                      <SelectTrigger className="rounded-xl border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-800">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl border-zinc-200 dark:border-zinc-800">
+                        <SelectItem value="INCREASING">INCREASING</SelectItem>
+                        <SelectItem value="DECREASING">DECREASING</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Last Meter Reading</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={formData?.last_meter_reading ?? ""}
+                      onChange={(e) => setFormData({ ...formData, last_meter_reading: e.target.value === "" ? null : parseFloat(e.target.value) })}
+                      className="rounded-xl border-zinc-200 dark:border-zinc-800"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Conversion Factor</Label>
+                    <Input
+                      type="number"
+                      step="0.0001"
+                      placeholder="1.0000"
+                      value={formData?.conversion_factor ?? ""}
+                      onChange={(e) => setFormData({ ...formData, conversion_factor: e.target.value === "" ? null : parseFloat(e.target.value) })}
+                      className="rounded-xl border-zinc-200 dark:border-zinc-800"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Last Reading Date</Label>
+                    <Input
+                      type="date"
+                      value={formData?.last_reading_date || ""}
+                      onChange={(e) => setFormData({ ...formData, last_reading_date: e.target.value })}
+                      className="rounded-xl border-zinc-200 dark:border-zinc-800"
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
 
