@@ -131,38 +131,10 @@ export async function GET(req: NextRequest) {
 
         // Fetch Base Lookups
         const [catJson, brandJson, unitJson, supplierJson] = await Promise.all([
-            fetchDirectus<{ data: Record<string, unknown>[] }>(`${DIRECTUS_URL}/items/${CATEGORIES}?limit=-1&fields=category_id,category_name&sort=category_name&filter[is_industrial][_eq]=1`),
-            fetchDirectus<{ data: Record<string, unknown>[] }>(`${DIRECTUS_URL}/items/${BRAND}?limit=-1&fields=brand_id,brand_name&sort=brand_name&filter[is_industrial][_eq]=1`),
+            fetchDirectus<{ data: Record<string, unknown>[] }>(`${DIRECTUS_URL}/items/${CATEGORIES}?limit=-1&fields=category_id,category_name&sort=category_name`),
+            fetchDirectus<{ data: Record<string, unknown>[] }>(`${DIRECTUS_URL}/items/${BRAND}?limit=-1&fields=brand_id,brand_name&sort=brand_name`),
             fetchDirectus<{ data: Record<string, unknown>[] }>(`${DIRECTUS_URL}/items/${UNITS}?limit=-1&fields=unit_id,unit_name,unit_shortcut,order&sort=order,unit_name`),
-            (async () => {
-                // Fetch supplier IDs that actually have serialized products
-                const activeSuppliersParams = new URLSearchParams();
-                activeSuppliersParams.set("limit", "-1");
-                activeSuppliersParams.set("fields", "supplier_id");
-                activeSuppliersParams.set("filter[product_id][is_serialized][_eq]", "1");
-
-                const activeSuppliersJson = await fetchDirectus<{ data: { supplier_id: number }[] }>(
-                    `${DIRECTUS_URL}/items/${PRODUCT_PER_SUPPLIER}?${activeSuppliersParams.toString()}`
-                );
-                const supplierIdsWithProducts = Array.from(new Set(
-                    (activeSuppliersJson.data ?? []).map(r => r.supplier_id).filter(Boolean)
-                ));
-
-                const sp = new URLSearchParams();
-                sp.set("limit", "-1");
-                sp.set("fields", "id,supplier_name,supplier_shortcut,isActive,address,tin_number,contact_person,phone_number,email_address,city,state_province,supplier_type");
-                sp.set("sort", "supplier_name");
-                sp.set("filter[isActive][_eq]", "1");
-                sp.set("filter[supplier_type][_eq]", "TRADE");
-
-                if (supplierIdsWithProducts.length > 0) {
-                    sp.set("filter[id][_in]", supplierIdsWithProducts.join(","));
-                } else {
-                    sp.set("filter[id][_eq]", "0");
-                }
-
-                return fetchDirectus<{ data: Record<string, unknown>[] }>(`${DIRECTUS_URL}/items/${SUPPLIERS}?${sp.toString()}`);
-            })(),
+            fetchDirectus<{ data: Record<string, unknown>[] }>(`${DIRECTUS_URL}/items/${SUPPLIERS}?limit=-1&fields=id,supplier_name,supplier_shortcut,isActive,address,tin_number,contact_person,phone_number,email_address,city,state_province,supplier_type&sort=supplier_name&filter[isActive][_eq]=1&filter[supplier_type][_eq]=TRADE`),
         ]);
 
         let categories = catJson.data ?? [];

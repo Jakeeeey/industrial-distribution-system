@@ -11,7 +11,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { NavUser } from "@/components/shared/app-sidebar/nav-user";
 
 import { cookies } from "next/headers";
-import { CustomerRegistration } from "@/modules/industrial-distribution-system/customer-relationship-management/customer-management/customer";
+import { CustomerRegistrationModule } from "@/modules/industrial-distribution-system/customer-relationship-management/customer-management/customer-registration";
 
 
 
@@ -112,7 +112,7 @@ export default async function Page() {
             </header>
 
             <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4">
-                <CustomerRegistration />
+                <CustomerRegistrationModule />
             </main>
         </div>
     );

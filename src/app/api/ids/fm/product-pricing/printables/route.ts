@@ -60,7 +60,6 @@ export async function GET(req: NextRequest) {
         const supplierIds = searchParams.get("supplier_ids")?.split(",") || [];
         const supplierScope = searchParams.get("supplier_scope") || "ALL";
         const activeOnly = searchParams.get("active_only") === "1";
-        const serializedOnly = searchParams.get("serialized_only") === "1";
 
         const fields = [
             "product_id", "parent_id", "product_code", "product_name",
@@ -79,7 +78,6 @@ export async function GET(req: NextRequest) {
         };
 
         if (activeOnly) addAnd("[isActive][_eq]", "1");
-        if (serializedOnly) addAnd("[is_serialized][_eq]", "1");
         if (categoryIds.length) addAnd("[product_category][_in]", categoryIds.join(","));
         if (brandIds.length) addAnd("[product_brand][_in]", brandIds.join(","));
         if (unitIds.length) addAnd("[unit_of_measurement][_in]", unitIds.join(","));
@@ -113,8 +111,9 @@ export async function GET(req: NextRequest) {
 
             const groupIds = new Set<number>();
             for (const item of productInfoRes.data) {
-                // If this product has a parent, the root is the parent; otherwise it IS the root
-                groupIds.add(item.parent_id ?? item.product_id);
+                // If this product has a parent (> 0), the root is the parent; otherwise it IS the root
+                const gid = pickId(item.parent_id) ?? item.product_id;
+                groupIds.add(gid);
             }
 
             if (groupIds.size > 0) {

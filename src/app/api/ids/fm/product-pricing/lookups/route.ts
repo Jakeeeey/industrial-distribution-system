@@ -233,13 +233,11 @@ export async function GET(req: NextRequest) {
         catParams.set("limit", "-1");
         catParams.set("fields", "category_id,category_name");
         catParams.set("sort", "category_name");
-        catParams.set("filter[is_industrial][_eq]", "1");
 
         const brandParams = new URLSearchParams();
         brandParams.set("limit", "-1");
         brandParams.set("fields", "brand_id,brand_name");
         brandParams.set("sort", "brand_name");
-        brandParams.set("filter[is_industrial][_eq]", "1");
 
         const unitParams = new URLSearchParams();
         unitParams.set("limit", "-1");
@@ -251,26 +249,7 @@ export async function GET(req: NextRequest) {
         supplierParams.set("fields", "id,supplier_name,supplier_shortcut,isActive");
         supplierParams.set("sort", "supplier_name");
         supplierParams.set("filter[isActive][_eq]", "1");
-
-        // Fetch supplier IDs that actually have serialized products
-        const activeSuppliersParams = new URLSearchParams();
-        activeSuppliersParams.set("limit", "-1");
-        activeSuppliersParams.set("fields", "supplier_id");
-        activeSuppliersParams.set("filter[product_id][is_serialized][_eq]", "1");
-        
-        const activeSuppliersJson = await fetchDirectus<{ data: { supplier_id: number }[] }>(
-            `${DIRECTUS_URL}/items/${PRODUCT_PER_SUPPLIER}?${activeSuppliersParams.toString()}`
-        );
-        const supplierIdsWithProducts = Array.from(new Set(
-            (activeSuppliersJson.data ?? []).map(r => r.supplier_id).filter(Boolean)
-        ));
-
-        if (supplierIdsWithProducts.length > 0) {
-            supplierParams.set("filter[id][_in]", supplierIdsWithProducts.join(","));
-        } else {
-            // If no suppliers have products, ensure we don't return all of them
-            supplierParams.set("filter[id][_eq]", "0"); 
-        }
+        supplierParams.set("filter[supplier_type][_eq]", "TRADE");
 
         const [catJson, brandJson, unitJson, supplierJson] = await Promise.all([
             fetchDirectus<{ data: DirectusCategory[] }>(`${DIRECTUS_URL}/items/${CATEGORIES}?${catParams.toString()}`),

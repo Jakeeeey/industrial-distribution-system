@@ -1,8 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import {
-  CustomerMapFilter,
-  CustomerMapRecord,
-} from "../types/customer-map.schema";
+import { CustomerMapFilter, CustomerMapRecord } from "../types/customer-map.schema";
 
 export function useCustomerMap() {
   const [data, setData] = useState<CustomerMapRecord[]>([]);
@@ -25,11 +22,7 @@ export function useCustomerMap() {
     try {
       const fields = ["cluster", "storeType", "classification", "salesman"];
       const results = await Promise.all(
-        fields.map((field) =>
-          fetch(`/api/ids/crm/customer-hub/customer-map?field=${field}`).then(
-            (res) => res.json(),
-          ),
-        ),
+        fields.map(field => fetch(`/api/ids/crm/customer-hub/customer-map?field=${field}`).then(res => res.json()))
       );
 
       setOptions({
@@ -43,40 +36,29 @@ export function useCustomerMap() {
     }
   }, []);
 
-  const fetchMapData = useCallback(
-    async (currentFilters: CustomerMapFilter) => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const params = new URLSearchParams();
-        if (currentFilters.cluster)
-          params.append("cluster", currentFilters.cluster);
-        if (currentFilters.storeType)
-          params.append("storeType", currentFilters.storeType);
-        if (currentFilters.classification)
-          params.append("classification", currentFilters.classification);
-        if (currentFilters.salesman)
-          params.append("salesman", currentFilters.salesman);
+  const fetchMapData = useCallback(async (currentFilters: CustomerMapFilter) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      if (currentFilters.cluster) params.append("cluster", currentFilters.cluster);
+      if (currentFilters.storeType) params.append("storeType", currentFilters.storeType);
+      if (currentFilters.classification) params.append("classification", currentFilters.classification);
+      if (currentFilters.salesman) params.append("salesman", currentFilters.salesman);
 
-        const response = await fetch(
-          `/api/ids/crm/customer-hub/customer-map?${params.toString()}`,
-        );
-        if (!response.ok) {
-          throw new Error("Failed to fetch map data");
-        }
-
-        const json = await response.json();
-        setData(json);
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "An unknown error occurred",
-        );
-      } finally {
-        setIsLoading(false);
+      const response = await fetch(`/api/ids/crm/customer-hub/customer-map?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch map data");
       }
-    },
-    [],
-  );
+
+      const json = await response.json();
+      setData(json);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An unknown error occurred");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     fetchOptions();

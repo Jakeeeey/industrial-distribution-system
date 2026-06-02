@@ -263,11 +263,10 @@ function applyCommonFilters(args: {
     brandIds: string[];
     unitIds: string[];
     activeOnly: boolean;
-    serializedOnly: boolean;
     missingTier: boolean;
     productIdsIn?: number[];
 }) {
-    const { params, q, categoryIds, brandIds, unitIds, activeOnly, serializedOnly, missingTier, productIdsIn } = args;
+    const { params, q, categoryIds, brandIds, unitIds, activeOnly, missingTier, productIdsIn } = args;
 
     let andIdx = 0;
     const addAnd = (suffix: string, value: string) => {
@@ -276,7 +275,6 @@ function applyCommonFilters(args: {
     };
 
     if (activeOnly) addAnd("[isActive][_eq]", "1");
-    if (serializedOnly) addAnd("[is_serialized][_eq]", "1");
 
     if (categoryIds.length > 0) addAnd("[product_category][_in]", categoryIds.join(","));
     if (brandIds.length > 0) addAnd("[product_brand][_in]", brandIds.join(","));
@@ -353,7 +351,6 @@ export async function GET(req: NextRequest) {
         })();
 
         const activeOnly = norm(searchParams.get("active_only") || "1") === "1";
-        const serializedOnly = norm(searchParams.get("serialized_only") || "1") === "1";
         const missingTier = norm(searchParams.get("missing_tier") || "0") === "1";
 
         const page = Math.max(1, toInt(searchParams.get("page"), 1));
@@ -424,7 +421,7 @@ export async function GET(req: NextRequest) {
                 params.set("fields", fields);
                 params.set("sort", "product_name");
 
-                applyCommonFilters({ params, q, categoryIds, brandIds, unitIds, activeOnly, serializedOnly, missingTier });
+                applyCommonFilters({ params, q, categoryIds, brandIds, unitIds, activeOnly, missingTier });
 
                 const directusUrl = `${DIRECTUS_URL}/items/${PRODUCTS}?${params.toString()}`;
                 const { ok, status, text } = await fetchDirectusRaw(directusUrl);
@@ -460,7 +457,6 @@ export async function GET(req: NextRequest) {
                         brandIds,
                         unitIds,
                         activeOnly,
-                        serializedOnly,
                         missingTier,
                         productIdsIn: ids,
                     });
@@ -531,6 +527,72 @@ export async function GET(req: NextRequest) {
         const safePage = Math.min(Math.max(1, page), Math.max(1, totalPages || 1));
         const start = (safePage - 1) * groupPageSize;
         const pageGroups = groupEntries.slice(start, start + groupPageSize);
+
+        // Fetch complete variants for pageGroups to ensure all UOMs (e.g. PCS, BOX) are present
+        const pageGroupIds = pageGroups.map((g) => g.gid);
+        if (pageGroupIds.length > 0) {
+            const params = new URLSearchParams();
+            params.set("limit", "-1");
+            params.set("fields", fields);
+
+            let andIdx = 0;
+            const addAnd = (suffix: string, value: string) => {
+                params.set(`filter[_and][${andIdx}]${suffix}`, value);
+                andIdx += 1;
+            };
+
+            if (activeOnly) {
+                addAnd("[isActive][_eq]", "1");
+            }
+
+            addAnd("[_or][0][product_id][_in]", pageGroupIds.join(","));
+            params.set(`filter[_and][${andIdx - 1}][_or][1][parent_id][_in]`, pageGroupIds.join(","));
+
+            const url = `${DIRECTUS_URL}/items/${PRODUCTS}?${params.toString()}`;
+            const { ok, status, text } = await fetchDirectusRaw(url);
+            if (!ok) {
+                throw new Error(
+                    JSON.stringify({
+                        message: "Directus request failed (page variants fetch)",
+                        status,
+                        url,
+                        body: text,
+                    }),
+                );
+            }
+
+            const json = JSON.parse(text) as { data?: ProductRow[] };
+            const fetchedVariants = (json.data ?? []).map(normalizeProductRow);
+
+            const fetchedGroups = new Map<number, ProductRow[]>();
+            for (const v of fetchedVariants) {
+                const gid = groupKey(v);
+                if (gid) {
+                    const existing = fetchedGroups.get(gid);
+                    if (existing) {
+                        existing.push(v);
+                    } else {
+                        fetchedGroups.set(gid, [v]);
+                    }
+                }
+            }
+
+            for (const group of pageGroups) {
+                let completeVariants = fetchedGroups.get(group.gid) ?? [];
+                if (unitIds.length > 0) {
+                    completeVariants = completeVariants.filter(
+                        (v) => v.unit_of_measurement && unitIds.includes(String(v.unit_of_measurement)),
+                    );
+                }
+                if (completeVariants.length > 0) {
+                    group.variants = completeVariants;
+                    group.display =
+                        completeVariants.find((v) => Number(v.product_id) === Number(group.gid)) ??
+                        completeVariants.find((v) => v.parent_id == null) ??
+                        completeVariants[0];
+                }
+            }
+        }
 
         const pageVariants: ProductRow[] = [];
         for (const group of pageGroups) {
