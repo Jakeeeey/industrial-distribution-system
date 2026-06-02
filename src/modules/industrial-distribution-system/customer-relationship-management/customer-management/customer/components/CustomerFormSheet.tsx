@@ -548,6 +548,8 @@ export function CustomerFormSheet({
   );
   const [paymentTerms, setPaymentTerms] = useState<PaymentTerm[]>([]);
   const [bankNames, setBankNames] = useState<ReferenceOption[]>([]);
+  const [priceTypes, setPriceTypes] = useState<{ price_type_id: number; price_type_name: string; sort?: number }[]>([]);
+  const [isLoadingPriceTypes, setIsLoadingPriceTypes] = useState(false);
 
   const [provincesList, setProvincesList] = useState<LocationOption[]>([]);
   const [citiesList, setCitiesList] = useState<LocationOption[]>([]);
@@ -882,6 +884,32 @@ export function CustomerFormSheet({
     };
 
     fetchPaymentTerms();
+    return () => {
+      isMounted = false;
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    let isMounted = true;
+
+    const fetchPriceTypes = async () => {
+      setIsLoadingPriceTypes(true);
+      try {
+        const res = await fetch("/api/ids/fm/product-pricing/price-types");
+        if (!res.ok) throw new Error("Failed to fetch price types");
+        const json = await res.json();
+        if (isMounted) {
+          setPriceTypes(json.data || []);
+        }
+      } catch {
+        console.error("Failed to fetch price types");
+      } finally {
+        if (isMounted) setIsLoadingPriceTypes(false);
+      }
+    };
+
+    fetchPriceTypes();
     return () => {
       isMounted = false;
     };
@@ -1730,7 +1758,7 @@ export function CustomerFormSheet({
                       )}
                     />
 
-                    {/* PRICE TYPE (HARD-CODED TO INPUT) */}
+                    {/* PRICE TYPE */}
                     <FormField
                       control={form.control}
                       name="price_type"
@@ -1741,21 +1769,22 @@ export function CustomerFormSheet({
                             Price Type
                           </FormLabel>
                           <FormControl>
-                            <Input
-                              className="h-11 bg-muted/30 uppercase font-bold"
-                              placeholder="e.g., E, A, B"
-                              {...field}
-                              onChange={(e) =>
-                                field.onChange(e.target.value.toUpperCase())
+                            <SearchableSelect
+                              options={priceTypes.map((pt) => ({
+                                value: pt.price_type_name,
+                                label: pt.price_type_name,
+                              }))}
+                              value={field.value || ""}
+                              onValueChange={field.onChange}
+                              placeholder={
+                                isLoadingPriceTypes
+                                  ? "Loading price types..."
+                                  : "Select price type"
                               }
-                              // disabled={isWalkInOrHousehold}
+                              disabled={isLoadingPriceTypes}
+                              className="h-11 bg-muted/30"
                             />
                           </FormControl>
-                          {/* {isWalkInOrHousehold && (
-                                                        <p className="text-[10px] text-primary mt-1 font-bold uppercase tracking-tight">
-                                                            ⚡ Price Type 'E' is mandatory for Walk-in / Household.
-                                                        </p>
-                                                    )} */}
                           <FormMessage />
                         </FormItem>
                       )}

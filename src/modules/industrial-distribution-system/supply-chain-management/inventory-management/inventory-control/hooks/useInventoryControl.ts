@@ -33,7 +33,8 @@ interface UseInventoryControlReturn {
 
     // Modal
     selectedProduct: ProductGroup | null;
-    openModal: (product: ProductGroup) => void;
+    openModal: (product: ProductGroup, filter?: "full" | "empty") => void;
+    initialStockFilter: "full" | "empty" | null;
     closeModal: () => void;
 
     // View within modal
@@ -67,6 +68,12 @@ const DEFAULT_PRINT_OPTIONS: PrintOptions = {
     paperSize: "A4",
     orientation: "portrait",
     columns: 3,
+    cardDisplay: {
+        showBarcodeNumber: true,
+        showSerialNumber: true,
+        showProductName: true,
+        showStatusBadge: false,
+    },
 };
 
 export function useInventoryControl(): UseInventoryControlReturn {
@@ -133,11 +140,14 @@ export function useInventoryControl(): UseInventoryControlReturn {
         [loadData],
     );
 
-    const openModal = useCallback((product: ProductGroup) => {
+    const [initialStockFilter, setInitialStockFilter] = useState<"full" | "empty" | null>(null);
+
+    const openModal = useCallback((product: ProductGroup, filter?: "full" | "empty") => {
         setSelectedProduct(product);
         setViewMode("serial");
         setSearchQuery("");
         setShowPrintOptions(false);
+        setInitialStockFilter(filter ?? null);
     }, []);
 
     const closeModal = useCallback(() => {
@@ -172,6 +182,7 @@ export function useInventoryControl(): UseInventoryControlReturn {
         error,
         selectedProduct,
         openModal,
+        initialStockFilter,
         closeModal,
         viewMode,
         setViewMode,

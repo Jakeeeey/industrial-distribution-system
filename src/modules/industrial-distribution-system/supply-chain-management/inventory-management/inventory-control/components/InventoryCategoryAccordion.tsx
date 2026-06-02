@@ -13,7 +13,7 @@ import { InventoryProductCard } from "./InventoryProductCard";
 
 interface InventoryCategoryAccordionProps {
     categoryGroups: CategoryGroup[];
-    onProductClick: (product: ProductGroup) => void;
+    onProductClick: (product: ProductGroup, filter?: "full" | "empty") => void;
 }
 
 export function InventoryCategoryAccordion({

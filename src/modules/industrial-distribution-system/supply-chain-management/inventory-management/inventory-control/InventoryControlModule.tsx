@@ -20,6 +20,7 @@ export default function InventoryControlModule() {
         selectedProduct,
         openModal,
         closeModal,
+        initialStockFilter,
         setViewMode,
         searchQuery,
         setSearchQuery,
@@ -124,6 +125,7 @@ export default function InventoryControlModule() {
                 filteredSerials={filteredSerials}
                 printOptions={printOptions}
                 setPrintOptions={setPrintOptions}
+                initialStockFilter={initialStockFilter}
             />
         </div>
     );

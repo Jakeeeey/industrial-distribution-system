@@ -6,7 +6,7 @@ import type { ProductGroup } from "../type";
 
 interface InventoryProductCardProps {
     product: ProductGroup;
-    onClick: (product: ProductGroup) => void;
+    onClick: (product: ProductGroup, filter?: "full" | "empty") => void;
 }
 
 export function InventoryProductCard({ product, onClick }: InventoryProductCardProps) {
@@ -22,6 +22,7 @@ export function InventoryProductCard({ product, onClick }: InventoryProductCardP
                 bg-gradient-to-b from-card/95 to-muted/70 dark:from-neutral-900 dark:to-neutral-950 p-4 
                 shadow-md hover:shadow-lg
                 hover:-translate-y-0.5 hover:border-b-[6px]
+                hover:bg-black/20
                 active:translate-y-[3px] active:border-b-[2px] active:shadow-sm
                 transition-all duration-150 ease-out
                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background
@@ -54,12 +55,30 @@ export function InventoryProductCard({ product, onClick }: InventoryProductCardP
 
             {/* Debossed Segmented Stock Metrics Grid */}
             <div className="grid grid-cols-2 gap-2.5">
-                {/* Full Stock Container */}
-                <div className="
-                    flex flex-col justify-center rounded-lg bg-emerald-500/10 border border-emerald-500/10 px-3 py-2
-                    shadow-[inset_0_2px_4px_rgba(0,0,0,0.06)] dark:shadow-[inset_0_2px_5px_rgba(0,0,0,0.25)]
-                    transition-colors group-hover:bg-emerald-500/15
-                ">
+                {/* Full Stock Container — clickable to filter full only */}
+                <div
+                    role="button"
+                    aria-label={`Show full cylinders for ${product.productName}`}
+                    tabIndex={0}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onClick(product, "full");
+                    }}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                            e.stopPropagation();
+                            onClick(product, "full");
+                        }
+                    }}
+                    className="
+                        flex flex-col justify-center rounded-lg bg-emerald-500/10 border border-emerald-500/10 px-3 py-2
+                        shadow-[inset_0_2px_4px_rgba(0,0,0,0.06)] dark:shadow-[inset_0_2px_5px_rgba(0,0,0,0.25)]
+                        cursor-pointer
+                        hover:bg-emerald-500/20 hover:border-emerald-500/30 hover:shadow-[inset_0_2px_4px_rgba(0,0,0,0.1)]
+                        active:scale-95
+                        transition-all duration-150
+                    "
+                >
                     <span className="text-[10px] uppercase tracking-wider text-emerald-700 dark:text-emerald-400 font-extrabold mb-0.5 opacity-90">
                         Full
                     </span>
@@ -67,13 +86,31 @@ export function InventoryProductCard({ product, onClick }: InventoryProductCardP
                         {product.fullCount.toLocaleString()}
                     </span>
                 </div>
-                
-                {/* Empty Stock Container */}
-                <div className="
-                    flex flex-col justify-center rounded-lg bg-rose-500/10 border border-rose-500/10 px-3 py-2
-                    shadow-[inset_0_2px_4px_rgba(0,0,0,0.06)] dark:shadow-[inset_0_2px_5px_rgba(0,0,0,0.25)]
-                    transition-colors group-hover:bg-rose-500/15
-                ">
+
+                {/* Empty Stock Container — clickable to filter empty only */}
+                <div
+                    role="button"
+                    aria-label={`Show empty cylinders for ${product.productName}`}
+                    tabIndex={0}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onClick(product, "empty");
+                    }}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                            e.stopPropagation();
+                            onClick(product, "empty");
+                        }
+                    }}
+                    className="
+                        flex flex-col justify-center rounded-lg bg-rose-500/10 border border-rose-500/10 px-3 py-2
+                        shadow-[inset_0_2px_4px_rgba(0,0,0,0.06)] dark:shadow-[inset_0_2px_5px_rgba(0,0,0,0.25)]
+                        cursor-pointer
+                        hover:bg-rose-500/20 hover:border-rose-500/30 hover:shadow-[inset_0_2px_4px_rgba(0,0,0,0.1)]
+                        active:scale-95
+                        transition-all duration-150
+                    "
+                >
                     <span className="text-[10px] uppercase tracking-wider text-rose-700 dark:text-rose-400 font-extrabold mb-0.5 opacity-90">
                         Empty
                     </span>

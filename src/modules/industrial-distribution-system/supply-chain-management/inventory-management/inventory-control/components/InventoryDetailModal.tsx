@@ -45,6 +45,7 @@ interface InventoryDetailModalProps {
     filteredSerials: EnrichedSerial[];
     printOptions: PrintOptions;
     setPrintOptions: (opts: Partial<PrintOptions>) => void;
+    initialStockFilter?: "full" | "empty" | null;
 }
 
 export function InventoryDetailModal({
@@ -55,6 +56,7 @@ export function InventoryDetailModal({
     filteredSerials,
     printOptions,
     setPrintOptions,
+    initialStockFilter,
 }: InventoryDetailModalProps) {
     const [activeMode, setActiveMode] = useState<"list" | "choice" | "serial" | "barcode">("list");
     const [prevProduct, setPrevProduct] = useState<ProductGroup | null>(null);
@@ -63,11 +65,14 @@ export function InventoryDetailModal({
     const previewContainerRef = useRef<HTMLDivElement>(null);
     const [zoom, setZoom] = useState(1.0);
 
+    // Track applied stock filter (full / empty / null = all)
+    const [activeStockFilter, setActiveStockFilter] = useState<"full" | "empty" | null>(null);
+
     const toggleSelectAll = () => {
-        if (selectedSerialIds.size === filteredSerials.length) {
+        if (selectedSerialIds.size === displayedSerials.length) {
             setSelectedSerialIds(new Set());
         } else {
-            setSelectedSerialIds(new Set(filteredSerials.map(s => s.id)));
+            setSelectedSerialIds(new Set(displayedSerials.map(s => s.id)));
         }
     };
 
@@ -90,6 +95,14 @@ export function InventoryDetailModal({
     const emptySerials = useMemo(() => {
         return filteredSerials.filter(s => !s.isFull);
     }, [filteredSerials]);
+
+    // Apply the stock filter on top of filteredSerials
+    const displayedSerials =
+        activeStockFilter === "full"
+            ? fullSerials
+            : activeStockFilter === "empty"
+            ? emptySerials
+            : filteredSerials;
 
     const toggleSelectAllFull = () => {
         const allFullIds = fullSerials.map(s => s.id);
@@ -120,18 +133,21 @@ export function InventoryDetailModal({
     };
 
     const hasBothTypes = product ? product.fullCount > 0 && product.emptyCount > 0 : false;
-    const shouldSplitSingleType = !hasBothTypes && filteredSerials.length > 10;
-    const halfIndex = shouldSplitSingleType ? Math.ceil(filteredSerials.length / 2) : 0;
+
+    // When a stock filter is active, only one column; otherwise normal split logic
+    const effectiveHasBothTypes = activeStockFilter === null && hasBothTypes;
+    const shouldSplitSingleType = !effectiveHasBothTypes && displayedSerials.length > 10;
+    const halfIndex = shouldSplitSingleType ? Math.ceil(displayedSerials.length / 2) : 0;
 
     const leftHalfSerials = useMemo(() => {
         if (!shouldSplitSingleType) return [];
-        return filteredSerials.slice(0, halfIndex);
-    }, [filteredSerials, shouldSplitSingleType, halfIndex]);
+        return displayedSerials.slice(0, halfIndex);
+    }, [displayedSerials, shouldSplitSingleType, halfIndex]);
 
     const rightHalfSerials = useMemo(() => {
         if (!shouldSplitSingleType) return [];
-        return filteredSerials.slice(halfIndex);
-    }, [filteredSerials, shouldSplitSingleType, halfIndex]);
+        return displayedSerials.slice(halfIndex);
+    }, [displayedSerials, shouldSplitSingleType, halfIndex]);
 
     const toggleSelectAllLeftHalf = () => {
         const leftIds = leftHalfSerials.map(s => s.id);
@@ -170,7 +186,8 @@ export function InventoryDetailModal({
         paperSize: printOptions.paperSize,
         orientation: printOptions.orientation,
         columns: printOptions.columns,
-    }), [activeMode, printOptions.paperSize, printOptions.orientation, printOptions.columns]);
+        cardDisplay: printOptions.cardDisplay,
+    }), [activeMode, printOptions.paperSize, printOptions.orientation, printOptions.columns, printOptions.cardDisplay]);
 
     const handlePrint = useReactToPrint({
         contentRef: printRef,
@@ -187,18 +204,58 @@ export function InventoryDetailModal({
         if (product) {
             setActiveMode("list");
             setSelectedSerialIds(new Set(filteredSerials.map(s => s.id)));
+            // Apply initial stock filter from card segment click
+            setActiveStockFilter(initialStockFilter ?? null);
         }
     }
 
     if (!product) return null;
 
-    const typeLabel = product.fullCount > 0 ? "Full Cylinders" : "Empty Cylinders";
-    const headerBgClass = product.fullCount > 0 ? "bg-emerald-500/5" : "bg-rose-500/5";
-    const textThemeClass = product.fullCount > 0 
-        ? "text-emerald-700 dark:text-emerald-400" 
-        : "text-rose-700 dark:text-rose-400";
+    const typeLabel =
+        activeStockFilter === "full"
+            ? "Full Cylinders"
+            : activeStockFilter === "empty"
+            ? "Empty Cylinders"
+            : product.fullCount > 0
+            ? "Full Cylinders"
+            : "Empty Cylinders";
 
-    const isSplit = hasBothTypes || shouldSplitSingleType;
+    const headerBgClass =
+        activeStockFilter === "full"
+            ? "bg-emerald-500/5"
+            : activeStockFilter === "empty"
+            ? "bg-rose-500/5"
+            : product.fullCount > 0
+            ? "bg-emerald-500/5"
+            : "bg-rose-500/5";
+
+    const textThemeClass =
+        activeStockFilter === "full"
+            ? "text-emerald-700 dark:text-emerald-400"
+            : activeStockFilter === "empty"
+            ? "text-rose-700 dark:text-rose-400"
+            : product.fullCount > 0
+            ? "text-emerald-700 dark:text-emerald-400"
+            : "text-rose-700 dark:text-rose-400";
+
+    const isSplit = effectiveHasBothTypes || shouldSplitSingleType;
+
+    // Card display options helpers
+    const cardDisplay = printOptions.cardDisplay ?? {
+        showBarcodeNumber: true,
+        showSerialNumber: true,
+        showProductName: false,
+        showStatusBadge: true,
+    };
+
+    const updateCardDisplay = (key: keyof typeof cardDisplay, value: boolean) => {
+        setPrintOptions({
+            cardDisplay: {
+                ...cardDisplay,
+                [key]: value,
+            },
+        });
+    };
 
     return (
         <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -228,20 +285,74 @@ export function InventoryDetailModal({
                             </p>
                         </DialogHeader>
 
-                        {/* Stock metrics summary */}
+                        {/* Stock metrics summary — clickable to filter */}
                         <div className="grid grid-cols-2 gap-3 shrink-0">
-                            <div className="flex items-center justify-between rounded-lg bg-emerald-500/10 border border-emerald-500/10 px-3.5 py-2.5">
-                                <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">Full Cylinders</span>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const next = activeStockFilter === "full" ? null : "full";
+                                    setActiveStockFilter(next);
+                                    // Re-select visible serials on filter change
+                                    const pool = next === "full" ? fullSerials : filteredSerials;
+                                    setSelectedSerialIds(new Set(pool.map(s => s.id)));
+                                }}
+                                className={`flex items-center justify-between rounded-lg px-3.5 py-2.5 border transition-all duration-150 ${
+                                    activeStockFilter === "full"
+                                        ? "bg-emerald-500/20 border-emerald-500/40 ring-2 ring-emerald-500/30"
+                                        : "bg-emerald-500/10 border-emerald-500/10 hover:bg-emerald-500/20 hover:border-emerald-500/30"
+                                }`}
+                            >
+                                <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                                    Full Cylinders{activeStockFilter === "full" ? " ✓" : ""}
+                                </span>
                                 <span className="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono">{product.fullCount}</span>
-                            </div>
-                            <div className="flex items-center justify-between rounded-lg bg-rose-500/10 border border-rose-500/10 px-3.5 py-2.5">
-                                <span className="text-xs font-bold text-rose-700 dark:text-rose-400">Empty Cylinders</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const next = activeStockFilter === "empty" ? null : "empty";
+                                    setActiveStockFilter(next);
+                                    const pool = next === "empty" ? emptySerials : filteredSerials;
+                                    setSelectedSerialIds(new Set(pool.map(s => s.id)));
+                                }}
+                                className={`flex items-center justify-between rounded-lg px-3.5 py-2.5 border transition-all duration-150 ${
+                                    activeStockFilter === "empty"
+                                        ? "bg-rose-500/20 border-rose-500/40 ring-2 ring-rose-500/30"
+                                        : "bg-rose-500/10 border-rose-500/10 hover:bg-rose-500/20 hover:border-rose-500/30"
+                                }`}
+                            >
+                                <span className="text-xs font-bold text-rose-700 dark:text-rose-400">
+                                    Empty Cylinders{activeStockFilter === "empty" ? " ✓" : ""}
+                                </span>
                                 <span className="text-base font-black text-rose-600 dark:text-rose-400 font-mono">{product.emptyCount}</span>
-                            </div>
+                            </button>
                         </div>
 
+                        {/* Active filter indicator */}
+                        {activeStockFilter && (
+                            <div className={`flex items-center justify-between text-xs px-3 py-1.5 rounded-lg border shrink-0 ${
+                                activeStockFilter === "full"
+                                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-400"
+                                    : "bg-rose-500/10 border-rose-500/20 text-rose-700 dark:text-rose-400"
+                            }`}>
+                                <span className="font-semibold">
+                                    Showing {activeStockFilter === "full" ? "Full" : "Empty"} cylinders only
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setActiveStockFilter(null);
+                                        setSelectedSerialIds(new Set(filteredSerials.map(s => s.id)));
+                                    }}
+                                    className="text-[10px] font-bold underline underline-offset-2 hover:opacity-70 transition-opacity"
+                                >
+                                    Show All
+                                </button>
+                            </div>
+                        )}
+
                         {/* List/Table */}
-                        {hasBothTypes ? (
+                        {effectiveHasBothTypes ? (
                             <div className="flex-1 min-h-0 grid grid-cols-2 gap-4">
                                 {/* LEFT COLUMN: Full Cylinders */}
                                 <div className="flex flex-col min-h-0 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-zinc-50/30 dark:bg-zinc-900/30">
@@ -375,7 +486,7 @@ export function InventoryDetailModal({
                                 {/* RIGHT HALF COLUMN */}
                                 <div className="flex flex-col min-h-0 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-zinc-50/30 dark:bg-zinc-900/30">
                                     <div className={`${headerBgClass} px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between shrink-0`}>
-                                        <span className={`text-xs font-bold ${textThemeClass}`}>{typeLabel} ({halfIndex + 1} - {filteredSerials.length})</span>
+                                        <span className={`text-xs font-bold ${textThemeClass}`}>{typeLabel} ({halfIndex + 1} - {displayedSerials.length})</span>
                                     </div>
                                     <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
                                         <table className="w-full text-left border-collapse">
@@ -416,7 +527,7 @@ export function InventoryDetailModal({
                                         <tr className="bg-muted/40 text-muted-foreground text-[10px] uppercase font-black tracking-wider">
                                             <th className="py-2.5 px-4 w-12 text-center">
                                                 <Checkbox
-                                                    checked={filteredSerials.length > 0 && selectedSerialIds.size === filteredSerials.length}
+                                                    checked={displayedSerials.length > 0 && displayedSerials.every(s => selectedSerialIds.has(s.id))}
                                                     onCheckedChange={toggleSelectAll}
                                                 />
                                             </th>
@@ -426,14 +537,14 @@ export function InventoryDetailModal({
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {filteredSerials.length === 0 ? (
+                                        {displayedSerials.length === 0 ? (
                                             <tr>
                                                 <td colSpan={4} className="text-center py-10 text-xs text-muted-foreground">
                                                     No serial numbers found for this product.
                                                 </td>
                                             </tr>
                                         ) : (
-                                            filteredSerials.map((s, idx) => (
+                                            displayedSerials.map((s, idx) => (
                                                 <tr key={s.id} className="border-b last:border-0 hover:bg-muted/30 text-xs">
                                                     <td className="py-2.5 px-4 text-center">
                                                         <Checkbox
@@ -678,6 +789,69 @@ export function InventoryDetailModal({
                                         Close
                                     </Button>
                                 </div>
+                            </div>
+
+                            {/* ROW 3: Card Display Options */}
+                            <div className="flex items-center gap-4 pt-2 border-t border-border/40 flex-wrap justify-end">
+                                {/* <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider shrink-0">
+                                    Card Shows:
+                                </span> */}
+
+                                {/* Barcode number — only relevant in barcode mode */}
+                                {activeMode === "barcode" && (
+                                    <label
+                                        htmlFor="card-show-barcode-number"
+                                        className="flex items-center gap-1.5 cursor-pointer select-none"
+                                    >
+                                        <Checkbox
+                                            id="card-show-barcode-number"
+                                            checked={cardDisplay.showBarcodeNumber}
+                                            onCheckedChange={(v) => updateCardDisplay("showBarcodeNumber", !!v)}
+                                        />
+                                        <span className="text-xs font-semibold text-foreground">Barcode Number</span>
+                                    </label>
+                                )}
+
+                                {/* Serial Number */}
+                                {activeMode === "serial" && (
+                                <label
+                                    htmlFor="card-show-serial-number"
+                                    className="flex items-center gap-1.5 cursor-pointer select-none"
+                                >
+                                    <Checkbox
+                                        id="card-show-serial-number"
+                                        checked={cardDisplay.showSerialNumber}
+                                        onCheckedChange={(v) => updateCardDisplay("showSerialNumber", !!v)}
+                                    />
+                                    <span className="text-xs font-semibold text-foreground">Serial Number</span>
+                                </label>
+                                 )}
+
+                                {/* Product Name */}
+                                <label
+                                    htmlFor="card-show-product-name"
+                                    className="flex items-center gap-1.5 cursor-pointer select-none"
+                                >
+                                    <Checkbox
+                                        id="card-show-product-name"
+                                        checked={cardDisplay.showProductName}
+                                        onCheckedChange={(v) => updateCardDisplay("showProductName", !!v)}
+                                    />
+                                    <span className="text-xs font-semibold text-foreground">Product Name</span>
+                                </label>
+
+                                {/* Full / Empty Badge */}
+                                <label
+                                    htmlFor="card-show-status-badge"
+                                    className="flex items-center gap-1.5 cursor-pointer select-none"
+                                >
+                                    <Checkbox
+                                        id="card-show-status-badge"
+                                        checked={cardDisplay.showStatusBadge}
+                                        onCheckedChange={(v) => updateCardDisplay("showStatusBadge", !!v)}
+                                    />
+                                    <span className="text-xs font-semibold text-foreground">Full/Empty Badge</span>
+                                </label>
                             </div>
 
                         </DialogHeader>
