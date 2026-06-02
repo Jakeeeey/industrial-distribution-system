@@ -530,6 +530,19 @@ function TabBadge({ count }: { count: number }) {
   );
 }
 
+const PRICE_TYPE_LABELS: Record<string, string> = {
+  A: "A - Dealer",
+  B: "B - Sub-Dealer",
+  C: "C - RTO",
+  D: "D - Commercial",
+  E: "E - Walk In",
+};
+
+const getPriceTypeLabel = (name: string) => {
+  const code = name.split("-")[0].trim().toUpperCase();
+  return PRICE_TYPE_LABELS[code] || name;
+};
+
 // ============================================================================
 // MAIN COMPONENT
 // ============================================================================
@@ -598,6 +611,18 @@ export function CustomerFormSheet({
   }, [selectedStoreTypeId, storeTypes]);
 
   const isWalkInOrHousehold = isWalkIn || isHousehold;
+
+  // Map customer.price_type (single letter) to the full price_type_name when customer or priceTypes load
+  const initialPriceType = useMemo(() => {
+    if (!customer?.price_type || priceTypes.length === 0) return customer?.price_type || "";
+    const letter = customer.price_type.split("-")[0].trim();
+    const found = priceTypes.find(
+      (pt) =>
+        pt.price_type_name?.split("-")[0].trim() === letter ||
+        pt.price_type_name === letter
+    );
+    return found ? found.price_type_name : customer.price_type;
+  }, [customer?.price_type, priceTypes]);
 
   // 🚀 REMOVED: Automatic enforcement of status/classification
   // We keep the logic for price_type as a default but won't force it on every change if already set
@@ -948,6 +973,23 @@ export function CustomerFormSheet({
     };
   }, [open]);
 
+  // Map any single-letter price_type values to their full names once priceTypes are loaded
+  useEffect(() => {
+    if (open && priceTypes.length > 0) {
+      const currentPriceType = form.getValues("price_type");
+      if (currentPriceType && currentPriceType.length === 1) {
+        const found = priceTypes.find(
+          (pt) =>
+            pt.price_type_name?.split("-")[0].trim() === currentPriceType ||
+            pt.price_type_name === currentPriceType
+        );
+        if (found) {
+          form.setValue("price_type", found.price_type_name, { shouldValidate: true });
+        }
+      }
+    }
+  }, [open, priceTypes, form]);
+
   useEffect(() => {
     if (open) {
       if (customer) {
@@ -962,7 +1004,7 @@ export function CustomerFormSheet({
           customer_tin: customer.customer_tin || "",
           payment_term: customer.payment_term || 0,
           store_type: customer.store_type || null,
-          price_type: customer.price_type || "",
+          price_type: initialPriceType || "",
           isActive: customer.isActive ?? 1,
           isVAT: customer.isVAT ?? 0,
           isEWT: customer.isEWT ?? 0,
@@ -981,7 +1023,7 @@ export function CustomerFormSheet({
         form.reset(getDefaultValues());
       }
     }
-  }, [customer, form, open]);
+  }, [customer, form, open, initialPriceType]);
 
   const handleFormSubmit: SubmitHandler<CustomerFormValues> = async (
     values,
@@ -1003,10 +1045,20 @@ export function CustomerFormSheet({
       "brgy",
       "store_name",
       "store_signage",
+      "store_type",
     ]);
 
     let hasManualErrors = false;
     let firstTab: "address" | "billing" | "basic" | null = null;
+
+    if (!values.store_type) {
+      form.setError("store_type", {
+        type: "manual",
+        message: "Store Type is required.",
+      });
+      firstTab = firstTab || "basic";
+      hasManualErrors = true;
+    }
 
     if (!values.province || values.province.trim() === "") {
       form.setError("province", {
@@ -1770,10 +1822,13 @@ export function CustomerFormSheet({
                           </FormLabel>
                           <FormControl>
                             <SearchableSelect
-                              options={priceTypes.map((pt) => ({
-                                value: pt.price_type_name,
-                                label: pt.price_type_name,
-                              }))}
+                              options={priceTypes.map((pt) => {
+                                const name = pt.price_type_name || "";
+                                return {
+                                  value: name,
+                                  label: getPriceTypeLabel(name),
+                                };
+                              })}
                               value={field.value || ""}
                               onValueChange={field.onChange}
                               placeholder={
