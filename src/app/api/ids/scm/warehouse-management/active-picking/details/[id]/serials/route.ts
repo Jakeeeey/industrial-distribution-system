@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ActivePickingService } from "@/modules/industrial-distribution-system/active-picking/services/active-picking.service";
+import { ActivePickingService } from "@/modules/industrial-distribution-system/supply-chain-management/warehouse-management/active-picking/services/active-picking.service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

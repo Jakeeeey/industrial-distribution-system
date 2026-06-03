@@ -14,7 +14,7 @@ export default function ActivePickingModule({ userId }: { userId: number | null 
     );
 }
 
-function ActivePickingContent() {
+export function ActivePickingContent() {
     const { activePickingId } = useActivePickingContext();
 
     return (

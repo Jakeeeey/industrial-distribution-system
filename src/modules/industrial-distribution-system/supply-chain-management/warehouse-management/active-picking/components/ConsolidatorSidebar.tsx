@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { RefreshCcw, Search, Package, ChevronLeft, ChevronRight } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { formatToPHT } from "../../invoicing/utils/dateUtils";
+import { formatToPHT } from "../../../../invoicing/utils/dateUtils";
 
 // Simple inline debounce hook
 function useDebounce<T>(value: T, delay: number): T {
