@@ -67,11 +67,19 @@ export type PrintMode = "serial" | "barcode";
 export type PaperSize = "A4" | "Letter";
 export type PrintOrientation = "portrait" | "landscape";
 
+export interface CardDisplayOptions {
+    showBarcodeNumber: boolean;
+    showSerialNumber: boolean;
+    showProductName: boolean;
+    showStatusBadge: boolean;
+}
+
 export interface PrintOptions {
     mode: PrintMode;
     paperSize: PaperSize;
     orientation: PrintOrientation;
     columns: number;
+    cardDisplay: CardDisplayOptions;
 }
 
 export interface DirectusItemsResponse<T> {

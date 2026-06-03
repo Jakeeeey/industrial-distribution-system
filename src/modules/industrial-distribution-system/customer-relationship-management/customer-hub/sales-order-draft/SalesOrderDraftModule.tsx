@@ -174,7 +174,7 @@ export default function SalesOrderDraftModule() {
                                     <TableRow
                                         key={order.order_id}
                                         className="group cursor-pointer hover:bg-muted/30 transition-all border-slate-50"
-                                        onClick={() => router.push(`/industrial-distribution-system/operation/sales-order/create-sales-order?orderId=${order.order_id}`)}
+                                        onClick={() => router.push(`/crm/customer-hub/create-sales-order?orderId=${order.order_id}`)}
                                     >
                                         <TableCell className="pl-6 py-4">
                                             <span className="font-black text-foreground text-sm group-hover:text-primary transition-colors">{order.order_no}</span>

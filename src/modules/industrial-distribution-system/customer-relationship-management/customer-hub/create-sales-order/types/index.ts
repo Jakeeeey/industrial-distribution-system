@@ -73,7 +73,6 @@ export interface Product {
 
 export interface LineItem {
     id: string;
-    detail_id?: number | string;
     product: Product;
     quantity: number;
     uom: string;
