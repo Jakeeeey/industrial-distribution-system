@@ -104,7 +104,7 @@ export const ActivePickingRepo = {
 
         const data = await response.json();
 
-        return data.data.map((item: { product_id: unknown; [key: string]: unknown }) => {
+        return data.data.map((item: { product_id: unknown;[key: string]: unknown }) => {
             // Robustly extract the product ID from the relational object or flat field
             const productRef = item.product_id as ProductRef | null;
             let pId: string | number | null = null;
@@ -116,7 +116,7 @@ export const ActivePickingRepo = {
                     pId = productRef as unknown as string | number;
                 }
             }
-            
+
             return {
                 ...item,
                 product_id: pId ? Number(pId) : null,
@@ -138,25 +138,25 @@ export const ActivePickingRepo = {
         const token = process.env.VOS_ACCESS_TOKEN || process.env.vos_access_token || sessionToken || DIRECTUS_TOKEN;
         const baseUrl = process.env.SPRING_API_BASE_URL;
         const productIdsStr = productIds.join(",");
-        
+
         // Target Spring Boot View with specific dates and divisionId
-        const url = `${baseUrl}/api/view-running-inventory-by-unit/all?startDate=2025-01-01&endDate=2025-12-30&divisionId=1&productId=${productIdsStr}&branchId=${branchId}&size=10000`;
+        const url = `${baseUrl}/api/view-running-inventory-by-unit/all?startDate=2025-01-01&endDate=2026-12-30&divisionId=1&productId=${productIdsStr}&branchId=${branchId}&size=10000`;
 
         try {
-            const response = await fetch(url, { 
+            const response = await fetch(url, {
                 headers: {
                     "Authorization": `Bearer ${token}`,
                     "Content-Type": "application/json"
-                }, 
-                cache: "no-store" 
+                },
+                cache: "no-store"
             });
-            
+
             if (!response.ok) {
                 return [];
             }
 
             const json = await response.json();
-            
+
             // Handle Spring Boot response structure (might be wrapped in 'content' or 'data')
             let items = [];
             if (Array.isArray(json)) items = json;
@@ -264,7 +264,7 @@ export const ActivePickingRepo = {
         if (!baseUrl) {
             throw new Error("NETWORK_FAILURE");
         }
-        
+
         const extractData = (raw: Record<string, unknown> | unknown[] | null): Record<string, unknown>[] => {
             if (Array.isArray(raw)) return raw as Record<string, unknown>[];
             if (raw && typeof raw === 'object' && 'content' in raw && Array.isArray(raw.content)) return raw.content as Record<string, unknown>[];
@@ -279,7 +279,7 @@ export const ActivePickingRepo = {
                     cache: "no-store",
                     headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }
                 });
-                
+
                 if (res.ok) {
                     const json = await res.json();
                     return extractData(json);
@@ -291,12 +291,12 @@ export const ActivePickingRepo = {
                     cache: "no-store",
                     headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }
                 });
-                
+
                 if (res2.ok) {
                     const json2 = await res2.json();
                     return extractData(json2);
                 }
-                
+
                 return [];
             } catch {
                 throw new Error("NETWORK_FAILURE");
@@ -306,7 +306,7 @@ export const ActivePickingRepo = {
         try {
             // 1. Try specific search (Serial + Branch)
             let data = await tryFetch("v-serial-onhand", `serialNumber=${encodeURIComponent(serialNumber.trim())}&branchId=${branchId}`);
-            
+
             // 2. Try specific search (Serial + Branch) - snake_case
             if (data.length === 0) {
                 data = await tryFetch("v-serial-onhand", `serial_number=${encodeURIComponent(serialNumber.trim())}&branch_id=${branchId}`);
@@ -331,12 +331,12 @@ export const ActivePickingRepo = {
             const onhand = data.find((item: Record<string, unknown>) => {
                 const dbVal = item.serialNumber ?? item.serial_number ?? item.serialNo ?? item.serial ?? item.sn ?? item.snCode;
                 if (dbVal === undefined || dbVal === null) return false;
-                
+
                 const dbSerial = String(dbVal).trim().toUpperCase();
                 const dbBranchId = item.branchId ?? item.branch_id;
                 const branchMatch = dbBranchId === undefined || dbBranchId === null || Number(dbBranchId) === Number(branchId);
                 const serialMatch = dbSerial === inputSerial;
-                
+
                 return serialMatch && branchMatch;
             });
 
@@ -367,7 +367,7 @@ export const ActivePickingRepo = {
 
                 throw new Error("Unable to identify product for this serial.");
             }
-            
+
             return null;
         } catch {
             throw new Error("NETWORK_FAILURE");

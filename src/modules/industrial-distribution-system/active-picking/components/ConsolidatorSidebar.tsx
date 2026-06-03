@@ -23,18 +23,18 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 export function ConsolidatorSidebar() {
-    const { 
-        pickings, 
+    const {
+        pickings,
         totalPickings,
         page,
-        isLoadingPickings, 
-        fetchPickings, 
-        activePickingId, 
+        isLoadingPickings,
+        fetchPickings,
+        activePickingId,
         fetchDetails,
         searchQuery,
         branches
     } = useActivePickingContext();
-    
+
     const [localSearch, setLocalSearch] = useState(searchQuery);
     const debouncedSearch = useDebounce(localSearch, 500);
 
@@ -51,17 +51,17 @@ export function ConsolidatorSidebar() {
         <div className="flex flex-col h-full bg-card rounded-lg border shadow-sm w-full md:w-80 lg:w-96 overflow-hidden flex-shrink-0">
             <div className="p-4 border-b space-y-4">
                 <div className="flex items-center justify-between">
-                    <h2 className="font-semibold text-lg">Active Pickings</h2>
-                    <Button 
-                        variant="outline" 
-                        size="icon" 
-                        onClick={() => fetchPickings(1, "Picking", page, localSearch)} 
+                    <h2 className="font-semibold text-lg">Active Picking Serial</h2>
+                    <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => fetchPickings(1, "Picking", page, localSearch)}
                         disabled={isLoadingPickings}
                     >
                         <RefreshCcw className={cn("h-4 w-4", isLoadingPickings && "animate-spin")} />
                     </Button>
                 </div>
-                
+
                 <div className="flex items-center justify-between text-[10px] uppercase font-bold tracking-widest text-muted-foreground/60 px-1">
                     <span>Division: 1</span>
                     <span>Status: Picking</span>
@@ -82,25 +82,25 @@ export function ConsolidatorSidebar() {
                         </div>
                     )}
                 </div>
-                
+
                 <div className="flex items-center justify-between text-sm text-muted-foreground">
                     <span>Showing {pickings.length} of {totalPickings}</span>
                     {totalPages > 1 && (
                         <div className="flex items-center gap-1">
-                            <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-6 w-6" 
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
                                 disabled={page <= 1 || isLoadingPickings}
                                 onClick={() => fetchPickings(1, "Picking", page - 1, localSearch)}
                             >
                                 <ChevronLeft className="h-3 w-3" />
                             </Button>
                             <span className="text-[10px] font-bold">{page} / {totalPages}</span>
-                            <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-6 w-6" 
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
                                 disabled={page >= totalPages || isLoadingPickings}
                                 onClick={() => fetchPickings(1, "Picking", page + 1, localSearch)}
                             >
@@ -138,7 +138,7 @@ export function ConsolidatorSidebar() {
                         </div>
                     ) : (
                         pickings.map((picking) => (
-                            <Card 
+                            <Card
                                 key={picking.id}
                                 className={cn(
                                     "p-3 cursor-pointer hover:border-primary transition-colors flex flex-col gap-2",
