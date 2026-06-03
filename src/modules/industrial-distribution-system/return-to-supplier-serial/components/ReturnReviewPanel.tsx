@@ -157,7 +157,7 @@ export function ReturnReviewPanel({
   return (
     <div className="space-y-6">
       {/* 1. TABLE SECTION */}
-      <div className="rounded-md border overflow-hidden bg-card shadow-sm">
+      <div className="rounded-md border overflow-x-auto bg-card shadow-sm">
         <Table>
           <TableHeader className="bg-muted/50 border-b">
             <TableRow>
