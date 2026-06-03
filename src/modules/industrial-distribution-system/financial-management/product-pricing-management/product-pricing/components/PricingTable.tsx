@@ -5,6 +5,7 @@ import * as React from "react";
 import type { PriceType, PricingFilters, ProductTierKey, Unit } from "../types";
 
 import { Button } from "@/components/ui/button";
+import { mapPriceTypeName } from "../utils/constants";
 import {
     Select,
     SelectContent,
@@ -550,7 +551,7 @@ export default function PricingTable({ matrix }: Props) {
                                                             colSpan={uomCount}
                                                         >
                                                             <div style={{ height: HEAD_ROW_H }} className="flex items-center justify-center">
-                                                                {t === "LIST" ? "List Price" : t}
+                                                                {t === "LIST" ? "List Price" : mapPriceTypeName(t)}
                                                             </div>
                                                         </PTableHead>
                                                     );

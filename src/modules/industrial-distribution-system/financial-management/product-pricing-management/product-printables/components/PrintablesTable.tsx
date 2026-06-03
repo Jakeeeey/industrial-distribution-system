@@ -3,6 +3,7 @@
 
 import React from "react";
 import type { ProductRow, PriceType, Unit } from "../types";
+import { mapPriceTypeName } from "../../product-pricing/utils/constants";
 import {
     Table,
     TableBody,
@@ -36,7 +37,7 @@ export default function PrintablesTable({ rows, loading, priceTypes, units }: Pr
                         <TableHead className="font-semibold">UOM</TableHead>
                         {priceTypes.slice(0, 5).map((pt, i) => (
                             <TableHead key={pt.price_type_id} className="font-semibold text-right">
-                                {pt.price_type_name || `Price ${String.fromCharCode(65 + i)}`}
+                                {mapPriceTypeName(pt.price_type_name || `Price ${String.fromCharCode(65 + i)}`)}
                             </TableHead>
                         ))}
                         <TableHead className="font-semibold text-center">Status</TableHead>

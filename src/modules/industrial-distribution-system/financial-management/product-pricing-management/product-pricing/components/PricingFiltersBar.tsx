@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { mapPriceTypeName } from "../utils/constants";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -226,7 +227,7 @@ export default function PricingFiltersBar(props: Props) {
         const map = new Map<string, string>();
         for (const pt of priceTypes) {
             const id = safeStr(pt.price_type_id);
-            const label = safeStr(pt.price_type_name) || "—";
+            const label = mapPriceTypeName(pt.price_type_name) || "—";
             if (id) map.set(id, label);
         }
         return map;
@@ -700,7 +701,7 @@ export default function PricingFiltersBar(props: Props) {
                                             </CommandItem>
                                             {priceTypes.map((pt) => {
                                                 const idStr = safeStr(pt.price_type_id);
-                                                const label = safeStr(pt.price_type_name) || "—";
+                                                const label = mapPriceTypeName(pt.price_type_name) || "—";
                                                 const selected = selectedPriceTypeIds.includes(idStr);
 
                                                 return (

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { mapPriceTypeName } from "../utils/constants";
 
 type PriceTypeRow = { price_type_id: number; price_type_name: string };
 
@@ -128,7 +129,7 @@ export default function RequestPriceChangeDialog(props: {
                         <div className="space-y-1">
                             <Label>Price Type</Label>
                             <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
-                                {props.priceType.price_type_name}
+                                {mapPriceTypeName(props.priceType.price_type_name)}
                             </div>
                         </div>
 

@@ -1,6 +1,7 @@
 // src/modules/financial-management/printables-management/product-printables/utils/printPdf.ts
 
 import type { MatrixRow, PriceType, Unit, Supplier } from "../types";
+import { mapPriceTypeName } from "../../product-pricing/utils/constants";
 import { PdfEngine } from "@/components/pdf-layout-design/PdfEngine";
 import { PdfTemplate } from "@/components/pdf-layout-design/services/pdf-template";
 import { PdfData } from "@/components/pdf-layout-design/types";
@@ -91,19 +92,19 @@ export async function generateProductMatrixPdf(rows: MatrixRow[], options: Matri
             .filter(pt => selectedPriceTypeIds.length === 0 || selectedPriceTypeIds.includes(String(pt.price_type_id)))
             .map(pt => {
                 if (pt.price_type_id === -1) {
-                    return { key: "ListPrice" as const, label: pt.price_type_name };
+                    return { key: "ListPrice" as const, label: mapPriceTypeName(pt.price_type_name) };
                 }
                 const nonSynthetic = allPriceTypes.filter(p => p.price_type_id !== -1);
                 const idx = nonSynthetic.findIndex(p => p.price_type_id === pt.price_type_id);
                 return {
                     key: (TIERS[idx] || "A") as typeof TIERS[number],
-                    label: pt.price_type_name
+                    label: mapPriceTypeName(pt.price_type_name)
                 };
             })
             .filter(t => t.key != null)
         : TIERS.map((key, i) => ({
             key,
-            label: allPriceTypes?.[i]?.price_type_name || `PRICE TYPE ${key}`
+            label: mapPriceTypeName(allPriceTypes?.[i]?.price_type_name) || `PRICE TYPE ${key}`
         })).slice(0, 5);
 
     const usedUnits = units

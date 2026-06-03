@@ -3,6 +3,7 @@
 
 import React from "react";
 import type { MatrixRow, PriceType, Unit } from "../types";
+import { mapPriceTypeName } from "../../product-pricing/utils/constants";
 import {
     Table,
     TableBody,
@@ -84,7 +85,7 @@ export default function PrintablesMatrixTable({
                                         groupColors[absoluteIndex !== -1 ? absoluteIndex % groupColors.length : 0]
                                     )}
                                 >
-                                    {pt.price_type_name}
+                                    {mapPriceTypeName(pt.price_type_name)}
                                 </TableHead>
                             );
                         })}
