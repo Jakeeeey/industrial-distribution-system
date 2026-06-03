@@ -4,7 +4,6 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   X,
   Plus,
-  Minus,
   Trash2,
   Save,
   ChevronDown,
@@ -1022,7 +1021,7 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
                       </div>
 
                       {/* Column 2: Quantity & Unit */}
-                      <div className="col-span-4 md:col-span-2 flex flex-col items-center justify-center gap-1" onClick={e => e.stopPropagation()}>
+                      <div className="col-span-4 md:col-span-2 flex flex-col items-center justify-center gap-1">
                         <Badge variant="outline" className="font-bold min-w-[40px] flex justify-center border-primary/40 bg-primary/10 text-primary shadow-sm">
                           {item.quantity}
                         </Badge>
@@ -1030,15 +1029,18 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
                       </div>
 
                       {/* Column 3: Gross, Disc Type, Disc Amount */}
-                      <div className="col-span-8 md:col-span-3 flex flex-col items-start text-left gap-1" onClick={e => e.stopPropagation()}>
+                      <div className="col-span-8 md:col-span-3 flex flex-col items-start text-left gap-1">
                         <span className="text-xs text-muted-foreground">Gross: <span className="font-mono font-semibold">₱{item.grossAmount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></span>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                           <span className="text-xs text-muted-foreground">Disc:</span>
                           <span className="text-xs text-destructive font-mono font-semibold">-₱{item.discountAmount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                          <Select value={item.discountType?.toString() || "none"} onValueChange={val => handleItemChange(idx, "discountType", val === "none" ? "" : val)}>
-                            <SelectTrigger className="h-6 w-16 px-1.5 text-[10px] border-border bg-background"><SelectValue placeholder="-" /></SelectTrigger>
-                            <SelectContent className="z-[200]"><SelectItem value="none">None</SelectItem>{lineDiscountOptions.map(opt => <SelectItem key={opt.id} value={opt.id.toString()}>{opt.discount_type}</SelectItem>)}</SelectContent>
-                          </Select>
+                          <SearchableSelect
+                            value={item.discountType?.toString() || "none"}
+                            onValueChange={val => handleItemChange(idx, "discountType", val === "none" ? "" : val)}
+                            options={[{ value: "none", label: "None" }, ...lineDiscountOptions.map(opt => ({ value: opt.id.toString(), label: opt.discount_type }))]}
+                            placeholder="Disc"
+                            className="h-6 w-20 px-1.5 text-[10px] border-border bg-background"
+                          />
                         </div>
                       </div>
 
@@ -1049,7 +1051,7 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
                       </div>
 
                       {/* Column 5: Trash (Delete) */}
-                      <div className="col-span-2 md:col-span-1 flex justify-end" onClick={e => e.stopPropagation()}>
+                      <div className="col-span-2 md:col-span-1 flex justify-end">
                         <button
                           onClick={e => { e.stopPropagation(); setItems(prev => prev.filter((_, i) => i !== idx)); if (selectedRowIndex === idx) setSelectedRowIndex(null); }}
                           className="bg-destructive/10 hover:bg-destructive text-destructive hover:text-white h-8 w-8 rounded-md flex items-center justify-center transition-all duration-200 active:scale-95 shrink-0"
@@ -1060,7 +1062,7 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
                     </div>
 
                     {/* Bottom Section: Return Type + Reason */}
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mt-3 pt-3 border-t border-border" onClick={e => e.stopPropagation()}>
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mt-3 pt-3 border-t border-border">
                       <div className="md:col-span-5 flex items-center gap-2 w-full">
                         <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Return Type:</span>
                         <SearchableSelect

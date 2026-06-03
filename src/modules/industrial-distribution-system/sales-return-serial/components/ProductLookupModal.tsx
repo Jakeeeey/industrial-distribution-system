@@ -4,7 +4,6 @@ import { toast } from "sonner";
 import {
   X,
   Plus,
-  Minus,
   Trash2,
   Package,
   Filter,
@@ -361,44 +360,7 @@ export function ProductLookupModal({
     }
   };
 
-  const updateItemQuantity = (tempId: string | undefined, change: number) => {
-    if (!tempId) return;
-    setSelectedItems((prev) =>
-      prev.map((item) => {
-        if (item.tempId === tempId) {
-          if (item.isSerialized) return item; 
-          const newQty = item.quantity + change;
-          if (newQty < 1) return item;
-          return {
-            ...item,
-            quantity: newQty,
-            grossAmount: newQty * item.unitPrice,
-            totalAmount: newQty * item.unitPrice,
-          };
-        }
-        return item;
-      }),
-    );
-  };
 
-  const setItemQuantityDirect = (tempId: string | undefined, qty: number) => {
-    if (!tempId) return;
-    setSelectedItems((prev) =>
-      prev.map((item) => {
-        if (item.tempId === tempId) {
-          if (item.isSerialized) return item;
-          const safeQty = Math.max(1, Math.floor(qty));
-          return {
-            ...item,
-            quantity: safeQty,
-            grossAmount: safeQty * item.unitPrice,
-            totalAmount: safeQty * item.unitPrice,
-          };
-        }
-        return item;
-      }),
-    );
-  };
 
   const handleRemoveItem = (tempId: string | undefined) => {
     if (!tempId) return;

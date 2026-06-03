@@ -5,7 +5,6 @@ import {
   X,
   Loader2,
   Plus,
-  Minus,
   Trash2,
   Printer,
   Save,
@@ -31,21 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableHeader,
-  TableRow,
-  TableHead,
-  TableBody,
-  TableCell,
-} from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+
 import {
   Popover,
   PopoverContent,
@@ -712,7 +697,7 @@ export function UpdateSalesReturnModal({
                       </div>
 
                       {/* Column 2: Quantity & Unit */}
-                      <div className="col-span-4 md:col-span-2 flex flex-col items-center justify-center gap-1" onClick={e => e.stopPropagation()}>
+                      <div className="col-span-4 md:col-span-2 flex flex-col items-center justify-center gap-1">
                         <Badge variant="outline" className="font-bold min-w-[40px] flex justify-center border-primary/40 bg-primary/10 text-primary shadow-sm">
                           {item.quantity}
                         </Badge>
@@ -720,15 +705,19 @@ export function UpdateSalesReturnModal({
                       </div>
 
                       {/* Column 3: Gross, Disc Type, Disc Amount */}
-                      <div className="col-span-8 md:col-span-3 flex flex-col items-start text-left gap-1" onClick={e => e.stopPropagation()}>
+                      <div className="col-span-8 md:col-span-3 flex flex-col items-start text-left gap-1">
                         <span className="text-xs text-muted-foreground">Gross: <span className="font-mono font-semibold">₱{item.grossAmount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></span>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                           <span className="text-xs text-muted-foreground">Disc:</span>
                           <span className="text-xs text-destructive font-mono font-semibold">-₱{item.discountAmount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                          <Select value={item.discountType?.toString() || "none"} onValueChange={val => handleDetailChange(idx, { discountType: val === "none" ? "" : val })} disabled={!canEditAll}>
-                            <SelectTrigger className="h-6 w-16 px-1.5 text-[10px] border-border bg-background"><SelectValue placeholder="-" /></SelectTrigger>
-                            <SelectContent className="z-[200]"><SelectItem value="none">None</SelectItem>{discountOptions.map(opt => <SelectItem key={opt.id} value={opt.id.toString()}>{opt.discount_type}</SelectItem>)}</SelectContent>
-                          </Select>
+                          <LocalSearchableSelect
+                            value={item.discountType?.toString() || "none"}
+                            onValueChange={val => handleDetailChange(idx, { discountType: val === "none" ? "" : val })}
+                            options={[{ value: "none", label: "None" }, ...discountOptions.map(opt => ({ value: opt.id.toString(), label: opt.discount_type }))]}
+                            placeholder="Disc"
+                            className="h-6 w-20 px-1.5 text-[10px] border-border bg-background"
+                            disabled={!canEditAll}
+                          />
                         </div>
                       </div>
 
@@ -739,7 +728,7 @@ export function UpdateSalesReturnModal({
                       </div>
 
                       {/* Column 5: Trash (Delete) */}
-                      <div className="col-span-2 md:col-span-1 flex justify-end" onClick={e => e.stopPropagation()}>
+                      <div className="col-span-2 md:col-span-1 flex justify-end">
                         <button
                           disabled={!canEditAll}
                           onClick={e => { e.stopPropagation(); handleDeleteRow(idx); if (selectedRowIndex === idx) setSelectedRowIndex(null); }}
@@ -751,7 +740,7 @@ export function UpdateSalesReturnModal({
                     </div>
 
                     {/* Bottom Section: Return Type + Reason */}
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mt-3 pt-3 border-t border-border" onClick={e => e.stopPropagation()}>
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mt-3 pt-3 border-t border-border">
                       <div className="md:col-span-5 flex items-center gap-2 w-full">
                         <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Return Type:</span>
                         <LocalSearchableSelect
