@@ -1,18 +1,18 @@
 import { OPSOrder } from "../types";
 
 export const opsDashboardProvider = {
-  async getAllOrders(): Promise<OPSOrder[]> {
-    const res = await fetch("/api/ids/crm/customer-hub/ops-dashboard", {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+    async getAllOrders(): Promise<OPSOrder[]> {
+        const res = await fetch("/api/ids/crm/customer-hub/ops-dashboard", {
+            method: "GET",
+            headers: {
+                "Content-Type": "application/json",
+            },
+        });
 
-    if (!res.ok) {
-      throw new Error(`Failed to fetch OPS Dashboard data: ${res.statusText}`);
-    }
+        if (!res.ok) {
+            throw new Error(`Failed to fetch OPS Dashboard data: ${res.statusText}`);
+        }
 
-    return await res.json();
-  },
+        return await res.json();
+    },
 };

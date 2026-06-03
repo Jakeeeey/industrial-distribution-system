@@ -167,7 +167,7 @@ export default function CallSheetModule() {
                 page={page}
                 pageSize={pageSize}
                 onPageChange={setPage}
-                onCreateSalesOrder={(row) => router.push(`/industrial-distribution-system/operation/sales-order/create-sales-order?attachment_id=${row.id}`)}
+                onCreateSalesOrder={(row) => router.push(`/crm/customer-hub/create-sales-order?attachment_id=${row.id}`)}
             />
         </div>
     );

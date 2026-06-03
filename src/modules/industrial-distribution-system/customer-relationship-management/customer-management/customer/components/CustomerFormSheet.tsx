@@ -530,6 +530,19 @@ function TabBadge({ count }: { count: number }) {
   );
 }
 
+const PRICE_TYPE_LABELS: Record<string, string> = {
+  A: "A - Dealer",
+  B: "B - Sub-Dealer",
+  C: "C - RTO",
+  D: "D - Commercial",
+  E: "E - Walk In",
+};
+
+const getPriceTypeLabel = (name: string) => {
+  const code = name.split("-")[0].trim().toUpperCase();
+  return PRICE_TYPE_LABELS[code] || name;
+};
+
 // ============================================================================
 // MAIN COMPONENT
 // ============================================================================
@@ -548,6 +561,8 @@ export function CustomerFormSheet({
   );
   const [paymentTerms, setPaymentTerms] = useState<PaymentTerm[]>([]);
   const [bankNames, setBankNames] = useState<ReferenceOption[]>([]);
+  const [priceTypes, setPriceTypes] = useState<{ price_type_id: number; price_type_name: string; sort?: number }[]>([]);
+  const [isLoadingPriceTypes, setIsLoadingPriceTypes] = useState(false);
 
   const [provincesList, setProvincesList] = useState<LocationOption[]>([]);
   const [citiesList, setCitiesList] = useState<LocationOption[]>([]);
@@ -596,6 +611,18 @@ export function CustomerFormSheet({
   }, [selectedStoreTypeId, storeTypes]);
 
   const isWalkInOrHousehold = isWalkIn || isHousehold;
+
+  // Map customer.price_type (single letter) to the full price_type_name when customer or priceTypes load
+  const initialPriceType = useMemo(() => {
+    if (!customer?.price_type || priceTypes.length === 0) return customer?.price_type || "";
+    const letter = customer.price_type.split("-")[0].trim();
+    const found = priceTypes.find(
+      (pt) =>
+        pt.price_type_name?.split("-")[0].trim() === letter ||
+        pt.price_type_name === letter
+    );
+    return found ? found.price_type_name : customer.price_type;
+  }, [customer?.price_type, priceTypes]);
 
   // 🚀 REMOVED: Automatic enforcement of status/classification
   // We keep the logic for price_type as a default but won't force it on every change if already set
@@ -891,6 +918,32 @@ export function CustomerFormSheet({
     if (!open) return;
     let isMounted = true;
 
+    const fetchPriceTypes = async () => {
+      setIsLoadingPriceTypes(true);
+      try {
+        const res = await fetch("/api/ids/fm/product-pricing/price-types");
+        if (!res.ok) throw new Error("Failed to fetch price types");
+        const json = await res.json();
+        if (isMounted) {
+          setPriceTypes(json.data || []);
+        }
+      } catch {
+        console.error("Failed to fetch price types");
+      } finally {
+        if (isMounted) setIsLoadingPriceTypes(false);
+      }
+    };
+
+    fetchPriceTypes();
+    return () => {
+      isMounted = false;
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    let isMounted = true;
+
     const fetchBankNames = async () => {
       setIsLoadingBankNames(true);
       try {
@@ -920,6 +973,23 @@ export function CustomerFormSheet({
     };
   }, [open]);
 
+  // Map any single-letter price_type values to their full names once priceTypes are loaded
+  useEffect(() => {
+    if (open && priceTypes.length > 0) {
+      const currentPriceType = form.getValues("price_type");
+      if (currentPriceType && currentPriceType.length === 1) {
+        const found = priceTypes.find(
+          (pt) =>
+            pt.price_type_name?.split("-")[0].trim() === currentPriceType ||
+            pt.price_type_name === currentPriceType
+        );
+        if (found) {
+          form.setValue("price_type", found.price_type_name, { shouldValidate: true });
+        }
+      }
+    }
+  }, [open, priceTypes, form]);
+
   useEffect(() => {
     if (open) {
       if (customer) {
@@ -934,7 +1004,7 @@ export function CustomerFormSheet({
           customer_tin: customer.customer_tin || "",
           payment_term: customer.payment_term || 0,
           store_type: customer.store_type || null,
-          price_type: customer.price_type || "",
+          price_type: initialPriceType || "",
           isActive: customer.isActive ?? 1,
           isVAT: customer.isVAT ?? 0,
           isEWT: customer.isEWT ?? 0,
@@ -953,7 +1023,7 @@ export function CustomerFormSheet({
         form.reset(getDefaultValues());
       }
     }
-  }, [customer, form, open]);
+  }, [customer, form, open, initialPriceType]);
 
   const handleFormSubmit: SubmitHandler<CustomerFormValues> = async (
     values,
@@ -975,10 +1045,20 @@ export function CustomerFormSheet({
       "brgy",
       "store_name",
       "store_signage",
+      "store_type",
     ]);
 
     let hasManualErrors = false;
     let firstTab: "address" | "billing" | "basic" | null = null;
+
+    if (!values.store_type) {
+      form.setError("store_type", {
+        type: "manual",
+        message: "Store Type is required.",
+      });
+      firstTab = firstTab || "basic";
+      hasManualErrors = true;
+    }
 
     if (!values.province || values.province.trim() === "") {
       form.setError("province", {
@@ -1730,7 +1810,7 @@ export function CustomerFormSheet({
                       )}
                     />
 
-                    {/* PRICE TYPE (HARD-CODED TO INPUT) */}
+                    {/* PRICE TYPE */}
                     <FormField
                       control={form.control}
                       name="price_type"
@@ -1741,21 +1821,25 @@ export function CustomerFormSheet({
                             Price Type
                           </FormLabel>
                           <FormControl>
-                            <Input
-                              className="h-11 bg-muted/30 uppercase font-bold"
-                              placeholder="e.g., E, A, B"
-                              {...field}
-                              onChange={(e) =>
-                                field.onChange(e.target.value.toUpperCase())
+                            <SearchableSelect
+                              options={priceTypes.map((pt) => {
+                                const name = pt.price_type_name || "";
+                                return {
+                                  value: name,
+                                  label: getPriceTypeLabel(name),
+                                };
+                              })}
+                              value={field.value || ""}
+                              onValueChange={field.onChange}
+                              placeholder={
+                                isLoadingPriceTypes
+                                  ? "Loading price types..."
+                                  : "Select price type"
                               }
-                              // disabled={isWalkInOrHousehold}
+                              disabled={isLoadingPriceTypes}
+                              className="h-11 bg-muted/30"
                             />
                           </FormControl>
-                          {/* {isWalkInOrHousehold && (
-                                                        <p className="text-[10px] text-primary mt-1 font-bold uppercase tracking-tight">
-                                                            ⚡ Price Type 'E' is mandatory for Walk-in / Household.
-                                                        </p>
-                                                    )} */}
                           <FormMessage />
                         </FormItem>
                       )}
