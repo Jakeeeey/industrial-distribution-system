@@ -3,6 +3,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 import type { MatrixRow, ProductTierKey, Unit, PriceType } from "../types";
+import { mapPriceTypeName } from "./constants";
 
 type Options = {
     paper?: "a4" | "legal" | "a3";
@@ -83,7 +84,7 @@ export function generatePricingMatrixPdf(
 
     for (const tier of TIERS) {
         headRow1.push({
-            content: `PRICE TYPE ${tier}`,
+            content: `PRICE TYPE ${mapPriceTypeName(tier)}`,
             colSpan: uomCount,
             styles: { 
                 halign: "center", 
@@ -106,7 +107,7 @@ export function generatePricingMatrixPdf(
 
     for (const tier of TIERS) {
         headRow2.push({
-            content: `Tier ${tier}`,
+            content: `Tier ${mapPriceTypeName(tier)}`,
             colSpan: uomCount,
             styles: { 
                 halign: "center",

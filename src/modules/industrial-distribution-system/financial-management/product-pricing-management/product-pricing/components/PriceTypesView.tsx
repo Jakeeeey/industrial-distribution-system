@@ -4,6 +4,7 @@ import * as React from "react";
 import { usePriceTypes } from "../hooks/usePriceTypes";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { mapPriceTypeName } from "../utils/constants";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export default function PriceTypesView() {
@@ -24,7 +25,7 @@ export default function PriceTypesView() {
                 <TableBody>
                     {priceTypes.map((t) => (
                         <TableRow key={t.price_type_id}>
-                            <TableCell className="font-medium">{t.price_type_name}</TableCell>
+                            <TableCell className="font-medium">{mapPriceTypeName(t.price_type_name)}</TableCell>
                             <TableCell>{t.sort ?? "—"}</TableCell>
                             <TableCell>{t.price_type_id}</TableCell>
                         </TableRow>
