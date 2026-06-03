@@ -30,21 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableHeader,
-  TableRow,
-  TableHead,
-  TableBody,
-  TableCell,
-} from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+
 import {
   Popover,
   PopoverContent,
@@ -279,6 +265,11 @@ export function UpdateSalesReturnModal({
 
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
   const [isValidatingSerial, setIsValidatingSerial] = useState(false);
+  const [productSearch, setProductSearch] = useState("");
+  const [serialSearch, setSerialSearch] = useState("");
+  const [returnTypeError, setReturnTypeError] = useState(false);
+  const productsSectionRef = React.useRef<HTMLDivElement>(null);
+  const cardRefs = React.useRef<Map<number, HTMLDivElement>>(new Map());
 
   // statusCardData is fetched but not currently used in UI
   const [statusCardData, setStatusCardData] = useState<SalesReturnStatusCard | null>(null);
@@ -360,9 +351,7 @@ export function UpdateSalesReturnModal({
         updatedItem.serialNumbers = [...(current.serialNumbers || []), updates.newSerial];
       }
       
-      if (updatedItem.isSerialized === 1 || updatedItem.isSerialized === true) {
-        updatedItem.quantity = (updatedItem.serialNumbers || []).length;
-      }
+      updatedItem.quantity = (updatedItem.serialNumbers || []).length;
       
       updatedItem.grossAmount = Math.round(Number(updatedItem.quantity) * Number(updatedItem.unitPrice) * 100) / 100;
       
@@ -423,10 +412,40 @@ export function UpdateSalesReturnModal({
   const handleDeleteRow = (index: number) => setDetails((prev) => prev.filter((_, i) => i !== index));
 
   const handleUpdateClick = () => {
-    if (!headerData.orderNo?.trim()) { toast.error("Order No. is required"); return; }
-    if (!headerData.invoiceNo?.trim()) { toast.error("Invoice No. is required"); return; }
-    const invalid = details.some(item => !item.returnType || item.returnType === "");
-    if (invalid) { toast.error("Please select a return type for all items"); return; }
+    if (!headerData.orderNo?.trim()) {
+      orderWrapperRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      toast.error("Order No. is required");
+      return;
+    }
+    if (!headerData.invoiceNo?.trim()) {
+      invoiceWrapperRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      toast.error("Invoice No. is required");
+      return;
+    }
+    const zeroQtyIdx = details.findIndex(item => !item.quantity || item.quantity <= 0);
+    if (zeroQtyIdx !== -1) {
+      const el = cardRefs.current.get(zeroQtyIdx);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else {
+        productsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      setSelectedRowIndex(zeroQtyIdx);
+      toast.error("Item quantity is required.", { description: `"${details[zeroQtyIdx].description}" has no quantity. Please add at least one serial number.` });
+      return;
+    }
+    const firstInvalidIdx = details.findIndex(item => !item.returnType || item.returnType === "");
+    if (firstInvalidIdx !== -1) {
+      setReturnTypeError(true);
+      const el = cardRefs.current.get(firstInvalidIdx);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else {
+        productsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      toast.error("Please select a return type for all items");
+      return;
+    }
     setIsUpdateConfirmOpen(true);
   };
 
@@ -440,7 +459,7 @@ export function UpdateSalesReturnModal({
         const productId = Number(rawId);
         const unitPrice = Math.round(Number(item.unitPrice || 0) * 100) / 100;
         const isSerialized = item.isSerialized === 1 || item.isSerialized === true;
-        const incomingQty = isSerialized ? 0 : (Number(item.quantity) || 1);
+        const incomingQty = 0;
 
         const existingIndex = updated.findIndex((i) => 
           i.productId === productId && 
@@ -597,119 +616,214 @@ export function UpdateSalesReturnModal({
             </div>
           </div>
 
-          <div className="space-y-4">
-            <div className="flex justify-between items-end">
-              <h3 className="text-base font-bold text-foreground flex items-center gap-2"><span className="h-5 w-1 bg-primary rounded-full"></span>Products Summary</h3>
-              {canEditAll && (
-                <Button size="sm" onClick={() => setIsProductLookupOpen(true)} className="bg-primary hover:bg-primary text-white shadow-primary/20 shadow-md h-9 gap-2">
-                  <Plus className="h-4 w-4" /> Add Product
-                </Button>
-              )}
-            </div>
-            <div className="border border-border rounded-xl overflow-hidden bg-background shadow-sm">
-              <div className="overflow-x-auto pb-4">
-                <Table className="min-w-[1500px]">
-                  <TableHeader>
-                    <TableRow className="bg-primary hover:bg-primary! border-none">
-                      <TableHead className="text-white font-semibold h-11 w-[120px] uppercase text-xs">Code</TableHead>
-                      <TableHead className="text-white font-semibold h-11 min-w-[180px] uppercase text-xs">Description</TableHead>
-                      <TableHead className="text-white font-semibold h-11 w-[80px] uppercase text-xs">Unit</TableHead>
-                      <TableHead className="text-white font-semibold h-11 text-center w-[150px] uppercase text-xs">Qty</TableHead>
-                      <TableHead className="text-white font-semibold h-11 text-right min-w-[100px] uppercase text-xs">Unit Price</TableHead>
-                      <TableHead className="text-white font-semibold h-11 text-right min-w-[120px] uppercase text-xs">Gross</TableHead>
-                      <TableHead className="text-white font-semibold h-11 w-[160px] uppercase text-xs">Disc. Type</TableHead>
-                      <TableHead className="text-white font-semibold h-11 text-right min-w-[120px] uppercase text-xs">Disc. Amt</TableHead>
-                      <TableHead className="text-white font-semibold h-11 text-right min-w-[120px] uppercase text-xs">Total</TableHead>
-                      <TableHead className="text-white font-semibold h-11 min-w-[180px] uppercase text-xs">Reason</TableHead>
-                      <TableHead className="text-white font-semibold h-11 w-[200px] uppercase text-xs">Return Type</TableHead>
-                      {canEditAll && <TableHead className="text-white font-semibold h-11 w-[50px]"></TableHead>}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loading ? Array.from({ length: 5 }).map((_, i) => (
-                      <TableRow key={i}>
-                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-48" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-12" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-10 mx-auto" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-28" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                        {canEditAll && <TableCell><Skeleton className="h-4 w-8" /></TableCell>}
-                      </TableRow>
-                    )) : details.length === 0 ? (
-                      <TableRow><TableCell colSpan={12} className="px-6 py-16 text-center text-muted-foreground bg-muted/30"><div className="flex flex-col items-center gap-2"><FileText className="h-8 w-8 text-muted-foreground mb-1" /><p>No items added yet.</p><span className="text-xs">Click &ldquo;Add Product&rdquo; to browse catalog.</span></div></TableCell></TableRow>
-                    ) : details.map((item, idx) => (
-                      <TableRow key={idx} onClick={() => canEditAll && setSelectedRowIndex(idx)} className={cn("border-b border-border hover:bg-muted/10 transition-colors cursor-pointer", selectedRowIndex === idx && "bg-primary/5")}>
-                        <TableCell className="font-mono text-sm">{item.code}</TableCell>
-                        <TableCell className="text-sm font-medium">{item.description}</TableCell>
-                        <TableCell><Badge variant="outline">{item.unit}</Badge></TableCell>
-                        <TableCell className="text-center" onClick={e => e.stopPropagation()}>
-                          <div className="flex flex-col items-center gap-1">
-                            {item.isSerialized === 1 || item.isSerialized === true ? (
-                              <Badge variant="outline" className="font-bold min-w-[40px] flex justify-center border-primary/40 bg-primary/10 text-primary shadow-sm">{item.quantity}</Badge>
-                            ) : (
-                              <Input type="number" className="h-8 w-16 text-center mx-auto" disabled={!canEditAll} value={item.quantity} onChange={e => handleDetailChange(idx, { quantity: Math.max(1, parseInt(e.target.value) || 0) })} />
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">₱{Number(item.unitPrice).toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
-                        <TableCell className="text-right">₱{Number(item.grossAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
-                        <TableCell>
-                          <Select value={item.discountType?.toString() || "No Discount"} onValueChange={v => handleDetailChange(idx, { discountType: v })} disabled={!canEditAll}>
-                            <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                            <SelectContent><SelectItem value="No Discount">None</SelectItem>{discountOptions.map(o => <SelectItem key={o.id} value={o.id.toString()}>{o.discount_type}</SelectItem>)}</SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell className="text-right">₱{Number(item.discountAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
-                        <TableCell className="text-right font-bold">₱{Number(item.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</TableCell>
-                        <TableCell onClick={e => e.stopPropagation()}><ReasonInputSection value={item.reason || ""} onChange={val => handleDetailChange(idx, { reason: val })} disabled={!canEditAll} /></TableCell>
-                        <TableCell>
-                          <LocalSearchableSelect value={item.returnType || ""} onValueChange={v => handleDetailChange(idx, { returnType: v })} options={returnTypeOptions.map(t => ({ value: t.type_name, label: t.type_name }))} disabled={!canEditAll} />
-                        </TableCell>
-                        {canEditAll && <TableCell><Button variant="ghost" size="icon" onClick={() => handleDeleteRow(idx)}><Trash2 className="h-4 w-4 text-destructive" /></Button></TableCell>}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+          <div ref={productsSectionRef} className="bg-background rounded-lg border border-border shadow-sm overflow-hidden flex flex-col">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 px-5 py-4 bg-background border-b border-border">
+              <h3 className="font-bold text-foreground flex items-center gap-2"><span className="h-5 w-1 bg-primary rounded-full"></span>Products Summary <Badge variant="outline" className="ml-1 text-xs font-bold">{details.length}</Badge></h3>
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <div className="relative flex-1 sm:flex-initial">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search products..."
+                    className="h-9 pl-9 pr-3 w-full sm:w-48 text-sm border-border"
+                    value={productSearch}
+                    onChange={(e) => {
+                      setProductSearch(e.target.value);
+                      if (e.target.value.trim()) {
+                        const query = e.target.value.toLowerCase();
+                        const matchIdx = details.findIndex(item =>
+                          item.description.toLowerCase().includes(query) ||
+                          item.code.toLowerCase().includes(query)
+                        );
+                        if (matchIdx !== -1) {
+                          const el = cardRefs.current.get(matchIdx);
+                          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+                        }
+                      }
+                    }}
+                  />
+                </div>
+                {canEditAll && (
+                  <Button size="sm" onClick={() => setIsProductLookupOpen(true)} className="bg-primary hover:bg-primary text-white shadow-primary/20 shadow-md h-9 gap-2 shrink-0">
+                    <Plus className="h-4 w-4" /> Add Product
+                  </Button>
+                )}
               </div>
+            </div>
+            <div className="max-h-[500px] overflow-y-auto p-4 space-y-3 bg-muted/20">
+              {loading ? Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="bg-background border rounded-lg p-4 shadow-sm animate-pulse space-y-3">
+                  <div className="h-4 bg-muted rounded w-3/4"></div>
+                  <div className="h-3 bg-muted rounded w-1/4"></div>
+                </div>
+              )) : details.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <FileText className="h-8 w-8 text-muted-foreground mb-2" />
+                  <p className="text-muted-foreground">No items added yet.</p>
+                  <span className="text-xs text-muted-foreground">Click &ldquo;Add Product&rdquo; to browse catalog.</span>
+                </div>
+              ) : details.map((item, idx) => {
+                const isSearchMatch = productSearch.trim() !== "" && (
+                  item.description.toLowerCase().includes(productSearch.toLowerCase()) ||
+                  item.code.toLowerCase().includes(productSearch.toLowerCase())
+                );
+                return (
+                  <div
+                    key={idx}
+                    ref={(el) => { if (el) cardRefs.current.set(idx, el); else cardRefs.current.delete(idx); }}
+                    onClick={() => setSelectedRowIndex(idx)}
+                    className={cn(
+                      "bg-background border rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group",
+                      selectedRowIndex === idx && "ring-2 ring-primary border-primary",
+                      isSearchMatch && selectedRowIndex !== idx && "ring-2 ring-amber-400/60 border-amber-400 bg-amber-50/10",
+                      returnTypeError && (!item.returnType || item.returnType === "") && "ring-2 ring-destructive border-destructive",
+                      !isSearchMatch && selectedRowIndex !== idx && "border-border"
+                    )}
+                  >
+                    {/* Main Grid: Columns 1 to 5 */}
+                    <div className="grid grid-cols-12 gap-4 items-center">
+                      {/* Column 1: Product Name & Code */}
+                      <div className="col-span-12 md:col-span-4 min-w-0">
+                        <div className="flex items-start gap-2">
+                          {selectedRowIndex === idx ? (
+                            <div className="w-2 h-2 mt-1.5 rounded-full bg-primary shadow-[0_0_8px_rgba(var(--primary),0.5)] animate-pulse shrink-0" />
+                          ) : (
+                            <div className="w-2 h-2 mt-1.5 rounded-full bg-muted-foreground/20 shrink-0" />
+                          )}
+                          <div className="min-w-0">
+                            <h4 className="text-sm font-semibold text-foreground leading-tight line-clamp-2">{item.description}</h4>
+                            <span className="text-[11px] text-muted-foreground font-mono">Code: {item.code}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Column 2: Quantity & Unit */}
+                      <div className="col-span-4 md:col-span-2 flex flex-col items-center justify-center gap-1">
+                        <Badge variant="outline" className="font-bold min-w-[40px] flex justify-center border-primary/40 bg-primary/10 text-primary shadow-sm">
+                          {item.quantity}
+                        </Badge>
+                        <span className="text-[10px] text-muted-foreground font-medium">({item.unit})</span>
+                      </div>
+
+                      {/* Column 3: Gross, Disc Type, Disc Amount */}
+                      <div className="col-span-8 md:col-span-3 flex flex-col items-start text-left gap-1">
+                        <span className="text-xs text-muted-foreground">Gross: <span className="font-mono font-semibold">₱{item.grossAmount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></span>
+                        <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                          <span className="text-xs text-muted-foreground">Disc:</span>
+                          <span className="text-xs text-destructive font-mono font-semibold">-₱{item.discountAmount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                          <LocalSearchableSelect
+                            value={item.discountType?.toString() || "none"}
+                            onValueChange={val => handleDetailChange(idx, { discountType: val === "none" ? "" : val })}
+                            options={[{ value: "none", label: "None" }, ...discountOptions.map(opt => ({ value: opt.id.toString(), label: opt.discount_type }))]}
+                            placeholder="Disc"
+                            className="h-6 w-20 px-1.5 text-[10px] border-border bg-background"
+                            disabled={!canEditAll}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Column 4: Net Amount */}
+                      <div className="col-span-10 md:col-span-2 text-right md:pl-3 md:border-l border-border flex flex-col items-end">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Net Amount</span>
+                        <span className="text-base font-bold text-foreground tabular-nums">₱{item.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      </div>
+
+                      {/* Column 5: Trash (Delete) */}
+                      <div className="col-span-2 md:col-span-1 flex justify-end">
+                        <button
+                          disabled={!canEditAll}
+                          onClick={e => { e.stopPropagation(); handleDeleteRow(idx); if (selectedRowIndex === idx) setSelectedRowIndex(null); }}
+                          className="bg-destructive/10 hover:bg-destructive text-destructive hover:text-white h-8 w-8 rounded-md flex items-center justify-center transition-all duration-200 active:scale-95 shrink-0 disabled:opacity-30 disabled:hover:bg-destructive/10 disabled:hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Bottom Section: Return Type + Reason */}
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mt-3 pt-3 border-t border-border">
+                      <div className="md:col-span-5 flex items-center gap-2 w-full">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Return Type:</span>
+                        <LocalSearchableSelect
+                          value={item.returnType || ""}
+                          onValueChange={val => { handleDetailChange(idx, { returnType: val }); setReturnTypeError(false); }}
+                          options={returnTypeOptions.map(t => ({ value: t.type_name, label: t.type_name }))}
+                          placeholder="Select type"
+                          className={cn("h-8 text-sm px-2 flex-1", returnTypeError && (!item.returnType || item.returnType === "") && "border-destructive ring-1 ring-destructive/30 bg-destructive/5 text-destructive")}
+                          disabled={!canEditAll}
+                        />
+                      </div>
+                      <div className="md:col-span-7 flex items-center gap-2 w-full">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Reason:</span>
+                        <div className="flex-1">
+                          <ReasonInputSection value={item.reason || ""} onChange={val => handleDetailChange(idx, { reason: val })} disabled={!canEditAll} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
           {selectedRowIndex !== null && details[selectedRowIndex] && (
             <div className="bg-background rounded-lg border-2 border-primary/20 shadow-md p-5 mb-6 animate-in slide-in-from-bottom-4 duration-300">
-              <div className="flex justify-between items-center mb-4">
-                <h4 className="font-bold text-foreground flex items-center gap-2 text-base">
-                  <div className="bg-emerald-500/10 p-1.5 rounded text-emerald-600">
-                    <ScanLine className="h-5 w-5" />
+              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-4">
+                <h4 className="font-bold text-foreground flex items-center gap-2 text-base shrink-0"><div className="bg-emerald-500/10 p-1.5 rounded text-emerald-600"><ScanLine className="h-5 w-5" /></div>Serial Management for: <span className="text-primary underline decoration-primary/30 underline-offset-4">{details[selectedRowIndex].description}</span></h4>
+                <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+                  {/* Serial Search Input */}
+                  <div className="relative w-full sm:w-48">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      placeholder="Search serials..."
+                      className="h-8 pl-9 pr-3 text-xs border-border bg-background"
+                      value={serialSearch}
+                      onChange={(e) => setSerialSearch(e.target.value)}
+                    />
                   </div>
-                  Serial Management for: <span className="text-primary underline decoration-primary/30 underline-offset-4">{details[selectedRowIndex].description}</span>
-                </h4>
-                <div className="flex items-center gap-3">
                   {canEditAll && (
                     <SerialInputSection onAdd={(serial) => handleAddSerial(serial)} disabled={isValidatingSerial} />
                   )}
-                  <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 px-3 py-1 font-bold">{details[selectedRowIndex].serialNumbers?.length || 0} TOTAL</Badge>
+                  <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 px-3 py-1 font-bold shrink-0">{details[selectedRowIndex].serialNumbers?.length || 0} TOTAL</Badge>
                 </div>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 max-h-40 overflow-y-auto p-1">
-                {(details[selectedRowIndex].serialNumbers || []).map((sn: string) => (
-                  <div key={sn} className="flex items-center justify-between bg-muted/20 border border-border px-3 py-2 rounded-md hover:border-primary/30 transition-all group hover:shadow-sm">
-                    <span className="text-[10px] font-mono font-bold text-foreground truncate">{sn}</span>
-                    {canEditAll && (
-                      <button onClick={() => {
-                        const row = details[selectedRowIndex];
-                        const newSerials = row.serialNumbers!.filter((s: string) => s !== sn);
-                        handleDetailChange(selectedRowIndex, { serialNumbers: newSerials });
-                      }} className="p-1 text-destructive/50 hover:text-destructive transition-colors"><X className="h-3 w-3" /></button>
-                    )}
+                {(details[selectedRowIndex].serialNumbers || [])
+                  .filter(sn => sn.toLowerCase().includes(serialSearch.toLowerCase()))
+                  .map(sn => (
+                    <div key={sn} className="flex items-center justify-between bg-muted/20 border border-border px-3 py-2 rounded-md hover:border-primary/30 transition-all group hover:shadow-sm">
+                      <span className="text-[10px] font-mono font-bold text-foreground truncate">{sn}</span>
+                      {canEditAll && (
+                        <button onClick={() => {
+                          setDetails(prev => {
+                            const next = [...prev];
+                            const row = next[selectedRowIndex];
+                            const newSerials = row.serialNumbers!.filter(s => s !== sn);
+                            const newQty = newSerials.length;
+                            const gross = Math.round(row.unitPrice * newQty * 100) / 100;
+                            let discAmt = 0;
+                            if (row.discountType) {
+                              const opt = discountOptions.find(d => d.id.toString() === row.discountType?.toString());
+                              if (opt) discAmt = Math.round(gross * (parseFloat(opt.total_percent) / 100) * 100) / 100;
+                            }
+                            next[selectedRowIndex] = { 
+                              ...row, 
+                              serialNumbers: newSerials, 
+                              quantity: newQty, 
+                              grossAmount: gross, 
+                              discountAmount: discAmt, 
+                              totalAmount: Math.round((gross - discAmt) * 100) / 100 
+                            };
+                            return next;
+                          });
+                        }} className="p-1 text-destructive/50 hover:text-destructive transition-colors"><X className="h-3 w-3" /></button>
+                      )}
+                    </div>
+                  ))}
+                {(details[selectedRowIndex].serialNumbers || []).filter(sn => sn.toLowerCase().includes(serialSearch.toLowerCase())).length === 0 && (
+                  <div className="col-span-full py-8 text-center border border-dashed rounded-lg text-muted-foreground italic">
+                    {serialSearch ? "No matching serial numbers found." : "No serial numbers entered yet."}
                   </div>
-                ))}
-                {(details[selectedRowIndex].serialNumbers || []).length === 0 && <div className="col-span-full py-8 text-center border border-dashed rounded-lg text-muted-foreground italic">No serial numbers entered yet.</div>}
+                )}
               </div>
             </div>
           )}
@@ -781,7 +895,9 @@ export function UpdateSalesReturnModal({
           <Button variant="outline" onClick={handlePrintInNewTab}><Printer className="h-4 w-4 mr-2" /> Print Slip</Button>
           <Button variant="outline" onClick={onClose}>Close</Button>
           <Button onClick={() => setIsReceiveConfirmOpen(true)} disabled={!isPending}>Receive</Button>
-          <Button className="bg-primary hover:bg-primary text-white min-w-40" onClick={handleUpdateClick} disabled={!canEditLimited}>Update Sales Return</Button>
+          <Button className="bg-primary hover:bg-primary text-white min-w-40 flex items-center gap-2" onClick={handleUpdateClick} disabled={!canEditLimited || isUpdating}>
+            {isUpdating ? <><Loader2 className="h-4 w-4 animate-spin" /> Submitting...</> : "Update Sales Return"}
+          </Button>
         </div>
       </DialogContent>
 
