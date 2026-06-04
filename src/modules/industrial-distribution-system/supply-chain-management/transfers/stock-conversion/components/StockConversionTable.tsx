@@ -8,7 +8,7 @@ import { DataTable } from "@/components/ui/new-data-table";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { SearchableCombobox } from "@/modules/supply-chain-management/warehouse-management/stock-transfer/shared/components/searchable-combobox";
+import { SearchableCombobox } from "@/modules/industrial-distribution-system/supply-chain-management/warehouse-management/stock-transfer/shared/components/searchable-combobox";
 
 interface StockConversionTableProps {
   data: StockConversionProduct[];
@@ -98,12 +98,12 @@ export function StockConversionTable({
   const uniqueSuppliers = useMemo(() => {
     const suppliers = options?.suppliers?.length ? options.suppliers : [];
     const map = new Map<string, string>();
-    
+
     // Add from props
     suppliers.forEach(s => {
       if (s.name?.trim() && s.shortcut?.trim()) map.set(s.name.trim(), s.shortcut.trim());
     });
-    
+
     // Add from data (fallbacks)
     if (!suppliers.length) {
       data.forEach((d) => {
@@ -121,7 +121,7 @@ export function StockConversionTable({
 
   const handleApplyFilters = (searchOverride?: string, branchOverride?: number, hasStockOverride?: boolean) => {
     const filterPayload: Record<string, string> = {};
-    
+
     // Safety check: ensure activeSearch is a string. 
     // onClick={handleApplyFilters} passes the event object, which we must ignore.
     const activeSearch = (typeof searchOverride === 'string') ? searchOverride : searchQuery;
@@ -142,9 +142,9 @@ export function StockConversionTable({
     if (activeHasStock) filterPayload.hasStock = "true";
 
     setPage(1);
-    const finalPayload = { 
-      ...filterPayload, 
-      branchId: activeBranchId ? String(activeBranchId) : "" 
+    const finalPayload = {
+      ...filterPayload,
+      branchId: activeBranchId ? String(activeBranchId) : ""
     };
     onBranchChange?.(activeBranchId);
     onFilterChange(finalPayload);
@@ -222,14 +222,14 @@ export function StockConversionTable({
       {/* Secondary Filters Group */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center space-x-2 bg-blue-500/5 px-3 py-1.5 rounded-md border border-blue-500/10 h-9">
-          <Checkbox 
-            id="convertible-only" 
-            checked={hasStockFilter} 
-            onCheckedChange={(checked) => setHasStockFilter(!!checked)} 
+          <Checkbox
+            id="convertible-only"
+            checked={hasStockFilter}
+            onCheckedChange={(checked) => setHasStockFilter(!!checked)}
             disabled={isLoading || !localBranchId || !supplierFilter}
           />
-          <Label 
-            htmlFor="convertible-only" 
+          <Label
+            htmlFor="convertible-only"
             className={`text-[10px] font-bold cursor-pointer uppercase tracking-tight ${(!localBranchId || !supplierFilter) ? "text-muted-foreground opacity-50" : "text-blue-600 dark:text-blue-400"}`}
           >
             Convertible Only
@@ -279,29 +279,29 @@ export function StockConversionTable({
         </div>
 
         <div className="flex items-center gap-1 ml-1">
-          <Button 
-            variant="default" 
-            size="sm" 
-            onClick={() => handleApplyFilters()} 
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => handleApplyFilters()}
             disabled={isLoading || !localBranchId || !supplierFilter}
             className="h-9 px-3 text-xs font-bold uppercase bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all active:scale-95 disabled:opacity-50"
           >
             Apply
           </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={handleClearFilters} 
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleClearFilters}
             disabled={isLoading || !localBranchId || !supplierFilter}
             className="h-9 px-3 text-xs font-bold uppercase border-slate-200 hover:bg-slate-50 transition-all active:scale-95 disabled:opacity-50"
           >
             Clear
           </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={onRefresh} 
-            disabled={isLoading || !localBranchId || !supplierFilter} 
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onRefresh}
+            disabled={isLoading || !localBranchId || !supplierFilter}
             className="h-9 w-9 rounded-lg hover:bg-blue-50 text-blue-600 disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
