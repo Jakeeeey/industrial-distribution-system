@@ -11,8 +11,15 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { NavUser } from "@/components/shared/app-sidebar/nav-user";
 
 import { cookies } from "next/headers";
+import { Metadata } from "next";
+import { InboundModule } from "@/modules/industrial-distribution-system/supply-chain-management/fleet-management/trip-management/dispatch-plan/inbound";
 
 // ✅ Wire the module you asked for
+
+export const metadata: Metadata = {
+  title: "Inbound Manual | Fleet Management",
+  description: "Process trip arrivals manually, record customer feedback, and verify delivery status.",
+};
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -115,7 +122,7 @@ export default async function Page() {
 
       {/* ✅ Only content scrolls inside RIGHT column */}
       <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4">
-         {/* <DispatchCreationPage />  Replace this with your module */}
+        <InboundModule />
       </main>
     </div>
   );
