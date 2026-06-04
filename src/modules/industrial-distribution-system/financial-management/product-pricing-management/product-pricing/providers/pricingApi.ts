@@ -1,4 +1,4 @@
-// src/modules/supply-chain-management/product-pricing-management/product-pricing/providers/pricingApi.ts
+// src/modules/industrial-distribution-system/supply-chain-management/product-pricing-management/product-pricing/providers/pricingApi.ts
 import type {
     Brand,
     Category,

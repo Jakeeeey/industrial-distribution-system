@@ -82,31 +82,22 @@ export function AddPoStopModal({
     },
   });
 
-  const loadPurchaseOrders = useCallback(
-    async (query = "") => {
-      setIsLoadingPOs(true);
-      try {
-        const branchParam = selectedBranch
-          ? `&branch_id=${selectedBranch}`
-          : "";
-        const res = await fetch(
-          `/api/ids/scm/fleet-management/trip-management/dispatch-plan/creation?type=purchase_orders&query=${encodeURIComponent(query)}${branchParam}`,
-        );
-        const result = await res.json();
-        const loaded = result.data || [];
-        setPurchaseOrders(
-          loaded.filter(
-            (po: POOption) => !existingPoIds.includes(po.purchase_order_id),
-          ),
-        );
-      } catch {
-        toast.error("Failed to load purchase orders");
-      } finally {
-        setIsLoadingPOs(false);
-      }
-    },
-    [existingPoIds, selectedBranch],
-  );
+  const loadPurchaseOrders = useCallback(async (query = "") => {
+    setIsLoadingPOs(true);
+    try {
+      const branchParam = selectedBranch ? `&branch_id=${selectedBranch}` : "";
+      const res = await fetch(
+        `/api/ids/scm/fleet-management/trip-management/dispatch-plan/creation?type=purchase_orders&query=${encodeURIComponent(query)}${branchParam}`,
+      );
+      const result = await res.json();
+      const loaded = result.data || [];
+      setPurchaseOrders(loaded.filter((po: POOption) => !existingPoIds.includes(po.purchase_order_id)));
+    } catch {
+      toast.error("Failed to load purchase orders");
+    } finally {
+      setIsLoadingPOs(false);
+    }
+  }, [existingPoIds, selectedBranch]);
 
   useEffect(() => {
     if (open) {
@@ -170,8 +161,8 @@ export function AddPoStopModal({
                         >
                           {field.value
                             ? purchaseOrders.find(
-                                (p) => p.purchase_order_id === field.value,
-                              )?.purchase_order_no
+                              (p) => p.purchase_order_id === field.value,
+                            )?.purchase_order_no
                             : "Select purchase order..."}
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
@@ -215,29 +206,19 @@ export function AddPoStopModal({
                                   )}
                                 />
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-semibold text-foreground">
-                                    {po.purchase_order_no}
-                                  </p>
+                                  <p className="text-sm font-semibold text-foreground">{po.purchase_order_no}</p>
                                   <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                                     {po.date && (
-                                      <span className="text-[10px] text-muted-foreground">
-                                        {po.date}
-                                      </span>
+                                      <span className="text-[10px] text-muted-foreground">{po.date}</span>
                                     )}
                                     {po.inventory_status !== undefined && (
                                       <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded font-medium">
-                                        {typeof po.inventory_status === "string"
-                                          ? po.inventory_status
-                                          : `Status ${po.inventory_status}`}
+                                        {typeof po.inventory_status === "string" ? po.inventory_status : `Status ${po.inventory_status}`}
                                       </span>
                                     )}
                                     {po.total_amount != null && (
                                       <span className="text-[10px] text-muted-foreground ml-auto">
-                                        ₱
-                                        {Number(po.total_amount).toLocaleString(
-                                          undefined,
-                                          { minimumFractionDigits: 2 },
-                                        )}
+                                        ₱{Number(po.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                       </span>
                                     )}
                                   </div>

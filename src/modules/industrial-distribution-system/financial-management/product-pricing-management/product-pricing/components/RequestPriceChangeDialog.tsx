@@ -26,7 +26,7 @@ async function createPCR(payload: {
     price_type_id: number;
     proposed_price: number;
 }) {
-    const res = await fetch("/api/scm/product-pricing/price-change-requests", {
+    const res = await fetch("/api/ids/scm/product-pricing/price-change-requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

@@ -1,4 +1,4 @@
-//src/modules/supply-chain-management/physical-inventory-serial-management/components/PhysicalInventoryGlobalSerialScannerDialog.tsx
+//src/modules/industrial-distribution-system/supply-chain-management/physical-inventory-serial-management/components/PhysicalInventoryGlobalSerialScannerDialog.tsx
 "use client";
 
 import * as React from "react";
@@ -838,7 +838,7 @@ export function PhysicalInventoryGlobalSerialScannerDialog(props: Props) {
 
                                             const finalTag =
                                                 finalizedFromInput.length >=
-                                                finalizedFromBuffer.length
+                                                    finalizedFromBuffer.length
                                                     ? finalizedFromInput
                                                     : finalizedFromBuffer;
 

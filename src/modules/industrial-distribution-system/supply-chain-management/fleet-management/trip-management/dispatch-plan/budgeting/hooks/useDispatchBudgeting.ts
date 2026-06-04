@@ -2,14 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { DispatchPlanSummary } from "../../creation/components/data-table/index";
 
 export function useDispatchBudgeting() {
-  const [masterData, setMasterData] = useState<{
-    coa: { coa_id: number; account_title: string; gl_code: string }[];
-  } | null>(null);
+  const [masterData, setMasterData] = useState<{ coa: { coa_id: number; account_title: string; gl_code: string }[] } | null>(null);
   const [isLoadingMasterData, setIsLoadingMasterData] = useState(true);
 
-  const [dispatchSummary, setDispatchSummary] = useState<DispatchPlanSummary[]>(
-    [],
-  );
+  const [dispatchSummary, setDispatchSummary] = useState<DispatchPlanSummary[]>([]);
   const [isLoadingSummary, setIsLoadingSummary] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -23,10 +19,7 @@ export function useDispatchBudgeting() {
       if (result.error) throw new Error(result.error);
       setMasterData(result.data);
     } catch (err: unknown) {
-      console.error(
-        "Failed to load master data:",
-        err instanceof Error ? err.message : String(err),
-      );
+      console.error("Failed to load master data:", err instanceof Error ? err.message : String(err));
     } finally {
       setIsLoadingMasterData(false);
     }
@@ -53,20 +46,14 @@ export function useDispatchBudgeting() {
         const budgets = budgetResult.data || [];
 
         const budgetMap = new Map<string, number>();
-        budgets.forEach(
-          (b: { post_dispatch_plan_id: number; amount: number }) => {
-            const pid = String(b.post_dispatch_plan_id);
-            budgetMap.set(
-              pid,
-              (budgetMap.get(pid) || 0) + Number(b.amount || 0),
-            );
-          },
-        );
+        budgets.forEach((b: { post_dispatch_plan_id: number; amount: number }) => {
+          const pid = String(b.post_dispatch_plan_id);
+          budgetMap.set(pid, (budgetMap.get(pid) || 0) + Number(b.amount || 0));
+        });
 
         const enriched = (rawData as DispatchPlanSummary[]).map((p) => {
           const totalValue = (p.customerTransactions || []).reduce(
-            (acc: number, t: { amount?: number | string }) =>
-              acc + Number(t.amount || 0),
+            (acc: number, t: { amount?: number | string }) => acc + Number(t.amount || 0),
             0,
           );
           return {
@@ -81,10 +68,7 @@ export function useDispatchBudgeting() {
         setDispatchSummary(rawData);
       }
     } catch (err: unknown) {
-      console.error(
-        "Failed to load dispatch summary:",
-        err instanceof Error ? err.message : String(err),
-      );
+      console.error("Failed to load dispatch summary:", err instanceof Error ? err.message : String(err));
     } finally {
       setIsLoadingSummary(false);
     }
@@ -121,7 +105,7 @@ export function useDispatchBudgeting() {
 
   const fetchPlanBudgets = async (planId: number) => {
     const res = await fetch(
-      `/api/ids/scm/fleet-management/trip-management/dispatch-plan/creation?type=plan_budgets&plan_id=${planId}`,
+      `/api/ids/scm/fleet-management/trip-management/dispatch-plan/creation?type=plan_budgets&plan_id=${planId}`
     );
     const result = await res.json();
     if (result.error) throw new Error(result.error);

@@ -1,4 +1,4 @@
-//src/modules/supply-chain-management/physical-inventory-serial-management/utils/compute.ts
+//src/modules/industrial-distribution-system/supply-chain-management/physical-inventory-serial-management/utils/compute.ts
 import type {
     CategoryRow,
     LoadProductsValidation,

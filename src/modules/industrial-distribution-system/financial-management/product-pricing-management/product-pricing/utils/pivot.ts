@@ -1,4 +1,4 @@
-// src/modules/supply-chain-management/product-pricing-management/product-pricing/utils/pivot.ts
+// src/modules/industrial-distribution-system/supply-chain-management/product-pricing-management/product-pricing/utils/pivot.ts
 import type { PriceRow, PriceType, ProductTierKey } from "../types";
 import { TIERS } from "./constants";
 

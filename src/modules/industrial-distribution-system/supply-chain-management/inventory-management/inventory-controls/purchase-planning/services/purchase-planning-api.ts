@@ -1,12 +1,12 @@
-import {PlanningRow} from "../types";
+import { PlanningRow } from "../types";
 
 export async function fetchSuppliers(type?: string): Promise<unknown[]> {
     // If a type is provided (e.g., "Non-Trade"), append it. Otherwise, use the default endpoint.
     const endpoint = type
-        ? `/api/scm/inventory-management/inventory-controls/suppliers?type=${encodeURIComponent(type)}`
-        : "/api/scm/inventory-management/inventory-controls/suppliers";
+        ? `/api/ids/scm/inventory-management/inventory-controls/suppliers?type=${encodeURIComponent(type)}`
+        : "/api/ids/scm/inventory-management/inventory-controls/suppliers";
 
-    const res = await fetch(endpoint, {cache: "no-store"});
+    const res = await fetch(endpoint, { cache: "no-store" });
     const data = await res.json();
 
     // Handle the { ok: false, message: ... } format from your BFF
@@ -18,7 +18,7 @@ export async function fetchSuppliers(type?: string): Promise<unknown[]> {
 }
 
 export async function fetchBranches(): Promise<unknown[]> {
-    const res = await fetch("/api/scm/inventory-management/inventory-controls/branches", {cache: "no-store"});
+    const res = await fetch("/api/ids/scm/inventory-management/inventory-controls/branches", { cache: "no-store" });
     const data = await res.json();
 
     // Handle the { ok: false, message: ... } format from your BFF
@@ -30,7 +30,7 @@ export async function fetchBranches(): Promise<unknown[]> {
 }
 
 export async function fetchInTransitPOs(supplierId: string): Promise<unknown[]> {
-    const res = await fetch(`/api/scm/inventory-management/inventory-controls/in-transit?supplierId=${supplierId}`, {cache: "no-store"});
+    const res = await fetch(`/api/ids/scm/inventory-management/inventory-controls/in-transit?supplierId=${supplierId}`, { cache: "no-store" });
     const data = await res.json();
 
     // Handle the { ok: false, message: ... } format from your BFF
@@ -51,7 +51,7 @@ export async function fetchHistoricalData(payload: {
     selectedMonths: number[]; // Array of month numbers (1-12)
     selectedYear: number;     // The selected year (e.g., 2026)
 }): Promise<PlanningRow[]> {
-    const res = await fetch("/api/scm/inventory-management/inventory-controls/load-planning/historical", {
+    const res = await fetch("/api/ids/scm/inventory-management/inventory-controls/load-planning/historical", {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
@@ -78,7 +78,7 @@ export async function fetchForecastData(payload: {
     inTransitPoIds: (string | number)[];
 }): Promise<PlanningRow[]> {
     // Make sure your Next.js BFF route matches this path!
-    const res = await fetch("/api/scm/inventory-management/inventory-controls/load-planning/forecast", {
+    const res = await fetch("/api/ids/scm/inventory-management/inventory-controls/load-planning/forecast", {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
@@ -110,7 +110,7 @@ export interface CreatePoPayload {
 }
 
 export async function submitPurchaseOrder(payload: CreatePoPayload) {
-    const res = await fetch("/api/scm/inventory-management/inventory-controls/purchasing/create-po", {
+    const res = await fetch("/api/ids/scm/inventory-management/inventory-controls/purchasing/create-po", {
         method: "POST",
         headers: {
             "Content-Type": "application/json",

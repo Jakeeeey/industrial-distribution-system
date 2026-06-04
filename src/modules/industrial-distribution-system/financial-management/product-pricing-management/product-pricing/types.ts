@@ -1,4 +1,4 @@
-// src/modules/supply-chain-management/product-pricing-management/product-pricing/types.ts
+// src/modules/industrial-distribution-system/supply-chain-management/product-pricing-management/product-pricing/types.ts
 
 export type PriceType = {
     price_type_id: number;
