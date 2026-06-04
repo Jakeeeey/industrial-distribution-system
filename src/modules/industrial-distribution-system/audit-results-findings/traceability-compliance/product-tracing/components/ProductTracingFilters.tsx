@@ -1,4 +1,4 @@
-//src/modules/supply-chain-management/traceability-compliance/product-tracing/components/ProductTracingFilters.tsx
+//src/modules/industrial-distribution-system/supply-chain-management/traceability-compliance/product-tracing/components/ProductTracingFilters.tsx
 "use client";
 
 import * as React from "react";
@@ -39,17 +39,17 @@ export function ProductTracingFilters({
     onSearch,
     isLoading
 }: Props) {
-    const branchOptions = React.useMemo(() => 
+    const branchOptions = React.useMemo(() =>
         branches.map(b => ({ value: b.id, label: b.branch_name })),
-    [branches]);
+        [branches]);
 
-    const familyOptions = React.useMemo(() => 
-        families.map(f => ({ 
-            value: f.parent_id, 
+    const familyOptions = React.useMemo(() =>
+        families.map(f => ({
+            value: f.parent_id,
             label: f.product_name || "Unknown Product",
             description: `${f.category_name || "No Category"} | ${f.brand_name || "No Brand"}`
         })),
-    [families]);
+        [families]);
 
     const [phList, setPhList] = React.useState<PhysicalInventoryRow[]>([]);
     const [isPhLoading, setIsPhLoading] = React.useState(false);
@@ -74,13 +74,13 @@ export function ProductTracingFilters({
         }
     }, [filters.branch_id, filters.parent_id]);
 
-    const phOptions = React.useMemo(() => 
-        phList.map(p => ({ 
-            value: p.id, 
+    const phOptions = React.useMemo(() =>
+        phList.map(p => ({
+            value: p.id,
             label: p.ph_no,
             description: `Start: ${p.starting_date ? format(new Date(p.starting_date), "MMM dd, yyyy HH:mm") : "N/A"} | Cutoff: ${p.cutOff_date ? format(new Date(p.cutOff_date), "MMM dd, yyyy HH:mm") : "N/A"}`
         })),
-    [phList]);
+        [phList]);
 
     const safeStartDate = filters.startDate ? new Date(filters.startDate) : null;
     const safeEndDate = filters.endDate ? new Date(filters.endDate) : null;
@@ -89,11 +89,11 @@ export function ProductTracingFilters({
         if (!time) return;
         const current = type === 'start' ? safeStartDate : safeEndDate;
         if (!current) return;
-        
+
         const [hours, minutes] = time.split(':').map(Number);
         const newDate = new Date(current);
         newDate.setHours(hours, minutes, 0, 0);
-        
+
         onFilterChange({
             [type === 'start' ? 'startDate' : 'endDate']: newDate.toISOString()
         });
@@ -104,7 +104,7 @@ export function ProductTracingFilters({
             <CardContent className="p-4 sm:p-6">
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-12 items-end">
                     <div className="xl:col-span-4">
-                        <SearchableSelect 
+                        <SearchableSelect
                             label="Branch"
                             placeholder="Select Branch"
                             emptyText="No branch found."
@@ -117,7 +117,7 @@ export function ProductTracingFilters({
                     </div>
 
                     <div className="xl:col-span-5">
-                        <SearchableSelect 
+                        <SearchableSelect
                             label="Product Family"
                             placeholder="Select Product"
                             emptyText="No product family found."
@@ -131,11 +131,11 @@ export function ProductTracingFilters({
 
                     <div className="space-y-2 xl:col-span-3">
                         <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground opacity-70">Date Selection</Label>
-                        <Tabs 
-                            value={filters.dateRangeMode || "manual"} 
-                            onValueChange={(val) => onFilterChange({ 
+                        <Tabs
+                            value={filters.dateRangeMode || "manual"}
+                            onValueChange={(val) => onFilterChange({
                                 dateRangeMode: val as 'manual' | 'ph',
-                                ph_id: val === 'manual' ? null : filters.ph_id 
+                                ph_id: val === 'manual' ? null : filters.ph_id
                             })}
                             className="w-full"
                         >
@@ -148,27 +148,27 @@ export function ProductTracingFilters({
 
                     {filters.dateRangeMode === 'ph' ? (
                         <div className="xl:col-span-5">
-                            <SearchableSelect 
+                            <SearchableSelect
                                 label="Physical Inventory"
-                            placeholder={isPhLoading ? "Loading..." : "Select PH Record"}
-                            emptyText="No PH records found."
-                            value={filters.ph_id || null}
-                            options={phOptions}
-                            onChange={(val) => {
-                                const selected = phList.find(p => p.id === val);
-                                if (selected) {
-                                    onFilterChange({ 
-                                        ph_id: val,
-                                        startDate: selected.starting_date ? new Date(selected.starting_date).toISOString() : null,
-                                        endDate: selected.cutOff_date ? new Date(selected.cutOff_date).toISOString() : null
-                                    });
-                                } else {
-                                    onFilterChange({ ph_id: null });
-                                }
-                            }}
-                            searchPlaceholder="Search PH #..."
-                            disabled={isLoading || isPhLoading || !filters.branch_id || !filters.parent_id}
-                        />
+                                placeholder={isPhLoading ? "Loading..." : "Select PH Record"}
+                                emptyText="No PH records found."
+                                value={filters.ph_id || null}
+                                options={phOptions}
+                                onChange={(val) => {
+                                    const selected = phList.find(p => p.id === val);
+                                    if (selected) {
+                                        onFilterChange({
+                                            ph_id: val,
+                                            startDate: selected.starting_date ? new Date(selected.starting_date).toISOString() : null,
+                                            endDate: selected.cutOff_date ? new Date(selected.cutOff_date).toISOString() : null
+                                        });
+                                    } else {
+                                        onFilterChange({ ph_id: null });
+                                    }
+                                }}
+                                searchPlaceholder="Search PH #..."
+                                disabled={isLoading || isPhLoading || !filters.branch_id || !filters.parent_id}
+                            />
                         </div>
                     ) : (
                         <div className="space-y-2 xl:col-span-5">
@@ -204,21 +204,21 @@ export function ProductTracingFilters({
                                     <Calendar
                                         mode="range"
                                         defaultMonth={safeStartDate || undefined}
-                                        selected={{ 
-                                            from: safeStartDate || undefined, 
-                                            to: safeEndDate || undefined 
+                                        selected={{
+                                            from: safeStartDate || undefined,
+                                            to: safeEndDate || undefined
                                         }}
                                         onSelect={(range) => {
                                             const s = range?.from ? new Date(range.from) : null;
                                             const e = range?.to ? new Date(range.to) : null;
-                                            
+
                                             if (s && !range?.from) { /* nothing */ }
                                             if (s) s.setHours(0, 0, 0, 0);
                                             if (e) e.setHours(23, 59, 59, 999);
 
-                                            onFilterChange({ 
-                                                startDate: s ? s.toISOString() : null, 
-                                                endDate: e ? e.toISOString() : null 
+                                            onFilterChange({
+                                                startDate: s ? s.toISOString() : null,
+                                                endDate: e ? e.toISOString() : null
                                             });
                                         }}
                                         numberOfMonths={2}
@@ -244,24 +244,24 @@ export function ProductTracingFilters({
                         </div>
                     ) : (
                         <div className="space-y-2 xl:col-span-3">
-                             <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground opacity-70">Manual Time</Label>
-                             <div className="flex gap-2 h-10 items-center">
-                                 <Input 
-                                    type="time" 
+                            <Label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground opacity-70">Manual Time</Label>
+                            <div className="flex gap-2 h-10 items-center">
+                                <Input
+                                    type="time"
                                     className="h-full text-[10px] rounded-xl px-2 border-muted-foreground/20"
                                     value={safeStartDate ? format(safeStartDate, "HH:mm") : ""}
                                     onChange={(e) => handleTimeChange('start', e.target.value)}
                                     disabled={!safeStartDate || isLoading}
-                                 />
-                                 <span className="text-muted-foreground">-</span>
-                                 <Input 
-                                    type="time" 
+                                />
+                                <span className="text-muted-foreground">-</span>
+                                <Input
+                                    type="time"
                                     className="h-full text-[10px] rounded-xl px-2 border-muted-foreground/20"
                                     value={safeEndDate ? format(safeEndDate, "HH:mm") : ""}
                                     onChange={(e) => handleTimeChange('end', e.target.value)}
                                     disabled={!safeEndDate || isLoading}
-                                 />
-                             </div>
+                                />
+                            </div>
                         </div>
                     )}
 

@@ -1,4 +1,5 @@
 import { DispatchCreationFormValues } from "@/modules/industrial-distribution-system/supply-chain-management/fleet-management/trip-management/dispatch-plan/creation/types/dispatch.schema";
+import type { PostDispatchBudgetRow } from "@/modules/industrial-distribution-system/supply-chain-management/fleet-management/trip-management/dispatch-plan/creation/types/dispatch.types";
 
 export const dispatchCreationLifecycleService = {
   /**
@@ -21,7 +22,7 @@ export const dispatchCreationLifecycleService = {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(
         errorData.error ||
-          `Failed to create dispatch plan (${response.status})`,
+        `Failed to create dispatch plan (${response.status})`,
       );
     }
 
@@ -46,8 +47,7 @@ export const dispatchCreationLifecycleService = {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(
-        errorData.error ||
-          `Failed to update dispatch plan (${response.status})`,
+        errorData.error || `Failed to update dispatch plan (${response.status})`,
       );
     }
 
@@ -57,7 +57,7 @@ export const dispatchCreationLifecycleService = {
   /**
    * Updates budgets for an existing dispatch plan.
    */
-  async updateBudget(planId: number, budgets: unknown[]) {
+  async updateBudget(planId: number, budgets: Omit<PostDispatchBudgetRow, "id">[]) {
     const response = await fetch(
       `/api/ids/scm/fleet-management/trip-management/dispatch-plan/creation?plan_id=${planId}`,
       {

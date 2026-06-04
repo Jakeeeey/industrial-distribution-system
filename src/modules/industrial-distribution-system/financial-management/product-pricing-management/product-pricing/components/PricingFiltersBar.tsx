@@ -1,4 +1,4 @@
-// src/modules/supply-chain-management/product-pricing-management/product-pricing/components/PricingFiltersBar.tsx
+// src/modules/industrial-distribution-system/supply-chain-management/product-pricing-management/product-pricing/components/PricingFiltersBar.tsx
 "use client";
 
 import * as React from "react";
@@ -222,7 +222,7 @@ export default function PricingFiltersBar(props: Props) {
         }
         return map;
     }, [units]);
-    
+
     const priceTypeLabelById = React.useMemo(() => {
         const map = new Map<string, string>();
         for (const pt of priceTypes) {

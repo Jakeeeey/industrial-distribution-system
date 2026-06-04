@@ -1,4 +1,4 @@
-//src/modules/supply-chain-management/traceability-compliance/cross-tracing/components/CrossTracingFilters.tsx
+//src/modules/industrial-distribution-system/supply-chain-management/traceability-compliance/cross-tracing/components/CrossTracingFilters.tsx
 "use client";
 
 import * as React from "react";
@@ -43,31 +43,31 @@ export function CrossTracingFilters({
     onSearch,
     isLoading
 }: Props) {
-    const primaryBranchOptions = React.useMemo(() => 
+    const primaryBranchOptions = React.useMemo(() =>
         branches.map(b => ({ value: b.id, label: b.branch_name })),
-    [branches]);
+        [branches]);
 
-    const secondaryBranchOptions = React.useMemo(() => 
+    const secondaryBranchOptions = React.useMemo(() =>
         branches
             .filter(b => b.id !== filters.primary_branch_id)
             .map(b => ({ value: b.id, label: b.branch_name })),
-    [branches, filters.primary_branch_id]);
+        [branches, filters.primary_branch_id]);
 
-    const familyOptions = React.useMemo(() => 
-        families.map(f => ({ 
-            value: f.parent_id, 
+    const familyOptions = React.useMemo(() =>
+        families.map(f => ({
+            value: f.parent_id,
             label: f.product_name || "Unknown Product",
             description: `${f.category_name || "No Category"} | ${f.brand_name || "No Brand"}`
         })),
-    [families]);
+        [families]);
 
-    const piOptions = React.useMemo(() => 
+    const piOptions = React.useMemo(() =>
         physicalInventories.map(pi => ({ value: pi.id, label: pi.ph_no })),
-    [physicalInventories]);
+        [physicalInventories]);
 
-    const uomOptions = React.useMemo(() => 
+    const uomOptions = React.useMemo(() =>
         uoms.map(u => ({ value: u, label: u })),
-    [uoms]);
+        [uoms]);
 
     const safeStartDate = filters.startDate ? new Date(filters.startDate) : null;
     const safeEndDate = filters.endDate ? new Date(filters.endDate) : null;
@@ -76,11 +76,11 @@ export function CrossTracingFilters({
         if (!time) return;
         const current = type === 'start' ? safeStartDate : safeEndDate;
         if (!current) return;
-        
+
         const [hours, minutes] = time.split(':').map(Number);
         const newDate = new Date(current);
         newDate.setHours(hours, minutes, 0, 0);
-        
+
         onFilterChange({
             [type === 'start' ? 'startDate' : 'endDate']: newDate.toISOString()
         });
@@ -89,7 +89,7 @@ export function CrossTracingFilters({
     const handlePIChange = (phId: number | null) => {
         const selectedPI = physicalInventories.find(pi => pi.id === phId);
         if (selectedPI) {
-            onFilterChange({ 
+            onFilterChange({
                 ph_id: phId,
                 startDate: selectedPI.starting_date || null,
                 endDate: selectedPI.cutOff_date || null
@@ -104,7 +104,7 @@ export function CrossTracingFilters({
             <CardContent className="p-6 sm:p-8 space-y-6">
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-12 items-end">
                     <div className="xl:col-span-3">
-                        <SearchableSelect 
+                        <SearchableSelect
                             label="Product Family"
                             placeholder="Select Product"
                             emptyText="No product family found."
@@ -117,7 +117,7 @@ export function CrossTracingFilters({
                     </div>
 
                     <div className="xl:col-span-3">
-                        <SearchableSelect 
+                        <SearchableSelect
                             label="Primary Batch (Branch)"
                             placeholder="Select Branch"
                             emptyText="No branch found."
@@ -130,7 +130,7 @@ export function CrossTracingFilters({
                     </div>
 
                     <div className="xl:col-span-4">
-                        <SearchableMultiSelect 
+                        <SearchableMultiSelect
                             label="Secondary Batches (Comparison)"
                             placeholder="Select Branches"
                             emptyText="No branch found."
@@ -143,7 +143,7 @@ export function CrossTracingFilters({
                     </div>
 
                     <div className="xl:col-span-2">
-                        <SearchableSelect 
+                        <SearchableSelect
                             label="Unit of Measure (UOM)"
                             placeholder="Filter by UOM"
                             emptyText="No units found."
@@ -157,11 +157,11 @@ export function CrossTracingFilters({
 
                     <div className="space-y-2 xl:col-span-2">
                         <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 ml-1">Date Selection</Label>
-                        <Tabs 
-                            value={filters.dateRangeMode || "manual"} 
-                            onValueChange={(val) => onFilterChange({ 
+                        <Tabs
+                            value={filters.dateRangeMode || "manual"}
+                            onValueChange={(val) => onFilterChange({
                                 dateRangeMode: val as 'manual' | 'ph',
-                                ph_id: val === 'manual' ? null : filters.ph_id 
+                                ph_id: val === 'manual' ? null : filters.ph_id
                             })}
                             className="w-full"
                         >
@@ -174,7 +174,7 @@ export function CrossTracingFilters({
 
                     {filters.dateRangeMode === 'ph' ? (
                         <div className="xl:col-span-4">
-                            <SearchableSelect 
+                            <SearchableSelect
                                 label="Physical Inventory"
                                 placeholder="Filter by PI record"
                                 emptyText="No records found."
@@ -215,19 +215,19 @@ export function CrossTracingFilters({
                                     <Calendar
                                         mode="range"
                                         defaultMonth={safeStartDate || undefined}
-                                        selected={{ 
-                                            from: safeStartDate || undefined, 
-                                            to: safeEndDate || undefined 
+                                        selected={{
+                                            from: safeStartDate || undefined,
+                                            to: safeEndDate || undefined
                                         }}
                                         onSelect={(range) => {
                                             const s = range?.from ? new Date(range.from) : null;
                                             const e = range?.to ? new Date(range.to) : null;
-                                            
+
                                             if (s) s.setHours(0, 0, 0, 0);
                                             if (e) e.setHours(23, 59, 59, 999);
 
-                                            onFilterChange({ 
-                                                startDate: s ? s.toISOString() : null, 
+                                            onFilterChange({
+                                                startDate: s ? s.toISOString() : null,
                                                 endDate: e ? e.toISOString() : null,
                                                 ph_id: null // Reset PI if manual date is picked
                                             });
@@ -238,7 +238,7 @@ export function CrossTracingFilters({
                             </Popover>
                         </div>
                     )}
-                    
+
                     {filters.dateRangeMode === 'ph' ? (
                         <div className="space-y-2 xl:col-span-3">
                             <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 ml-1">Range Status</Label>
@@ -255,24 +255,24 @@ export function CrossTracingFilters({
                         </div>
                     ) : (
                         <div className="space-y-2 xl:col-span-3">
-                             <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 ml-1">Manual Time Selection</Label>
-                             <div className="flex gap-2 h-10 items-center">
-                                 <Input 
-                                    type="time" 
+                            <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 ml-1">Manual Time Selection</Label>
+                            <div className="flex gap-2 h-10 items-center">
+                                <Input
+                                    type="time"
                                     className="h-full px-4 rounded-2xl border-muted-foreground/10 bg-background/50 text-xs font-medium focus:ring-primary/20 transition-all"
                                     value={safeStartDate ? format(safeStartDate, "HH:mm") : ""}
                                     onChange={(e) => handleTimeChange('start', e.target.value)}
                                     disabled={!safeStartDate || isLoading}
-                                 />
-                                 <span className="text-muted-foreground font-bold text-[10px]">to</span>
-                                 <Input 
-                                    type="time" 
+                                />
+                                <span className="text-muted-foreground font-bold text-[10px]">to</span>
+                                <Input
+                                    type="time"
                                     className="h-full px-4 rounded-2xl border-muted-foreground/10 bg-background/50 text-xs font-medium focus:ring-primary/20 transition-all"
                                     value={safeEndDate ? format(safeEndDate, "HH:mm") : ""}
                                     onChange={(e) => handleTimeChange('end', e.target.value)}
                                     disabled={!safeEndDate || isLoading}
-                                 />
-                             </div>
+                                />
+                            </div>
                         </div>
                     )}
 

@@ -9,6 +9,7 @@ import {
   UpdateTripSchema,
 } from "@/modules/industrial-distribution-system/supply-chain-management/fleet-management/trip-management/dispatch-plan/creation/types/dispatch.schema";
 import { NextRequest, NextResponse } from "next/server";
+import { decodeJwtPayload, COOKIE_NAME } from "@/lib/auth-utils";
 
 // ─── GET ────────────────────────────────────────────────────
 
@@ -31,10 +32,7 @@ export async function GET(req: NextRequest) {
       let currentPlanId: number | number[] | undefined = undefined;
       if (currentPlanIdRaw) {
         if (currentPlanIdRaw.includes(",")) {
-          currentPlanId = currentPlanIdRaw
-            .split(",")
-            .map((id) => Number(id.trim()))
-            .filter((id) => !isNaN(id));
+          currentPlanId = currentPlanIdRaw.split(",").map(id => Number(id.trim())).filter(id => !isNaN(id));
         } else {
           currentPlanId = Number(currentPlanIdRaw);
         }
@@ -48,7 +46,7 @@ export async function GET(req: NextRequest) {
         currentPlanId,
         limit,
         offset,
-        search,
+        search
       );
       return NextResponse.json(result);
     }
@@ -63,10 +61,7 @@ export async function GET(req: NextRequest) {
         );
       }
 
-      const planIds = planIdsRaw
-        .split(",")
-        .map((id) => Number(id.trim()))
-        .filter((id) => !isNaN(id));
+      const planIds = planIdsRaw.split(",").map(id => Number(id.trim())).filter(id => !isNaN(id));
       const result = await dispatchService.getPlanDetails(
         planIds,
         tripId ? Number(tripId) : undefined,
@@ -108,7 +103,7 @@ export async function GET(req: NextRequest) {
       const branchIdRaw = searchParams.get("branch_id");
       const data = await dispatchService.getPurchaseOrders(
         query || undefined,
-        branchIdRaw ? Number(branchIdRaw) : undefined,
+        branchIdRaw ? Number(branchIdRaw) : undefined
       );
       return NextResponse.json({ data });
     }
@@ -137,7 +132,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const result = await dispatchService.createDispatchPlan(parsed.data);
+    const token = req.cookies.get(COOKIE_NAME)?.value;
+    const payload = decodeJwtPayload(token || "");
+    const userId = Number(payload?.user_id || payload?.id || payload?.sub || 0);
+
+    const result = await dispatchService.createDispatchPlan(parsed.data, userId);
     return NextResponse.json(result);
   } catch (error) {
     console.error("[Dispatch POST Error]:", error);
@@ -171,15 +170,21 @@ export async function PATCH(req: NextRequest) {
       if (!parsed.success) {
         return NextResponse.json(
           {
-            error: parsed.error.issues[0]?.message || "Trip validation failed",
+            error:
+              parsed.error.issues[0]?.message || "Trip validation failed",
           },
           { status: 400 },
         );
       }
 
+      const token = req.cookies.get(COOKIE_NAME)?.value;
+      const payload = decodeJwtPayload(token || "");
+      const userId = Number(payload?.user_id || payload?.id || payload?.sub || 0);
+
       const result = await dispatchService.updateTrip(
         Number(planId),
         parsed.data,
+        userId,
       );
       return NextResponse.json(result);
     }

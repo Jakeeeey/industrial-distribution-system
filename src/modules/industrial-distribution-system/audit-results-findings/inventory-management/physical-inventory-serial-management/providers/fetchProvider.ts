@@ -1,4 +1,4 @@
-//src/modules/supply-chain-management/physical-inventory-serial-management/providers/fetchProvider.ts
+//src/modules/industrial-distribution-system/supply-chain-management/physical-inventory-serial-management/providers/fetchProvider.ts
 import type {
     BranchRow,
     CategoryRow,

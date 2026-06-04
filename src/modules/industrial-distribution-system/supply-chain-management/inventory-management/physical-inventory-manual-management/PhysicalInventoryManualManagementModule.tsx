@@ -1,4 +1,4 @@
-//src/modules/supply-chain-management/physical-inventory-manual-management/PhysicalInventoryManualManagementModule.tsx
+//src/modules/industrial-distribution-system/supply-chain-management/physical-inventory-manual-management/PhysicalInventoryManualManagementModule.tsx
 "use client";
 
 import * as React from "react";

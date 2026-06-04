@@ -1,4 +1,4 @@
-// src/modules/supply-chain-management/product-pricing-management/product-pricing/utils/printPdf.ts
+// src/modules/industrial-distribution-system/supply-chain-management/product-pricing-management/product-pricing/utils/printPdf.ts
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -86,8 +86,8 @@ export function generatePricingMatrixPdf(
         headRow1.push({
             content: `PRICE TYPE ${mapPriceTypeName(tier)}`,
             colSpan: uomCount,
-            styles: { 
-                halign: "center", 
+            styles: {
+                halign: "center",
                 fillColor: groupColors[tier],
                 textColor: groupTextColors[tier],
                 fontStyle: "bold"
@@ -109,7 +109,7 @@ export function generatePricingMatrixPdf(
         headRow2.push({
             content: `Tier ${mapPriceTypeName(tier)}`,
             colSpan: uomCount,
-            styles: { 
+            styles: {
                 halign: "center",
                 fillColor: groupColors[tier],
                 textColor: groupTextColors[tier]
@@ -125,8 +125,8 @@ export function generatePricingMatrixPdf(
             for (const unit of usedUnits) {
                 headRow3.push({
                     content: unit.unit_shortcut || unit.unit_name || "—",
-                    styles: { 
-                        halign: "center", 
+                    styles: {
+                        halign: "center",
                         fontSize: 7,
                         fillColor: groupColors[tier]
                     },
@@ -148,7 +148,7 @@ export function generatePricingMatrixPdf(
 
         for (const tier of TIERS) {
             if (usedUnits.length === 0) {
-                cells.push(""); 
+                cells.push("");
             } else {
                 for (const unit of usedUnits) {
                     const variant = row.variantsByUnitId[Number(unit.unit_id)];

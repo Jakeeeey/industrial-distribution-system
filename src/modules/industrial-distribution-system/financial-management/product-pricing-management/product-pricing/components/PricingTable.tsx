@@ -1,4 +1,4 @@
-// src/modules/supply-chain-management/product-pricing-management/product-pricing/components/PricingTable.tsx
+// src/modules/industrial-distribution-system/supply-chain-management/product-pricing-management/product-pricing/components/PricingTable.tsx
 "use client";
 
 import * as React from "react";
@@ -465,46 +465,46 @@ export default function PricingTable({ matrix }: Props) {
                                 {loading && rows.length === 0 ? <LoadingLeftBody rowCount={10} /> : null}
 
                                 {rows.map((r) => {
-                                        const display = r.display ?? {};
-                                        const groupKey = String(r.group_id);
-                                        const hovered = hoverKey === groupKey;
+                                    const display = r.display ?? {};
+                                    const groupKey = String(r.group_id);
+                                    const hovered = hoverKey === groupKey;
 
-                                        return (
-                                            <PTableRow
-                                                key={`L-${groupKey}`}
-                                                className={cn(hovered ? "bg-muted/30" : "hover:bg-muted/30")}
-                                                style={{ height: BODY_ROW_H }}
-                                                onMouseEnter={() => setHoverKey(groupKey)}
-                                                onMouseLeave={() => setHoverKey(null)}
-                                            >
-                                                <PTableCell className="p-0 border-b overflow-hidden" style={{ width: LEFT_COL_WIDTHS[0], height: BODY_ROW_H }}>
-                                                    <div style={{ height: BODY_ROW_H }} className="flex items-center px-3 truncate text-[13px] text-muted-foreground">
-                                                        {r.brand_name ?? "—"}
-                                                    </div>
-                                                </PTableCell>
-                                                <PTableCell className="p-0 border-b overflow-hidden" style={{ width: LEFT_COL_WIDTHS[1], height: BODY_ROW_H }}>
-                                                    <div style={{ height: BODY_ROW_H }} className="flex items-center px-3 truncate text-[13px] text-muted-foreground">
-                                                        {r.category_name ?? "—"}
-                                                    </div>
-                                                </PTableCell>
-                                                <PTableCell className="p-0 border-b" style={{ width: LEFT_COL_WIDTHS[2], height: BODY_ROW_H }}>
-                                                    <div style={{ height: BODY_ROW_H }} className="flex flex-col justify-center gap-1.5 px-3">
-                                                        <span className="text-[13px] font-semibold leading-tight text-foreground/90 whitespace-normal">
-                                                            {display.product_name ?? "—"}
+                                    return (
+                                        <PTableRow
+                                            key={`L-${groupKey}`}
+                                            className={cn(hovered ? "bg-muted/30" : "hover:bg-muted/30")}
+                                            style={{ height: BODY_ROW_H }}
+                                            onMouseEnter={() => setHoverKey(groupKey)}
+                                            onMouseLeave={() => setHoverKey(null)}
+                                        >
+                                            <PTableCell className="p-0 border-b overflow-hidden" style={{ width: LEFT_COL_WIDTHS[0], height: BODY_ROW_H }}>
+                                                <div style={{ height: BODY_ROW_H }} className="flex items-center px-3 truncate text-[13px] text-muted-foreground">
+                                                    {r.brand_name ?? "—"}
+                                                </div>
+                                            </PTableCell>
+                                            <PTableCell className="p-0 border-b overflow-hidden" style={{ width: LEFT_COL_WIDTHS[1], height: BODY_ROW_H }}>
+                                                <div style={{ height: BODY_ROW_H }} className="flex items-center px-3 truncate text-[13px] text-muted-foreground">
+                                                    {r.category_name ?? "—"}
+                                                </div>
+                                            </PTableCell>
+                                            <PTableCell className="p-0 border-b" style={{ width: LEFT_COL_WIDTHS[2], height: BODY_ROW_H }}>
+                                                <div style={{ height: BODY_ROW_H }} className="flex flex-col justify-center gap-1.5 px-3">
+                                                    <span className="text-[13px] font-semibold leading-tight text-foreground/90 whitespace-normal">
+                                                        {display.product_name ?? "—"}
+                                                    </span>
+                                                    <div className="flex items-center gap-2 text-[11px] leading-none text-muted-foreground/80">
+                                                        <span className="flex items-center gap-1 rounded bg-muted/40 px-1.5 py-0.5 border border-muted-foreground/10 truncate">
+                                                            Code: <span className="font-medium text-foreground/80">{display.product_code ?? "—"}</span>
                                                         </span>
-                                                        <div className="flex items-center gap-2 text-[11px] leading-none text-muted-foreground/80">
-                                                            <span className="flex items-center gap-1 rounded bg-muted/40 px-1.5 py-0.5 border border-muted-foreground/10 truncate">
-                                                                Code: <span className="font-medium text-foreground/80">{display.product_code ?? "—"}</span>
-                                                            </span>
-                                                            <span className="flex items-center gap-1 rounded bg-muted/40 px-1.5 py-0.5 border border-muted-foreground/10 truncate">
-                                                                Barcode: <span className="font-medium text-foreground/80">{display.barcode ?? "—"}</span>
-                                                            </span>
-                                                        </div>
+                                                        <span className="flex items-center gap-1 rounded bg-muted/40 px-1.5 py-0.5 border border-muted-foreground/10 truncate">
+                                                            Barcode: <span className="font-medium text-foreground/80">{display.barcode ?? "—"}</span>
+                                                        </span>
                                                     </div>
-                                                </PTableCell>
-                                            </PTableRow>
-                                        );
-                                    })}
+                                                </div>
+                                            </PTableCell>
+                                        </PTableRow>
+                                    );
+                                })}
 
                                 {!loading && totalGroups === 0 ? (
                                     <PTableRow>
@@ -619,25 +619,43 @@ export default function PricingTable({ matrix }: Props) {
                                         {loading && rows.length === 0 ? <LoadingRightBody rowCount={10} priceCols={priceCols} /> : null}
 
                                         {rows.map((r) => {
-                                                const groupKey = String(r.group_id);
-                                                const hovered = hoverKey === groupKey;
+                                            const groupKey = String(r.group_id);
+                                            const hovered = hoverKey === groupKey;
 
-                                                return (
-                                                    <PTableRow
-                                                        key={`R-${groupKey}`}
-                                                        className={cn(hovered ? "bg-muted/30" : "hover:bg-muted/30")}
-                                                        style={{ height: BODY_ROW_H }}
-                                                        onMouseEnter={() => setHoverKey(groupKey)}
-                                                        onMouseLeave={() => setHoverKey(null)}
-                                                    >
-                                                        {tiers.map((tier, ti) => {
-                                                            const st = tierStyle(ti);
+                                            return (
+                                                <PTableRow
+                                                    key={`R-${groupKey}`}
+                                                    className={cn(hovered ? "bg-muted/30" : "hover:bg-muted/30")}
+                                                    style={{ height: BODY_ROW_H }}
+                                                    onMouseEnter={() => setHoverKey(groupKey)}
+                                                    onMouseLeave={() => setHoverKey(null)}
+                                                >
+                                                    {tiers.map((tier, ti) => {
+                                                        const st = tierStyle(ti);
 
-                                                            if (!usedUnits.length) {
+                                                        if (!usedUnits.length) {
+                                                            return (
+                                                                <PTableCell
+                                                                    key={`${groupKey}-${String(tier)}-none`}
+                                                                    className={cn("p-0 text-center border-b text-muted-foreground", st.cell, st.border, ti === 0 ? "" : "border-l")}
+                                                                    style={{ height: BODY_ROW_H, width: PRICE_COL_WIDTH }}
+                                                                >
+                                                                    <div style={{ height: BODY_ROW_H }} className="flex items-center justify-center">—</div>
+                                                                </PTableCell>
+                                                            );
+                                                        }
+
+                                                        return usedUnits.map((u, uIndex) => {
+                                                            const uomId = Number(u.unit_id);
+                                                            const byUnit = r.variantsByUnitId ?? {};
+                                                            const variant = byUnit[String(uomId)];
+                                                            const borderL = ti === 0 && uIndex === 0 ? "" : "border-l";
+
+                                                            if (!variant) {
                                                                 return (
                                                                     <PTableCell
-                                                                        key={`${groupKey}-${String(tier)}-none`}
-                                                                        className={cn("p-0 text-center border-b text-muted-foreground", st.cell, st.border, ti === 0 ? "" : "border-l")}
+                                                                        key={`${groupKey}-${String(tier)}-${String(uomId)}-na`}
+                                                                        className={cn("p-0 text-center border-b text-muted-foreground", st.cell, st.border, borderL)}
                                                                         style={{ height: BODY_ROW_H, width: PRICE_COL_WIDTH }}
                                                                     >
                                                                         <div style={{ height: BODY_ROW_H }} className="flex items-center justify-center">—</div>
@@ -645,67 +663,49 @@ export default function PricingTable({ matrix }: Props) {
                                                                 );
                                                             }
 
-                                                            return usedUnits.map((u, uIndex) => {
-                                                                const uomId = Number(u.unit_id);
-                                                                const byUnit = r.variantsByUnitId ?? {};
-                                                                const variant = byUnit[String(uomId)];
-                                                                const borderL = ti === 0 && uIndex === 0 ? "" : "border-l";
-
-                                                                if (!variant) {
-                                                                    return (
-                                                                        <PTableCell
-                                                                            key={`${groupKey}-${String(tier)}-${String(uomId)}-na`}
-                                                                            className={cn("p-0 text-center border-b text-muted-foreground", st.cell, st.border, borderL)}
-                                                                            style={{ height: BODY_ROW_H, width: PRICE_COL_WIDTH }}
-                                                                        >
-                                                                            <div style={{ height: BODY_ROW_H }} className="flex items-center justify-center">—</div>
-                                                                        </PTableCell>
-                                                                    );
-                                                                }
-
-                                                                const variantProductId = Number(variant.product.product_id);
-                                                                if (!Number.isFinite(variantProductId) || variantProductId <= 0) {
-                                                                    return (
-                                                                        <PTableCell
-                                                                            key={`${groupKey}-${String(tier)}-${String(uomId)}-bad`}
-                                                                            className={cn("p-0 text-center border-b text-muted-foreground", st.cell, st.border, borderL)}
-                                                                            style={{ height: BODY_ROW_H, width: PRICE_COL_WIDTH }}
-                                                                        >
-                                                                            <div style={{ height: BODY_ROW_H }} className="flex items-center justify-center">—</div>
-                                                                        </PTableCell>
-                                                                    );
-                                                                }
-
-                                                                const base = toNullableNumber(variant.tiers?.[tier]);
-                                                                const val = matrix.getCellValue(variantProductId, tier, base);
-                                                                const pending = matrix.getPendingValue(variantProductId, tier);
-                                                                const dirty = matrix.isDirty(variantProductId, tier);
-                                                                const err = toErrorString(matrix.getError(variantProductId, tier));
-
+                                                            const variantProductId = Number(variant.product.product_id);
+                                                            if (!Number.isFinite(variantProductId) || variantProductId <= 0) {
                                                                 return (
                                                                     <PTableCell
-                                                                        key={`${groupKey}-${String(tier)}-${String(uomId)}`}
-                                                                        className={cn("p-0 border-b", st.cell, st.border, borderL)}
+                                                                        key={`${groupKey}-${String(tier)}-${String(uomId)}-bad`}
+                                                                        className={cn("p-0 text-center border-b text-muted-foreground", st.cell, st.border, borderL)}
                                                                         style={{ height: BODY_ROW_H, width: PRICE_COL_WIDTH }}
                                                                     >
-                                                                        <div style={{ height: BODY_ROW_H }} className="flex items-center justify-center px-3">
-                                                                            <div className="w-full">
-                                                                                <PriceCell
-                                                                                    value={val}
-                                                                                    pendingValue={pending}
-                                                                                    dirty={dirty}
-                                                                                    error={err}
-                                                                                    onChange={(raw) => matrix.setCell(variantProductId, tier, raw)}
-                                                                                />
-                                                                            </div>
-                                                                        </div>
+                                                                        <div style={{ height: BODY_ROW_H }} className="flex items-center justify-center">—</div>
                                                                     </PTableCell>
                                                                 );
-                                                            });
-                                                        })}
-                                                    </PTableRow>
-                                                );
-                                            })}
+                                                            }
+
+                                                            const base = toNullableNumber(variant.tiers?.[tier]);
+                                                            const val = matrix.getCellValue(variantProductId, tier, base);
+                                                            const pending = matrix.getPendingValue(variantProductId, tier);
+                                                            const dirty = matrix.isDirty(variantProductId, tier);
+                                                            const err = toErrorString(matrix.getError(variantProductId, tier));
+
+                                                            return (
+                                                                <PTableCell
+                                                                    key={`${groupKey}-${String(tier)}-${String(uomId)}`}
+                                                                    className={cn("p-0 border-b", st.cell, st.border, borderL)}
+                                                                    style={{ height: BODY_ROW_H, width: PRICE_COL_WIDTH }}
+                                                                >
+                                                                    <div style={{ height: BODY_ROW_H }} className="flex items-center justify-center px-3">
+                                                                        <div className="w-full">
+                                                                            <PriceCell
+                                                                                value={val}
+                                                                                pendingValue={pending}
+                                                                                dirty={dirty}
+                                                                                error={err}
+                                                                                onChange={(raw) => matrix.setCell(variantProductId, tier, raw)}
+                                                                            />
+                                                                        </div>
+                                                                    </div>
+                                                                </PTableCell>
+                                                            );
+                                                        });
+                                                    })}
+                                                </PTableRow>
+                                            );
+                                        })}
                                     </PTableBody>
                                 </PTable>
                             </div>

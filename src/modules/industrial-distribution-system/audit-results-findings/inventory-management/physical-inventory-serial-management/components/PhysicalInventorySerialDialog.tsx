@@ -1,4 +1,4 @@
-//src/modules/supply-chain-management/physical-inventory-serial-management/components/PhysicalInventorySerialDialog.tsx
+//src/modules/industrial-distribution-system/supply-chain-management/physical-inventory-serial-management/components/PhysicalInventorySerialDialog.tsx
 "use client";
 
 import * as React from "react";
@@ -433,10 +433,10 @@ export function PhysicalInventorySerialDialog(props: Props) {
 
         try {
             setIsSaving(true);
-            
+
             // For each registered serial, create a PI detail serial record
             const createdTags: PhysicalInventoryDetailSerialRow[] = [];
-            
+
             for (const serial of registeredSerials) {
                 const created = await createPhysicalInventoryDetailSerial({
                     pi_detail_id: detailId,
@@ -601,13 +601,12 @@ export function PhysicalInventorySerialDialog(props: Props) {
                                     focusInput();
                                 }}
                                 disabled={!detailId || isSaving}
-                                className={`${inputErrorMessage ? "border-destructive" : ""} ${
-                                    flash === "success" 
-                                        ? "border-green-500 ring-2 ring-green-500/20 bg-green-50" 
-                                        : flash === "error" 
-                                        ? "border-red-500 ring-2 ring-red-500/20 bg-red-50" 
-                                        : ""
-                                } transition-all duration-200`}
+                                className={`${inputErrorMessage ? "border-destructive" : ""} ${flash === "success"
+                                        ? "border-green-500 ring-2 ring-green-500/20 bg-green-50"
+                                        : flash === "error"
+                                            ? "border-red-500 ring-2 ring-red-500/20 bg-red-50"
+                                            : ""
+                                    } transition-all duration-200`}
                             />
 
                             <Button
@@ -652,8 +651,8 @@ export function PhysicalInventorySerialDialog(props: Props) {
                                         <p className="text-xs font-semibold text-amber-700">
                                             {pendingSerials.length} UNREGISTERED SERIALS
                                         </p>
-                                        <Button 
-                                            size="sm" 
+                                        <Button
+                                            size="sm"
                                             variant="secondary"
                                             className="h-7 text-[10px] bg-amber-600 text-white hover:bg-amber-700"
                                             onClick={() => setShowRegistrationModal(true)}

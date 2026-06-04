@@ -1,4 +1,4 @@
-// src/modules/supply-chain-management/product-pricing-management/product-pricing/components/PrintPricingDialog.tsx
+// src/modules/industrial-distribution-system/supply-chain-management/product-pricing-management/product-pricing/components/PrintPricingDialog.tsx
 "use client";
 
 import * as React from "react";

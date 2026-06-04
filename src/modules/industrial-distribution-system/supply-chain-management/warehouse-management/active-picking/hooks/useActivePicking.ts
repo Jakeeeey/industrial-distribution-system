@@ -1,257 +1,203 @@
-"use client";
-
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { transmitItemScan, lookupRfidTag, submitManualPick } from "../providers/fetchProvider";
-import { ConsolidatorDto, ConsolidatorDetailsDto } from "../types";
-import { soundFX } from "../utils/audioProvider";
+import { useState, useCallback } from "react";
+import { Consolidator, ConsolidatorDetail, ConsolidatorSerialMapping } from "../types";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
 
-export interface UseActivePickingProps {
-    batch: ConsolidatorDto;
-    currentUserId: number;
-}
+export function useActivePicking(userId: number | null = null) {
+    const [branches, setBranches] = useState<{ id: number, branch_name: string }[]>([]);
+    const [isLoadingBranches, setIsLoadingBranches] = useState(false);
 
-export interface ScanLog {
-    id: string;
-    tag: string;
-    time: string;
-    status: "success" | "error";
-    message: string;
-}
+    const [pickings, setPickings] = useState<Consolidator[]>([]);
+    const [totalPickings, setTotalPickings] = useState(0);
+    const [page, setPage] = useState(1);
+    const [isLoadingPickings, setIsLoadingPickings] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+    
+    const [activePickingId, setActivePickingId] = useState<number | null>(null);
+    const [details, setDetails] = useState<ConsolidatorDetail[]>([]);
+    const [isLoadingDetails, setIsLoadingDetails] = useState(false);
 
-export function useActivePicking({ batch, currentUserId }: UseActivePickingProps) {
-    const router = useRouter();
-    const [localDetails, setLocalDetails] = useState<ConsolidatorDetailsDto[]>(batch.details || []);
-    const [activeDetailId, setActiveDetailId] = useState<number | null>(null);
-    const [scanLogs, setScanLogs] = useState<ScanLog[]>([]);
-    const [isScanning, setIsScanning] = useState(false);
+    const [serialsMap, setSerialsMap] = useState<Record<number, ConsolidatorSerialMapping[]>>({});
+    const [isLoadingSerials, setIsLoadingSerials] = useState<Record<number, boolean>>({});
 
-    const [isManualModalOpen, setIsManualModalOpen] = useState(false);
-    const [manualQuantity, setManualQuantity] = useState<number | "">("");
+    const [isProcessingSerial, setIsProcessingSerial] = useState(false);
 
-    // 🏎️ PERFORMANCE REFS
-    const detailsRef = useRef(batch.details || []);
-    const scannedTagsRef = useRef(new Set<string>());
-    const bufferRef = useRef<string>("");
-    const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-    const isProcessingRef = useRef<boolean>(false);
-
-    useEffect(() => {
-        if (batch.details) {
-            setLocalDetails(batch.details);
-            detailsRef.current = batch.details;
+    const fetchBranches = useCallback(async (divisionId: number = 1) => {
+        setIsLoadingBranches(true);
+        try {
+            const res = await fetch(`/api/ids/scm/warehouse-management/active-picking/branches?divisionId=${divisionId}`);
+            if (!res.ok) throw new Error("Failed to fetch branches");
+            const data = await res.json();
+            setBranches(data);
+        } catch {
+            toast.error("Failed to load branches");
+        } finally {
+            setIsLoadingBranches(false);
         }
-    }, [batch.id, batch.details]);
-
-    const activeDetail = useMemo(() => localDetails.find(d => d.id === activeDetailId), [localDetails, activeDetailId]);
-    const totalItems = useMemo(() => localDetails.reduce((sum, d) => sum + (d.orderedQuantity || 0), 0), [localDetails]);
-    const totalPicked = useMemo(() => localDetails.reduce((sum, d) => sum + (d.pickedQuantity || 0), 0), [localDetails]);
-    const progressPercent = totalItems > 0 ? (totalPicked / totalItems) * 100 : 0;
-    const isBatchComplete = totalItems > 0 && totalPicked >= totalItems;
-
-    const groupedDetails = useMemo(() => {
-        const groups: Record<string, Record<string, Record<string, ConsolidatorDetailsDto[]>>> = {};
-        localDetails.forEach(detail => {
-            const supplier = detail.supplierName || "UNASSIGNED";
-            const brand = detail.brandName || "NO BRAND";
-            const category = detail.categoryName || "UNCATEGORIZED";
-
-            if (!groups[supplier]) groups[supplier] = {};
-            if (!groups[supplier][brand]) groups[supplier][brand] = {};
-            if (!groups[supplier][brand][category]) groups[supplier][brand][category] = [];
-            groups[supplier][brand][category].push(detail);
-        });
-        return groups;
-    }, [localDetails]);
-
-    const logScan = useCallback((tag: string, status: "success" | "error", message: string) => {
-        if (status === "success") soundFX.success();
-        else soundFX.error();
-
-        const newLog: ScanLog = {
-            id: Math.random().toString(36).substring(7),
-            tag,
-            time: new Date().toLocaleTimeString([], { hour12: false }),
-            status,
-            message
-        };
-        setScanLogs(prev => [newLog, ...prev].slice(0, 50));
     }, []);
 
-    // 🚀 HARDWARE SCANNER LOGIC (Memoized to prevent effect re-runs)
-    const processScan = useCallback(async (inputString: string) => {
-        const tag = inputString.trim();
-        if (!tag) return;
-
-        const isLikelyRFID = tag.length > 12;
-        if (isLikelyRFID && scannedTagsRef.current.has(tag)) {
-            soundFX.duplicate();
-            return;
-        }
-
-        if (isProcessingRef.current) return;
-        isProcessingRef.current = true;
-        setIsScanning(true);
-
+    const fetchPickings = useCallback(async (divisionId: number = 1, status: string = "Picking", targetPage: number = 1, search: string = "") => {
+        setIsLoadingPickings(true);
         try {
-            const currentDetails = detailsRef.current;
-
-            let targetDetail = currentDetails.find(d =>
-                d.barcode?.toLowerCase() === tag.toLowerCase() ||
-                d.productId?.toString() === tag
-            );
-
-            if (!targetDetail) {
-                const productId = await lookupRfidTag(tag);
-                if (productId) targetDetail = currentDetails.find(d => d.productId === productId);
-            }
-
-            if (!targetDetail) {
-                logScan(tag, "error", "Unrecognized Barcode/Tag");
-                return;
-            }
-
-            const currentQty = targetDetail.pickedQuantity || 0;
-            const requiredQty = targetDetail.orderedQuantity || 0;
-
-            if (currentQty + 1 > requiredQty) {
-                logScan(tag, "error", "Exceeds Requirement");
-                return;
-            }
-
-            const updatedQty = currentQty + 1;
-            if (isLikelyRFID) scannedTagsRef.current.add(tag);
-
-            const updatedDetails = currentDetails.map(d =>
-                d.id === targetDetail!.id ? { ...d, pickedQuantity: updatedQty } : d
-            );
-
-            detailsRef.current = updatedDetails;
-            setLocalDetails(updatedDetails);
-            setActiveDetailId(targetDetail.id || null);
-
-            const isRFIDRequired = (targetDetail.unitOrder || 0) === 3;
-            const transmitTag = isRFIDRequired ? tag : "";
-
-            const result = await transmitItemScan({
-                detailId: targetDetail.id!,
-                rfidTag: transmitTag,
-                scannedBy: currentUserId,
-                newPickedQuantity: updatedQty
-            });
-
-            if (result.success) {
-                logScan(transmitTag || tag, "success", `Picked ${targetDetail.productName}`);
-            } else {
-                if (isLikelyRFID) scannedTagsRef.current.delete(tag);
-
-                const revertedDetails = currentDetails.map(d =>
-                    d.id === targetDetail!.id ? { ...d, pickedQuantity: currentQty } : d
-                );
-                detailsRef.current = revertedDetails;
-                setLocalDetails(revertedDetails);
-
-                logScan(transmitTag || tag, "error", result.message || "Server Rejected");
-            }
+            const res = await fetch(`/api/ids/scm/warehouse-management/active-picking?divisionId=${divisionId}&status=${status}&page=${targetPage}&limit=10&search=${encodeURIComponent(search)}`);
+            if (!res.ok) throw new Error("Failed to fetch pickings");
+            const data = await res.json();
+            setPickings(data.data);
+            setTotalPickings(data.meta.total);
+            setPage(targetPage);
+            setSearchQuery(search);
         } catch {
-            logScan(tag, "error", "Connection Error");
+            toast.error("Failed to load pickings");
         } finally {
-            setIsScanning(false);
-            isProcessingRef.current = false;
+            setIsLoadingPickings(false);
         }
-    }, [currentUserId, logScan]);
+    }, []);
 
-    // 🚀 HARDWARE LISTENER
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-            if (["Shift", "Control", "Alt", "CapsLock", "Meta"].includes(e.key)) return;
-
-            if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
-
-            if (e.key === "Enter") {
-                const finalTag = bufferRef.current.trim();
-                bufferRef.current = "";
-                if (finalTag) processScan(finalTag);
-            } else if (e.key.length === 1) {
-                bufferRef.current += e.key;
-            }
-
-            scanTimeoutRef.current = setTimeout(() => {
-                const finalTag = bufferRef.current.trim();
-                if (finalTag.length > 3) {
-                    bufferRef.current = "";
-                    processScan(finalTag);
-                }
-            }, 60);
-        };
-
-        window.addEventListener("keydown", handleKeyDown);
-        return () => {
-            window.removeEventListener("keydown", handleKeyDown);
-            if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
-        };
-    }, [processScan]);
-
-    // 🚀 MANUAL SUBMIT LOGIC
-    const handleManualSubmit = async () => {
-        const qty = Number(manualQuantity);
-
-        if (!activeDetail || isNaN(qty) || qty <= 0) return;
-
-        const currentQty = activeDetail.pickedQuantity || 0;
-        const requiredQty = activeDetail.orderedQuantity || 0;
-
-        if (currentQty + qty > requiredQty) {
-            soundFX.error();
-            toast.error(`Exceeds requirement! Max allowed: ${requiredQty - currentQty}`);
-            return;
-        }
-
-        setIsScanning(true);
-
+    const fetchDetails = useCallback(async (consolidatorId: number, branchId: number = 196) => {
+        setIsLoadingDetails(true);
+        setActivePickingId(consolidatorId);
         try {
-            await submitManualPick({
-                batchId: batch.id!,
-                productId: activeDetail.productId,
-                quantity: qty
+            const res = await fetch(`/api/ids/scm/warehouse-management/active-picking/details/${consolidatorId}?branchId=${branchId}`);
+            if (!res.ok) throw new Error("Failed to fetch details");
+            const data = await res.json();
+            setDetails(data);
+        } catch {
+            toast.error("Failed to load picking details");
+            setDetails([]);
+        } finally {
+            setIsLoadingDetails(false);
+        }
+    }, []);
+
+    const fetchSerials = useCallback(async (detailId: number) => {
+        setIsLoadingSerials(prev => ({ ...prev, [detailId]: true }));
+        try {
+            const res = await fetch(`/api/ids/scm/warehouse-management/active-picking/details/${detailId}/serials`);
+            if (!res.ok) throw new Error("Failed to fetch serials");
+            const data = await res.json();
+            setSerialsMap(prev => ({ ...prev, [detailId]: data }));
+        } catch {
+            // Ignore error or handle silently
+        } finally {
+            setIsLoadingSerials(prev => ({ ...prev, [detailId]: false }));
+        }
+    }, []);
+
+    const removeSerial = useCallback(async (mappingId: number, detailId: number) => {
+        try {
+            const res = await fetch(`/api/ids/scm/warehouse-management/active-picking/serials/${mappingId}?detailId=${detailId}&userId=${userId}`, {
+                method: "DELETE"
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to delete serial");
+
+            // Update quantity
+            setDetails(prev => prev.map(d => d.id === detailId ? { ...d, picked_quantity: data.newQuantity } : d));
+            
+            // Remove from map
+            setSerialsMap(prev => ({
+                ...prev,
+                [detailId]: prev[detailId]?.filter(m => m.id !== mappingId) || []
+            }));
+
+            toast.success("Serial removed");
+            return true;
+        } catch (error) {
+            const err = error as Error;
+            toast.error(err.message);
+            return false;
+        }
+    }, [userId]);
+
+    const processSerial = useCallback(async (consolidatorId: number, serialNumber: string, branchId: number) => {
+        setIsProcessingSerial(true);
+        try {
+            const res = await fetch(`/api/ids/scm/warehouse-management/active-picking/pick`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ consolidatorId, serial_number: serialNumber, userId, branchId })
             });
 
-            // Optimistic UI Update
-            const updatedQty = currentQty + qty;
-            const updatedDetails = detailsRef.current.map(d =>
-                d.id === activeDetail.id ? { ...d, pickedQuantity: updatedQty } : d
-            );
+            const data = await res.json();
 
-            detailsRef.current = updatedDetails;
-            setLocalDetails(updatedDetails);
+            if (!res.ok) {
+                toast.error(data.details || data.error || "Failed to process serial");
+                return false;
+            }
 
-            logScan(`MANUAL-${qty}`, "success", `Added ${qty} x ${activeDetail.productName}`);
-            soundFX.success();
-            toast.success(`Updated ${activeDetail.productName}`);
+            const detailId = data.detailId;
 
-            // Refresh data from server
-            router.refresh();
+            // Update details with new quantity from server
+            setDetails(prev => prev.map(d => {
+                if (d.id === detailId) {
+                    return { ...d, picked_quantity: data.newQuantity };
+                }
+                return d;
+            }));
 
-            // Cleanup Modal
-            setIsManualModalOpen(false);
-            setManualQuantity("");
+            // Refresh serials for this detail
+            fetchSerials(detailId);
 
-        } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : "Manual pick failed";
-            logScan("MANUAL", "error", message);
-            soundFX.error();
-            toast.error(message);
+            toast.success("Serial matched and picked successfully");
+            return true;
+        } catch {
+            toast.error("Network error while processing serial");
+            return false;
         } finally {
-            setIsScanning(false);
+            setIsProcessingSerial(false);
         }
-    };
+    }, [fetchSerials, userId]);
+
+    const completePicking = useCallback(async (consolidatorId: number, status: string = "Picked") => {
+        try {
+            const res = await fetch(`/api/ids/scm/warehouse-management/active-picking/complete`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ consolidatorId, status })
+            });
+            if (!res.ok) throw new Error("Failed to complete picking");
+            
+            toast.success(`Picking ${status} successfully`);
+            
+            // Refresh pickings
+            fetchPickings(1, "Picking", page, searchQuery);
+            setActivePickingId(null);
+            setDetails([]);
+            return true;
+        } catch (error) {
+            const err = error as Error;
+            toast.error(err.message);
+            return false;
+        }
+    }, [fetchPickings, page, searchQuery]);
 
     return {
-        groupedDetails, activeDetailId, activeDetail, scanLogs, isScanning,
-        totalItems, totalPicked, progressPercent, isBatchComplete,
-        isManualModalOpen, manualQuantity, setIsManualModalOpen,
-        setManualQuantity, setActiveDetailId, handleManualSubmit
+        userId,
+        branches,
+        isLoadingBranches,
+        fetchBranches,
+
+        pickings,
+        totalPickings,
+        page,
+        setPage,
+        searchQuery,
+        setSearchQuery,
+        isLoadingPickings,
+        fetchPickings,
+        
+        activePickingId,
+        setActivePickingId,
+        details,
+        isLoadingDetails,
+        fetchDetails,
+        
+        serialsMap,
+        isLoadingSerials,
+        fetchSerials,
+        removeSerial,
+
+        isProcessingSerial,
+        processSerial,
+        completePicking
     };
 }

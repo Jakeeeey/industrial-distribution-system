@@ -1,4 +1,4 @@
-//src/modules/supply-chain-management/traceability-compliance/cross-tracing/CrossTracingModule.tsx
+//src/modules/industrial-distribution-system/supply-chain-management/traceability-compliance/cross-tracing/CrossTracingModule.tsx
 "use client";
 
 import * as React from "react";

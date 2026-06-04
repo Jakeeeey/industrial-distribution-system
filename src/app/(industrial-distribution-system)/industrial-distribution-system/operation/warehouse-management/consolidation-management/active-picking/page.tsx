@@ -13,7 +13,7 @@ import { NavUser } from "@/components/shared/app-sidebar/nav-user";
 import { cookies } from "next/headers";
 
 // ✅ Wire the module you asked for
-import ActivePickingModule from "@/modules/industrial-distribution-system/active-picking/ActivePickingModule";
+import ActivePickingModule from "@/modules/industrial-distribution-system/supply-chain-management/warehouse-management/active-picking";
 
 
 export const runtime = "nodejs";
