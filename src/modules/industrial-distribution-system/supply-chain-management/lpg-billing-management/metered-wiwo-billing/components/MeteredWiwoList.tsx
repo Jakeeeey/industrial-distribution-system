@@ -117,7 +117,7 @@ export function MeteredWiwoList({ selectedId, onSelect, onNew }: Props) {
               ? format(new Date(row.transaction_date), "MMM dd, yyyy")
               : "—";
             const customer = row.customer?.customer_name || row.customer?.store_name || row.customer_code;
-            const site = row.site?.site_name || (row.lpg_site_id ? `Site #${row.lpg_site_id}` : "—");
+            // const site = row.site?.site_name || (row.lpg_site_id ? `Site #${row.lpg_site_id}` : "—");
             const billableKg = row.billable_kg != null ? Number(row.billable_kg) : 0;
             const netAmt = row.net_amount != null ? Number(row.net_amount) : 0;
             const selected = selectedId === id;
