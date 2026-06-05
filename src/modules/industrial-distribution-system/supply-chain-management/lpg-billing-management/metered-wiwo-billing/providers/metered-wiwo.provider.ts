@@ -87,7 +87,7 @@ async function createOrUpdateMeterReading(
   pricePerKg: number,
   status: string,
   userId?: number,
-  readingId?: number | null
+  readingId?: number | null,
 ): Promise<number> {
   const rawConsumption = Math.max(0, currReading - prevReading);
   const data = {
@@ -100,6 +100,7 @@ async function createOrUpdateMeterReading(
     price_per_kg: pricePerKg,
     raw_consumption: rawConsumption,
     reading_status: status,
+    // Note: pressure_line, psi, atmospheric_pressure, lpg_vapor_factor do not exist in Directus collection
     ...(userId ? { created_by: userId } : {})
   };
 
@@ -141,13 +142,18 @@ export async function createMeteredTransaction(
       Number(payload.price_per_kg ?? 0),
       payload.status || "DRAFT",
       payload.created_by ?? undefined,
-      payload.meter_reading_id
+      payload.meter_reading_id,
     );
   }
 
   const dbPayload = { ...payloadRecord };
   delete dbPayload.previous_reading;
   delete dbPayload.current_reading;
+  // Omit custom pressure properties which do not exist in directus schema
+  delete dbPayload.pressure_line;
+  delete dbPayload.psi;
+  delete dbPayload.atmospheric_pressure;
+  delete dbPayload.lpg_vapor_factor;
 
   const res = await directusFetch<{ data: MeteredWiwoTransaction }>(
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions`,
@@ -180,13 +186,18 @@ export async function updateMeteredTransaction(
       Number(payload.price_per_kg ?? 0),
       payload.status || "DRAFT",
       payloadRecord.modified_by as number | undefined,
-      payload.meter_reading_id
+      payload.meter_reading_id,
     );
   }
 
   const dbPayload = { ...payloadRecord };
   delete dbPayload.previous_reading;
   delete dbPayload.current_reading;
+  // Omit custom pressure properties which do not exist in directus schema
+  delete dbPayload.pressure_line;
+  delete dbPayload.psi;
+  delete dbPayload.atmospheric_pressure;
+  delete dbPayload.lpg_vapor_factor;
 
   const res = await directusFetch<{ data: MeteredWiwoTransaction }>(
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions/${id}`,
@@ -247,6 +258,10 @@ export async function fetchMeteredSites(): Promise<
     meter_unit?: string | null;
     meter_direction?: "INCREASING" | "DECREASING" | null;
     conversion_factor?: number | null;
+    default_pressure_line?: number | null;
+    default_psi?: number | null;
+    default_atmospheric_pressure?: number | null;
+    psi?: number | null;
     last_meter_reading?: number | null;
     billing_mode?: string | null;
   }[]
@@ -256,7 +271,12 @@ export async function fetchMeteredSites(): Promise<
   }>(
     `${DIRECTUS_URL}/items/lpg_customer_lpg_sites?fields=id,site_name,customer_code,default_price_per_kg,meter_unit,meter_direction,conversion_factor,last_meter_reading,billing_mode&filter[is_active][_eq]=1&filter[billing_mode][_in]=METERED,BOTH&sort=site_name&limit=-1`
   );
-  return (res.data ?? []) as unknown as {
+  return (res.data ?? []).map((site) => ({
+    ...site,
+    default_pressure_line: site.default_pressure_line !== undefined && site.default_pressure_line !== null ? Number(site.default_pressure_line) : 2.0183,
+    default_psi: site.default_psi !== undefined && site.default_psi !== null ? Number(site.default_psi) : 10.0,
+    default_atmospheric_pressure: site.default_atmospheric_pressure !== undefined && site.default_atmospheric_pressure !== null ? Number(site.default_atmospheric_pressure) : 14.7,
+  })) as unknown as {
     id: number;
     site_name: string | null;
     customer_code: string;
@@ -264,6 +284,10 @@ export async function fetchMeteredSites(): Promise<
     meter_unit?: string | null;
     meter_direction?: "INCREASING" | "DECREASING" | null;
     conversion_factor?: number | null;
+    default_pressure_line?: number | null;
+    default_psi?: number | null;
+    default_atmospheric_pressure?: number | null;
+    psi?: number | null;
     last_meter_reading?: number | null;
     billing_mode?: string | null;
   }[];
@@ -286,3 +310,4 @@ export async function updateSiteReading(
   );
   return res.data;
 }
+

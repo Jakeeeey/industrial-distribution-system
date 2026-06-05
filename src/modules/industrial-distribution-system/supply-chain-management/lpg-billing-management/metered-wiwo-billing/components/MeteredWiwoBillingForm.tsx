@@ -49,6 +49,10 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
     linkedWiwo,
     isValidReading,
     meterDirection,
+    siteLpgVapor,
+    sitePsi,
+    siteCorrectionFactor,
+    pressureLine,
   } = useMeteredWiwoBillingForm(txId);
 
   const selectedSite = sites.find((s) => s.id === form.siteId);
@@ -167,7 +171,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                   />
                 ) : (
                   <Select
-                    value={form.siteId?.toString() || ""}
+                    value={form.siteId ? String(form.siteId) : undefined}
                     onValueChange={(v) => handleSiteChange(Number(v))}
                   >
                     <SelectTrigger className="w-full">
@@ -312,7 +316,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">Metered KG (computed)</Label>
                   <Input
-                    value={Number(meteredKg).toFixed(3)}
+                    value={Number(meteredKg).toFixed(4)}
                     readOnly
                     className="font-mono bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 font-bold"
                   />
@@ -355,6 +359,12 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
             previousReading={form.previousReading}
             currentReading={form.currentReading}
             meteredKg={meteredKg}
+            meterUnit={(selectedSite?.meter_unit as string) || "KG"}
+            meterDirection={meterDirection}
+            lpgVapor={siteLpgVapor}
+            psi={sitePsi}
+            correctionFactor={siteCorrectionFactor}
+            pressureLine={pressureLine}
           />
 
           {/* Variance & Arbitration */}

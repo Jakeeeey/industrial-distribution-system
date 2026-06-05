@@ -154,7 +154,7 @@ export function MeteredWiwoList({ selectedId, onSelect, onNew }: Props) {
                   <div className="flex items-center gap-1.5">
                     {SOURCE_BADGE[row.billable_source]}
                     <span className="font-mono font-bold text-foreground bg-zinc-50 dark:bg-zinc-900 px-1.5 py-0.5 rounded text-[10px]">
-                      {billableKg.toFixed(2)} kg (₱{netAmt.toLocaleString(undefined, { maximumFractionDigits: 0 })})
+                      {billableKg.toFixed(4)} kg (₱{netAmt.toLocaleString(undefined, { maximumFractionDigits: 0 })})
                     </span>
                   </div>
                 </div>
