@@ -81,7 +81,7 @@ export const lpgBillingService = {
   },
 
   async fetchCustomers(search?: string) {
-    let query = `fields=customer_code,customer_name&filter[isActive][_eq]=1&limit=100&sort=customer_name`;
+    let query = `fields=customer_code,customer_name&filter[isActive][_eq]=1&limit=-1&sort=customer_name`;
     if (search) {
       const filter = {
         _or: [
