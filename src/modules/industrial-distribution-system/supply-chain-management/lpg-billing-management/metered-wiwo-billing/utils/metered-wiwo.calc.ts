@@ -1,0 +1,84 @@
+import type { WiwoDetailRef } from "../types";
+
+// ─── WIWO computation ─────────────────────────────────────────────────────────
+
+export function calcWiwoDetail(d: WiwoDetailRef): WiwoDetailRef {
+  const remaining = Math.max(0, d.gross_weight - d.tare_weight);
+  const consumed = Math.max(0, d.opening_lpg_kg - remaining);
+  return {
+    ...d,
+    remaining_lpg_kg: parseFloat(remaining.toFixed(3)),
+    consumed_lpg_kg: parseFloat(consumed.toFixed(3)),
+  };
+}
+
+export function calcTotalWiwoKg(details: WiwoDetailRef[]): number {
+  return parseFloat(
+    details.reduce((sum, d) => sum + (d.consumed_lpg_kg ?? 0), 0).toFixed(3)
+  );
+}
+
+// ─── Meter reading computation ────────────────────────────────────────────────
+
+/**
+ * Metered KG = Current Reading - Previous Reading
+ */
+export function calcMeteredKg(
+  currentReading: number,
+  previousReading: number
+): number {
+  return Math.max(0, parseFloat((currentReading - previousReading).toFixed(3)));
+}
+
+// ─── Variance ─────────────────────────────────────────────────────────────────
+
+/**
+ * Variance KG = |Metered KG - WIWO KG|
+ */
+export function calcVarianceKg(meteredKg: number, wiwoKg: number): number {
+  return parseFloat(Math.abs(meteredKg - wiwoKg).toFixed(3));
+}
+
+// ─── Arbitration ──────────────────────────────────────────────────────────────
+
+export interface ArbitrationResult {
+  metered_kg: number;
+  wiwo_kg: number;
+  variance_kg: number;
+  billable_kg: number;
+  billable_source: "METERED" | "WIWO";
+}
+
+/**
+ * Billable KG = MAX(Metered KG, WIWO KG)
+ * Billable Source = the one that is higher (METERED wins on tie)
+ */
+export function computeArbitration(
+  meteredKg: number,
+  wiwoKg: number
+): ArbitrationResult {
+  const varianceKg = calcVarianceKg(meteredKg, wiwoKg);
+  const billableKg = Math.max(meteredKg, wiwoKg);
+  const billableSource = meteredKg >= wiwoKg ? "METERED" : "WIWO";
+  return {
+    metered_kg: parseFloat(meteredKg.toFixed(3)),
+    wiwo_kg: parseFloat(wiwoKg.toFixed(3)),
+    variance_kg: varianceKg,
+    billable_kg: parseFloat(billableKg.toFixed(3)),
+    billable_source: billableSource,
+  };
+}
+
+// ─── Billing computation ──────────────────────────────────────────────────────
+
+export function calcGrossAmount(billableKg: number, pricePerKg: number): number {
+  return parseFloat((billableKg * pricePerKg).toFixed(2));
+}
+
+export function calcVatAmount(grossAmount: number, vatRate = 0.12): number {
+  return parseFloat((grossAmount * vatRate).toFixed(2));
+}
+
+export function calcNetAmount(grossAmount: number, vatAmount: number): number {
+  return parseFloat((grossAmount + vatAmount).toFixed(2));
+}
