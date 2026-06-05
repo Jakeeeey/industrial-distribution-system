@@ -42,7 +42,7 @@ import { toast } from "sonner";
 import type { Department } from "../types";
 import { AddressSelectors } from "./AddressSelectors";
 
-const UPLOAD_API = "/api/hrm/employee-admin/employee-master-list/upload";
+const UPLOAD_API = "/api/ids/hrm/employee-admin/employee-master-list/upload";
 const MAX_FILE_SIZE_MB = 10;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
@@ -251,7 +251,7 @@ export function AddEmployeeModal({
 
   // File input refs — avoids Radix Dialog white-screen bug with <label> wrappers
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const sigInputRef   = useRef<HTMLInputElement>(null);
+  const sigInputRef = useRef<HTMLInputElement>(null);
 
   // Image previews
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -277,7 +277,7 @@ export function AddEmployeeModal({
     if (pwd.length > 64) return "Password must not exceed 64 characters.";
     if (!/[a-z]/.test(pwd)) return "Password must contain at least one lowercase letter.";
     if (!/[A-Z]/.test(pwd)) return "Password must contain at least one uppercase letter.";
-    if (!/\d/.test(pwd))    return "Password must contain at least one digit.";
+    if (!/\d/.test(pwd)) return "Password must contain at least one digit.";
     if (!/[@$!%*?&]/.test(pwd)) return "Password must contain at least one special character (@$!%*?&).";
     return null;
   }
@@ -365,12 +365,12 @@ export function AddEmployeeModal({
       }
 
       // ── Step 2: Pass enriched form data to parent ──
-      await onSubmit({ 
-        ...form, 
-        user_image: null, 
-        signature: null, 
-        _userImageId: userImageId, 
-        _signatureId: signatureId 
+      await onSubmit({
+        ...form,
+        user_image: null,
+        signature: null,
+        _userImageId: userImageId,
+        _signatureId: signatureId
       });
       onOpenChange(false);
     } catch {
@@ -504,7 +504,7 @@ export function AddEmployeeModal({
                     <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
                     <Input
                       className={cn(
-                        inputCls, 
+                        inputCls,
                         "pl-9",
                         phoneError && "border-red-500 focus-visible:ring-red-500/30"
                       )}
@@ -552,7 +552,7 @@ export function AddEmployeeModal({
                   />
                 </Field>
                 <Field label="Gender" required>
-                   <Select value={form.gender} onValueChange={(v) => set("gender", v)} required>
+                  <Select value={form.gender} onValueChange={(v) => set("gender", v)} required>
                     <SelectTrigger className={inputCls}>
                       <SelectValue placeholder="Select Gender" />
                     </SelectTrigger>
@@ -641,7 +641,7 @@ export function AddEmployeeModal({
                 <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground/50 flex items-center gap-1.5">
                   <MapPin className="h-3 w-3" /> Address
                 </p>
-                <AddressSelectors 
+                <AddressSelectors
                   province={form.user_province}
                   city={form.user_city}
                   brgy={form.user_brgy}

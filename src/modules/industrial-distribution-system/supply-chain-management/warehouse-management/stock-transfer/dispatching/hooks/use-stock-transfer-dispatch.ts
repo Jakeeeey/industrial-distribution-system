@@ -12,14 +12,14 @@ const LOCAL_STORAGE_KEY = 'scm_dispatching_scans_v1';
  * Hook for managing the "Stock Transfer Dispatch" phase (RFID Scanning at Source).
  */
 export function useStockTransferDispatch() {
-  const base = useStockTransferBase({ 
-    statuses: ['For Picking', 'Picking', 'Picked'] 
+  const base = useStockTransferBase({
+    statuses: ['For Picking', 'Picking', 'Picked']
   });
 
   const [fetchingAvailable, setFetchingAvailable] = useState(false);
   const [scannedInventory, setScannedInventory] = useState<Record<number, number>>({});
   const [isThrottled, setIsThrottled] = useState(false);
-  
+
   // Track recently processed tags to prevent spam (temporal lockout)
   const recentLocks = useRef<Map<string, number>>(new Map());
 
@@ -29,9 +29,9 @@ export function useStockTransferDispatch() {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (!saved) return {};
-      
+
       const parsed = JSON.parse(saved);
-      
+
       // Migration: If the format is the old one (Record<number, string[]>), clear it
       // or transform it. For simplicity and to avoid bugs, we'll start fresh if 
       // the structure looks like the old one.
@@ -39,7 +39,7 @@ export function useStockTransferDispatch() {
       if (firstEntry && !Array.isArray(firstEntry)) {
         return {};
       }
-      
+
       return parsed;
     } catch {
       return {};
@@ -96,20 +96,20 @@ export function useStockTransferDispatch() {
       const enrichedItems = group.items.map((st: OrderGroupItem) => {
         const product = st.product_id as ProductRow;
         const pid = product?.product_id || st.product_id;
-        
+
         const scanLogs = scannedItemsState[group.orderNo] || [];
         const itemScans = scanLogs.filter(s => s.status === 'SUCCESS' && s.productId === pid);
         const rfids = itemScans.map(s => s.rfid);
-        
+
         const uom = typeof product?.unit_of_measurement === 'object' ? product.unit_of_measurement : null;
         const unitName = (uom?.unit_name || '').toLowerCase();
         const unitId = Number(uom?.unit_id || 0);
 
         // Mark as loose pack if unit is pieces, tie, pcs, or loose (these don't need RFID scanning)
         const loosePack = unitName.includes('loose') || unitName.includes('pieces') || unitName.includes('pcs') || unitName.includes('tie') || unitId === 4;
-        
+
         const rawAvailable = scannedInventory[pid as number] ?? (st as OrderGroupItem).qtyAvailable ?? 0;
-        
+
         const manualQty = (manualQtysState[group.orderNo] || {})[pid as number] || 0;
 
         return {
@@ -162,17 +162,17 @@ export function useStockTransferDispatch() {
             current: '0'
           });
 
-          const proxyUrl = `/api/scm/warehouse-management/stock-transfer/inventory-proxy?${params.toString()}`;
+          const proxyUrl = `/api/ids/scm/warehouse-management/stock-transfer/inventory-proxy?${params.toString()}`;
           const res = await fetch(proxyUrl);
           if (res.ok) {
             const data = await res.json();
             const list = Array.isArray(data) ? data : (data.data || []);
             // Handle both camelCase (productId) and snake_case (product_id) from Spring API
-            const inventoryList = list.filter((inv: Record<string, string | number>) => 
-               String(inv.productId ?? inv.product_id) === String(pid) && 
-               String(inv.branchId ?? inv.branch_id) === String(sourceBranch)
+            const inventoryList = list.filter((inv: Record<string, string | number>) =>
+              String(inv.productId ?? inv.product_id) === String(pid) &&
+              String(inv.branchId ?? inv.branch_id) === String(sourceBranch)
             );
-            
+
             const availableCount = inventoryList.reduce((acc: number, inv: Record<string, string | number>) => acc + Number(inv.runningInventory ?? inv.running_inventory ?? 0), 0);
             const unitCount = Number(product?.unit_of_measurement_count || 1) || 1;
             return { pid: pid as number, available: Math.max(0, Math.floor(availableCount / unitCount)) };
@@ -185,7 +185,7 @@ export function useStockTransferDispatch() {
             newAvailable[result.value.pid] = result.value.available;
           }
         }
-        
+
         if (results.some(r => r.status === 'fulfilled')) setScannedInventory(newAvailable);
       } catch (err) {
         console.error('Failed to fetch initial available quantities:', err);
@@ -204,12 +204,12 @@ export function useStockTransferDispatch() {
 
     try {
       const ids = group.items.map((item) => item.id);
-      await stockTransferLifecycleService.submitStatusUpdate({ 
-        items: ids.map(id => ({ id, status })), 
-        status 
+      await stockTransferLifecycleService.submitStatusUpdate({
+        items: ids.map(id => ({ id, status })),
+        status
       });
-      
-      base.setStockTransfers(prev => prev.map(st => 
+
+      base.setStockTransfers(prev => prev.map(st =>
         st.order_no === orderNo ? { ...st, status } : st
       ));
     } catch (err) {
@@ -224,7 +224,7 @@ export function useStockTransferDispatch() {
     base.setProcessing(true);
     try {
       const scanLogs = (scannedItemsState[orderNo] || []).filter(s => s.status === 'SUCCESS');
-      const rfidsPayload = scanLogs.map(s => ({ 
+      const rfidsPayload = scanLogs.map(s => ({
         stock_transfer_id: group.items.find(i => {
           const p = i.product_id as ProductRow;
           const pid = p?.product_id || i.product_id;
@@ -239,15 +239,15 @@ export function useStockTransferDispatch() {
         status: 'For Loading'
       }));
 
-      await stockTransferLifecycleService.submitStatusUpdate({ 
-        items: itemsPayload, 
+      await stockTransferLifecycleService.submitStatusUpdate({
+        items: itemsPayload,
         status: 'For Loading',
         rfids: rfidsPayload,
       });
 
       toast.success(`Order ${orderNo} successfully dispatched.`);
       base.setSelectedOrderNo(null);
-      
+
       setScannedItemsState(prev => {
         const nextState = { ...prev };
         delete nextState[orderNo];
@@ -274,7 +274,7 @@ export function useStockTransferDispatch() {
       oscillator.connect(gainNode);
       gainNode.connect(audioCtx.destination);
       oscillator.type = 'square';
-      oscillator.frequency.setValueAtTime(1200, audioCtx.currentTime); 
+      oscillator.frequency.setValueAtTime(1200, audioCtx.currentTime);
       gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
       gainNode.gain.linearRampToValueAtTime(0.2, audioCtx.currentTime + 0.01);
       gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.15);
@@ -359,13 +359,13 @@ export function useStockTransferDispatch() {
         pushError(`Product is not part of this order!`, 'Mismatch');
         return;
       }
-      
+
       const targetQty = Math.max(0, itemInOrder.allocated_quantity ?? 0);
       if (itemInOrder.scannedQty >= targetQty) {
         pushError(`Required quantity already reached for ${match.productName}`, 'Over-scan');
         return;
       }
-      
+
       const newScan: ScanLog = {
         rfid,
         productId,
@@ -378,15 +378,15 @@ export function useStockTransferDispatch() {
         ...prev,
         [base.selectedOrderNo!]: [newScan, ...(prev[base.selectedOrderNo!] || [])]
       }));
-      
+
       playSuccessSound();
 
       if (selectedGroup.status === 'For Picking') {
         await updateOrderStatus(base.selectedOrderNo!, 'Picking');
       }
-      } catch {
-        pushError('Tag not found in inventory', 'Not Found');
-      }
+    } catch {
+      pushError('Tag not found in inventory', 'Not Found');
+    }
   };
 
   const markAsPicked = async (orderNo: string) => {

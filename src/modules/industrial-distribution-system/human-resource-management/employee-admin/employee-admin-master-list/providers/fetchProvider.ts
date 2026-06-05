@@ -1,6 +1,6 @@
 import { User, Department } from "../types";
 
-const PROXY_BASE = "/api/hrm/employee-admin/employee-master-list";
+const PROXY_BASE = "/api/ids/hrm/employee-admin/employee-master-list";
 
 async function request<T>(method: string, endpoint: string, body?: Record<string, unknown>): Promise<T> {
   const headers: Record<string, string> = {

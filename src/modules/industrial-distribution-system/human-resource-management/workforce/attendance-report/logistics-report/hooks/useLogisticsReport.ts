@@ -42,7 +42,7 @@ export function useLogisticsReport() {
     try {
       const query = new URLSearchParams({ ...selectedRange });
       const response = await fetch(
-        `/api/hrm/logistics-report?${query.toString()}`,
+        `/api/ids/hrm/logistics-report?${query.toString()}`,
         {
           cache: "no-store",
         },

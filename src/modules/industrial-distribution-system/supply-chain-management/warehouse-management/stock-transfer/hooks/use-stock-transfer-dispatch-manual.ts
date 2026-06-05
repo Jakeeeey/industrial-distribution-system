@@ -7,8 +7,8 @@ import { toast } from 'sonner';
  * Hook for managing the "Stock Transfer Dispatch" phase (Manual Entry).
  */
 export function useStockTransferDispatchManual() {
-  const base = useStockTransferBase({ 
-    statuses: ['For Picking', 'Picking', 'Picked'] 
+  const base = useStockTransferBase({
+    statuses: ['For Picking', 'Picking', 'Picked']
   });
 
   const [fetchingAvailable, setFetchingAvailable] = useState(false);
@@ -27,17 +27,17 @@ export function useStockTransferDispatchManual() {
       const enrichedItems = group.items.map(st => {
         const product = st.product_id as unknown as Record<string, unknown>;
         const pid = (product?.product_id as number) || (product?.id as number) || st.product_id;
-        
+
         const uom = product?.unit_of_measurement as Record<string, unknown> | undefined;
         const unitName = (uom?.unit_name as string || '').toLowerCase();
         const unitId = Number(uom?.unit_id || 0);
         const loosePack = unitName.includes('loose') || unitName.includes('pieces') || unitName.includes('pcs') || unitName.includes('tie') || unitId === 4;
-        
+
         const rawAvailable = scannedInventory[pid as number] ?? (st as unknown as Record<string, unknown>).qtyAvailable ?? 0;
 
         return {
           ...st,
-          scannedQty: scannedQtys[st.id] ?? 0, 
+          scannedQty: scannedQtys[st.id] ?? 0,
           qtyAvailable: Math.max(0, rawAvailable),
           isLoosePack: loosePack,
         };
@@ -70,7 +70,7 @@ export function useStockTransferDispatchManual() {
         for (const item of selectedGroup.items) {
           const product = item.product_id as unknown as Record<string, unknown>;
           const pid = (product?.product_id as number) || (product?.id as number) || item.product_id;
-          
+
           if (!pid || scannedInventory[pid as number] !== undefined) continue;
 
           const params = new URLSearchParams({
@@ -80,14 +80,14 @@ export function useStockTransferDispatchManual() {
             current: '0'
           });
 
-          const proxyUrl = `/api/scm/warehouse-management/inventory-proxy?${params.toString()}`;
+          const proxyUrl = `/api/ids/scm/warehouse-management/inventory-proxy?${params.toString()}`;
           const res = await fetch(proxyUrl);
           if (res.ok) {
             const data = await res.json();
             const list = Array.isArray(data) ? data : (data.data || []);
-            const inventoryList = list.filter((inv: Record<string, unknown>) => 
-               String(inv.productId) === String(pid) && 
-               String(inv.branchId) === String(sourceBranch)
+            const inventoryList = list.filter((inv: Record<string, unknown>) =>
+              String(inv.productId) === String(pid) &&
+              String(inv.branchId) === String(sourceBranch)
             );
             const availableCount = inventoryList.reduce((acc: number, inv: Record<string, unknown>) => acc + Number(inv.runningInventory || 0), 0);
             const unitCount = Number(product?.unit_of_measurement_count || 1) || 1;
@@ -100,7 +100,7 @@ export function useStockTransferDispatchManual() {
             hasChanges = true;
           }
         }
-        
+
         if (hasChanges) setScannedInventory(newAvailable);
       } catch (err) {
         console.error('Failed to fetch initial available quantities:', err);
