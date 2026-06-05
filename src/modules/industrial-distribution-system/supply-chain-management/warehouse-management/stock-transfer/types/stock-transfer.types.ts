@@ -53,6 +53,7 @@ export interface ProductRow {
   product_brand?: ProductBrand | number;
   product_category?: ProductCategory | number;
   product_per_supplier?: ProductPerSupplier[];
+  is_serialized?: number;
 }
 
 // ─── Stock Transfer Row Shapes ──────────────────────────────
@@ -106,6 +107,19 @@ export interface ScannedItem {
   totalAmount: number;
 }
 
+/** 
+ * A single scan event recorded during dispatch or receive verification. 
+ * Linked to a specific stock transfer line item by productId.
+ */
+export interface ScanLog {
+  rfid: string;
+  productId?: number;
+  productName?: string;
+  timestamp: number;
+  status: 'SUCCESS' | 'ERROR';
+  errorType?: string;
+}
+
 // ─── Order Grouping ────────────────────────────────────────
 
 /**
@@ -117,6 +131,9 @@ export interface OrderGroupItem extends StockTransferRow {
   scannedQty?: number;
   /** Number of items received at the target branch. */
   receivedQty?: number;
+  /** RFID tags scanned/received for this item during pick/receipt. */
+  scannedRfids: string[];
+  receivedRfids: string[];
   /** Available qty at source branch (fetched from inventory). */
   qtyAvailable?: number;
   /** Whether this item is a loose-pack variant. */
@@ -206,6 +223,8 @@ export interface UpdateTransferItem {
   id: number;
   status: string;
   allocated_quantity?: number;
+  scanned_quantity?: number;
+  date_received?: string | null;
 }
 
 /** RFID tracking entry in the PATCH request body. */
@@ -226,6 +245,8 @@ export interface UpdateTransferPayload {
   rfids?: RfidTrackingEntry[];
   /** Scan type for RFID tracking ('DISPATCH' or 'RECEIVE'). */
   scanType?: "DISPATCH" | "RECEIVE";
+  /** ID of the user performing the update. */
+  userId?: number;
 }
 
 /** Directus payload for batch-inserting a stock_transfer row. */
@@ -258,3 +279,23 @@ export type StockTransferStatus =
 
 /** All valid RFID scan types. */
 export type RfidScanType = "DISPATCH" | "RECEIVE";
+
+/** Corporate branding and contact data for PDF generation. */
+export interface CompanyData {
+  company_name: string;
+  company_address: string;
+  company_brgy: string;
+  company_city: string;
+  company_province: string;
+  company_zipCode: string;
+  company_contact: string;
+  company_email: string;
+  company_logo: string;
+}
+
+/** Logged-in user information for metadata and signatures. */
+export interface CurrentUser {
+  name: string;
+  email: string;
+  avatar?: string;
+}

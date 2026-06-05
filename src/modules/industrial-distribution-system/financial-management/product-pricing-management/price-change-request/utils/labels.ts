@@ -1,4 +1,5 @@
 import type { PriceChangeRequestRow, CostChangeRequestRow } from "../types";
+import { mapPriceTypeName } from "../../product-pricing/utils/constants";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null;
@@ -46,7 +47,7 @@ export function priceTypeLabel(r: PriceChangeRequestRow) {
                 ? String(priceType.price_type_id)
                 : "";
 
-        return priceTypeName || `#${priceTypeId}`;
+        return mapPriceTypeName(priceTypeName) || `#${priceTypeId}`;
     }
 
     return `#${r.price_type_id}`;

@@ -1,61 +1,43 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { useStockTransferBase } from "./use-stock-transfer-base";
-import { stockTransferLifecycleService } from "../services/stock-transfer.lifecycle";
-import { toast } from "sonner";
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useStockTransferBase } from './use-stock-transfer-base';
+import { stockTransferLifecycleService } from '../services/stock-transfer.lifecycle';
+import { toast } from 'sonner';
 
 /**
  * Hook for managing the "Stock Transfer Dispatch" phase (Manual Entry).
  */
 export function useStockTransferDispatchManual() {
-  const base = useStockTransferBase({
-    statuses: ["For Picking", "Picking", "Picked"],
+  const base = useStockTransferBase({ 
+    statuses: ['For Picking', 'Picking', 'Picked'] 
   });
 
   const [fetchingAvailable, setFetchingAvailable] = useState(false);
-  const [scannedInventory, setScannedInventory] = useState<
-    Record<number, number>
-  >({});
+  const [scannedInventory, setScannedInventory] = useState<Record<number, number>>({});
   const [scannedQtys, setScannedQtys] = useState<Record<number, number>>({});
 
-  const updateScannedQty = useCallback(
-    (id: number, qty: number, maxQty: number) => {
-      setScannedQtys((prev) => {
-        const validQty = Math.max(0, Math.min(qty, maxQty));
-        return { ...prev, [id]: validQty };
-      });
-    },
-    [],
-  );
+  const updateScannedQty = useCallback((id: number, qty: number, maxQty: number) => {
+    setScannedQtys(prev => {
+      const validQty = Math.max(0, Math.min(qty, maxQty));
+      return { ...prev, [id]: validQty };
+    });
+  }, []);
 
   const orderGroups = useMemo(() => {
-    return base.baseOrderGroups.map((group) => {
-      const enrichedItems = group.items.map((st) => {
+    return base.baseOrderGroups.map(group => {
+      const enrichedItems = group.items.map(st => {
         const product = st.product_id as unknown as Record<string, unknown>;
-        const pid =
-          (product?.product_id as number) ||
-          (product?.id as number) ||
-          st.product_id;
-
-        const uom = product?.unit_of_measurement as
-          | Record<string, unknown>
-          | undefined;
-        const unitName = ((uom?.unit_name as string) || "").toLowerCase();
+        const pid = (product?.product_id as number) || (product?.id as number) || st.product_id;
+        
+        const uom = product?.unit_of_measurement as Record<string, unknown> | undefined;
+        const unitName = (uom?.unit_name as string || '').toLowerCase();
         const unitId = Number(uom?.unit_id || 0);
-        const loosePack =
-          unitName.includes("loose") ||
-          unitName.includes("pieces") ||
-          unitName.includes("pcs") ||
-          unitName.includes("tie") ||
-          unitId === 4;
-
-        const rawAvailable =
-          scannedInventory[pid as number] ??
-          (st as unknown as Record<string, unknown>).qtyAvailable ??
-          0;
+        const loosePack = unitName.includes('loose') || unitName.includes('pieces') || unitName.includes('pcs') || unitName.includes('tie') || unitId === 4;
+        
+        const rawAvailable = scannedInventory[pid as number] ?? (st as unknown as Record<string, unknown>).qtyAvailable ?? 0;
 
         return {
           ...st,
-          scannedQty: scannedQtys[st.id] ?? 0,
+          scannedQty: scannedQtys[st.id] ?? 0, 
           qtyAvailable: Math.max(0, rawAvailable),
           isLoosePack: loosePack,
         };
@@ -63,7 +45,7 @@ export function useStockTransferDispatchManual() {
 
       return {
         ...group,
-        items: enrichedItems,
+        items: enrichedItems
       };
     });
   }, [base.baseOrderGroups, scannedQtys, scannedInventory]);
@@ -87,41 +69,29 @@ export function useStockTransferDispatchManual() {
 
         for (const item of selectedGroup.items) {
           const product = item.product_id as unknown as Record<string, unknown>;
-          const pid =
-            (product?.product_id as number) ||
-            (product?.id as number) ||
-            item.product_id;
-
+          const pid = (product?.product_id as number) || (product?.id as number) || item.product_id;
+          
           if (!pid || scannedInventory[pid as number] !== undefined) continue;
 
           const params = new URLSearchParams({
             branchName: sourceBranchName,
             branchId: String(sourceBranch),
             productId: String(pid),
-            current: "0",
+            current: '0'
           });
 
-          const proxyUrl = `/api/ids/scm/warehouse-management/inventory-proxy?${params.toString()}`;
+          const proxyUrl = `/api/scm/warehouse-management/inventory-proxy?${params.toString()}`;
           const res = await fetch(proxyUrl);
           if (res.ok) {
             const data = await res.json();
-            const list = Array.isArray(data) ? data : data.data || [];
-            const inventoryList = list.filter(
-              (inv: Record<string, unknown>) =>
-                String(inv.productId) === String(pid) &&
-                String(inv.branchId) === String(sourceBranch),
+            const list = Array.isArray(data) ? data : (data.data || []);
+            const inventoryList = list.filter((inv: Record<string, unknown>) => 
+               String(inv.productId) === String(pid) && 
+               String(inv.branchId) === String(sourceBranch)
             );
-            const availableCount = inventoryList.reduce(
-              (acc: number, inv: Record<string, unknown>) =>
-                acc + Number(inv.runningInventory || 0),
-              0,
-            );
-            const unitCount =
-              Number(product?.unit_of_measurement_count || 1) || 1;
-            const finalAvailable = Math.max(
-              0,
-              Math.floor(availableCount / unitCount),
-            );
+            const availableCount = inventoryList.reduce((acc: number, inv: Record<string, unknown>) => acc + Number(inv.runningInventory || 0), 0);
+            const unitCount = Number(product?.unit_of_measurement_count || 1) || 1;
+            const finalAvailable = Math.max(0, Math.floor(availableCount / unitCount));
 
             newAvailable[pid as number] = finalAvailable;
             hasChanges = true;
@@ -130,10 +100,10 @@ export function useStockTransferDispatchManual() {
             hasChanges = true;
           }
         }
-
+        
         if (hasChanges) setScannedInventory(newAvailable);
       } catch (err) {
-        console.error("Failed to fetch initial available quantities:", err);
+        console.error('Failed to fetch initial available quantities:', err);
       } finally {
         setFetchingAvailable(false);
       }
@@ -150,18 +120,15 @@ export function useStockTransferDispatchManual() {
     base.setProcessing(true);
     try {
       await stockTransferLifecycleService.submitManualDispatch(
-        group.items.map((i) => i.id),
-        "For Loading",
+        group.items.map(i => i.id),
+        'For Loading'
       );
 
       toast.success(`Order ${orderNo} successfully dispatched manually.`);
       base.setSelectedOrderNo(null);
       await base.refresh();
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : "Something went wrong while dispatching.";
+      const msg = err instanceof Error ? err.message : 'Something went wrong while dispatching.';
       toast.error(msg);
     } finally {
       base.setProcessing(false);
@@ -171,17 +138,17 @@ export function useStockTransferDispatchManual() {
   const markAsPicked = async (orderNo: string) => {
     base.setProcessing(true);
     try {
-      const group = orderGroups.find((g) => g.orderNo === orderNo);
+      const group = orderGroups.find(g => g.orderNo === orderNo);
       if (group) {
         await stockTransferLifecycleService.submitStatusUpdate({
-          items: group.items.map((i) => ({ id: i.id, status: "Picked" })),
-          status: "Picked",
+          items: group.items.map(i => ({ id: i.id, status: 'Picked' })),
+          status: 'Picked'
         });
         toast.success(`Successfully marked as Done Picking.`);
         await base.refresh();
       }
     } catch {
-      toast.error("Failed to update status to Picked");
+      toast.error('Failed to update status to Picked');
     } finally {
       base.setProcessing(false);
     }

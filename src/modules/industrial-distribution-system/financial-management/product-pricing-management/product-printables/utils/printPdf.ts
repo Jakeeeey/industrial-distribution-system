@@ -1,6 +1,7 @@
 // src/modules/financial-management/printables-management/product-printables/utils/printPdf.ts
 
 import type { MatrixRow, PriceType, Unit, Supplier } from "../types";
+import { mapPriceTypeName } from "../../product-pricing/utils/constants";
 import { PdfEngine } from "@/components/pdf-layout-design/PdfEngine";
 import { PdfTemplate } from "@/components/pdf-layout-design/services/pdf-template";
 import { PdfData } from "@/components/pdf-layout-design/types";
@@ -91,19 +92,31 @@ export async function generateProductMatrixPdf(rows: MatrixRow[], options: Matri
             .filter(pt => selectedPriceTypeIds.length === 0 || selectedPriceTypeIds.includes(String(pt.price_type_id)))
             .map(pt => {
                 if (pt.price_type_id === -1) {
+<<<<<<< HEAD
                     return { key: "ListPrice" as const, label: pt.price_type_name };
+=======
+                    return { key: "ListPrice" as const, label: mapPriceTypeName(pt.price_type_name) };
+>>>>>>> 511058ec6b99fa0edd453f56bdedb6d4f78007fa
                 }
                 const nonSynthetic = allPriceTypes.filter(p => p.price_type_id !== -1);
                 const idx = nonSynthetic.findIndex(p => p.price_type_id === pt.price_type_id);
                 return {
                     key: (TIERS[idx] || "A") as typeof TIERS[number],
+<<<<<<< HEAD
                     label: pt.price_type_name
+=======
+                    label: mapPriceTypeName(pt.price_type_name)
+>>>>>>> 511058ec6b99fa0edd453f56bdedb6d4f78007fa
                 };
             })
             .filter(t => t.key != null)
         : TIERS.map((key, i) => ({
             key,
+<<<<<<< HEAD
             label: allPriceTypes?.[i]?.price_type_name || `PRICE TYPE ${key}`
+=======
+            label: mapPriceTypeName(allPriceTypes?.[i]?.price_type_name) || `PRICE TYPE ${key}`
+>>>>>>> 511058ec6b99fa0edd453f56bdedb6d4f78007fa
         })).slice(0, 5);
 
     const usedUnits = units

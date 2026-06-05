@@ -3,6 +3,10 @@
 
 import * as React from "react";
 import type { FilterState, Category, Brand, Unit, Supplier, PriceType } from "../types";
+<<<<<<< HEAD
+=======
+import { mapPriceTypeName } from "../../product-pricing/utils/constants";
+>>>>>>> 511058ec6b99fa0edd453f56bdedb6d4f78007fa
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -190,7 +194,11 @@ export default function PrintablesFiltersBar({
                 <FilterSelector
                     label="Prices"
                     selectedIds={filters.price_type_ids || []}
+<<<<<<< HEAD
                     options={priceTypes.map(pt => ({ label: pt.price_type_name, value: String(pt.price_type_id) }))}
+=======
+                    options={priceTypes.map(pt => ({ label: mapPriceTypeName(pt.price_type_name), value: String(pt.price_type_id) }))}
+>>>>>>> 511058ec6b99fa0edd453f56bdedb6d4f78007fa
                     onToggle={(id) => toggleFilter("price_type_ids", id)}
                     onClear={() => setFilters(prev => ({ ...prev, price_type_ids: [] }))}
                 />
@@ -294,7 +302,11 @@ export default function PrintablesFiltersBar({
                         const name = priceTypes.find(pt => String(pt.price_type_id) === id)?.price_type_name;
                         return (
                             <Badge key={id} variant="secondary" className="gap-1 rounded-lg px-2 py-0.5 bg-blue-50 text-blue-700 border-blue-200 pr-1">
+<<<<<<< HEAD
                                 Price: {name || id}
+=======
+                                Price: {mapPriceTypeName(name) || id}
+>>>>>>> 511058ec6b99fa0edd453f56bdedb6d4f78007fa
                                 <button
                                     type="button"
                                     onClick={(e) => {

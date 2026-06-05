@@ -2,7 +2,7 @@ import { dispatchPlanService } from "@/modules/industrial-distribution-system/su
 import { NextRequest, NextResponse } from "next/server";
 
 /**
- * GET /api/scm/warehouse-management/consolidation/pre-dispatch-plan/[id]
+ * GET /api/ids/scm/warehouse-management/consolidation/pre-dispatch-plan/[id]
  * Fetches a single dispatch plan with its full details
  */
 export async function GET(
@@ -24,7 +24,7 @@ export async function GET(
 }
 
 /**
- * PUT /api/scm/warehouse-management/consolidation/pre-dispatch-plan/[id]
+ * PUT /api/ids/scm/warehouse-management/consolidation/pre-dispatch-plan/[id]
  * Updates an existing dispatch plan and its detail records
  */
 export async function PUT(
@@ -47,7 +47,7 @@ export async function PUT(
 }
 
 /**
- * PATCH /api/scm/warehouse-management/consolidation/pre-dispatch-plan/[id]
+ * PATCH /api/ids/scm/warehouse-management/consolidation/pre-dispatch-plan/[id]
  * Updates plan status (approve action)
  */
 export async function PATCH(

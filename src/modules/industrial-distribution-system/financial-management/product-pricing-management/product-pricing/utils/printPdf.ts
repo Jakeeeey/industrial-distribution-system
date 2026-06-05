@@ -3,6 +3,10 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 import type { MatrixRow, ProductTierKey, Unit, PriceType } from "../types";
+<<<<<<< HEAD
+=======
+import { mapPriceTypeName } from "./constants";
+>>>>>>> 511058ec6b99fa0edd453f56bdedb6d4f78007fa
 
 type Options = {
     paper?: "a4" | "legal" | "a3";
@@ -83,10 +87,17 @@ export function generatePricingMatrixPdf(
 
     for (const tier of TIERS) {
         headRow1.push({
+<<<<<<< HEAD
             content: `PRICE TYPE ${tier}`,
             colSpan: uomCount,
             styles: { 
                 halign: "center", 
+=======
+            content: `PRICE TYPE ${mapPriceTypeName(tier)}`,
+            colSpan: uomCount,
+            styles: {
+                halign: "center",
+>>>>>>> 511058ec6b99fa0edd453f56bdedb6d4f78007fa
                 fillColor: groupColors[tier],
                 textColor: groupTextColors[tier],
                 fontStyle: "bold"
@@ -106,9 +117,15 @@ export function generatePricingMatrixPdf(
 
     for (const tier of TIERS) {
         headRow2.push({
+<<<<<<< HEAD
             content: `Tier ${tier}`,
             colSpan: uomCount,
             styles: { 
+=======
+            content: `Tier ${mapPriceTypeName(tier)}`,
+            colSpan: uomCount,
+            styles: {
+>>>>>>> 511058ec6b99fa0edd453f56bdedb6d4f78007fa
                 halign: "center",
                 fillColor: groupColors[tier],
                 textColor: groupTextColors[tier]
@@ -124,8 +141,13 @@ export function generatePricingMatrixPdf(
             for (const unit of usedUnits) {
                 headRow3.push({
                     content: unit.unit_shortcut || unit.unit_name || "—",
+<<<<<<< HEAD
                     styles: { 
                         halign: "center", 
+=======
+                    styles: {
+                        halign: "center",
+>>>>>>> 511058ec6b99fa0edd453f56bdedb6d4f78007fa
                         fontSize: 7,
                         fillColor: groupColors[tier]
                     },
@@ -147,7 +169,11 @@ export function generatePricingMatrixPdf(
 
         for (const tier of TIERS) {
             if (usedUnits.length === 0) {
+<<<<<<< HEAD
                 cells.push(""); 
+=======
+                cells.push("");
+>>>>>>> 511058ec6b99fa0edd453f56bdedb6d4f78007fa
             } else {
                 for (const unit of usedUnits) {
                     const variant = row.variantsByUnitId[Number(unit.unit_id)];

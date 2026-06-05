@@ -1,12 +1,12 @@
-//src/modules/supply-chain-management/traceability-compliance/cross-tracing/components/BranchComparisonCards.tsx
+//src/modules/industrial-distribution-system/supply-chain-management/traceability-compliance/cross-tracing/components/BranchComparisonCards.tsx
 "use client";
 
 import * as React from "react";
 import { BranchMovementData } from "../types";
 import { Card, CardContent } from "@/components/ui/card";
-import { 
-    ArrowUpCircle as InIcon, 
-    ArrowDownCircle as OutIcon, 
+import {
+    ArrowUpCircle as InIcon,
+    ArrowDownCircle as OutIcon,
     Activity as TrendIcon,
     Building2 as BranchIcon
 } from "lucide-react";
@@ -29,12 +29,12 @@ export function BranchComparisonCards({ data, familyDivisor, familyUnitName }: P
                     const isPH = m.docNo.toUpperCase().startsWith("PH") || m.docType?.toUpperCase() === "PHYSICAL INVENTORY";
                     const phys = m.physical_count !== undefined ? m.physical_count : m.physicalCount;
                     const sys = m.system_count !== undefined ? m.system_count : m.systemCount;
-                    const calcVariance = isPH && phys !== undefined && sys !== undefined 
-                        ? (Number(phys) - Number(sys)) 
+                    const calcVariance = isPH && phys !== undefined && sys !== undefined
+                        ? (Number(phys) - Number(sys))
                         : Number(m.variance || 0);
 
-                    const movement = isPH 
-                        ? (calcVariance * (m.unitCount || 1)) 
+                    const movement = isPH
+                        ? (calcVariance * (m.unitCount || 1))
                         : ((Number(m.inBase) || 0) - (Number(m.outBase) || 0));
 
                     if (movement > 0) {

@@ -1,4 +1,4 @@
-//src/modules/supply-chain-management/traceability-compliance/product-tracing/ProductTracingModule.tsx
+//src/modules/industrial-distribution-system/supply-chain-management/traceability-compliance/product-tracing/ProductTracingModule.tsx
 "use client";
 
 import * as React from "react";
@@ -134,7 +134,7 @@ export const ProductTracingModule = React.forwardRef<HTMLDivElement, React.HTMLA
         });
         if (firstPHIndex > -1) {
             validMovements = validMovements.slice(firstPHIndex);
-            
+
             // Override the variance for the first PH since its baseline system count is no longer valid
             // due to us dropping the prior history. Its variance should purely be its physical count.
             const firstPHDocNo = validMovements[0].docNo;
@@ -226,18 +226,18 @@ export const ProductTracingModule = React.forwardRef<HTMLDivElement, React.HTMLA
             return end.getTime() >= startOfToday;
         })();
 
-    return {
-        totalInBase,
-        totalOutBase,
-        netChangeBase,
-        breakdown,
-        beginningBaseBalance,
-        filtered,
-        divisor: divisor || 1,
-        unit: validMovements.find(r => r.unitCount === (divisor || 1))?.unit || validMovements[0]?.familyUnit || "Box",
-        isLiveRange
-    };
-}, [movements, filters.startDate, filters.endDate, filters.branch_id, filters.parent_id, filters.dateRangeMode]);
+        return {
+            totalInBase,
+            totalOutBase,
+            netChangeBase,
+            breakdown,
+            beginningBaseBalance,
+            filtered,
+            divisor: divisor || 1,
+            unit: validMovements.find(r => r.unitCount === (divisor || 1))?.unit || validMovements[0]?.familyUnit || "Box",
+            isLiveRange
+        };
+    }, [movements, filters.startDate, filters.endDate, filters.branch_id, filters.parent_id, filters.dateRangeMode]);
 
     const currentUnit = stats?.unit || "Units";
     const currentDivisor = stats?.divisor || 1;

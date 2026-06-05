@@ -1,4 +1,4 @@
-//src/app/api/scm/traceability-compliance/product-tracing/route.ts
+//src/app/api/ids/scm/traceability-compliance/product-tracing/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -108,10 +108,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
                     }
                 });
 
-                await Promise.all(nonPhData.map(async (row: { 
-                    docType?: string; 
-                    docNo: string; 
-                    inBase?: number; 
+                await Promise.all(nonPhData.map(async (row: {
+                    docType?: string;
+                    docNo: string;
+                    inBase?: number;
                     outBase?: number;
                     productName?: string;
                     productId?: number | string;
@@ -205,10 +205,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
                         descr: "Physical Inventory"
                     };
 
-                    (info.phDetails as { 
-                        product_id?: { 
-                            product_id: number | string; 
-                            parent_id?: number | string; 
+                    (info.phDetails as {
+                        product_id?: {
+                            product_id: number | string;
+                            parent_id?: number | string;
                             unit_of_measurement?: { unit_name: string };
                             unit_of_measurement_count?: number;
                         };

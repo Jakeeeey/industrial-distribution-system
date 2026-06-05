@@ -1,4 +1,4 @@
-// src/app/api/arf/traceability-compliance/product-tracing/consolidation-dispatches/route.ts
+// src/app/api/ids/arf/traceability-compliance/product-tracing/consolidation-dispatches/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { fetchConsolidationItems } from "@/modules/industrial-distribution-system/audit-results-findings/traceability-compliance/product-tracing/service";
 
@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/arf/traceability-compliance/product-tracing/consolidation-dispatches?product_id=XXX
+ * GET /api/ids/arf/traceability-compliance/product-tracing/consolidation-dispatches?product_id=XXX
  */
 export async function GET(req: NextRequest): Promise<NextResponse> {
     try {

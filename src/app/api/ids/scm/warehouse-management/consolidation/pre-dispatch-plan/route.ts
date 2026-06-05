@@ -4,7 +4,7 @@ import { dispatchPlanFormSchema } from "@/modules/industrial-distribution-system
 import { NextRequest, NextResponse } from "next/server";
 
 /**
- * GET /api/scm/warehouse-management/consolidation/pre-dispatch-plan
+ * GET /api/ids/scm/warehouse-management/consolidation/pre-dispatch-plan
  * Handles multiple query types: plans list, master data, available orders
  */
 export async function GET(req: NextRequest) {
@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * POST /api/scm/warehouse-management/consolidation/pre-dispatch-plan
+ * POST /api/ids/scm/warehouse-management/consolidation/pre-dispatch-plan
  * Creates a new dispatch plan with validated form data
  */
 export async function POST(req: NextRequest) {

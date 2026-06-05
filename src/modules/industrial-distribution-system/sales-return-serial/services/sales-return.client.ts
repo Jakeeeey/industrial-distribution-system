@@ -1,4 +1,4 @@
-// src/modules/supply-chain-management/inventories/sales-return-serial/services/sales-return.client.ts
+// src/modules/industrial-distribution-system/supply-chain-management/inventories/sales-return-serial/services/sales-return.client.ts
 
 // =============================================================================
 // INTERNAL HELPERS — Directus Client (Module-Isolated)

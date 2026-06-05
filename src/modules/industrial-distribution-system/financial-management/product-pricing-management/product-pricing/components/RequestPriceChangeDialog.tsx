@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { mapPriceTypeName } from "../utils/constants";
 
 type PriceTypeRow = { price_type_id: number; price_type_name: string };
 
@@ -25,7 +26,11 @@ async function createPCR(payload: {
     price_type_id: number;
     proposed_price: number;
 }) {
+<<<<<<< HEAD
     const res = await fetch("/api/scm/product-pricing/price-change-requests", {
+=======
+    const res = await fetch("/api/ids/scm/product-pricing/price-change-requests", {
+>>>>>>> 511058ec6b99fa0edd453f56bdedb6d4f78007fa
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -128,7 +133,11 @@ export default function RequestPriceChangeDialog(props: {
                         <div className="space-y-1">
                             <Label>Price Type</Label>
                             <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+<<<<<<< HEAD
                                 {props.priceType.price_type_name}
+=======
+                                {mapPriceTypeName(props.priceType.price_type_name)}
+>>>>>>> 511058ec6b99fa0edd453f56bdedb6d4f78007fa
                             </div>
                         </div>
 

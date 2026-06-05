@@ -1,4 +1,4 @@
-//src/app/api/scm/traceability-compliance/cross-tracing/route.ts
+//src/app/api/ids/scm/traceability-compliance/cross-tracing/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { directusFetch, getDirectusBase } from "../directus";
 

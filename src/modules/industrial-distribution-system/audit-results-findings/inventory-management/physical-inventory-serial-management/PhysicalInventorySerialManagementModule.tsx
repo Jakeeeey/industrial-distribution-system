@@ -1,4 +1,4 @@
-//src/modules/supply-chain-management/physical-inventory-serial-management/PhysicalInventorySerialManagementModule.tsx
+//src/modules/industrial-distribution-system/supply-chain-management/physical-inventory-serial-management/PhysicalInventorySerialManagementModule.tsx
 "use client";
 
 import * as React from "react";
@@ -236,7 +236,7 @@ export function PhysicalInventorySerialManagementModule(props: Props) {
                     if (sentinel) {
                         const rect = sentinel.getBoundingClientRect();
                         const shouldBeScrolled = rect.bottom < 0;
-                        
+
                         setIsScrolled(prev => {
                             if (prev !== shouldBeScrolled) return shouldBeScrolled;
                             return prev;
@@ -1507,7 +1507,7 @@ export function PhysicalInventorySerialManagementModule(props: Props) {
                                 const bName = branches.find((b) => b.id == (filters.branch_id ?? header.branch_id))?.branch_name ?? "";
                                 const sName = suppliers.find((s) => s.id == (filters.supplier_id ?? header.supplier_id))?.supplier_name ?? "";
                                 const pName = priceTypes.find((pt) => pt.price_type_id == (filters.price_type_id ?? header.price_type))?.price_type_name ?? "";
-                                
+
                                 printAuditSheet({
                                     header,
                                     groupedRows,
@@ -2009,7 +2009,7 @@ export function PhysicalInventorySerialManagementModule(props: Props) {
             </AlertDialog>
 
             {groupedRows.length > 0 && (
-                <div 
+                <div
                     className={cn(
                         "fixed bottom-8 left-1/2 -translate-x-1/2 z-[9999] w-full max-w-xl px-4 pointer-events-none transition-all duration-500 ease-in-out",
                         isScrolled ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-20 scale-90"
@@ -2025,7 +2025,7 @@ export function PhysicalInventorySerialManagementModule(props: Props) {
                                 className="h-12 w-full bg-transparent border-none focus:ring-0 text-sm pl-12 pr-4 placeholder:text-muted-foreground/50"
                             />
                         </div>
-                        <Button 
+                        <Button
                             className="rounded-full h-12 w-12 p-0 bg-primary text-primary-foreground shadow-lg shadow-primary/40 hover:scale-105 active:scale-95 transition-all shrink-0"
                             onClick={() => setOpenAddProductDialog(true)}
                             disabled={!canEdit}

@@ -1,4 +1,4 @@
-// src/app/api/arf/inventory-management/physical-inventory/header/[id]/commit/route.ts
+// src/app/api/ids/arf/inventory-management/physical-inventory/header/[id]/commit/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 const DIRECTUS_URL = process.env.NEXT_PUBLIC_API_BASE_URL;

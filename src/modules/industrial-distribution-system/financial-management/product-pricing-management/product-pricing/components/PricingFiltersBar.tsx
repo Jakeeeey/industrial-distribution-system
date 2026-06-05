@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { mapPriceTypeName } from "../utils/constants";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -221,12 +222,20 @@ export default function PricingFiltersBar(props: Props) {
         }
         return map;
     }, [units]);
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> 511058ec6b99fa0edd453f56bdedb6d4f78007fa
     const priceTypeLabelById = React.useMemo(() => {
         const map = new Map<string, string>();
         for (const pt of priceTypes) {
             const id = safeStr(pt.price_type_id);
+<<<<<<< HEAD
             const label = safeStr(pt.price_type_name) || "—";
+=======
+            const label = mapPriceTypeName(pt.price_type_name) || "—";
+>>>>>>> 511058ec6b99fa0edd453f56bdedb6d4f78007fa
             if (id) map.set(id, label);
         }
         return map;
@@ -700,7 +709,11 @@ export default function PricingFiltersBar(props: Props) {
                                             </CommandItem>
                                             {priceTypes.map((pt) => {
                                                 const idStr = safeStr(pt.price_type_id);
+<<<<<<< HEAD
                                                 const label = safeStr(pt.price_type_name) || "—";
+=======
+                                                const label = mapPriceTypeName(pt.price_type_name) || "—";
+>>>>>>> 511058ec6b99fa0edd453f56bdedb6d4f78007fa
                                                 const selected = selectedPriceTypeIds.includes(idStr);
 
                                                 return (

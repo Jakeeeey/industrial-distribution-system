@@ -1,4 +1,4 @@
-// src/app/api/scm/inventories/sales-return-serial/route.ts
+// src/app/api/ids/scm/inventories/sales-return-serial/route.ts
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
@@ -160,7 +160,7 @@ export async function POST(req: NextRequest) {
   try {
     const token = req.cookies.get("vos_access_token")?.value;
     const userId = getUserIdFromToken(token);
-    
+
     if (!userId) {
       throw new AppError("AUTH_DENIED", "Unauthorized: Invalid or missing session", 401);
     }
@@ -197,7 +197,7 @@ export async function PATCH(req: NextRequest) {
     // Default: full update
     const token = req.cookies.get("vos_access_token")?.value;
     const userId = getUserIdFromToken(token);
-    
+
     if (!userId) {
       throw new AppError("AUTH_DENIED", "Unauthorized: Invalid or missing session", 401);
     }

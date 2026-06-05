@@ -1,4 +1,4 @@
-//src/modules/supply-chain-management/traceability-compliance/cross-tracing/components/SearchableMultiSelect.tsx
+//src/modules/industrial-distribution-system/supply-chain-management/traceability-compliance/cross-tracing/components/SearchableMultiSelect.tsx
 "use client";
 
 import * as React from "react";
@@ -96,14 +96,14 @@ export function SearchableMultiSelect({
                             {selectedOptions.length > 0 ? (
                                 <div className="flex flex-wrap gap-1">
                                     {selectedOptions.map(opt => (
-                                        <Badge 
-                                            key={opt.value} 
-                                            variant="secondary" 
+                                        <Badge
+                                            key={opt.value}
+                                            variant="secondary"
                                             className="h-5 px-1 bg-primary/10 text-primary hover:bg-primary/20 border-transparent text-[10px] uppercase font-bold"
                                         >
                                             {opt.label}
-                                            <X 
-                                                className="ml-1 h-2.5 w-2.5 cursor-pointer" 
+                                            <X
+                                                className="ml-1 h-2.5 w-2.5 cursor-pointer"
                                                 onClick={(e) => handleRemove(opt.value, e)}
                                             />
                                         </Badge>
