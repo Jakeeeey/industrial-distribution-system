@@ -30,10 +30,10 @@ export function useStockConversionManual(branchId?: number) {
   const loadProductsInventory = useCallback(async (productIds: number[]) => {
     const fetchableIds = productIds.filter(id => !loadingProductsRef.current.has(id));
     if (!fetchableIds.length) return;
-    
+
     fetchableIds.forEach(id => loadingProductsRef.current.add(id));
 
-    setData(prev => prev.map(p => 
+    setData(prev => prev.map(p =>
       fetchableIds.includes(p.productId) ? { ...p, inventoryLoaded: p.inventoryLoaded ?? false } : p
     ));
 
@@ -41,7 +41,7 @@ export function useStockConversionManual(branchId?: number) {
       const sp = new URLSearchParams({ type: "inventory", productIds: fetchableIds.join(",") });
       if (branchId !== undefined) sp.set("branchId", String(branchId));
 
-      const res = await fetch(`/api/scm/transfers/stock-conversion?${sp.toString()}`, { cache: "no-store" });
+      const res = await fetch(`/api/ids/scm/transfers/stock-conversion?${sp.toString()}`, { cache: "no-store" });
       const invJson = await res.json();
       if (!res.ok) throw new Error(invJson.error || "Inventory load failed");
 
@@ -63,7 +63,7 @@ export function useStockConversionManual(branchId?: number) {
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Unknown error";
       console.warn("Inventory fetch failed:", message);
-      setData(prev => prev.map(p => 
+      setData(prev => prev.map(p =>
         fetchableIds.includes(p.productId) ? { ...p, inventoryLoaded: true, inventoryError: true } : p
       ));
     } finally {
@@ -85,15 +85,15 @@ export function useStockConversionManual(branchId?: number) {
       });
       if (branchId) sp.set("branchId", String(branchId));
 
-      const res = await fetch(`/api/scm/transfers/stock-conversion?${sp.toString()}`, { cache: "no-store" });
+      const res = await fetch(`/api/ids/scm/transfers/stock-conversion?${sp.toString()}`, { cache: "no-store" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to fetch stock conversion data");
-      
+
       const newData = json.data || [];
       setData(newData);
       setTotalCount(json.totalCount || 0);
       if (json.options) setOptions(json.options);
-      
+
       if (newData.length && !newData[0].inventoryLoaded) {
         loadProductsInventory(newData.map((p: StockConversionProduct) => p.productId));
       }
@@ -110,7 +110,7 @@ export function useStockConversionManual(branchId?: number) {
     setIsUpdating(true);
     setConvertingId(payload.productId);
     try {
-      const res = await fetch("/api/scm/transfers/stock-conversion-manual", {
+      const res = await fetch("/api/ids/scm/transfers/stock-conversion-manual", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -119,7 +119,7 @@ export function useStockConversionManual(branchId?: number) {
       if (!res.ok) throw new Error(resData.error || "Failed to convert stock");
 
       toast.success("Manual stock conversion complete!");
-      
+
       setData(prev => prev.map(p => {
         if (p.productId === payload.productId) {
           const newQty = Math.max(0, p.quantity - payload.quantityToConvert);

@@ -3,22 +3,22 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 
-const IMAGE_PROXY = "/api/hrm/workforce/attendance-report/employee-report/geotag/image";
+const IMAGE_PROXY = "/api/ids/hrm/workforce/attendance-report/employee-report/geotag/image";
 
 interface GeotagRecord {
-  geotag_id:   number;
-  log_id:      number;
-  kind:        "TIME_IN" | "TIME_OUT";
-  position:    { type: string; coordinates: [number, number] } | null;
-  image_path:  string | null;
+  geotag_id: number;
+  log_id: number;
+  kind: "TIME_IN" | "TIME_OUT";
+  position: { type: string; coordinates: [number, number] } | null;
+  image_path: string | null;
   captured_at: string | null;
 }
 
 interface Props {
-  logId:         number;
-  logDate:       string;
+  logId: number;
+  logDate: string;
   employeeName?: string;
-  employeeId?:   number;
+  employeeId?: number;
 }
 
 function fmt12(iso: string | null): string {
@@ -101,15 +101,15 @@ function GeoCard({ tag, label }: { tag: GeotagRecord | undefined; label: string 
         <div className="w-[180px] shrink-0">
           {imageUrl && !imgError ? (
             // Using standard img tag for local proxy endpoints that are secure
-              <Image
-                src={imageUrl}
-                alt={`${label} photo`}
-                className="w-full h-[240px] object-cover"
-                width={320}
-                height={240}
-                onError={() => setImgError(true)}
-                style={{ objectFit: 'cover' }}
-              />
+            <Image
+              src={imageUrl}
+              alt={`${label} photo`}
+              className="w-full h-[240px] object-cover"
+              width={320}
+              height={240}
+              onError={() => setImgError(true)}
+              style={{ objectFit: 'cover' }}
+            />
           ) : (
             <div className="w-full h-[240px] flex flex-col items-center justify-center bg-muted/20 gap-2 px-4">
               <svg
@@ -155,8 +155,8 @@ function GeoCard({ tag, label }: { tag: GeotagRecord | undefined; label: string 
 
 export function GeotagEvidencePanel({ logId, logDate, employeeName }: Props) {
   const [loading, setLoading] = useState(true);
-  const [tags,    setTags]    = useState<GeotagRecord[]>([]);
-  const [error,   setError]   = useState<string | null>(null);
+  const [tags, setTags] = useState<GeotagRecord[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!logId || logId === -1) {
@@ -169,7 +169,7 @@ export function GeotagEvidencePanel({ logId, logDate, employeeName }: Props) {
       setError(null);
       try {
         const res = await fetch(
-          `/api/hrm/workforce/attendance-report/employee-report/geotag?logId=${logId}`,
+          `/api/ids/hrm/workforce/attendance-report/employee-report/geotag?logId=${logId}`,
           { credentials: "include" }
         );
         if (!res.ok) throw new Error(`${res.status}`);
@@ -185,7 +185,7 @@ export function GeotagEvidencePanel({ logId, logDate, employeeName }: Props) {
     load();
   }, [logId]);
 
-  const timeIn  = tags.find((t) => t.kind === "TIME_IN");
+  const timeIn = tags.find((t) => t.kind === "TIME_IN");
   const timeOut = tags.find((t) => t.kind === "TIME_OUT");
 
   const dateDisplay = new Date(logDate + "T00:00:00").toLocaleDateString("en-US", {
@@ -230,7 +230,7 @@ export function GeotagEvidencePanel({ logId, logDate, employeeName }: Props) {
           </p>
         ) : (
           <div className="flex gap-4 flex-wrap">
-            <GeoCard tag={timeIn}  label="Time In"  />
+            <GeoCard tag={timeIn} label="Time In" />
             <GeoCard tag={timeOut} label="Time Out" />
           </div>
         )}

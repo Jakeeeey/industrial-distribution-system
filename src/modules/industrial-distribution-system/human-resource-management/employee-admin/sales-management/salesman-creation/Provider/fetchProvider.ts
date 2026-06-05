@@ -15,7 +15,7 @@ import type {
 } from "../types";
 
 const API_BASE =
-	"/api/hrm/employee-admin/structure/sales-management/salesman-creation";
+	"/api/ids/hrm/employee-admin/structure/sales-management/salesman-creation";
 
 export interface SalesmanCreationDataResponse {
 	salesmen: SalesmanWithRelations[];

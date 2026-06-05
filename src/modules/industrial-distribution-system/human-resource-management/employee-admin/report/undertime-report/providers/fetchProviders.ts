@@ -10,7 +10,7 @@ import type {
 
 export async function fetchUndertimeReportData() {
   try {
-    const response = await fetch("/api/hrm/employee-admin/report/undertime-report", {
+    const response = await fetch("/api/ids/hrm/employee-admin/report/undertime-report", {
       credentials: "include",
     });
 

@@ -37,22 +37,22 @@ async function http<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T>
 }
 
 export async function getLookups() {
-  return http<{ data: Lookups }>("/api/hrm/employee-admin/structure/sales-management/salesman-qr-code/lookups");
+  return http<{ data: Lookups }>("/api/ids/hrm/employee-admin/structure/sales-management/salesman-qr-code/lookups");
 }
 
 export async function listSalesmen() {
-  return http<{ data: SalesmanRow[] }>("/api/hrm/employee-admin/structure/sales-management/salesman-qr-code/salesmen");
+  return http<{ data: SalesmanRow[] }>("/api/ids/hrm/employee-admin/structure/sales-management/salesman-qr-code/salesmen");
 }
 
 export async function createSalesman(draft: SalesmanDraft) {
-  return http<{ data: SalesmanRow }>(`/api/hrm/employee-admin/structure/sales-management/salesman-qr-code/salesmen`, {
+  return http<{ data: SalesmanRow }>(`/api/ids/hrm/employee-admin/structure/sales-management/salesman-qr-code/salesmen`, {
     method: "POST",
     body: JSON.stringify({ data: draft }),
   });
 }
 
 export async function updateSalesman(id: number, draft: SalesmanDraft) {
-  return http<{ data: SalesmanRow }>(`/api/hrm/employee-admin/structure/sales-management/salesman-qr-code/salesmen/${id}`, {
+  return http<{ data: SalesmanRow }>(`/api/ids/hrm/employee-admin/structure/sales-management/salesman-qr-code/salesmen/${id}`, {
     method: "PATCH",
     body: JSON.stringify({ data: draft }),
   });
@@ -60,7 +60,7 @@ export async function updateSalesman(id: number, draft: SalesmanDraft) {
 
 export async function listSalesmanQrCodes(salesmanId: number) {
   return http<{ data: SalesmanQrCodeRow[] }>(
-    `/api/hrm/employee-admin/structure/sales-management/salesman-qr-code/salesmen/${salesmanId}/qr-codes`,
+    `/api/ids/hrm/employee-admin/structure/sales-management/salesman-qr-code/salesmen/${salesmanId}/qr-codes`,
   );
 }
 
@@ -80,7 +80,7 @@ export async function upsertSalesmanQrCode(args: {
   fd.append("file", args.file);
 
   const res = await fetch(
-    `/api/hrm/employee-admin/structure/sales-management/salesman-qr-code/salesmen/${args.salesmanId}/qr-codes`,
+    `/api/ids/hrm/employee-admin/structure/sales-management/salesman-qr-code/salesmen/${args.salesmanId}/qr-codes`,
     {
       method: "POST",
       body: fd,

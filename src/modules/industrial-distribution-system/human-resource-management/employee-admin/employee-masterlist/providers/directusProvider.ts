@@ -7,7 +7,7 @@ import {
   Company
 } from "../types";
 
-const PROXY_BASE = "/api/hrm/employee-admin/employee-master-list";
+const PROXY_BASE = "/api/ids/hrm/employee-admin/employee-master-list";
 
 export async function getEmployeeFileRecordsDirectus(userId: number): Promise<EmployeeFileRecordDisplay[]> {
   const res = await fetch(`${PROXY_BASE}/file-records?filter[user_id][_eq]=${userId}&filter[is_deleted][_eq]=0`);

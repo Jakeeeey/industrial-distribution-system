@@ -173,7 +173,7 @@ export function EmployeeHistoryView({
     const check = async () => {
       try {
         const res = await fetch(
-          `/api/hrm/workforce/attendance-report/employee-report/geotag/check?logIds=${directusIds.join(",")}`,
+          `/api/ids/hrm/workforce/attendance-report/employee-report/geotag/check?logIds=${directusIds.join(",")}`,
         );
         if (!res.ok) throw new Error(`Geotag check failed: ${res.status}`);
         const data = (await res.json()) as { logIdsWithGeotag?: number[] };

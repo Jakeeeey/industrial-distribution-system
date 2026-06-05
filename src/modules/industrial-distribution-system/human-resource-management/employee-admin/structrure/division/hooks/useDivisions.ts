@@ -46,7 +46,7 @@ export function useDivisions(): UseDivisionsReturn {
       setIsError(false);
       setError(null);
 
-      const res = await fetch("/api/hrm/employee-admin/structure/division", {
+      const res = await fetch("/api/ids/hrm/employee-admin/structure/division", {
         cache: "no-store",
       });
 
@@ -113,7 +113,7 @@ export function useDivisions(): UseDivisionsReturn {
       try {
         console.log("Creating division with data:", data);
 
-        const res = await fetch("/api/hrm/employee-admin/structure/division", {
+        const res = await fetch("/api/ids/hrm/employee-admin/structure/division", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data),
@@ -144,7 +144,7 @@ export function useDivisions(): UseDivisionsReturn {
       try {
         console.log("Updating division:", id, data);
 
-        const res = await fetch("/api/hrm/employee-admin/structure/division", {
+        const res = await fetch("/api/ids/hrm/employee-admin/structure/division", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ division_id: id, ...data }),
@@ -173,7 +173,7 @@ export function useDivisions(): UseDivisionsReturn {
     async (id: number) => {
       try {
         const res = await fetch(
-          `/api/hrm/employee-admin/structure/division?id=${id}`,
+          `/api/ids/hrm/employee-admin/structure/division?id=${id}`,
           { method: "DELETE" },
         );
 
