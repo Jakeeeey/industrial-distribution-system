@@ -1,6 +1,6 @@
 import type { OvertimeListResponse, ApprovalAction } from "../type";
 
-const API_BASE = "/api/hrm/employee-admin/approval/overtime-request";
+const API_BASE = "/api/ids/hrm/employee-admin/approval/overtime-request";
 
 export async function fetchOvertimeRequests(): Promise<OvertimeListResponse> {
   const response = await fetch(API_BASE, {

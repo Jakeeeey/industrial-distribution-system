@@ -12,14 +12,14 @@ import {
   Department
 } from "../types";
 
-const PROXY_BASE = "/api/hrm/employee-admin/structure/role-management";
+const PROXY_BASE = "/api/ids/hrm/employee-admin/structure/role-management";
 
 async function request<T>(method: string, endpoint: string, body?: Record<string, unknown>): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
 
-  const url = method === "GET" 
+  const url = method === "GET"
     ? (endpoint.includes('?') ? `${endpoint}&_t=${Date.now()}` : `${endpoint}?_t=${Date.now()}`)
     : endpoint;
 

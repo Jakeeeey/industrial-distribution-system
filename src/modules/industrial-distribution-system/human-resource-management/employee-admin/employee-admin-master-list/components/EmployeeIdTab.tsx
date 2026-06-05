@@ -22,12 +22,12 @@ export function EmployeeIdTab({ user }: EmployeeIdTabProps) {
   const address = addressParts.length > 0 ? addressParts.join(", ").toUpperCase() : "N/A";
 
   const isUUID = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
-  
+
   const resolveImageUrl = (path?: string | null) => {
     if (!path) return "";
     if (path.startsWith("http") || path.startsWith("blob:")) return path;
     if (isUUID(path)) {
-      return `/api/hrm/employee-admin/employee-master-list/assets/${path}`;
+      return `/api/ids/hrm/employee-admin/employee-master-list/assets/${path}`;
     }
     const base = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/+$/, "") || "";
     return `${base}${path}`;
@@ -71,28 +71,28 @@ export function EmployeeIdTab({ user }: EmployeeIdTabProps) {
   return (
     <div className="flex flex-col gap-6 animate-in fade-in duration-300">
       <div className="flex flex-col md:flex-row gap-8 justify-center items-start py-6 bg-muted/20 rounded-2xl min-h-[750px]">
-        
+
         {/* FRONT SIDE */}
         <div className="flex flex-col items-center gap-6">
           <div className="relative group" style={{ perspective: "1000px" }}>
             <div className="text-center mb-2 text-sm font-semibold text-muted-foreground uppercase tracking-widest">Front</div>
-            <div 
-              ref={frontRef} 
+            <div
+              ref={frontRef}
               className="id-card-wrapper transition-transform duration-300 group-hover:shadow-2xl"
               style={idStyle}
             >
-              <Image 
-                src="/id_front_template.png" 
-                alt="ID Front Background" 
+              <Image
+                src="/id_front_template.png"
+                alt="ID Front Background"
                 className="absolute inset-0 w-full h-full object-cover z-0"
                 crossOrigin="anonymous"
                 width={408}
                 height={648}
                 unoptimized
               />
-              
+
               <div className="absolute inset-0 z-10 flex flex-col items-center">
-                <div 
+                <div
                   className="absolute top-[21%] rounded-full overflow-hidden border-[4px] border-[#0e2a3f] bg-white flex items-center justify-center shadow-lg"
                   style={{ width: "194px", height: "194px", left: "50%", transform: "translateX(-50%)" }}
                 >
@@ -132,10 +132,10 @@ export function EmployeeIdTab({ user }: EmployeeIdTabProps) {
               </div>
             </div>
           </div>
-          
-          <Button 
-            onClick={() => exportToPng(frontRef, "Front")} 
-            variant="outline" 
+
+          <Button
+            onClick={() => exportToPng(frontRef, "Front")}
+            variant="outline"
             className="gap-2 h-11 rounded-xl w-[200px] border-primary/20 hover:border-primary hover:bg-primary/5 transition-all mt-2"
           >
             <Download className="h-4 w-4" />
@@ -147,8 +147,8 @@ export function EmployeeIdTab({ user }: EmployeeIdTabProps) {
         <div className="flex flex-col items-center gap-6">
           <div className="relative group" style={{ perspective: "1000px" }}>
             <div className="text-center mb-2 text-sm font-semibold text-muted-foreground uppercase tracking-widest">Back</div>
-            <div 
-              ref={backRef} 
+            <div
+              ref={backRef}
               className="id-card-wrapper transition-transform duration-300 group-hover:shadow-2xl"
               style={idStyle}
             >
@@ -176,17 +176,17 @@ export function EmployeeIdTab({ user }: EmployeeIdTabProps) {
                 </div>
 
                 <div className="absolute top-[40.8%] left-[6%] right-[6%] flex flex-col gap-1 items-center">
-                   <div className="flex w-full items-center justify-center font-bold text-[15.5px] uppercase mt-[14px]">
-                      <span className="truncate pr-4 text-center" style={{ fontFamily: "Arial Black, Impact, sans-serif", WebkitTextStroke: ".5px white", letterSpacing: "-0.5px" }}>{user.emergencyContactName || "N/A"}</span>
-                      <span className="pl-4" style={{ fontFamily: "Arial Black, Impact, sans-serif", WebkitTextStroke: ".5px white", letterSpacing: "-0.5px" }}>{user.emergencyContactNumber || "N/A"}</span>
-                   </div>
+                  <div className="flex w-full items-center justify-center font-bold text-[15.5px] uppercase mt-[14px]">
+                    <span className="truncate pr-4 text-center" style={{ fontFamily: "Arial Black, Impact, sans-serif", WebkitTextStroke: ".5px white", letterSpacing: "-0.5px" }}>{user.emergencyContactName || "N/A"}</span>
+                    <span className="pl-4" style={{ fontFamily: "Arial Black, Impact, sans-serif", WebkitTextStroke: ".5px white", letterSpacing: "-0.5px" }}>{user.emergencyContactNumber || "N/A"}</span>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-          <Button 
-            onClick={() => exportToPng(backRef, "Back")} 
-            variant="outline" 
+          <Button
+            onClick={() => exportToPng(backRef, "Back")}
+            variant="outline"
             className="gap-2 h-11 rounded-xl w-[200px] border-primary/20 hover:border-primary hover:bg-primary/5 transition-all mt-2"
           >
             <Download className="h-4 w-4" />

@@ -37,8 +37,8 @@ import type { Department, User } from "../types";
 import { UpdateEmployeePayload } from "../providers/springProvider";
 import { AddressSelectors } from "./AddressSelectors";
 
-const UPLOAD_API = "/api/hrm/employee-admin/employee-master-list/upload";
-const PROXY_BASE = "/api/hrm/employee-admin/employee-master-list";
+const UPLOAD_API = "/api/ids/hrm/employee-admin/employee-master-list/upload";
+const PROXY_BASE = "/api/ids/hrm/employee-admin/employee-master-list";
 const MAX_FILE_SIZE_MB = 10;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
@@ -178,12 +178,12 @@ const inputCls = "h-10 bg-muted/40 border-transparent focus-visible:bg-backgroun
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
-export function EditProfileTab({ 
-  user, 
+export function EditProfileTab({
+  user,
   departments,
-  onUpdateEmployee 
-}: { 
-  user: User; 
+  onUpdateEmployee
+}: {
+  user: User;
   departments: Department[];
   onUpdateEmployee: (id: number, data: UpdateEmployeePayload) => Promise<void>;
 }) {
@@ -384,42 +384,42 @@ export function EditProfileTab({
 
       setUploadStatus("Saving changes...");
       await onUpdateEmployee(user.id, {
-        id:           user.id,
-        email:        form.email,
+        id: user.id,
+        email: form.email,
         hashPassword: form.password || undefined,
-        firstName:    form.firstName,
-        middleName:   form.middleName || undefined,
-        lastName:     form.lastName,
-        suffixName:   form.suffixName || undefined,
-        nickname:     form.nickname || undefined,
-        contact:      form.contact,
-        birthday:     form.birthday || undefined,
-        gender:       form.gender === "Other" ? form.gender_specify : (form.gender || undefined),
-        civilStatus:  form.civilStatus || undefined,
-        nationality:  form.nationality || undefined,
+        firstName: form.firstName,
+        middleName: form.middleName || undefined,
+        lastName: form.lastName,
+        suffixName: form.suffixName || undefined,
+        nickname: form.nickname || undefined,
+        contact: form.contact,
+        birthday: form.birthday || undefined,
+        gender: form.gender === "Other" ? form.gender_specify : (form.gender || undefined),
+        civilStatus: form.civilStatus || undefined,
+        nationality: form.nationality || undefined,
         placeOfBirth: form.placeOfBirth || undefined,
-        bloodType:    form.bloodType    || undefined,
-        religion:     form.religion     || undefined,
-        spouseName:   form.spouseName   || undefined,
-        province:     form.province,
-        city:         form.city,
-        brgy:         form.brgy,
-        emergencyContactName:   form.emergencyContactName || undefined,
+        bloodType: form.bloodType || undefined,
+        religion: form.religion || undefined,
+        spouseName: form.spouseName || undefined,
+        province: form.province,
+        city: form.city,
+        brgy: form.brgy,
+        emergencyContactName: form.emergencyContactName || undefined,
         emergencyContactNumber: form.emergencyContactNumber || undefined,
-        department:   form.department ? String(form.department) : undefined,
-        position:     form.position,
-        dateOfHire:   form.dateOfHire,
-        tags:         "Employee", // or handle tags
-        rfid:         form.rfId || undefined,
-        biometricId:  form.biometricId || undefined,
-        tinNumber:    form.tinNumber || undefined,
-        sssNumber:    form.sssNumber || undefined,
+        department: form.department ? String(form.department) : undefined,
+        position: form.position,
+        dateOfHire: form.dateOfHire,
+        tags: "Employee", // or handle tags
+        rfid: form.rfId || undefined,
+        biometricId: form.biometricId || undefined,
+        tinNumber: form.tinNumber || undefined,
+        sssNumber: form.sssNumber || undefined,
         philHealthNumber: form.philHealthNumber || undefined,
-        pagibigNumber:    form.pagibigNumber || undefined,
-        admin:        form.isAdmin,
-        role:         form.role,
-        image:        finalImageId ? finalImageId : (existingImage ? (user.image || null) : null),
-        signature:    finalSigId ? finalSigId : (isSignatureCleared ? null : (existingSignature ? (user.signature || null) : null)),
+        pagibigNumber: form.pagibigNumber || undefined,
+        admin: form.isAdmin,
+        role: form.role,
+        image: finalImageId ? finalImageId : (existingImage ? (user.image || null) : null),
+        signature: finalSigId ? finalSigId : (isSignatureCleared ? null : (existingSignature ? (user.signature || null) : null)),
       });
 
     } catch (err) {
@@ -487,16 +487,16 @@ export function EditProfileTab({
           <Field label="Contact Number" required>
             <div className="relative">
               <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
-              <Input 
-                className={cn(inputCls, "pl-9", phoneError && "border-red-500 focus-visible:ring-red-500/30")} 
-                value={form.contact} 
+              <Input
+                className={cn(inputCls, "pl-9", phoneError && "border-red-500 focus-visible:ring-red-500/30")}
+                value={form.contact}
                 onChange={(e) => {
                   const val = e.target.value.replace(/\D/g, "");
                   set("contact", val);
                   setPhoneError(validatePhone(val));
-                }} 
+                }}
                 placeholder="09XXXXXXXXX"
-                required 
+                required
               />
             </div>
             {phoneError && <p className="text-[11px] text-red-500 mt-1 ml-1 font-medium">{phoneError}</p>}
@@ -504,11 +504,11 @@ export function EditProfileTab({
           <Field label="Birthday" required>
             <div className="relative">
               <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50 pointer-events-none" />
-              <Input 
-                type="date" 
-                className={cn(inputCls, "pl-9")} 
-                value={form.birthday} 
-                onChange={(e) => set("birthday", e.target.value)} 
+              <Input
+                type="date"
+                className={cn(inputCls, "pl-9")}
+                value={form.birthday}
+                onChange={(e) => set("birthday", e.target.value)}
                 max="9999-12-31"
                 required
               />
@@ -582,7 +582,7 @@ export function EditProfileTab({
           <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground/50 flex items-center gap-1.5">
             <MapPin className="h-3 w-3" /> Address
           </p>
-          <AddressSelectors 
+          <AddressSelectors
             province={form.province}
             city={form.city}
             brgy={form.brgy}
@@ -598,14 +598,14 @@ export function EditProfileTab({
             <Input className={inputCls} value={form.emergencyContactName} onChange={(e) => set("emergencyContactName", e.target.value)} />
           </Field>
           <Field label="Emergency Contact Number">
-            <Input 
-              className={cn(inputCls, emergencyPhoneError && "border-red-500 focus-visible:ring-red-500/30")} 
-              value={form.emergencyContactNumber} 
+            <Input
+              className={cn(inputCls, emergencyPhoneError && "border-red-500 focus-visible:ring-red-500/30")}
+              value={form.emergencyContactNumber}
               onChange={(e) => {
                 const val = e.target.value.replace(/\D/g, "");
                 set("emergencyContactNumber", val);
                 setEmergencyPhoneError(validatePhone(val, false));
-              }} 
+              }}
               placeholder="09XXXXXXXXX"
             />
             {emergencyPhoneError && <p className="text-[11px] text-red-500 mt-1 ml-1 font-medium">{emergencyPhoneError}</p>}
@@ -695,12 +695,12 @@ export function EditProfileTab({
               <p className="text-xs text-muted-foreground">Grant this user administrative privileges</p>
             </div>
           </div>
-          <Switch 
-            checked={form.isAdmin} 
+          <Switch
+            checked={form.isAdmin}
             onCheckedChange={(v) => {
               set("isAdmin", v);
               set("role", v ? "ADMIN" : "USER");
-            }} 
+            }}
           />
         </div>
       </section>
@@ -711,7 +711,7 @@ export function EditProfileTab({
       <section>
         <SectionHeader icon={ImagePlus} title="Media" color="text-violet-500" bg="bg-violet-50/60" />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          
+
           {/* User Image */}
           <div className="space-y-2">
             <Label className="text-[12px] font-semibold text-foreground/70">User Image</Label>

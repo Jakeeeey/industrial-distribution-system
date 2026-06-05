@@ -11,7 +11,7 @@ const APPROVAL_STATUSES = ['Requested'];
  */
 export function useStockTransferApproval() {
   const base = useStockTransferBase({ statuses: APPROVAL_STATUSES });
-  
+
   const [allocatedQtys, setAllocatedQtys] = useState<Record<number, number>>({});
   const [availableQtys, setAvailableQtys] = useState<Record<number, number>>({});
   const [fetchingAvailable, setFetchingAvailable] = useState(false);
@@ -20,7 +20,7 @@ export function useStockTransferApproval() {
     try {
       const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
       if (audioCtx.state === 'suspended') audioCtx.resume();
-      
+
       const oscillator = audioCtx.createOscillator();
       const gainNode = audioCtx.createGain();
 
@@ -48,7 +48,7 @@ export function useStockTransferApproval() {
       setFetchingAvailable(true);
       try {
         const sourceBranchName = base.getBranchName(base.selectedGroup!.sourceBranch);
-        
+
         const newAvailable: Record<number, number> = {};
         const newAllocated: Record<number, number> = {};
 
@@ -64,21 +64,21 @@ export function useStockTransferApproval() {
             current: '0'
           });
 
-          const proxyUrl = `/api/scm/warehouse-management/inventory-proxy?${params.toString()}`;
-          
+          const proxyUrl = `/api/ids/scm/warehouse-management/stock-transfer/inventory-proxy?${params.toString()}`;
+
           const res = await fetch(proxyUrl);
           if (res.ok) {
             const data = await res.json();
             const list = Array.isArray(data) ? data : (data.data || []);
-            const inventoryList = list.filter((inv: { productId: string | number; branchId: string | number; runningInventory: number }) => 
-               String(inv.productId) === String(pid) && 
-               String(inv.branchId) === String(base.selectedGroup!.sourceBranch)
+            const inventoryList = list.filter((inv: { productId: string | number; branchId: string | number; runningInventory: number }) =>
+              String(inv.productId) === String(pid) &&
+              String(inv.branchId) === String(base.selectedGroup!.sourceBranch)
             );
-            
+
             const availableCount = inventoryList.reduce((acc: number, inv: { runningInventory: number }) => acc + Number(inv.runningInventory || 0), 0);
             const unitCount = Number(product?.unit_of_measurement_count || 1) || 1;
             let finalAvailable = Math.floor(availableCount / unitCount);
-            
+
             finalAvailable = Math.max(0, finalAvailable);
 
             newAvailable[item.id] = finalAvailable;
@@ -113,7 +113,7 @@ export function useStockTransferApproval() {
     base.setProcessing(true);
     try {
       const finalStatus = status === 'approved' ? 'For Picking' : 'Rejected';
-      
+
       if (status === 'approved') {
         let totalAllocated = 0;
         for (const item of group.items) {
@@ -151,14 +151,14 @@ export function useStockTransferApproval() {
         return payload;
       });
 
-      await stockTransferLifecycleService.submitStatusUpdate({ 
-        items: itemsPayload, 
-        status: finalStatus 
+      await stockTransferLifecycleService.submitStatusUpdate({
+        items: itemsPayload,
+        status: finalStatus
       });
 
       toast.success(`Order ${orderNo} successfully ${status}.`);
       base.setSelectedOrderNo(null);
-      await base.refresh(); 
+      await base.refresh();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Something went wrong while updating status.';
       console.error('Status update failed:', err);

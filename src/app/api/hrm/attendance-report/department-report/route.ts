@@ -1,5 +1,3 @@
-// src/app/api/hrm/attendance-report/department-report/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
 import {
   getActiveOncall,
