@@ -112,7 +112,7 @@ export function MeteredWiwoList({ selectedId, onSelect, onNew }: Props) {
         ) : (
           rows.map((row) => {
             const id = row.id;
-            const txNo = row.transaction_no;
+            const txNo = row.reading_no;
             const date = row.transaction_date
               ? format(new Date(row.transaction_date), "MMM dd, yyyy")
               : "—";
