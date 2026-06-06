@@ -11,14 +11,35 @@ import type {
 
 const DIRECTUS_URL = getDirectusBase();
 const FIELDS_TX =
-  "*,customer.customer_name,customer.store_name,site.site_name," +
-  "meter_reading_id.id,meter_reading_id.previous_reading,meter_reading_id.current_reading,meter_reading_id.kg_consumed,meter_reading_id.price_per_kg,meter_reading_id.reading_date," +
+  "*,customer.customer_name,customer.store_name,site.id,site.site_name,site.site_address,lpg_site_id.id,lpg_site_id.site_name,lpg_site_id.site_address," +
+  "meter_reading_id.id,meter_reading_id.lpg_site_id,meter_reading_id.previous_reading,meter_reading_id.current_reading,meter_reading_id.kg_consumed,meter_reading_id.price_per_kg,meter_reading_id.reading_date," +
   "wiwo_header_id.id,wiwo_header_id.wiwo_no,wiwo_header_id.transaction_date";
 
 function mapMeteredTransaction(tx: unknown): MeteredWiwoTransaction {
   if (!tx) return tx as MeteredWiwoTransaction;
   const raw = tx as Record<string, unknown>;
   const mapped = { ...raw } as unknown as MeteredWiwoTransaction;
+
+  let siteObj: Record<string, unknown> | null = null;
+  if (raw["site"] && typeof raw["site"] === "object") {
+    siteObj = raw["site"] as Record<string, unknown>;
+  } else if (raw["lpg_site_id"] && typeof raw["lpg_site_id"] === "object") {
+    siteObj = raw["lpg_site_id"] as Record<string, unknown>;
+  }
+
+  let siteId = raw["lpg_site_id"] && typeof raw["lpg_site_id"] !== "object" ? Number(raw["lpg_site_id"]) : null;
+  if (siteObj && siteObj.id) {
+    siteId = Number(siteObj.id);
+  }
+
+  mapped.lpg_site_id = siteId;
+  if (siteObj) {
+    mapped.site = {
+      id: siteObj.id ? Number(siteObj.id) : undefined,
+      site_name: siteObj.site_name ? String(siteObj.site_name) : null,
+      site_address: siteObj.site_address ? String(siteObj.site_address) : null,
+    };
+  }
 
   if (raw["meter_reading_id"] && typeof raw["meter_reading_id"] === "object") {
     mapped.meter_reading = raw["meter_reading_id"] as unknown as MeterReading;
@@ -56,7 +77,7 @@ export async function fetchMeteredTransactions(params: MeteredListParams): Promi
     ];
   }
 
-  let qs = `fields=${FIELDS_TX}&sort=-transaction_date&limit=${limit}&offset=${offset}&meta=total_count`;
+  let qs = `fields=${FIELDS_TX}&sort=-modified_date,-created_date&limit=${limit}&offset=${offset}&meta=total_count`;
   if (Object.keys(filters).length > 0) {
     qs += `&filter=${encodeURIComponent(JSON.stringify(filters))}`;
   }
@@ -87,7 +108,7 @@ async function createOrUpdateMeterReading(
   pricePerKg: number,
   status: string,
   userId?: number,
-  readingId?: number | null
+  readingId?: number | null,
 ): Promise<number> {
   const rawConsumption = Math.max(0, currReading - prevReading);
   const data = {
@@ -141,13 +162,18 @@ export async function createMeteredTransaction(
       Number(payload.price_per_kg ?? 0),
       payload.status || "DRAFT",
       payload.created_by ?? undefined,
-      payload.meter_reading_id
+      payload.meter_reading_id,
     );
   }
 
   const dbPayload = { ...payloadRecord };
   delete dbPayload.previous_reading;
   delete dbPayload.current_reading;
+  // Omit custom pressure properties which do not exist in directus schema
+  delete dbPayload.pressure_line;
+  delete dbPayload.psi;
+  delete dbPayload.atmospheric_pressure;
+  delete dbPayload.lpg_vapor_factor;
 
   const res = await directusFetch<{ data: MeteredWiwoTransaction }>(
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions`,
@@ -180,13 +206,18 @@ export async function updateMeteredTransaction(
       Number(payload.price_per_kg ?? 0),
       payload.status || "DRAFT",
       payloadRecord.modified_by as number | undefined,
-      payload.meter_reading_id
+      payload.meter_reading_id,
     );
   }
 
   const dbPayload = { ...payloadRecord };
   delete dbPayload.previous_reading;
   delete dbPayload.current_reading;
+  // Omit custom pressure properties which do not exist in directus schema
+  delete dbPayload.pressure_line;
+  delete dbPayload.psi;
+  delete dbPayload.atmospheric_pressure;
+  delete dbPayload.lpg_vapor_factor;
 
   const res = await directusFetch<{ data: MeteredWiwoTransaction }>(
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions/${id}`,
@@ -247,6 +278,10 @@ export async function fetchMeteredSites(): Promise<
     meter_unit?: string | null;
     meter_direction?: "INCREASING" | "DECREASING" | null;
     conversion_factor?: number | null;
+    default_pressure_line?: number | null;
+    default_psi?: number | null;
+    default_atmospheric_pressure?: number | null;
+    psi?: number | null;
     last_meter_reading?: number | null;
     billing_mode?: string | null;
   }[]
@@ -256,7 +291,12 @@ export async function fetchMeteredSites(): Promise<
   }>(
     `${DIRECTUS_URL}/items/lpg_customer_lpg_sites?fields=id,site_name,customer_code,default_price_per_kg,meter_unit,meter_direction,conversion_factor,last_meter_reading,billing_mode&filter[is_active][_eq]=1&filter[billing_mode][_in]=METERED,BOTH&sort=site_name&limit=-1`
   );
-  return (res.data ?? []) as unknown as {
+  return (res.data ?? []).map((site) => ({
+    ...site,
+    default_pressure_line: site.default_pressure_line !== undefined && site.default_pressure_line !== null ? Number(site.default_pressure_line) : 2.0183,
+    default_psi: site.default_psi !== undefined && site.default_psi !== null ? Number(site.default_psi) : 10.0,
+    default_atmospheric_pressure: site.default_atmospheric_pressure !== undefined && site.default_atmospheric_pressure !== null ? Number(site.default_atmospheric_pressure) : 14.7,
+  })) as unknown as {
     id: number;
     site_name: string | null;
     customer_code: string;
@@ -264,6 +304,10 @@ export async function fetchMeteredSites(): Promise<
     meter_unit?: string | null;
     meter_direction?: "INCREASING" | "DECREASING" | null;
     conversion_factor?: number | null;
+    default_pressure_line?: number | null;
+    default_psi?: number | null;
+    default_atmospheric_pressure?: number | null;
+    psi?: number | null;
     last_meter_reading?: number | null;
     billing_mode?: string | null;
   }[];
@@ -286,3 +330,4 @@ export async function updateSiteReading(
   );
   return res.data;
 }
+

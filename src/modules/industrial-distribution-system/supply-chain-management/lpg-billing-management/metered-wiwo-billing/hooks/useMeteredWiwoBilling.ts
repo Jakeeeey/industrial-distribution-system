@@ -31,8 +31,15 @@ export function mapMeteredTransaction(tx: unknown): MeteredWiwoTransaction {
     ? (raw["wiwo_header_id"] as Record<string, unknown>)
     : (raw["wiwo_header"] as Record<string, unknown> | undefined);
 
+  let siteId = raw["lpg_site_id"] ? Number(raw["lpg_site_id"]) : null;
+  if (!siteId && raw["site"] && typeof raw["site"] === "object") {
+    const rawSite = raw["site"] as Record<string, unknown>;
+    if (rawSite.id) siteId = Number(rawSite.id);
+  }
+
   return {
     ...raw,
+    lpg_site_id: siteId,
     meter_reading_id: meterReadingRaw ? Number(meterReadingRaw["id"]) : (raw["meter_reading_id"] ? Number(raw["meter_reading_id"]) : null),
     wiwo_header_id: wiwoHeaderRaw ? Number(wiwoHeaderRaw["id"]) : (raw["wiwo_header_id"] ? Number(raw["wiwo_header_id"]) : null),
     metered_kg: Number(raw["metered_kg"] ?? 0),
@@ -46,7 +53,7 @@ export function mapMeteredTransaction(tx: unknown): MeteredWiwoTransaction {
     meter_reading: meterReadingRaw ? {
       ...meterReadingRaw,
       id: Number(meterReadingRaw["id"]),
-      lpg_site_id: Number(meterReadingRaw["lpg_site_id"]),
+      lpg_site_id: meterReadingRaw["lpg_site_id"] ? Number(meterReadingRaw["lpg_site_id"]) : (siteId ?? 0),
       reading_date: meterReadingRaw["reading_date"] as string,
       previous_reading: Number(meterReadingRaw["previous_reading"] ?? 0),
       current_reading: Number(meterReadingRaw["current_reading"] ?? 0),
@@ -113,6 +120,10 @@ export interface MeteredBillingFormState {
   vatRate: number;
   remarks: string;
   status: TransactionStatus;
+  /** User-editable Meter Configuration overrides */
+  configLpgVapor: number;
+  configPsi: number;
+  configCorrectionFactor: number;
 }
 
 export function useMeteredWiwoBillingForm(txId?: number | null) {
@@ -130,6 +141,9 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
     vatRate: 0,
     remarks: "",
     status: "DRAFT",
+    configLpgVapor: 2.0183,
+    configPsi: 10.0,
+    configCorrectionFactor: 14.7,
   });
 
   const [wiwoKg, setWiwoKg] = useState(0);
@@ -175,6 +189,9 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
         vatRate: 0,
         remarks: "",
         status: "DRAFT",
+        configLpgVapor: 2.0183,
+        configPsi: 10.0,
+        configCorrectionFactor: 14.7,
       });
       setWiwoKg(0);
       setLinkedWiwo(null);
@@ -188,6 +205,26 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
       .then((d) => {
         const tx: MeteredWiwoTransaction = mapMeteredTransaction(d.data);
         if (!tx) return;
+        // const rawMr = tx.meter_reading as unknown as Record<string, unknown> | undefined;
+
+        let lpgVapor = Number(tx.site?.default_pressure_line ?? 2.0183);
+        let psi = Number(tx.site?.default_psi ?? 10.0);
+        let cf = Number(tx.site?.default_atmospheric_pressure ?? 14.7);
+
+        if (typeof window !== "undefined" && tx.lpg_site_id) {
+          const cached = localStorage.getItem(`lpg_site_config_${tx.lpg_site_id}`);
+          if (cached) {
+            try {
+              const parsed = JSON.parse(cached);
+              lpgVapor = Number(parsed.configLpgVapor ?? lpgVapor);
+              psi = Number(parsed.configPsi ?? psi);
+              cf = Number(parsed.configCorrectionFactor ?? cf);
+            } catch (e) {
+              console.error(e);
+            }
+          }
+        }
+
         setForm({
           transactionNo: tx.transaction_no,
           transactionDate: tx.transaction_date,
@@ -202,6 +239,9 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
           vatRate: 0,
           remarks: tx.remarks ?? "",
           status: tx.status,
+          configLpgVapor: lpgVapor,
+          configPsi: psi,
+          configCorrectionFactor: cf,
         });
         setOriginalStatus(tx.status);
         setWiwoKg(tx.wiwo_kg);
@@ -270,6 +310,25 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
   const handleSiteChange = useCallback((siteId: number) => {
     const site = sites.find((s) => s.id === siteId);
     if (!site) return;
+
+    let lpgVapor = Number(site.default_pressure_line ?? 2.0183);
+    let psi = Number(site.default_psi ?? 10.0);
+    let cf = Number(site.default_atmospheric_pressure ?? 14.7);
+
+    if (typeof window !== "undefined") {
+      const cached = localStorage.getItem(`lpg_site_config_${siteId}`);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          lpgVapor = Number(parsed.configLpgVapor ?? lpgVapor);
+          psi = Number(parsed.configPsi ?? psi);
+          cf = Number(parsed.configCorrectionFactor ?? cf);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+
     setForm((f) => ({
       ...f,
       siteId,
@@ -280,6 +339,9 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
       wiwoHeaderId: null,
       previousReading: Number(site.last_meter_reading ?? 0),
       currentReading: 0,
+      configLpgVapor: lpgVapor,
+      configPsi: psi,
+      configCorrectionFactor: cf,
     }));
   }, [sites]);
 
@@ -298,6 +360,25 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
   const selectedSite = sites.find((s) => s.id === form.siteId);
   const meterDirection = (selectedSite?.meter_direction ?? "INCREASING") as string;
   const conversionFactor = Number(selectedSite?.conversion_factor ?? 1);
+
+  // ── Pressure / PSI constants from site (matching physical bill terminology) ──
+  /** LPG VAPOR — constant from pressure tables (e.g. 2.0183) — site default */
+  const siteLpgVapor = Number(selectedSite?.default_pressure_line ?? 2.0183);
+  /** PSI — gauge operating pressure (e.g. 10.0000) — site default */
+  const sitePsi = Number(selectedSite?.default_psi ?? 10.0);
+  /** CORRECTION FACTOR — atmospheric pressure constant (default 14.7) — site default */
+  const siteCorrectionFactor = Number(selectedSite?.default_atmospheric_pressure ?? 14.7);
+
+  // ── User-editable config (form overrides site defaults) ──
+  const activeLpgVapor = form.configLpgVapor;
+  const activePsi = form.configPsi;
+  const activeCorrectionFactor = form.configCorrectionFactor;
+
+  /** PRESSURE LINE — computed: (PSI + CF) / CF (e.g. 1.6803) */
+  const pressureLine = activePsi > 0
+    ? (activePsi + activeCorrectionFactor) / activeCorrectionFactor
+    : 1;
+
   const isMeteredOnly = selectedSite?.billing_mode === "METERED";
 
   // Meter Reading Validation & Calculation
@@ -311,7 +392,8 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
       ? Math.max(0, form.previousReading - form.currentReading)
       : Math.max(0, form.currentReading - form.previousReading);
 
-  const meteredKg = Number((rawConsumption * conversionFactor).toFixed(3));
+  // KG = Usage × LPG Vapor × Pressure Line (uses active/user-edited config)
+  const meteredKg = Number((rawConsumption * activeLpgVapor * pressureLine).toFixed(4));
   
   const arbitration = useMemo(() => {
     return isMeteredOnly
@@ -342,7 +424,15 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
     setSubmitting(true);
     try {
       const targetStatus = statusOverride || form.status;
-      const payload: Partial<MeteredWiwoTransaction> & { previous_reading?: number; current_reading?: number; transaction_type?: string } = {
+      const payload: Partial<MeteredWiwoTransaction> & {
+        previous_reading?: number;
+        current_reading?: number;
+        transaction_type?: string;
+        pressure_line?: number;
+        psi?: number;
+        atmospheric_pressure?: number;
+        lpg_vapor_factor?: number;
+      } = {
         transaction_no: form.transactionNo,
         transaction_date: form.transactionDate,
         transaction_type: "REGULAR_BILLING",
@@ -364,6 +454,13 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
         sales_invoice_id: null,
         previous_reading: form.previousReading,
         current_reading: form.currentReading,
+        // Pressure fields — stored as snapshot on meter reading row
+        // pressure_line = LPG Vapor constant (DB column name), psi = gauge PSI,
+        // atmospheric_pressure = Correction Factor, lpg_vapor_factor = computed Pressure Line
+        pressure_line: form.configLpgVapor,
+        psi: form.configPsi,
+        atmospheric_pressure: form.configCorrectionFactor,
+        lpg_vapor_factor: pressureLine,
       };
 
       const url = txId
@@ -376,6 +473,18 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
       });
 
       if (!res.ok) return false;
+
+      // Persist configuration overrides locally
+      if (typeof window !== "undefined" && form.siteId) {
+        localStorage.setItem(
+          `lpg_site_config_${form.siteId}`,
+          JSON.stringify({
+            configLpgVapor: form.configLpgVapor,
+            configPsi: form.configPsi,
+            configCorrectionFactor: form.configCorrectionFactor,
+          })
+        );
+      }
 
       // ─── Critical: update site last_meter_reading after a POSTED transaction ───
       if (targetStatus === "POSTED" && form.siteId && form.currentReading !== undefined) {
@@ -398,7 +507,7 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
     } finally {
       setSubmitting(false);
     }
-  }, [form, arbitration, grossAmount, vatAmount, netAmount, txId]);
+  }, [form, arbitration, grossAmount, vatAmount, netAmount, txId, pressureLine]);
 
   return {
     form, setForm,
@@ -414,6 +523,14 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
     isValidReading,
     meterDirection,
     conversionFactor,
+    /** LPG VAPOR constant from site (e.g. 2.0183) — site default only */
+    siteLpgVapor,
+    /** Gauge PSI from site (e.g. 10.0000) — site default only */
+    sitePsi,
+    /** Correction Factor / atmospheric pressure from site (e.g. 14.7) — site default only */
+    siteCorrectionFactor,
+    /** Computed Pressure Line = (PSI + CF) / CF (e.g. 1.6803) — uses active config */
+    pressureLine,
   };
 }
 

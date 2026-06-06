@@ -7,14 +7,14 @@ export function calcWiwoDetail(d: WiwoDetailRef): WiwoDetailRef {
   const consumed = Math.max(0, d.opening_lpg_kg - remaining);
   return {
     ...d,
-    remaining_lpg_kg: parseFloat(remaining.toFixed(3)),
-    consumed_lpg_kg: parseFloat(consumed.toFixed(3)),
+    remaining_lpg_kg: parseFloat(remaining.toFixed(4)),
+    consumed_lpg_kg: parseFloat(consumed.toFixed(4)),
   };
 }
 
 export function calcTotalWiwoKg(details: WiwoDetailRef[]): number {
   return parseFloat(
-    details.reduce((sum, d) => sum + (d.consumed_lpg_kg ?? 0), 0).toFixed(3)
+    details.reduce((sum, d) => sum + (d.consumed_lpg_kg ?? 0), 0).toFixed(4)
   );
 }
 
@@ -27,7 +27,7 @@ export function calcMeteredKg(
   currentReading: number,
   previousReading: number
 ): number {
-  return Math.max(0, parseFloat((currentReading - previousReading).toFixed(3)));
+  return Math.max(0, parseFloat((currentReading - previousReading).toFixed(4)));
 }
 
 // ─── Variance ─────────────────────────────────────────────────────────────────
@@ -36,7 +36,7 @@ export function calcMeteredKg(
  * Variance KG = |Metered KG - WIWO KG|
  */
 export function calcVarianceKg(meteredKg: number, wiwoKg: number): number {
-  return parseFloat(Math.abs(meteredKg - wiwoKg).toFixed(3));
+  return parseFloat(Math.abs(meteredKg - wiwoKg).toFixed(4));
 }
 
 // ─── Arbitration ──────────────────────────────────────────────────────────────
@@ -61,10 +61,10 @@ export function computeArbitration(
   const billableKg = Math.max(meteredKg, wiwoKg);
   const billableSource = meteredKg >= wiwoKg ? "METERED" : "WIWO";
   return {
-    metered_kg: parseFloat(meteredKg.toFixed(3)),
-    wiwo_kg: parseFloat(wiwoKg.toFixed(3)),
+    metered_kg: parseFloat(meteredKg.toFixed(4)),
+    wiwo_kg: parseFloat(wiwoKg.toFixed(4)),
     variance_kg: varianceKg,
-    billable_kg: parseFloat(billableKg.toFixed(3)),
+    billable_kg: parseFloat(billableKg.toFixed(4)),
     billable_source: billableSource,
   };
 }
@@ -82,3 +82,4 @@ export function calcVatAmount(grossAmount: number, vatRate = 0.12): number {
 export function calcNetAmount(grossAmount: number, vatAmount: number): number {
   return parseFloat((grossAmount + vatAmount).toFixed(2));
 }
+

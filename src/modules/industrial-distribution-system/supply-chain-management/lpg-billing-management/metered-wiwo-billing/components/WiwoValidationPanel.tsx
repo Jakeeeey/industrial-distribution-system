@@ -23,7 +23,7 @@ export function WiwoValidationPanel({ details, totalWiwoKg }: Props) {
           </div>
         </div>
         <Badge className="bg-orange-100 text-orange-700 border-none font-mono text-xs">
-          {Number(totalWiwoKg).toFixed(3)} kg total
+          {Number(totalWiwoKg).toFixed(4)} kg total
         </Badge>
       </div>
 
@@ -53,10 +53,10 @@ export function WiwoValidationPanel({ details, totalWiwoKg }: Props) {
                   <td className="px-4 py-3 text-right font-mono">{Number(d.gross_weight).toFixed(2)}</td>
                   <td className="px-4 py-3 text-right font-mono text-muted-foreground">{Number(d.tare_weight).toFixed(2)}</td>
                   <td className="px-4 py-3 text-right">
-                    <Badge variant="outline" className="font-mono text-xs">{Number(d.remaining_lpg_kg ?? 0).toFixed(3)} kg</Badge>
+                    <Badge variant="outline" className="font-mono text-xs">{Number(d.remaining_lpg_kg ?? 0).toFixed(4)} kg</Badge>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Badge className="bg-orange-100 text-orange-700 border-none font-mono text-xs">{Number(d.consumed_lpg_kg ?? 0).toFixed(3)} kg</Badge>
+                    <Badge className="bg-orange-100 text-orange-700 border-none font-mono text-xs">{Number(d.consumed_lpg_kg ?? 0).toFixed(4)} kg</Badge>
                   </td>
                 </tr>
               ))}
@@ -67,7 +67,7 @@ export function WiwoValidationPanel({ details, totalWiwoKg }: Props) {
                   Total WIWO KG
                 </td>
                 <td className="px-4 py-3 text-right font-mono text-orange-700 dark:text-orange-400 text-base">
-                  {Number(totalWiwoKg).toFixed(3)} kg
+                  {Number(totalWiwoKg).toFixed(4)} kg
                 </td>
               </tr>
             </tfoot>

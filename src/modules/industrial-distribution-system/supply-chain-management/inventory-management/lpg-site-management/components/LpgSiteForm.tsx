@@ -69,6 +69,9 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
     meter_direction: "INCREASING",
     last_meter_reading: 0,
     conversion_factor: 1.0,
+    default_pressure_line: 1.000000,
+    default_psi: 0.0,
+    default_atmospheric_pressure: 14.7,
     last_reading_date: new Date().toISOString().split("T")[0],
   });
 
@@ -82,9 +85,30 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
         if (id) {
           const site = await lpgSiteService.fetchSiteById(id);
           if (site) {
+            let lpgVapor = site.default_pressure_line ?? 2.0183;
+            let psi = site.default_psi ?? 10.0;
+            let cf = site.default_atmospheric_pressure ?? 14.7;
+
+            if (typeof window !== "undefined") {
+              const cached = localStorage.getItem(`lpg_site_config_${id}`);
+              if (cached) {
+                try {
+                  const parsed = JSON.parse(cached);
+                  lpgVapor = Number(parsed.configLpgVapor ?? lpgVapor);
+                  psi = Number(parsed.configPsi ?? psi);
+                  cf = Number(parsed.configCorrectionFactor ?? cf);
+                } catch (e) {
+                  console.error(e);
+                }
+              }
+            }
+
             setFormData({
               ...site,
               meter_direction: site.meter_direction || "INCREASING",
+              default_pressure_line: lpgVapor,
+              default_psi: psi,
+              default_atmospheric_pressure: cf,
               cylinders: site.cylinders || []
             });
           }
@@ -108,12 +132,12 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
 
       if (id) {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { cylinders: _c, ...updatePayload } = formData;
+        const { cylinders: _c, default_pressure_line: _pl, default_psi: _psi, default_atmospheric_pressure: _ap, ...updatePayload } = formData;
         await lpgSiteService.updateSite(id, updatePayload);
         toast.success("Site updated successfully");
       } else {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { cylinders: _c2, ...createPayload } = formData;
+        const { cylinders: _c2, default_pressure_line: _pl2, default_psi: _psi2, default_atmospheric_pressure: _ap2, ...createPayload } = formData;
         const newSite = await lpgSiteService.createSite(createPayload);
         siteId = newSite.id;
 
@@ -133,6 +157,19 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
         }
         toast.success("Site and cylinders registered successfully");
       }
+
+      // Persist pressure configuration locally
+      if (typeof window !== "undefined" && siteId) {
+        localStorage.setItem(
+          `lpg_site_config_${siteId}`,
+          JSON.stringify({
+            configLpgVapor: formData.default_pressure_line ?? 2.0183,
+            configPsi: formData.default_psi ?? 10.0,
+            configCorrectionFactor: formData.default_atmospheric_pressure ?? 14.7,
+          })
+        );
+      }
+
       onSuccess();
     } catch {
       toast.error("Failed to save site");
@@ -401,8 +438,8 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
                     <Label>Conversion Factor</Label>
                     <Input
                       type="number"
-                      step="0.0001"
-                      placeholder="1.0000"
+                      step="0.000001"
+                      placeholder="1.000000"
                       value={formData?.conversion_factor ?? ""}
                       onChange={(e) => setFormData({ ...formData, conversion_factor: e.target.value === "" ? null : parseFloat(e.target.value) })}
                       className="rounded-xl border-zinc-200 dark:border-zinc-800"
@@ -418,6 +455,124 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
                     />
                   </div>
                 </div>
+
+                {/* ── PSI / Pressure Billing Constants ── */}
+                <div className="border-t border-zinc-100 dark:border-zinc-800 pt-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="h-6 w-6 rounded bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
+                      <Gauge className="h-3.5 w-3.5 text-orange-600" />
+                    </div>
+                    <p className="text-sm font-semibold">PSI Conversion Constants</p>
+                    <span className="text-[10px] text-muted-foreground ml-1">
+                      Kilo = Usage × LPG Vapor × Pressure Line
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4">
+                    {/* LPG VAPOR */}
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-violet-700 dark:text-violet-400">
+                        LPG Vapor
+                        <span className="text-muted-foreground font-normal normal-case ml-1">(Constant)</span>
+                      </Label>
+                      <Input
+                        type="number"
+                        step="0.000001"
+                        placeholder="1.000000"
+                        value={formData?.default_pressure_line ?? ""}
+                        onChange={(e) => setFormData({ ...formData, default_pressure_line: e.target.value === "" ? null : parseFloat(e.target.value) })}
+                        className="rounded-xl border-violet-200 dark:border-violet-800/40 font-mono focus:ring-violet-500"
+                      />
+                      <p className="text-[10px] text-muted-foreground">e.g. 2.0183 — from pressure tables</p>
+                    </div>
+                    {/* PSI */}
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-400">
+                        PSI
+                        <span className="text-muted-foreground font-normal normal-case ml-1">(Constant)</span>
+                      </Label>
+                      <Input
+                        type="number"
+                        step="0.0001"
+                        placeholder="0.0000"
+                        value={formData?.default_psi ?? ""}
+                        onChange={(e) => setFormData({ ...formData, default_psi: e.target.value === "" ? null : parseFloat(e.target.value) })}
+                        className="rounded-xl border-zinc-200 dark:border-zinc-800 font-mono"
+                      />
+                      <p className="text-[10px] text-muted-foreground">e.g. 10.0000 — 0 disables PSI correction</p>
+                    </div>
+                    {/* CORRECTION FACTOR */}
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-400">
+                        Correction Factor
+                        <span className="text-muted-foreground font-normal normal-case ml-1">(Constant)</span>
+                      </Label>
+                      <Input
+                        type="number"
+                        step="0.0001"
+                        placeholder="14.7000"
+                        value={formData?.default_atmospheric_pressure ?? ""}
+                        onChange={(e) => setFormData({ ...formData, default_atmospheric_pressure: e.target.value === "" ? null : parseFloat(e.target.value) })}
+                        className="rounded-xl border-zinc-200 dark:border-zinc-800 font-mono"
+                      />
+                      <p className="text-[10px] text-muted-foreground">Default: 14.7 (atmospheric pressure)</p>
+                    </div>
+                  </div>
+
+                  {/* FOR YOUR REFERENCE preview table */}
+                  <div className="rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700/50 mt-1">
+                    <div className="px-3 py-1.5 bg-zinc-100/80 dark:bg-zinc-800/60 border-b border-zinc-200 dark:border-zinc-700/50">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">For Your Reference</p>
+                    </div>
+                    <table className="w-full text-xs">
+                      <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/40">
+                        <tr className="bg-white dark:bg-zinc-900/40">
+                          <td className="px-3 py-2 font-semibold text-zinc-700 dark:text-zinc-300">LPG VAPOR</td>
+                          <td className="px-3 py-2 text-right font-mono font-bold text-violet-700 dark:text-violet-400">
+                            {(formData?.default_pressure_line ?? 1).toFixed(4)}
+                          </td>
+                          <td className="px-3 py-2 text-right text-[10px] text-muted-foreground font-semibold uppercase">CONSTANT</td>
+                        </tr>
+                        <tr className="bg-zinc-50/50 dark:bg-zinc-900/20">
+                          <td className="px-3 py-2 font-semibold text-zinc-700 dark:text-zinc-300">PSI</td>
+                          <td className="px-3 py-2 text-right font-mono font-bold text-zinc-700 dark:text-zinc-300">
+                            {(formData?.default_psi ?? 0).toFixed(4)}
+                          </td>
+                          <td className="px-3 py-2 text-right text-[10px] text-muted-foreground font-semibold uppercase">CONSTANT</td>
+                        </tr>
+                        <tr className="bg-white dark:bg-zinc-900/40">
+                          <td className="px-3 py-2 font-semibold text-zinc-700 dark:text-zinc-300">CORRECTION FACTOR</td>
+                          <td className="px-3 py-2 text-right font-mono font-bold text-zinc-700 dark:text-zinc-300">
+                            {(formData?.default_atmospheric_pressure ?? 14.7).toFixed(1)}
+                          </td>
+                          <td className="px-3 py-2 text-right text-[10px] text-muted-foreground font-semibold uppercase">CONSTANT</td>
+                        </tr>
+                        <tr className="bg-orange-50/40 dark:bg-orange-950/10">
+                          <td className="px-3 py-2 font-semibold text-orange-700 dark:text-orange-400">PRESSURE LINE</td>
+                          <td className="px-3 py-2 text-right font-mono font-bold text-orange-700 dark:text-orange-400">
+                            {(formData?.default_psi ?? 0) > 0
+                              ? (((formData?.default_psi ?? 0) + (formData?.default_atmospheric_pressure ?? 14.7)) / (formData?.default_atmospheric_pressure ?? 14.7)).toFixed(4)
+                              : "—"}
+                          </td>
+                          <td className="px-3 py-2 text-right text-[10px] text-orange-600 dark:text-orange-500 font-semibold uppercase">
+                            {(formData?.default_psi ?? 0) > 0 ? "PSI + CF / CF" : "N/A"}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Live formula */}
+                  {(formData?.default_psi ?? 0) > 0 && (
+                    <div className="bg-blue-50/30 dark:bg-blue-950/10 border border-blue-100 dark:border-blue-900/20 rounded-xl px-4 py-2.5">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400 mb-0.5">KG Formula Preview</p>
+                      <p className="text-xs font-mono text-zinc-700 dark:text-zinc-300">
+                        Kilo = Usage × {(formData?.default_pressure_line ?? 1).toFixed(4)} × {(((formData?.default_psi ?? 0) + (formData?.default_atmospheric_pressure ?? 14.7)) / (formData?.default_atmospheric_pressure ?? 14.7)).toFixed(4)}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
               </CardContent>
             </Card>
           )}

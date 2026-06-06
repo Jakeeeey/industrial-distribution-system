@@ -117,7 +117,7 @@ export function MeteredWiwoList({ selectedId, onSelect, onNew }: Props) {
               ? format(new Date(row.transaction_date), "MMM dd, yyyy")
               : "—";
             const customer = row.customer?.customer_name || row.customer?.store_name || row.customer_code;
-            // const site = row.site?.site_name || (row.lpg_site_id ? `Site #${row.lpg_site_id}` : "—");
+            const site = row.site?.site_name || (row.lpg_site_id ? `Site #${row.lpg_site_id}` : "—");
             const billableKg = row.billable_kg != null ? Number(row.billable_kg) : 0;
             const netAmt = row.net_amount != null ? Number(row.net_amount) : 0;
             const selected = selectedId === id;
@@ -141,9 +141,9 @@ export function MeteredWiwoList({ selectedId, onSelect, onNew }: Props) {
                     <div className="text-[11px] text-zinc-900 dark:text-zinc-100 font-bold truncate">
                       {customer}
                     </div>
-                    {/* <div className="text-[11px] text-muted-foreground truncate">
+                    <div className="text-[11px] text-muted-foreground truncate">
                       {site}
-                    </div> */}
+                    </div>
                   </div>
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
                     {STATUS_BADGE[row.status] ?? <Badge variant="outline">{row.status}</Badge>}
@@ -154,7 +154,7 @@ export function MeteredWiwoList({ selectedId, onSelect, onNew }: Props) {
                   <div className="flex items-center gap-1.5">
                     {SOURCE_BADGE[row.billable_source]}
                     <span className="font-mono font-bold text-foreground bg-zinc-50 dark:bg-zinc-900 px-1.5 py-0.5 rounded text-[10px]">
-                      {billableKg.toFixed(2)} kg (₱{netAmt.toLocaleString(undefined, { maximumFractionDigits: 0 })})
+                      {billableKg.toFixed(4)} kg (₱{netAmt.toLocaleString(undefined, { maximumFractionDigits: 0 })})
                     </span>
                   </div>
                 </div>

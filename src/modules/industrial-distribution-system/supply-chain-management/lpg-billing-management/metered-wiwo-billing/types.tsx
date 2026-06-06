@@ -88,7 +88,14 @@ export interface MeteredWiwoTransaction {
 
   // Relations
   customer?: { customer_name: string; store_name?: string | null };
-  site?: { site_name: string | null };
+  site?: {
+    id?: number;
+    site_name: string | null;
+    site_address?: string | null;
+    default_pressure_line?: number | null;
+    default_psi?: number | null;
+    default_atmospheric_pressure?: number | null;
+  };
   meter_reading?: MeterReading;
   wiwo_header?: WiwoHeaderRef;
 }
