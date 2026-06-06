@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import { lpgSiteService } from "../services/lpgSiteService";
 import { LpgSite, BillingMode, MeterUnit, MeterDirection } from "../types";
+// import { SiteCylinderManager } from "./SiteCylinderManager";
 import {
   Save,
   MapPin,
   CreditCard,
-  Cylinder,
+  // Cylinder,
   Loader2,
   ChevronLeft,
   Gauge
@@ -26,7 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
-import { SiteCylinderManager } from "./SiteCylinderManager";
+// import { SiteCylinderManager } from "./SiteCylinderManager";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -308,7 +309,7 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
                     value={formData?.billing_mode}
                     onValueChange={(val: BillingMode) => {
                       let updatedUnit = formData.meter_unit;
-                      if (val === "METERED") updatedUnit = "M3";
+                      if (val === "METERED" || val === "BOTH") updatedUnit = "M3";
                       if (val === "KILO") updatedUnit = "KG";
                       setFormData({
                         ...formData,
@@ -422,19 +423,6 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Last Meter Reading</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={formData?.last_meter_reading ?? ""}
-                      onChange={(e) => setFormData({ ...formData, last_meter_reading: e.target.value === "" ? null : parseFloat(e.target.value) })}
-                      className="rounded-xl border-zinc-200 dark:border-zinc-800"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
                     <Label>Conversion Factor</Label>
                     <Input
                       type="number"
@@ -442,6 +430,21 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
                       placeholder="1.000000"
                       value={formData?.conversion_factor ?? ""}
                       onChange={(e) => setFormData({ ...formData, conversion_factor: e.target.value === "" ? null : parseFloat(e.target.value) })}
+                      className="rounded-xl border-zinc-200 dark:border-zinc-800"
+                    />
+                  </div>
+                </div>
+
+                {/* Commented out last_meter_reading and last_reading_date for now
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Last Meter Reading</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={formData?.last_meter_reading ?? ""}
+                      onChange={(e) => setFormData({ ...formData, last_meter_reading: e.target.value === "" ? null : parseFloat(e.target.value) })}
                       className="rounded-xl border-zinc-200 dark:border-zinc-800"
                     />
                   </div>
@@ -455,6 +458,7 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
                     />
                   </div>
                 </div>
+                */}
 
                 {/* ── PSI / Pressure Billing Constants ── */}
                 <div className="border-t border-zinc-100 dark:border-zinc-800 pt-4 space-y-3">
@@ -582,6 +586,7 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
       </div>
 
       {/* Full Width Bottom: Cylinder Management */}
+      {/* Commented out Installed Site Cylinders section for now
       <div className="space-y-4">
         <div className="flex items-center gap-2 px-1">
           <Cylinder className="h-5 w-5 text-zinc-900 dark:text-zinc-100" />
@@ -594,6 +599,7 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
           onStagedChange={(cyls) => setFormData({ ...formData, cylinders: cyls })}
         />
       </div>
+      */}
     </div>
   );
 }
