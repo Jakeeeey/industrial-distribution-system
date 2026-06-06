@@ -85,12 +85,30 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
         if (id) {
           const site = await lpgSiteService.fetchSiteById(id);
           if (site) {
+            let lpgVapor = site.default_pressure_line ?? 2.0183;
+            let psi = site.default_psi ?? 10.0;
+            let cf = site.default_atmospheric_pressure ?? 14.7;
+
+            if (typeof window !== "undefined") {
+              const cached = localStorage.getItem(`lpg_site_config_${id}`);
+              if (cached) {
+                try {
+                  const parsed = JSON.parse(cached);
+                  lpgVapor = Number(parsed.configLpgVapor ?? lpgVapor);
+                  psi = Number(parsed.configPsi ?? psi);
+                  cf = Number(parsed.configCorrectionFactor ?? cf);
+                } catch (e) {
+                  console.error(e);
+                }
+              }
+            }
+
             setFormData({
               ...site,
               meter_direction: site.meter_direction || "INCREASING",
-              default_pressure_line: site.default_pressure_line ?? 2.0183,
-              default_psi: site.default_psi ?? 10.0,
-              default_atmospheric_pressure: site.default_atmospheric_pressure ?? 14.7,
+              default_pressure_line: lpgVapor,
+              default_psi: psi,
+              default_atmospheric_pressure: cf,
               cylinders: site.cylinders || []
             });
           }
@@ -139,6 +157,19 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
         }
         toast.success("Site and cylinders registered successfully");
       }
+
+      // Persist pressure configuration locally
+      if (typeof window !== "undefined" && siteId) {
+        localStorage.setItem(
+          `lpg_site_config_${siteId}`,
+          JSON.stringify({
+            configLpgVapor: formData.default_pressure_line ?? 2.0183,
+            configPsi: formData.default_psi ?? 10.0,
+            configCorrectionFactor: formData.default_atmospheric_pressure ?? 14.7,
+          })
+        );
+      }
+
       onSuccess();
     } catch {
       toast.error("Failed to save site");

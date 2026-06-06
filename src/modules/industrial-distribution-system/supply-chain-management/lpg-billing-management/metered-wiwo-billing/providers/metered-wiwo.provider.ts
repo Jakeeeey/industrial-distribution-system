@@ -11,14 +11,35 @@ import type {
 
 const DIRECTUS_URL = getDirectusBase();
 const FIELDS_TX =
-  "*,customer.customer_name,customer.store_name,site.site_name," +
-  "meter_reading_id.id,meter_reading_id.previous_reading,meter_reading_id.current_reading,meter_reading_id.kg_consumed,meter_reading_id.price_per_kg,meter_reading_id.reading_date," +
+  "*,customer.customer_name,customer.store_name,site.id,site.site_name,site.site_address,lpg_site_id.id,lpg_site_id.site_name,lpg_site_id.site_address," +
+  "meter_reading_id.id,meter_reading_id.lpg_site_id,meter_reading_id.previous_reading,meter_reading_id.current_reading,meter_reading_id.kg_consumed,meter_reading_id.price_per_kg,meter_reading_id.reading_date," +
   "wiwo_header_id.id,wiwo_header_id.wiwo_no,wiwo_header_id.transaction_date";
 
 function mapMeteredTransaction(tx: unknown): MeteredWiwoTransaction {
   if (!tx) return tx as MeteredWiwoTransaction;
   const raw = tx as Record<string, unknown>;
   const mapped = { ...raw } as unknown as MeteredWiwoTransaction;
+
+  let siteObj: Record<string, unknown> | null = null;
+  if (raw["site"] && typeof raw["site"] === "object") {
+    siteObj = raw["site"] as Record<string, unknown>;
+  } else if (raw["lpg_site_id"] && typeof raw["lpg_site_id"] === "object") {
+    siteObj = raw["lpg_site_id"] as Record<string, unknown>;
+  }
+
+  let siteId = raw["lpg_site_id"] && typeof raw["lpg_site_id"] !== "object" ? Number(raw["lpg_site_id"]) : null;
+  if (siteObj && siteObj.id) {
+    siteId = Number(siteObj.id);
+  }
+
+  mapped.lpg_site_id = siteId;
+  if (siteObj) {
+    mapped.site = {
+      id: siteObj.id ? Number(siteObj.id) : undefined,
+      site_name: siteObj.site_name ? String(siteObj.site_name) : null,
+      site_address: siteObj.site_address ? String(siteObj.site_address) : null,
+    };
+  }
 
   if (raw["meter_reading_id"] && typeof raw["meter_reading_id"] === "object") {
     mapped.meter_reading = raw["meter_reading_id"] as unknown as MeterReading;
@@ -56,7 +77,7 @@ export async function fetchMeteredTransactions(params: MeteredListParams): Promi
     ];
   }
 
-  let qs = `fields=${FIELDS_TX}&sort=-transaction_date&limit=${limit}&offset=${offset}&meta=total_count`;
+  let qs = `fields=${FIELDS_TX}&sort=-modified_date,-created_date&limit=${limit}&offset=${offset}&meta=total_count`;
   if (Object.keys(filters).length > 0) {
     qs += `&filter=${encodeURIComponent(JSON.stringify(filters))}`;
   }
@@ -100,7 +121,6 @@ async function createOrUpdateMeterReading(
     price_per_kg: pricePerKg,
     raw_consumption: rawConsumption,
     reading_status: status,
-    // Note: pressure_line, psi, atmospheric_pressure, lpg_vapor_factor do not exist in Directus collection
     ...(userId ? { created_by: userId } : {})
   };
 
