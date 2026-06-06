@@ -418,7 +418,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
           {!isMeteredOnly && <VariancePanel result={arbitration} />}
 
           {/* WIWO detail (only if linked) */}
-          {!isMeteredOnly && <WiwoValidationPanel details={linkedWiwo?.details ?? []} totalWiwoKg={wiwoKg} />}
+          {/* {!isMeteredOnly && <WiwoValidationPanel details={linkedWiwo?.details ?? []} totalWiwoKg={wiwoKg} />} */}
         </div>
 
         {/* Sidebar */}
