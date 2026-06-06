@@ -49,9 +49,6 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
     linkedWiwo,
     isValidReading,
     meterDirection,
-    siteLpgVapor,
-    sitePsi,
-    siteCorrectionFactor,
     pressureLine,
   } = useMeteredWiwoBillingForm(txId);
 
@@ -329,6 +326,52 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
               )}
             </div>
 
+            {/* Meter Configuration */}
+            <div className="border-t border-zinc-100 dark:border-zinc-800/50 pt-4">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Meter Configuration</p>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">LPG VAPOR</Label>
+                  <Input
+                    id="metered-config-lpg-vapor"
+                    type="number"
+                    step="0.0001"
+                    value={form.configLpgVapor}
+                    onChange={(e) => setForm((f) => ({ ...f, configLpgVapor: Number(e.target.value) }))}
+                    className="font-mono"
+                    readOnly={isReadOnly}
+                    placeholder="e.g. 2.0183"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">PSI</Label>
+                  <Input
+                    id="metered-config-psi"
+                    type="number"
+                    step="0.0001"
+                    value={form.configPsi}
+                    onChange={(e) => setForm((f) => ({ ...f, configPsi: Number(e.target.value) }))}
+                    className="font-mono"
+                    readOnly={isReadOnly}
+                    placeholder="e.g. 10.0"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">CORRECTION FACTOR</Label>
+                  <Input
+                    id="metered-config-correction-factor"
+                    type="number"
+                    step="0.1"
+                    value={form.configCorrectionFactor}
+                    onChange={(e) => setForm((f) => ({ ...f, configCorrectionFactor: Number(e.target.value) }))}
+                    className="font-mono"
+                    readOnly={isReadOnly}
+                    placeholder="e.g. 14.7"
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* WIWO Header Selection */}
             {!txId && form.siteId && !isMeteredOnly && (
               <div className="border-t border-zinc-100 dark:border-zinc-800/50 pt-4 space-y-2">
@@ -359,11 +402,11 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
             previousReading={form.previousReading}
             currentReading={form.currentReading}
             meteredKg={meteredKg}
-            meterUnit={(selectedSite?.meter_unit as string) || "KG"}
+            meterUnit="m3"
             meterDirection={meterDirection}
-            lpgVapor={siteLpgVapor}
-            psi={sitePsi}
-            correctionFactor={siteCorrectionFactor}
+            lpgVapor={form.configLpgVapor}
+            psi={form.configPsi}
+            correctionFactor={form.configCorrectionFactor}
             pressureLine={pressureLine}
           />
 
