@@ -56,7 +56,7 @@ export interface WiwoDetailRef {
 
 export interface MeteredWiwoTransaction {
   id?: number;
-  transaction_no: string;
+  reading_no: string;
   transaction_date: string;
   customer_code: string;
   lpg_site_id: number | null;
@@ -75,11 +75,35 @@ export interface MeteredWiwoTransaction {
   gross_amount: number;
   vat_amount: number;
   net_amount: number;
+  discount_amount?: number;
 
   // Invoice
   sales_invoice_id: number | null;
+  sales_invoice_no?: string | null;
   status: TransactionStatus;
   remarks: string | null;
+
+  // Pressure fields snapshot
+  pressure_line?: number;
+  psi?: number;
+  atmospheric_pressure?: number;
+  lpg_vapor_factor?: number;
+
+  // Meter settings snapshot
+  meter_unit?: "M3" | "LITER" | "KG" | "UNIT";
+  meter_direction?: "INCREASING" | "DECREASING";
+  conversion_factor?: number;
+
+  // Billing period
+  billing_period_from?: string | null;
+  billing_period_to?: string | null;
+
+  // Post / Cancel logs
+  posted_by?: number | null;
+  posted_date?: string | null;
+  cancelled_by?: number | null;
+  cancelled_date?: string | null;
+  cancelled_reason?: string | null;
 
   created_by: number | null;
   created_date: string | null;
@@ -88,7 +112,14 @@ export interface MeteredWiwoTransaction {
 
   // Relations
   customer?: { customer_name: string; store_name?: string | null };
-  site?: { site_name: string | null };
+  site?: {
+    id?: number;
+    site_name: string | null;
+    site_address?: string | null;
+    default_pressure_line?: number | null;
+    default_psi?: number | null;
+    default_atmospheric_pressure?: number | null;
+  };
   meter_reading?: MeterReading;
   wiwo_header?: WiwoHeaderRef;
 }

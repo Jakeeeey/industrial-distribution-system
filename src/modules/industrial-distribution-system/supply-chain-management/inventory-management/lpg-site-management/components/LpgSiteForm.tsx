@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import { lpgSiteService } from "../services/lpgSiteService";
 import { LpgSite, BillingMode, MeterUnit, MeterDirection } from "../types";
+// import { SiteCylinderManager } from "./SiteCylinderManager";
 import {
   Save,
   MapPin,
   CreditCard,
-  Cylinder,
+  // Cylinder,
   Loader2,
   ChevronLeft,
   Gauge
@@ -26,7 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
-import { SiteCylinderManager } from "./SiteCylinderManager";
+// import { SiteCylinderManager } from "./SiteCylinderManager";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -85,12 +86,30 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
         if (id) {
           const site = await lpgSiteService.fetchSiteById(id);
           if (site) {
+            let lpgVapor = site.default_pressure_line ?? 2.0183;
+            let psi = site.default_psi ?? 10.0;
+            let cf = site.default_atmospheric_pressure ?? 14.7;
+
+            if (typeof window !== "undefined") {
+              const cached = localStorage.getItem(`lpg_site_config_${id}`);
+              if (cached) {
+                try {
+                  const parsed = JSON.parse(cached);
+                  lpgVapor = Number(parsed.configLpgVapor ?? lpgVapor);
+                  psi = Number(parsed.configPsi ?? psi);
+                  cf = Number(parsed.configCorrectionFactor ?? cf);
+                } catch (e) {
+                  console.error(e);
+                }
+              }
+            }
+
             setFormData({
               ...site,
               meter_direction: site.meter_direction || "INCREASING",
-              default_pressure_line: site.default_pressure_line ?? 2.0183,
-              default_psi: site.default_psi ?? 10.0,
-              default_atmospheric_pressure: site.default_atmospheric_pressure ?? 14.7,
+              default_pressure_line: lpgVapor,
+              default_psi: psi,
+              default_atmospheric_pressure: cf,
               cylinders: site.cylinders || []
             });
           }
@@ -139,6 +158,19 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
         }
         toast.success("Site and cylinders registered successfully");
       }
+
+      // Persist pressure configuration locally
+      if (typeof window !== "undefined" && siteId) {
+        localStorage.setItem(
+          `lpg_site_config_${siteId}`,
+          JSON.stringify({
+            configLpgVapor: formData.default_pressure_line ?? 2.0183,
+            configPsi: formData.default_psi ?? 10.0,
+            configCorrectionFactor: formData.default_atmospheric_pressure ?? 14.7,
+          })
+        );
+      }
+
       onSuccess();
     } catch {
       toast.error("Failed to save site");
@@ -277,7 +309,7 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
                     value={formData?.billing_mode}
                     onValueChange={(val: BillingMode) => {
                       let updatedUnit = formData.meter_unit;
-                      if (val === "METERED") updatedUnit = "M3";
+                      if (val === "METERED" || val === "BOTH") updatedUnit = "M3";
                       if (val === "KILO") updatedUnit = "KG";
                       setFormData({
                         ...formData,
@@ -391,19 +423,6 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Last Meter Reading</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={formData?.last_meter_reading ?? ""}
-                      onChange={(e) => setFormData({ ...formData, last_meter_reading: e.target.value === "" ? null : parseFloat(e.target.value) })}
-                      className="rounded-xl border-zinc-200 dark:border-zinc-800"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
                     <Label>Conversion Factor</Label>
                     <Input
                       type="number"
@@ -411,6 +430,21 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
                       placeholder="1.000000"
                       value={formData?.conversion_factor ?? ""}
                       onChange={(e) => setFormData({ ...formData, conversion_factor: e.target.value === "" ? null : parseFloat(e.target.value) })}
+                      className="rounded-xl border-zinc-200 dark:border-zinc-800"
+                    />
+                  </div>
+                </div>
+
+                {/* Commented out last_meter_reading and last_reading_date for now
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Last Meter Reading</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={formData?.last_meter_reading ?? ""}
+                      onChange={(e) => setFormData({ ...formData, last_meter_reading: e.target.value === "" ? null : parseFloat(e.target.value) })}
                       className="rounded-xl border-zinc-200 dark:border-zinc-800"
                     />
                   </div>
@@ -424,6 +458,7 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
                     />
                   </div>
                 </div>
+                */}
 
                 {/* ── PSI / Pressure Billing Constants ── */}
                 <div className="border-t border-zinc-100 dark:border-zinc-800 pt-4 space-y-3">
@@ -551,6 +586,7 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
       </div>
 
       {/* Full Width Bottom: Cylinder Management */}
+      {/* Commented out Installed Site Cylinders section for now
       <div className="space-y-4">
         <div className="flex items-center gap-2 px-1">
           <Cylinder className="h-5 w-5 text-zinc-900 dark:text-zinc-100" />
@@ -563,6 +599,7 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
           onStagedChange={(cyls) => setFormData({ ...formData, cylinders: cyls })}
         />
       </div>
+      */}
     </div>
   );
 }

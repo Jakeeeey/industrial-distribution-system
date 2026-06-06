@@ -6,6 +6,7 @@ import {
   fetchMeterReadings,
   fetchUnbilledWiwoHeaders,
   updateSiteReading,
+  fetchNextMeterReadingSeq,
 } from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/metered-wiwo-billing/providers/metered-wiwo.provider";
 import { handleApiError } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/error-handler";
 import { getUserIdFromToken } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/auth-utils";
@@ -35,6 +36,16 @@ export async function GET(request: NextRequest) {
       const siteId = searchParams.get("siteId") ? Number(searchParams.get("siteId")) : undefined;
       const headers = await fetchUnbilledWiwoHeaders(customerCode, siteId);
       return NextResponse.json({ data: headers });
+    }
+
+    if (type === "next-seq") {
+      const customerCode = searchParams.get("customerCode");
+      const date = searchParams.get("date");
+      if (!customerCode || !date) {
+        return NextResponse.json({ seq: 1 });
+      }
+      const seq = await fetchNextMeterReadingSeq(customerCode, date);
+      return NextResponse.json({ seq });
     }
 
     if (type === "wiwo-kg") {

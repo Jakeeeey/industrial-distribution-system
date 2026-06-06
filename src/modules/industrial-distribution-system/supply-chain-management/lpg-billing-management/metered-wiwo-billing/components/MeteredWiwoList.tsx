@@ -24,18 +24,18 @@ const STATUS_BADGE: Record<string, React.ReactNode> = {
   CANCELLED: <Badge variant="destructive" className="text-[10px] font-bold uppercase tracking-wider">Cancelled</Badge>,
 };
 
-const SOURCE_BADGE: Record<string, React.ReactNode> = {
-  METERED: (
-    <Badge className="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border-none text-[9px] px-1.5 py-0 font-bold uppercase tracking-wider">
-      Metered
-    </Badge>
-  ),
-  WIWO: (
-    <Badge className="bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-450 border-none text-[9px] px-1.5 py-0 font-bold uppercase tracking-wider">
-      WIWO
-    </Badge>
-  ),
-};
+// const SOURCE_BADGE: Record<string, React.ReactNode> = {
+//   METERED: (
+//     <Badge className="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border-none text-[9px] px-1.5 py-0 font-bold uppercase tracking-wider">
+//       Metered
+//     </Badge>
+//   ),
+//   WIWO: (
+//     <Badge className="bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-450 border-none text-[9px] px-1.5 py-0 font-bold uppercase tracking-wider">
+//       WIWO
+//     </Badge>
+//   ),
+// };
 
 export function MeteredWiwoList({ selectedId, onSelect, onNew }: Props) {
   const [search, setSearch] = useState("");
@@ -112,12 +112,12 @@ export function MeteredWiwoList({ selectedId, onSelect, onNew }: Props) {
         ) : (
           rows.map((row) => {
             const id = row.id;
-            const txNo = row.transaction_no;
+            const txNo = row.reading_no;
             const date = row.transaction_date
               ? format(new Date(row.transaction_date), "MMM dd, yyyy")
               : "—";
             const customer = row.customer?.customer_name || row.customer?.store_name || row.customer_code;
-            // const site = row.site?.site_name || (row.lpg_site_id ? `Site #${row.lpg_site_id}` : "—");
+            const site = row.site?.site_name || (row.lpg_site_id ? `Site #${row.lpg_site_id}` : "—");
             const billableKg = row.billable_kg != null ? Number(row.billable_kg) : 0;
             const netAmt = row.net_amount != null ? Number(row.net_amount) : 0;
             const selected = selectedId === id;
@@ -141,9 +141,9 @@ export function MeteredWiwoList({ selectedId, onSelect, onNew }: Props) {
                     <div className="text-[11px] text-zinc-900 dark:text-zinc-100 font-bold truncate">
                       {customer}
                     </div>
-                    {/* <div className="text-[11px] text-muted-foreground truncate">
+                    <div className="text-[11px] text-muted-foreground truncate">
                       {site}
-                    </div> */}
+                    </div>
                   </div>
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
                     {STATUS_BADGE[row.status] ?? <Badge variant="outline">{row.status}</Badge>}
@@ -152,7 +152,7 @@ export function MeteredWiwoList({ selectedId, onSelect, onNew }: Props) {
                 <div className="flex justify-between items-center border-t border-dashed border-zinc-150 dark:border-zinc-800/50 pt-2 w-full text-[10px] text-zinc-400 dark:text-zinc-500">
                   <span>{date}</span>
                   <div className="flex items-center gap-1.5">
-                    {SOURCE_BADGE[row.billable_source]}
+                    {/* {SOURCE_BADGE[row.billable_source]} */}
                     <span className="font-mono font-bold text-foreground bg-zinc-50 dark:bg-zinc-900 px-1.5 py-0.5 rounded text-[10px]">
                       {billableKg.toFixed(4)} kg (₱{netAmt.toLocaleString(undefined, { maximumFractionDigits: 0 })})
                     </span>
