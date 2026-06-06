@@ -13,12 +13,12 @@ import {
   Gauge,
 } from "lucide-react";
 import { MeteredReadingPanel } from "./MeteredReadingPanel";
-import { WiwoValidationPanel } from "./WiwoValidationPanel";
+// import { WiwoValidationPanel } from "./WiwoValidationPanel";
 import { VariancePanel } from "./VariancePanel";
 import { MeteredBillingSummaryCard } from "./MeteredBillingSummaryCard";
 import { useMeteredWiwoBillingForm } from "../hooks/useMeteredWiwoBilling";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { format } from "date-fns";
+// import { format } from "date-fns";
 
 interface Props {
   txId?: number | null;
@@ -31,7 +31,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
     form,
     setForm,
     originalStatus,
-    wiwoKg,
+    // wiwoKg,
     meteredKg,
     arbitration,
     grossAmount,
@@ -44,16 +44,16 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
     sites,
     sitesLoading,
     handleSiteChange,
-    wiwoHeaders,
-    wiwoLoading,
-    linkedWiwo,
+    // wiwoHeaders,
+    // wiwoLoading,
+    // linkedWiwo,
     isValidReading,
     meterDirection,
     pressureLine,
   } = useMeteredWiwoBillingForm(txId);
 
-  const selectedSite = sites.find((s) => s.id === form.siteId);
-  const isMeteredOnly = selectedSite?.billing_mode === "METERED";
+  // const selectedSite = sites.find((s) => s.id === form.siteId);
+  const isMeteredOnly = true; // WIWO commented out for now: selectedSite?.billing_mode === "METERED";
   const isReadOnly = originalStatus === "POSTED" || originalStatus === "CANCELLED";
 
   const handleSubmit = async () => {
@@ -93,10 +93,10 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-black bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">
-            {txId ? (isMeteredOnly ? "Edit Metered Billing" : "Edit Metered+WIWO Billing") : (isMeteredOnly ? "New Metered Billing" : "New Metered+WIWO Billing")}
+            {txId ? (isMeteredOnly ? "Edit Metered Billing" : "Edit Metered") : (isMeteredOnly ? "New Metered Billing" : "New Metered")}
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {isMeteredOnly ? "Billing source: Metered KG Only" : "Billing source: MAX(Metered KG, WIWO KG)"}
+            {isMeteredOnly ? "Billing source: Metered KG Only" : "Billing source: MAX(Metered KG)"}
           </p>
         </div>
         <div className="flex gap-2">
@@ -270,7 +270,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                   </div>
                 )} */}
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-3 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">Previous Reading</Label>
                   <Input
@@ -296,18 +296,22 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                   />
                 </div>
                 {!isMeteredOnly && (
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">WIWO KG (from header)</Label>
-                    <Input
-                      id="metered-wiwo-kg"
-                      type="number"
-                      step="0.001"
-                      value={wiwoKg}
-                      onChange={() => undefined}
-                      readOnly={!!form.wiwoHeaderId}
-                      className="font-mono bg-zinc-50 dark:bg-zinc-800"
-                      title="Auto-filled from linked WIWO header"
-                    />
+                  // <div className="space-y-2">
+                  //   {/* <Label className="text-xs text-muted-foreground">WIWO KG (from header)</Label> */}
+                  //   <Label className="text-xs text-muted-foreground">WIWO KG (from header)</Label>
+                  //   <Input
+                  //     id="metered-wiwo-kg"
+                  //     type="number"
+                  //     step="0.001"
+                  //     value={wiwoKg}
+                  //     onChange={() => undefined}
+                  //     readOnly={!!form.wiwoHeaderId}
+                  //     className="font-mono bg-zinc-50 dark:bg-zinc-800"
+                  //     title="Auto-filled from linked WIWO header"
+                  //   />
+                  // </div>
+                  <div>
+                    
                   </div>
                 )}
                 <div className="space-y-2">
@@ -372,7 +376,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
               </div>
             </div>
 
-            {/* WIWO Header Selection */}
+            {/* WIWO Header Selection
             {!txId && form.siteId && !isMeteredOnly && (
               <div className="border-t border-zinc-100 dark:border-zinc-800/50 pt-4 space-y-2">
                 <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Link WIWO Transaction</Label>
@@ -393,7 +397,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                   </SelectContent>
                 </Select>
               </div>
-            )}
+            )} */}
           </div>
 
           {/* Meter Reading Panel */}
@@ -414,7 +418,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
           {!isMeteredOnly && <VariancePanel result={arbitration} />}
 
           {/* WIWO detail (only if linked) */}
-          {!isMeteredOnly && <WiwoValidationPanel details={linkedWiwo?.details ?? []} totalWiwoKg={wiwoKg} />}
+          {/* {!isMeteredOnly && <WiwoValidationPanel details={linkedWiwo?.details ?? []} totalWiwoKg={wiwoKg} />} */}
         </div>
 
         {/* Sidebar */}
