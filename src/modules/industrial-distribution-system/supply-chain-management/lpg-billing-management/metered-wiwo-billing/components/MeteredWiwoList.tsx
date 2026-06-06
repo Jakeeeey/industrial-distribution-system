@@ -24,18 +24,18 @@ const STATUS_BADGE: Record<string, React.ReactNode> = {
   CANCELLED: <Badge variant="destructive" className="text-[10px] font-bold uppercase tracking-wider">Cancelled</Badge>,
 };
 
-const SOURCE_BADGE: Record<string, React.ReactNode> = {
-  METERED: (
-    <Badge className="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border-none text-[9px] px-1.5 py-0 font-bold uppercase tracking-wider">
-      Metered
-    </Badge>
-  ),
-  WIWO: (
-    <Badge className="bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-450 border-none text-[9px] px-1.5 py-0 font-bold uppercase tracking-wider">
-      WIWO
-    </Badge>
-  ),
-};
+// const SOURCE_BADGE: Record<string, React.ReactNode> = {
+//   METERED: (
+//     <Badge className="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border-none text-[9px] px-1.5 py-0 font-bold uppercase tracking-wider">
+//       Metered
+//     </Badge>
+//   ),
+//   WIWO: (
+//     <Badge className="bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-450 border-none text-[9px] px-1.5 py-0 font-bold uppercase tracking-wider">
+//       WIWO
+//     </Badge>
+//   ),
+// };
 
 export function MeteredWiwoList({ selectedId, onSelect, onNew }: Props) {
   const [search, setSearch] = useState("");

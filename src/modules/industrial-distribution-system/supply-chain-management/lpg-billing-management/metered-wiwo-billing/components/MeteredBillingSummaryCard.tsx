@@ -26,7 +26,7 @@ interface Props {
 export function MeteredBillingSummaryCard(props: Props) {
   const {
     meteredKg,
-    wiwoKg,
+    // wiwoKg,
     varianceKg,
     billableKg,
     billableSource,

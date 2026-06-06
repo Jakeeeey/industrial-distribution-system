@@ -13,12 +13,12 @@ import {
   Gauge,
 } from "lucide-react";
 import { MeteredReadingPanel } from "./MeteredReadingPanel";
-import { WiwoValidationPanel } from "./WiwoValidationPanel";
+// import { WiwoValidationPanel } from "./WiwoValidationPanel";
 import { VariancePanel } from "./VariancePanel";
 import { MeteredBillingSummaryCard } from "./MeteredBillingSummaryCard";
 import { useMeteredWiwoBillingForm } from "../hooks/useMeteredWiwoBilling";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { format } from "date-fns";
+// import { format } from "date-fns";
 
 interface Props {
   txId?: number | null;
@@ -44,15 +44,15 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
     sites,
     sitesLoading,
     handleSiteChange,
-    wiwoHeaders,
-    wiwoLoading,
+    // wiwoHeaders,
+    // wiwoLoading,
     linkedWiwo,
     isValidReading,
     meterDirection,
     pressureLine,
   } = useMeteredWiwoBillingForm(txId);
 
-  const selectedSite = sites.find((s) => s.id === form.siteId);
+  // const selectedSite = sites.find((s) => s.id === form.siteId);
   const isMeteredOnly = true; // WIWO commented out for now: selectedSite?.billing_mode === "METERED";
   const isReadOnly = originalStatus === "POSTED" || originalStatus === "CANCELLED";
 
