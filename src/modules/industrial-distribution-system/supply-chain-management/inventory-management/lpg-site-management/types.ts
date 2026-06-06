@@ -15,6 +15,12 @@ export interface LpgSite {
   meter_unit: MeterUnit | null;
   meter_direction: MeterDirection | null;
   conversion_factor: number | null;
+  /** Default pressure line (LPG vapour factor from tables, e.g. 2.0183) */
+  default_pressure_line: number | null;
+  /** Default gauge pressure in PSI (e.g. 10.0000) */
+  default_psi: number | null;
+  /** Default atmospheric pressure constant (default 14.7) */
+  default_atmospheric_pressure: number | null;
   last_meter_reading: number | null;
   last_reading_date: string | null;
   is_active: boolean;
