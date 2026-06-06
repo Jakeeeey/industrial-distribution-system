@@ -152,7 +152,7 @@ export function MeteredWiwoList({ selectedId, onSelect, onNew }: Props) {
                 <div className="flex justify-between items-center border-t border-dashed border-zinc-150 dark:border-zinc-800/50 pt-2 w-full text-[10px] text-zinc-400 dark:text-zinc-500">
                   <span>{date}</span>
                   <div className="flex items-center gap-1.5">
-                    {SOURCE_BADGE[row.billable_source]}
+                    {/* {SOURCE_BADGE[row.billable_source]} */}
                     <span className="font-mono font-bold text-foreground bg-zinc-50 dark:bg-zinc-900 px-1.5 py-0.5 rounded text-[10px]">
                       {billableKg.toFixed(4)} kg (₱{netAmt.toLocaleString(undefined, { maximumFractionDigits: 0 })})
                     </span>

@@ -56,10 +56,10 @@ export function MeteredBillingSummaryCard(props: Props) {
             <span>Metered KG</span>
             <span className="font-mono font-bold">{Number(meteredKg).toFixed(4)} kg</span>
           </div>
-          <div className="flex justify-between text-violet-100">
+          {/* <div className="flex justify-between text-violet-100">
             <span>WIWO KG</span>
             <span className="font-mono font-bold">{Number(wiwoKg).toFixed(4)} kg</span>
-          </div>
+          </div> */}
           <div className="flex justify-between text-violet-200 border-t border-white/10 pt-1.5">
             <span>Variance</span>
             <span className="font-mono">{Number(varianceKg).toFixed(4)} kg</span>

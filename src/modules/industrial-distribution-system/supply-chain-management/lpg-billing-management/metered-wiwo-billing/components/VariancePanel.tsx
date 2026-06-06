@@ -23,7 +23,7 @@ export function VariancePanel({ result }: Props) {
         </div>
         <div>
           <h2 className="font-semibold">Variance & Arbitration</h2>
-          <p className="text-[10px] text-muted-foreground">MAX(Metered KG, WIWO KG)</p>
+          <p className="text-[10px] text-muted-foreground">MAX(Metered KG)</p>
         </div>
       </div>
 
@@ -51,7 +51,7 @@ export function VariancePanel({ result }: Props) {
               : "bg-zinc-50 dark:bg-zinc-800/40 border-zinc-200 dark:border-zinc-700/40"
           }`}
         >
-          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">WIWO KG</p>
+          {/* <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">WIWO KG</p> */}
           <p className={`text-xl font-black font-mono ${billable_source === "WIWO" ? "text-orange-700 dark:text-orange-400" : ""}`}>
             {Number(wiwo_kg).toFixed(4)}
           </p>

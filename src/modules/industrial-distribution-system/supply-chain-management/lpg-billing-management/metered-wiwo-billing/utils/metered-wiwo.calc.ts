@@ -50,7 +50,7 @@ export interface ArbitrationResult {
 }
 
 /**
- * Billable KG = MAX(Metered KG, WIWO KG)
+ * Billable KG = MAX(Metered KG)
  * Billable Source = the one that is higher (METERED wins on tie)
  */
 export function computeArbitration(
