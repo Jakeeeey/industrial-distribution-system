@@ -36,10 +36,7 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
   }
 }
 
-function pickString(
-  obj: Record<string, unknown> | null,
-  keys: string[],
-): string {
+function pickString(obj: Record<string, unknown> | null, keys: string[]): string {
   for (const k of keys) {
     const v = obj?.[k];
     if (typeof v === "string" && v.trim()) return v.trim();
@@ -123,3 +120,4 @@ export default async function Page() {
     </div>
   );
 }
+

@@ -10,8 +10,8 @@ export class SubsystemService {
         try {
             // Fetch everything in parallel for speed
             const [subRes, modRes] = await Promise.all([
-                fetch(`/api/hrm/subsystem-registration/subsystems?limit=-1`),
-                fetch(`/api/hrm/subsystem-registration/modules?limit=-1&sort=sort`)
+                fetch(`/api/ids/hrm/subsystem-registration/subsystems?limit=-1`),
+                fetch(`/api/ids/hrm/subsystem-registration/modules?limit=-1&sort=sort`)
             ]);
 
             if (!subRes.ok || !modRes.ok) return [];
@@ -26,7 +26,7 @@ export class SubsystemService {
             (allModules || []).forEach((m: RawModule) => {
                 const mod: RawModule = { ...m, subModules: [] };
                 modulesById[Number(mod.id)] = mod;
-                
+
                 const sid = Number(m.subsystem_id);
                 if (!modulesBySubsystem[sid]) modulesBySubsystem[sid] = [];
                 modulesBySubsystem[sid].push(mod);
@@ -36,10 +36,10 @@ export class SubsystemService {
             const finalSubsystems = (subsystems || []).map((sub: SubsystemRegistration) => {
                 const subId = Number(sub.id);
                 const subModules = modulesBySubsystem[subId] || [];
-                
+
                 // Identify root modules (those with no parent_module_id)
                 const roots = subModules.filter(m => !m.parent_module_id);
-                
+
                 // Link children to parents
                 subModules.forEach(m => {
                     const parentId = m.parent_module_id ? Number(m.parent_module_id) : null;
@@ -76,14 +76,14 @@ export class SubsystemService {
     }
 
     private static async syncModulesRecursively(
-        modules: ModuleRegistration[], 
-        subsystemId: number, 
+        modules: ModuleRegistration[],
+        subsystemId: number,
         parentId: number | null = null
     ): Promise<true | string> {
         // Optimized: Trigger all sibling modules in parallel
         const results = await Promise.all(modules.map(async (itemModule, index) => {
             const isNew = !itemModule.id || isNaN(Number(itemModule.id)) || String(itemModule.id).length > 10;
-            
+
             const payload = {
                 slug: itemModule.slug || "",
                 title: itemModule.title || "Untitled",
@@ -101,7 +101,7 @@ export class SubsystemService {
             try {
                 if (isNew) {
                     // Create new module
-                    const response = await fetch(`/api/hrm/subsystem-registration/modules`, {
+                    const response = await fetch(`/api/ids/hrm/subsystem-registration/modules`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify(payload)
@@ -117,22 +117,22 @@ export class SubsystemService {
                     }
                 } else {
                     // Update existing module
-                    const response = await fetch(`/api/hrm/subsystem-registration/modules?id=${itemModule.id}`, {
+                    const response = await fetch(`/api/ids/hrm/subsystem-registration/modules?id=${itemModule.id}`, {
                         method: "PATCH",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify(payload)
                     });
                     if (!response.ok) {
                         // Fallback: Try with path parameter if query parameter failed
-                        const secondaryResponse = await fetch(`/api/hrm/subsystem-registration/modules/${itemModule.id}`, {
+                        const secondaryResponse = await fetch(`/api/ids/hrm/subsystem-registration/modules/${itemModule.id}`, {
                             method: "PATCH",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify(payload)
                         });
                         if (!secondaryResponse.ok) {
-                             const errorData = await secondaryResponse.json();
-                             currentError = errorData.details?.errors?.[0]?.message || `Failed to update module "${itemModule.title}"`;
-                             return currentError;
+                            const errorData = await secondaryResponse.json();
+                            currentError = errorData.details?.errors?.[0]?.message || `Failed to update module "${itemModule.title}"`;
+                            return currentError;
                         }
                     }
                 }
@@ -166,15 +166,15 @@ export class SubsystemService {
             delete cleanedData.id;
             delete cleanedData.modules;
 
-            const response = await fetch(`/api/hrm/subsystem-registration/subsystems`, {
+            const response = await fetch(`/api/ids/hrm/subsystem-registration/subsystems`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(cleanedData)
             });
-            
+
             if (!response.ok) return null;
             const { data: created } = await response.json();
-            
+
             if (data.modules && data.modules.length > 0) {
                 await this.syncModulesRecursively(data.modules, Number(created.id));
             }
@@ -193,7 +193,7 @@ export class SubsystemService {
             delete subsystemPayload.modules;
 
             // 1. Fetch current metadata to detect path changes
-            const currentSubRes = await fetch(`/api/hrm/subsystem-registration/subsystems?id=${id}&fields=base_path`);
+            const currentSubRes = await fetch(`/api/ids/hrm/subsystem-registration/subsystems?id=${id}&fields=base_path`);
             let oldBasePath = "";
             if (currentSubRes.ok) {
                 const { data: currentSub } = await currentSubRes.json();
@@ -201,7 +201,7 @@ export class SubsystemService {
             }
 
             // 2. Update the subsystem record
-            const response = await fetch(`/api/hrm/subsystem-registration/subsystems?id=${id}`, {
+            const response = await fetch(`/api/ids/hrm/subsystem-registration/subsystems?id=${id}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(subsystemPayload)
@@ -219,12 +219,12 @@ export class SubsystemService {
                 const alignPath = (path: string, root: string): string => {
                     if (!path) return root;
                     if (path.startsWith(root)) return path;
-                    
+
                     // Extract the sub-path after the first segment
                     // e.g. "/er/application/overtime" -> parts: ["er", "application", "overtime"]
                     const parts = path.split('/').filter(Boolean);
                     if (parts.length <= 1) return root; // It was just a root path like "/er"
-                    
+
                     const subPath = parts.slice(1).join('/');
                     return root + (subPath ? '/' + subPath : '');
                 };
@@ -244,14 +244,14 @@ export class SubsystemService {
                     if (data.modules) transformTree(data.modules);
 
                     // Step B: Fetch all existing modules in DB and enforce the correct prefix
-                    const modRes = await fetch(`/api/hrm/subsystem-registration/modules?filter={"subsystem_id":{"_eq":${subsystemId}}}&limit=-1`);
+                    const modRes = await fetch(`/api/ids/hrm/subsystem-registration/modules?filter={"subsystem_id":{"_eq":${subsystemId}}}&limit=-1`);
                     if (modRes.ok) {
                         const { data: allModules } = await modRes.json();
                         if (allModules && allModules.length > 0) {
                             await Promise.all(allModules.map(async (mod: RawModule) => {
                                 const alignedPath = alignPath(mod.base_path || "", newBasePath);
                                 if (mod.base_path !== alignedPath) {
-                                    await fetch(`/api/hrm/subsystem-registration/modules?id=${mod.id}`, {
+                                    await fetch(`/api/ids/hrm/subsystem-registration/modules?id=${mod.id}`, {
                                         method: "PATCH",
                                         headers: { "Content-Type": "application/json" },
                                         body: JSON.stringify({ base_path: alignedPath })
@@ -269,20 +269,20 @@ export class SubsystemService {
                 // 4. PRUNING: Bulk Delete stale modules in parallel
                 try {
                     // FIX: Added limit=-1 to ensure all modules are fetched for pruning comparison
-                    const currentRes = await fetch(`/api/hrm/subsystem-registration/modules?filter={"subsystem_id":{"_eq":${subsystemId}}}&fields=id&limit=-1`);
+                    const currentRes = await fetch(`/api/ids/hrm/subsystem-registration/modules?filter={"subsystem_id":{"_eq":${subsystemId}}}&fields=id&limit=-1`);
                     if (currentRes.ok) {
                         const { data: currentInDb } = await currentRes.json();
                         const dbIds = (currentInDb || []).map((m: { id: string | number }) => Number(m.id));
                         const incomingIds = this.collectIds(data.modules);
                         const staleIds = dbIds.filter((dbId: number) => !incomingIds.includes(dbId));
-                        
+
                         if (staleIds.length > 0) {
-                            const deleteRes = await fetch(`/api/hrm/subsystem-registration/modules`, { 
+                            const deleteRes = await fetch(`/api/ids/hrm/subsystem-registration/modules`, {
                                 method: "DELETE",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify(staleIds)
                             });
-                            
+
                             if (!deleteRes.ok) {
                                 console.error("Bulk delete failed during pruning:", await deleteRes.text());
                                 return { success: false, message: "Hierarchy cleanup failed. Some modules could not be removed." };
@@ -310,7 +310,7 @@ export class SubsystemService {
 
     static async deleteSubsystem(id: string): Promise<boolean> {
         try {
-            const response = await fetch(`/api/hrm/subsystem-registration/subsystems?id=${id}`, {
+            const response = await fetch(`/api/ids/hrm/subsystem-registration/subsystems?id=${id}`, {
                 method: "DELETE"
             });
             return response.ok;

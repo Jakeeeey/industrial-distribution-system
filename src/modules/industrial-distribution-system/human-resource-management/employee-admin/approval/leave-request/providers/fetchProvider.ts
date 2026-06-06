@@ -1,6 +1,6 @@
 import type { LeaveListResponse, ApprovalAction } from "../type";
 
-const API_BASE = "/api/hrm/employee-admin/approval/leave-request";
+const API_BASE = "/api/ids/hrm/employee-admin/approval/leave-request";
 
 export async function fetchLeaveRequests(): Promise<LeaveListResponse> {
   const response = await fetch(API_BASE, {

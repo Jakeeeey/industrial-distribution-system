@@ -1,4 +1,4 @@
-//src/modules/supply-chain-management/physical-inventory-management/components/PhysicalInventoryRFIDDialog.tsx
+//src/modules/industrial-distribution-system/supply-chain-management/physical-inventory-management/components/PhysicalInventoryRFIDDialog.tsx
 "use client";
 
 import * as React from "react";

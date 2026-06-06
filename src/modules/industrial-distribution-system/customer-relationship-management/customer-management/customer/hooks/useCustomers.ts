@@ -154,6 +154,12 @@ export function useCustomers(): UseCustomersReturn {
     async (data: Partial<CustomerWithRelations>) => {
       try {
         const { bank_accounts, ...customerData } = data;
+
+        // Normalize price_type to only the first letter (e.g. "A-Dealer" -> "A")
+        if (customerData.price_type) {
+          customerData.price_type = customerData.price_type.split("-")[0].trim();
+        }
+
         const res = await fetch("/api/ids/crm/customer", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -209,6 +215,11 @@ export function useCustomers(): UseCustomersReturn {
     async (id: number, data: Partial<CustomerWithRelations>) => {
       try {
         const { bank_accounts: newAccounts, ...customerData } = data;
+
+        // Normalize price_type to only the first letter (e.g. "A-Dealer" -> "A")
+        if (customerData.price_type) {
+          customerData.price_type = customerData.price_type.split("-")[0].trim();
+        }
 
         // 1. Update primary customer data
         const res = await fetch("/api/ids/crm/customer", {

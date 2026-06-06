@@ -19,7 +19,7 @@ export const useChangePassword = () => {
     const onSubmit = async (data: ChangePasswordInput) => {
         setIsSubmitting(true);
         try {
-            const response = await fetch("/api/hrm/change-password", {
+            const response = await fetch("/api/ids/hrm/change-password", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(data),

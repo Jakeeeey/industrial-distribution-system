@@ -1,4 +1,4 @@
-//src/modules/supply-chain-management/physical-inventory-management/types.ts
+//src/modules/industrial-distribution-system/supply-chain-management/physical-inventory-management/types.ts
 export type PhysicalInventoryStatus =
     | "Pending"
     | "Committed"
@@ -104,13 +104,13 @@ export type PhysicalInventoryHeaderRow = {
     supplier_id: number | null;
     category_id: number | null;
     encoder_id:
-        | number
-        | {
-            user_id: number;
-            user_fname: string | null;
-            user_lname: string | null;
-        }
-        | null;
+    | number
+    | {
+        user_id: number;
+        user_fname: string | null;
+        user_lname: string | null;
+    }
+    | null;
 
     // optional future-ready field
     isPending?: number;

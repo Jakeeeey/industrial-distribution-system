@@ -1,4 +1,4 @@
-//src/modules/supply-chain-management/traceability-compliance/product-tracing/types.ts
+//src/modules/industrial-distribution-system/supply-chain-management/traceability-compliance/product-tracing/types.ts
 
 export type ProductMovementRow = {
     ts: string;

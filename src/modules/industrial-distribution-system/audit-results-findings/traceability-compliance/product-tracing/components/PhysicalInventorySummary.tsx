@@ -1,4 +1,4 @@
-//src/modules/supply-chain-management/traceability-compliance/product-tracing/components/PhysicalInventorySummary.tsx
+//src/modules/industrial-distribution-system/supply-chain-management/traceability-compliance/product-tracing/components/PhysicalInventorySummary.tsx
 "use client";
 
 import * as React from "react";
@@ -27,7 +27,7 @@ interface Props {
 export const PhysicalInventorySummary: React.FC<Props> = ({ movements, baseUnitName, baseUnitDivisor, costPerUnit, beginningBaseBalance, familyRunningTotal }) => {
     // 1. Calculate running balances chronologically so we can map Beginning and Ending Balance of a PH event
     const sortedData = [...movements].sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
-    
+
     let currentBalance = beginningBaseBalance || 0;
     const phBalancesBefore: Record<string, number> = {};
     const phBalancesAfter: Record<string, number> = {};
@@ -39,7 +39,7 @@ export const PhysicalInventorySummary: React.FC<Props> = ({ movements, baseUnitN
         // Use variance from API if available (newly added to the view), otherwise fallback to manual calc
         const calcVariance = isPH ? (m.variance ?? ((phys || 0) - (sys || 0))) : 0;
         const movement = isPH ? (calcVariance * (m.unitCount || 1)) : ((m.inBase || 0) - (m.outBase || 0));
-        
+
         if (isPH && phBalancesBefore[m.docNo] === undefined) {
             phBalancesBefore[m.docNo] = currentBalance;
         }
@@ -88,9 +88,9 @@ export const PhysicalInventorySummary: React.FC<Props> = ({ movements, baseUnitN
 
         // Use variance from API if available, otherwise calculate from counts
         const v = m.variance ?? (phys !== undefined && sys !== undefined ? ((Number(phys) || 0) - (Number(sys) || 0)) : undefined);
-        
+
         if (v !== undefined && v !== null) {
-             acc[m.docNo].units[unit] = (acc[m.docNo].units[unit] || 0) + v;
+            acc[m.docNo].units[unit] = (acc[m.docNo].units[unit] || 0) + v;
         }
 
         return acc;

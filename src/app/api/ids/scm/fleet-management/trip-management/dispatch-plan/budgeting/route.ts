@@ -20,7 +20,8 @@ export async function PATCH(req: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json(
         {
-          error: parsed.error.issues[0]?.message || "Budget validation failed",
+          error:
+            parsed.error.issues[0]?.message || "Budget validation failed",
         },
         { status: 400 },
       );

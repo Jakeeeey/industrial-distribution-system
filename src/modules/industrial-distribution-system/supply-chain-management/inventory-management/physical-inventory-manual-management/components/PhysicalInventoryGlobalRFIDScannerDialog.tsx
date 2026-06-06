@@ -1,4 +1,4 @@
-//src/modules/supply-chain-management/physical-inventory-management/components/PhysicalInventoryGlobalRFIDScannerDialog.tsx
+//src/modules/industrial-distribution-system/supply-chain-management/physical-inventory-management/components/PhysicalInventoryGlobalRFIDScannerDialog.tsx
 "use client";
 
 import * as React from "react";
@@ -782,7 +782,7 @@ export function PhysicalInventoryGlobalRFIDScannerDialog(props: Props) {
 
                                             const finalTag =
                                                 finalizedFromInput.length >=
-                                                finalizedFromBuffer.length
+                                                    finalizedFromBuffer.length
                                                     ? finalizedFromInput
                                                     : finalizedFromBuffer;
 

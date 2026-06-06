@@ -178,7 +178,7 @@ export const lpgSiteService = {
 
   async fetchCustomers(search?: string) {
     const DIRECTUS_URL = getDirectusBase();
-    let query = `fields=customer_code,customer_name,brgy,city,province&filter[isActive][_eq]=1&limit=100&sort=customer_name`;
+    let query = `fields=customer_code,customer_name,brgy,city,province&filter[isActive][_eq]=1&limit=-1&sort=customer_name`;
     if (search) {
       const filter = {
         _or: [

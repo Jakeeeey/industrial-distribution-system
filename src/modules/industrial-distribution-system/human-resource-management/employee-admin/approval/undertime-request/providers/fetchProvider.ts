@@ -1,6 +1,6 @@
 import type { UndertimeListResponse, ApprovalAction } from "../type";
 
-const API_BASE = "/api/hrm/employee-admin/approval/undertime-request";
+const API_BASE = "/api/ids/hrm/employee-admin/approval/undertime-request";
 
 export async function fetchUndertimeRequests(): Promise<UndertimeListResponse> {
   const response = await fetch(API_BASE, {

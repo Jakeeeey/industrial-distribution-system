@@ -112,6 +112,18 @@ export async function createTransfer(payload: CreateTransferPayload): Promise<{ 
 }
 
 /**
+ * Helper to return current PH Manila Time (UTC+8) as an ISO-like string
+ * but without the 'Z' suffix to ensure correct local interpretation.
+ */
+function nowPH(): string {
+  const date = new Date();
+  const phOffset = 8 * 60; // 8 hours in minutes
+  const localOffset = date.getTimezoneOffset(); // in minutes
+  const phTime = new Date(date.getTime() + (phOffset + localOffset) * 60000);
+  return phTime.toISOString().replace("Z", "");
+}
+
+/**
  * Updates status and handles optional RFID tracking logic.
  */
 export async function updateTransferStatus(payload: UpdateTransferPayload): Promise<{ success: boolean }> {
@@ -119,10 +131,23 @@ export async function updateTransferStatus(payload: UpdateTransferPayload): Prom
   const validated = UpdateStockTransferSchema.parse(payload);
   
   // 2. Normalize updates (handle both 'items' and 'ids' formats)
-  const updates = validated.items || (validated.ids || []).map(id => ({
+  const phNow = nowPH();
+  const updates = (validated.items || (validated.ids || []).map(id => ({
     id,
     status: validated.status || "Unknown"
+  }))).map(u => ({
+    ...u,
+    ...(u.status === "Received" ? { date_received: phNow, receiver_id: validated.userId || null } : {}),
+    ...(u.status === "For Picking" ? { 
+      approved_by: validated.userId || null
+    } : {}),
+    ...(u.status === "For Loading" ? { 
+      dispatched_at: phNow, 
+      dispatched_by: validated.userId || null 
+    } : {})
   }));
+
+  console.log("[Stock Transfer Service] Mapped updates payload:", JSON.stringify(updates));
 
   if (updates.length === 0) return { success: true };
 
@@ -145,26 +170,40 @@ export async function updateTransferStatus(payload: UpdateTransferPayload): Prom
 /**
  * Specifically handles manual receiving where received_quantity is auto-filled.
  */
-export async function manualReceiveItems(ids: number[], status: string): Promise<{ success: boolean }> {
-  const transfers = await repo.fetchStockTransfers(); // Ideally we'd filter by IDs here
-  const targetItems = transfers.filter(t => ids.includes(t.id));
+export async function manualReceiveItems(ids: number[], status: string, userId?: number): Promise<{ success: boolean }> {
+  // Fetch ONLY the rows we need instead of the entire table
+  const targetItems = await repo.fetchStockTransfersByIds(ids);
 
+  if (targetItems.length === 0) return { success: true };
+
+  // Build update payloads
   const updates = targetItems.map(item => ({
     id: item.id,
     status: status,
     received_quantity: item.allocated_quantity ?? item.ordered_quantity ?? 0
   }));
 
-  if (updates.length > 0) {
-    await Promise.all(
-      updates.map(u => 
-        repo.updateTransfer(u.id, {
-          status: u.status,
-          received_quantity: u.received_quantity
-        })
-      )
-    );
-  }
+  // Use bulk update — one request per unique payload shape
+  const now = new Date().toISOString();
+  await repo.updateTransfersStatus(updates.map(u => ({
+    id: u.id,
+    status: u.status,
+    allocated_quantity: u.received_quantity,
+    date_received: now,
+    receiver_id: userId || null
+  })));
+
+  // Also set received_quantity individually where it varies per row
+  await Promise.all(
+    updates.map(u =>
+      repo.updateTransfer(u.id, {
+        status: u.status,
+        received_quantity: u.received_quantity,
+        date_received: now,
+        receiver_id: userId || null
+      })
+    )
+  );
 
   return { success: true };
 }

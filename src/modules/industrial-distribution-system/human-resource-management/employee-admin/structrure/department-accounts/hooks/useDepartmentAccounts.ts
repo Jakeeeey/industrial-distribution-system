@@ -14,7 +14,7 @@ import {
 } from "../types";
 import { toastServerDown } from "@/modules/industrial-distribution-system/human-resource-management/employee-admin/administrator/utils/utils";
 
-const API_BASE = "/api/hrm/employee-admin/structure/department-accounts";
+const API_BASE = "/api/ids/hrm/employee-admin/structure/department-accounts";
 
 // ============================================================================
 // MASTER DATA HOOK

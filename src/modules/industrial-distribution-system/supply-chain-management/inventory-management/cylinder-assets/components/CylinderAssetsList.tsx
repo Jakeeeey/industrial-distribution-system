@@ -66,6 +66,8 @@ interface Props {
 
 export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, pagination, sorting }: Props) {
   const [showFilters, setShowFilters] = useState(false);
+  const [invalidSerials, setInvalidSerials] = useState<string[]>([]);
+  const [pendingSerials, setPendingSerials] = useState<Record<string, string>>({});
   const [products, setProducts] = useState<{ id: number; name: string }[]>([]);
   const [branches, setBranches] = useState<{ id: number; name: string }[]>([]);
   const [qrModalOpen, setQrModalOpen] = useState(false);
@@ -173,7 +175,14 @@ export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, 
     fetch("/api/ids/scm/inventory-management/cylinder-assets/products")
       .then((r) => r.json())
       .then((d) => {
-        if (d.data) setProducts(d.data.map((p: { product_id: number; product_name: string }) => ({ id: p.product_id, name: p.product_name })));
+        if (d.data) {
+          setProducts(
+            d.data.map((p: { product_id: number; product_name: string; unit_of_measurement: number | null }) => {
+              const uomLabel = p.unit_of_measurement === 23 ? " (FULL)" : p.unit_of_measurement === 18 ? " (EMPTY)" : "";
+              return { id: p.product_id, name: `${p.product_name}${uomLabel}` };
+            })
+          );
+        }
       });
 
     fetch("/api/ids/scm/inventory-management/stock-adjustment/branches")
@@ -182,6 +191,36 @@ export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, 
         if (d.data) setBranches(d.data.map((b: { id: number; branch_name: string }) => ({ id: b.id, name: b.branch_name })));
       });
   }, []);
+
+  useEffect(() => {
+    const checkOnhand = async () => {
+      if (!data || data.length === 0) return;
+      try {
+        const serials = data.map((item) => ({
+          serialNumber: item.serial_number,
+          branchId: item.current_branch_id || item.branch?.id
+        }));
+        const res = await fetch(`/api/ids/scm/inventory-management/cylinder-assets/validate-onhand`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ serials }),
+        });
+        const json = await res.json();
+        if (json.ok && json.invalidSerials) {
+          setInvalidSerials(json.invalidSerials);
+          if (json.pendingSerials) {
+            setPendingSerials(json.pendingSerials);
+          }
+        } else {
+          setInvalidSerials([]);
+          setPendingSerials({});
+        }
+      } catch (err) {
+        console.error("Failed to validate serials", err);
+      }
+    };
+    checkOnhand();
+  }, [data]);
 
   const renderSortIcon = (field: string) => {
     if (sorting.sortBy !== field) return <ArrowUpDown className="ml-2 h-3 w-3 opacity-50" />;
@@ -528,9 +567,21 @@ export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, 
                           aria-label={`Select ${item.serial_number}`}
                         />
                       </TableCell>
-                      <TableCell className="w-[12%] font-bold text-foreground truncate">{item.serial_number}</TableCell>
+                      <TableCell className="w-[12%] font-bold text-foreground">
+                        <div className="truncate">{item.serial_number}</div>
+                        {invalidSerials.includes(item.serial_number) && (
+                          <div className="text-[10px] text-red-600 font-semibold mt-0.5">
+                            {pendingSerials[item.serial_number] 
+                              ? pendingSerials[item.serial_number]
+                              : 'Not Transacted'}
+                          </div>
+                        )}
+                      </TableCell>
                       <TableCell className="w-[18%] font-medium">
-                        <div className="truncate">{item.product?.product_name || "N/A"}</div>
+                        <div className="truncate">
+                          {item.product?.product_name || "N/A"}
+                          {item.product?.unit_of_measurement === 23 ? " (FULL)" : item.product?.unit_of_measurement === 18 ? " (EMPTY)" : ""}
+                        </div>
                         {item.product?.product_code && <span className="block text-[10px] text-muted-foreground truncate">{item.product.product_code}</span>}
                       </TableCell>
                       <TableCell className="w-[10%]">

@@ -41,7 +41,7 @@ export function CustomerManagementDialog({
     const [isPrinting, setIsPrinting] = useState(false);
 
     const customersApiUrl =
-        "/api/hrm/employee-admin/structure/sales-management/salesman-creation/customers";
+        "/api/ids/hrm/employee-admin/structure/sales-management/salesman-creation/customers";
 
     const fetchData = useCallback(
         async (salesmanId: number) => {
@@ -333,16 +333,16 @@ export function CustomerManagementDialog({
                                                             </div>
                                                             {(customer.city ||
                                                                 customer.province) && (
-                                                                <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                                                                    <span className="truncate">
-                                                                        {customer.city}
-                                                                        {customer.city &&
-                                                                            customer.province &&
-                                                                            ", "}
-                                                                        {customer.province}
-                                                                    </span>
-                                                                </div>
-                                                            )}
+                                                                    <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                                                                        <span className="truncate">
+                                                                            {customer.city}
+                                                                            {customer.city &&
+                                                                                customer.province &&
+                                                                                ", "}
+                                                                            {customer.province}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
                                                         </div>
                                                     </div>
                                                 );
@@ -437,16 +437,16 @@ export function CustomerManagementDialog({
                                                             </div>
                                                             {(customer.city ||
                                                                 customer.province) && (
-                                                                <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                                                                    <span className="truncate">
-                                                                        {customer.city}
-                                                                        {customer.city &&
-                                                                            customer.province &&
-                                                                            ", "}
-                                                                        {customer.province}
-                                                                    </span>
-                                                                </div>
-                                                            )}
+                                                                    <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                                                                        <span className="truncate">
+                                                                            {customer.city}
+                                                                            {customer.city &&
+                                                                                customer.province &&
+                                                                                ", "}
+                                                                            {customer.province}
+                                                                        </span>
+                                                                    </div>
+                                                                )}
                                                         </div>
                                                     </div>
                                                 );

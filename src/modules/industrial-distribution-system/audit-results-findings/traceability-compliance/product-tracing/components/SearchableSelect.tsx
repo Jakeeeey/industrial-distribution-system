@@ -1,4 +1,4 @@
-//src/modules/supply-chain-management/traceability-compliance/product-tracing/components/SearchableSelect.tsx
+//src/modules/industrial-distribution-system/supply-chain-management/traceability-compliance/product-tracing/components/SearchableSelect.tsx
 "use client";
 
 import * as React from "react";
