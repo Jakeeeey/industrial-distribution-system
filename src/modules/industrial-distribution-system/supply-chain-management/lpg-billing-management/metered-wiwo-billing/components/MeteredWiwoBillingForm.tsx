@@ -196,13 +196,13 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
               <div className="space-y-2">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Transaction No</Label>
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Reading No</Label>
                 <div className="relative">
                   <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="metered-tx-no"
-                    value={form.transactionNo}
-                    onChange={(e) => setForm((f) => ({ ...f, transactionNo: e.target.value }))}
+                    value={form.readingNo}
+                    onChange={(e) => setForm((f) => ({ ...f, readingNo: e.target.value }))}
                     className="pl-10 font-mono"
                     readOnly={isReadOnly}
                   />

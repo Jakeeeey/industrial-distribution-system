@@ -107,7 +107,7 @@ export function useMeteredWiwoList(initialParams: MeteredListParams = {}) {
 // ─── Form / billing computation hook ─────────────────────────────────────────
 
 export interface MeteredBillingFormState {
-  transactionNo: string;
+  readingNo: string;
   transactionDate: string;
   customerCode: string;
   siteId: number | null;
@@ -126,9 +126,17 @@ export interface MeteredBillingFormState {
   configCorrectionFactor: number;
 }
 
+function generateMtrNo(siteId?: number | null, date?: string): string {
+  const d = date || new Date().toISOString().slice(0, 10);
+  const dateStr = d.replace(/-/g, "").slice(0, 8);
+  const sId = siteId ?? 0;
+  const seq = Date.now().toString().slice(-3);
+  return `MTR-${dateStr}${sId}${seq}`;
+}
+
 export function useMeteredWiwoBillingForm(txId?: number | null) {
   const [form, setForm] = useState<MeteredBillingFormState>({
-    transactionNo: `MTR-${Date.now().toString().slice(-6)}`,
+    readingNo: generateMtrNo(),
     transactionDate: new Date().toISOString().slice(0, 10),
     customerCode: "",
     siteId: null,
@@ -176,7 +184,7 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
   useEffect(() => {
     if (!txId) {
       setForm({
-        transactionNo: `MTR-${Date.now().toString().slice(-6)}`,
+        readingNo: generateMtrNo(),
         transactionDate: new Date().toISOString().slice(0, 10),
         customerCode: "",
         siteId: null,
@@ -226,7 +234,7 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
         }
 
         setForm({
-          transactionNo: tx.transaction_no,
+          readingNo: tx.reading_no,
           transactionDate: tx.transaction_date,
           customerCode: tx.customer_code,
           siteId: tx.lpg_site_id,
@@ -276,6 +284,53 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
       .catch(console.error)
       .finally(() => setWiwoLoading(false));
   }, [form.siteId, form.customerCode]);
+
+  // Fetch sequential transaction number for new transactions
+  useEffect(() => {
+    if (txId) return; // Do not fetch/overwrite transaction number for existing records
+    if (!form.customerCode || !form.siteId) {
+      // If no site is selected, show default placeholder with 001
+      const d = form.transactionDate || new Date().toISOString().slice(0, 10);
+      const dateStr = d.replace(/-/g, "").slice(0, 8);
+      setForm((f) => {
+        const placeholder = `MTR-${dateStr}${form.siteId ? "" : "0"}001`; // format as non-hyphenated MTR-{dateStr}{siteId}{seq}
+        if (f.readingNo === placeholder) return f;
+        return {
+          ...f,
+          readingNo: placeholder,
+        };
+      });
+      return;
+    }
+
+    let active = true;
+    const fetchSeq = async () => {
+      try {
+        const url = `/api/ids/scm/lpg-billing-management/metered-billing?type=next-seq&customerCode=${encodeURIComponent(form.customerCode)}&date=${form.transactionDate}`;
+        const res = await window.fetch(url);
+        const data = await res.json();
+        if (!active) return;
+        const seq = data.seq ?? 1;
+        const seqStr = String(seq).padStart(3, "0");
+        const dateStr = form.transactionDate.replace(/-/g, "").slice(0, 8);
+        const newTxNo = `MTR-${dateStr}${form.siteId}${seqStr}`;
+        setForm((f) => {
+          if (f.readingNo === newTxNo) return f;
+          return {
+            ...f,
+            readingNo: newTxNo,
+          };
+        });
+      } catch (err) {
+        console.error("Failed to fetch next seq number:", err);
+      }
+    };
+
+    fetchSeq();
+    return () => {
+      active = false;
+    };
+  }, [txId, form.customerCode, form.transactionDate, form.siteId]);
 
   // Compute from current wiwoHeaderId if selected
   const loadWiwoKg = useCallback(async (headerId: number) => {
@@ -342,6 +397,7 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
       configLpgVapor: lpgVapor,
       configPsi: psi,
       configCorrectionFactor: cf,
+      readingNo: generateMtrNo(siteId, f.transactionDate),
     }));
   }, [sites]);
 
@@ -420,6 +476,8 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
     isValidReading &&
     (!hasVariance || !!form.remarks.trim());
 
+  const meterUnit = (selectedSite?.meter_unit ?? "KG") as "M3" | "LITER" | "KG" | "UNIT";
+
   const submit = useCallback(async (statusOverride?: TransactionStatus): Promise<boolean> => {
     setSubmitting(true);
     try {
@@ -433,7 +491,7 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
         atmospheric_pressure?: number;
         lpg_vapor_factor?: number;
       } = {
-        transaction_no: form.transactionNo,
+        reading_no: form.readingNo,
         transaction_date: form.transactionDate,
         transaction_type: "REGULAR_BILLING",
         customer_code: form.customerCode,
@@ -461,6 +519,10 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
         psi: form.configPsi,
         atmospheric_pressure: form.configCorrectionFactor,
         lpg_vapor_factor: pressureLine,
+        // Meter settings snapshot
+        meter_unit: meterUnit,
+        meter_direction: meterDirection as "INCREASING" | "DECREASING",
+        conversion_factor: conversionFactor,
       };
 
       const url = txId
@@ -507,7 +569,7 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
     } finally {
       setSubmitting(false);
     }
-  }, [form, arbitration, grossAmount, vatAmount, netAmount, txId, pressureLine]);
+  }, [form, arbitration, grossAmount, vatAmount, netAmount, txId, pressureLine, meterUnit, meterDirection, conversionFactor]);
 
   return {
     form, setForm,
