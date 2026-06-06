@@ -38,7 +38,7 @@ export function VariancePanel({ result }: Props) {
         >
           <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Metered KG</p>
           <p className={`text-xl font-black font-mono ${billable_source === "METERED" ? "text-blue-700 dark:text-blue-400" : ""}`}>
-            {Number(metered_kg).toFixed(3)}
+            {Number(metered_kg).toFixed(4)}
           </p>
           {billable_source === "METERED" && (
             <Badge className="mt-1.5 bg-blue-600 text-white border-none text-[10px]">SELECTED</Badge>
@@ -53,7 +53,7 @@ export function VariancePanel({ result }: Props) {
         >
           <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">WIWO KG</p>
           <p className={`text-xl font-black font-mono ${billable_source === "WIWO" ? "text-orange-700 dark:text-orange-400" : ""}`}>
-            {Number(wiwo_kg).toFixed(3)}
+            {Number(wiwo_kg).toFixed(4)}
           </p>
           {billable_source === "WIWO" && (
             <Badge className="mt-1.5 bg-orange-600 text-white border-none text-[10px]">SELECTED</Badge>
@@ -82,7 +82,7 @@ export function VariancePanel({ result }: Props) {
         </div>
         <div className="text-right">
           <p className={`font-mono font-bold ${isHighVariance ? "text-red-600" : "text-zinc-700 dark:text-zinc-300"}`}>
-            {Number(variance_kg).toFixed(3)} kg
+            {Number(variance_kg).toFixed(4)} kg
           </p>
           <p className="text-[10px] text-muted-foreground">{variancePct}%</p>
         </div>
@@ -97,7 +97,7 @@ export function VariancePanel({ result }: Props) {
           </p>
         </div>
         <p className="text-2xl font-black font-mono text-violet-700 dark:text-violet-400">
-          {Number(billable_kg).toFixed(3)} <span className="text-sm font-normal">kg</span>
+          {Number(billable_kg).toFixed(4)} <span className="text-sm font-normal">kg</span>
         </p>
       </div>
     </div>
