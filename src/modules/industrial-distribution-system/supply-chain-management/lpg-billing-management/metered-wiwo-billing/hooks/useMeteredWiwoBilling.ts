@@ -379,7 +379,7 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
     ? (activePsi + activeCorrectionFactor) / activeCorrectionFactor
     : 1;
 
-  const isMeteredOnly = selectedSite?.billing_mode === "METERED";
+  const isMeteredOnly = true; // WIWO commented out for now: selectedSite?.billing_mode === "METERED";
 
   // Meter Reading Validation & Calculation
   const isValidReading =
