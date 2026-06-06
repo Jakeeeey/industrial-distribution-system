@@ -175,6 +175,7 @@ export async function createMeteredTransaction(
   delete dbPayload.atmospheric_pressure;
   delete dbPayload.lpg_vapor_factor;
 
+  /* Commented out posting/editing in lpg_metered_wiwo_transactions for now
   const res = await directusFetch<{ data: MeteredWiwoTransaction }>(
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions`,
     {
@@ -186,6 +187,11 @@ export async function createMeteredTransaction(
     }
   );
   return res.data;
+  */
+  return {
+    ...payload,
+    meter_reading_id: readingId,
+  } as unknown as MeteredWiwoTransaction;
 }
 
 export async function updateMeteredTransaction(
@@ -219,6 +225,7 @@ export async function updateMeteredTransaction(
   delete dbPayload.atmospheric_pressure;
   delete dbPayload.lpg_vapor_factor;
 
+  /* Commented out posting/editing in lpg_metered_wiwo_transactions for now
   const res = await directusFetch<{ data: MeteredWiwoTransaction }>(
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions/${id}`,
     {
@@ -230,6 +237,12 @@ export async function updateMeteredTransaction(
     }
   );
   return res.data;
+  */
+  return {
+    id,
+    ...payload,
+    meter_reading_id: readingId,
+  } as unknown as MeteredWiwoTransaction;
 }
 
 // ─── Meter Readings lookup ────────────────────────────────────────────────────
