@@ -30,7 +30,7 @@ export default function StockConversionManualModule({
   const [branches, setBranches] = useState<{ id: number; branch_name: string }[]>([]);
 
   useEffect(() => {
-    fetch("/api/scm/inventory-management/branch-management")
+    fetch("/api/ids/scm/inventory-management/branch-management")
       .then(res => res.json())
       .then(json => {
         if (Array.isArray(json.branches)) setBranches(json.branches);

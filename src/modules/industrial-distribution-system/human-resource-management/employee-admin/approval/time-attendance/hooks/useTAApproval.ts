@@ -13,21 +13,21 @@ import { toast } from "sonner";
  * HR Head: sees all pending requests across all departments, with a department filter.
  */
 export function useTAApproval() {
-  const [managerQueue, setManagerQueue]                     = useState<AnyTARequest[]>([]);
-  const [approvalLogs, setApprovalLogs]                     = useState<ApprovalLogEntry[]>([]);
-  const [filters, setFilters]                               = useState<TAFilterOptions>({});
-  const [isLoading, setIsLoading]                           = useState(false);
-  const [isLogsLoading, setIsLogsLoading]                   = useState(false);
-  const [isHRHead, setIsHRHead]                             = useState(false);
-  const [departments, setDepartments]                       = useState<Department[]>([]);
-  const [selectedDepartmentId, setSelectedDepartmentId]     = useState<number | undefined>(undefined);
-  const [error, setError]                                   = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated]                       = useState<Date>(new Date());
+  const [managerQueue, setManagerQueue] = useState<AnyTARequest[]>([]);
+  const [approvalLogs, setApprovalLogs] = useState<ApprovalLogEntry[]>([]);
+  const [filters, setFilters] = useState<TAFilterOptions>({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLogsLoading, setIsLogsLoading] = useState(false);
+  const [isHRHead, setIsHRHead] = useState(false);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState<number | undefined>(undefined);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
   // ── Fetch all departments (for HR Head dropdown) ──────────────────────────
   const fetchDepartments = useCallback(async () => {
     try {
-      const res = await fetch("/api/hrm/employee-admin/approval/time-attendance?action=departments");
+      const res = await fetch("/api/ids/hrm/employee-admin/approval/time-attendance?action=departments");
       const result = await res.json();
       if (result.success) {
 
@@ -54,12 +54,12 @@ export function useTAApproval() {
     try {
       const query = new URLSearchParams();
       if (filters.status && filters.status !== "all") query.append("status", filters.status);
-      if (filters.types && filters.types.length > 0)  query.append("types", filters.types.join(","));
+      if (filters.types && filters.types.length > 0) query.append("types", filters.types.join(","));
       if (filters.startDate) query.append("startDate", filters.startDate);
-      if (filters.endDate)   query.append("endDate",   filters.endDate);
+      if (filters.endDate) query.append("endDate", filters.endDate);
       if (selectedDepartmentId) query.append("departmentId", String(selectedDepartmentId));
 
-      const res    = await fetch(`/api/hrm/employee-admin/approval/time-attendance?${query.toString()}`);
+      const res = await fetch(`/api/ids/hrm/employee-admin/approval/time-attendance?${query.toString()}`);
       const result = await res.json();
 
       if (result.success) {
@@ -89,10 +89,10 @@ export function useTAApproval() {
       query.append("action", "logs");
       query.append("limit", "100");
       if (filters.startDate) query.append("startDate", filters.startDate);
-      if (filters.endDate)   query.append("endDate",   filters.endDate);
+      if (filters.endDate) query.append("endDate", filters.endDate);
       if (filters.departmentId) query.append("departmentId", String(filters.departmentId));
 
-      const res    = await fetch(`/api/hrm/employee-admin/approval/time-attendance?${query.toString()}`);
+      const res = await fetch(`/api/ids/hrm/employee-admin/approval/time-attendance?${query.toString()}`);
       const result = await res.json();
       if (result.success) {
         setApprovalLogs(result.data);
@@ -108,7 +108,7 @@ export function useTAApproval() {
   const fetchHistory = useCallback(async (requestId: number, type: string) => {
     try {
       const res = await fetch(
-        `/api/hrm/employee-admin/approval/time-attendance?action=history&requestId=${requestId}&type=${type}`
+        `/api/ids/hrm/employee-admin/approval/time-attendance?action=history&requestId=${requestId}&type=${type}`
       );
       const result = await res.json();
       return result.success ? result.data : [];
@@ -121,7 +121,7 @@ export function useTAApproval() {
   // ── Approve / Reject / Return / Override ──────────────────────────────────
   const performAction = useCallback(async (payload: TAActionPayload): Promise<boolean> => {
     try {
-      const res = await fetch("/api/hrm/employee-admin/approval/time-attendance", {
+      const res = await fetch("/api/ids/hrm/employee-admin/approval/time-attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -134,12 +134,12 @@ export function useTAApproval() {
         fetchApprovalLogs();
 
         const pastTense =
-          payload.action === "approve"         ? "approved"   :
-          payload.action === "reject"          ? "rejected"   :
-          payload.action === "approve_override" ? "approved (override)" :
-          payload.action === "reject_override"  ? "rejected (override)" :
-          payload.action === "override"         ? "overridden" :
-          "returned";
+          payload.action === "approve" ? "approved" :
+            payload.action === "reject" ? "rejected" :
+              payload.action === "approve_override" ? "approved (override)" :
+                payload.action === "reject_override" ? "rejected (override)" :
+                  payload.action === "override" ? "overridden" :
+                    "returned";
         toast.success(`Request ${pastTense} successfully`);
         return true;
       } else {

@@ -1,13 +1,13 @@
 import type { AttendanceListResponse, ApprovalAction } from "../type";
 
-const API_BASE = "/api/hrm/employee-admin/approval/attendance-approval";
+const API_BASE = "/api/ids/hrm/employee-admin/approval/attendance-approval";
 
 // Simple in-memory cache
 let departmentCache: { department_id: number, department_name: string }[] | null = null;
 
-export async function fetchAttendanceRequests(params?: { 
-  startDate?: string; 
-  endDate?: string; 
+export async function fetchAttendanceRequests(params?: {
+  startDate?: string;
+  endDate?: string;
   approvalStatus?: string;
   departmentId?: string;
 }): Promise<AttendanceListResponse> {
@@ -27,8 +27,8 @@ export async function fetchAttendanceRequests(params?: {
 
 export async function fetchDepartments(): Promise<{ department_id: number, department_name: string }[]> {
   if (departmentCache) return departmentCache;
-  
-  const response = await fetch('/api/hrm/employee-admin/approval/attendance-approval/departments');
+
+  const response = await fetch('/api/ids/hrm/employee-admin/approval/attendance-approval/departments');
   if (!response.ok) return [];
   const data = await response.json();
   departmentCache = data.data || [];

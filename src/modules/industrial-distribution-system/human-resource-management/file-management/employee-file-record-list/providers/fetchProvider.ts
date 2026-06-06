@@ -1,9 +1,9 @@
 "use client";
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
-import type { 
+import type {
     EmployeeFileRecordListWithRelations,
-    EmployeeFileRecordListFormData 
+    EmployeeFileRecordListFormData
 } from "../types";
 import type { EmployeeFileRecordType } from "../../employee-file-record-type/types";
 
@@ -39,7 +39,7 @@ export function EmployeeFileRecordListFetchProvider({
             setIsError(false);
 
             const res = await fetch(
-                "/api/hrm/file-management/employee-file-record-list",
+                "/api/ids/hrm/file-management/employee-file-record-list",
                 { cache: "no-store" }
             );
 
@@ -63,7 +63,7 @@ export function EmployeeFileRecordListFetchProvider({
     const createRecord = useCallback(
         async (data: EmployeeFileRecordListFormData) => {
             const res = await fetch(
-                "/api/hrm/file-management/employee-file-record-list",
+                "/api/ids/hrm/file-management/employee-file-record-list",
                 {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -79,7 +79,7 @@ export function EmployeeFileRecordListFetchProvider({
     const updateRecord = useCallback(
         async (id: number, data: EmployeeFileRecordListFormData) => {
             const res = await fetch(
-                "/api/hrm/file-management/employee-file-record-list",
+                "/api/ids/hrm/file-management/employee-file-record-list",
                 {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },
@@ -95,7 +95,7 @@ export function EmployeeFileRecordListFetchProvider({
     const deleteRecord = useCallback(
         async (id: number) => {
             const res = await fetch(
-                `/api/hrm/file-management/employee-file-record-list?id=${id}`,
+                `/api/ids/hrm/file-management/employee-file-record-list?id=${id}`,
                 { method: "DELETE" }
             );
             if (!res.ok) throw new Error("Delete failed");

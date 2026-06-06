@@ -4,63 +4,63 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 
 export interface Employee {
-  user_id:         number;
-  user_fname:      string;
-  user_lname:      string;
-  user_email:      string;
-  user_position:   string;
-  user_image:      string | null;
-  department_id:   number;
+  user_id: number;
+  user_fname: string;
+  user_lname: string;
+  user_email: string;
+  user_position: string;
+  user_image: string | null;
+  department_id: number;
   department_name: string;
-  work_start:      string | null;
-  work_end:        string | null;
-  working_days:    number;
-  workdays_note:   string | null;
-  grace_period:    number;
+  work_start: string | null;
+  work_end: string | null;
+  working_days: number;
+  workdays_note: string | null;
+  grace_period: number;
 }
 
 export interface EmployeeAttendanceRow {
-  log_id:          number;
-  directus_id:     number | null; // Directus PK (e.g. 4195300336) — FK in attendance_log_geotag.log_id
-  log_date:        string;
-  time_in:         string | null;
-  lunch_start:     string | null;
-  lunch_end:       string | null;
-  break_start:     string | null;
-  break_end:       string | null;
-  time_out:        string | null;
-  status:          string;
+  log_id: number;
+  directus_id: number | null; // Directus PK (e.g. 4195300336) — FK in attendance_log_geotag.log_id
+  log_date: string;
+  time_in: string | null;
+  lunch_start: string | null;
+  lunch_end: string | null;
+  break_start: string | null;
+  break_end: string | null;
+  time_out: string | null;
+  status: string;
   approval_status: string;
-  work_hours:      number;  // minutes
-  overtime:        number;  // minutes
-  late:            number;  // minutes
-  undertime:       number;  // minutes
-  is_rest_day:     boolean;
-  is_oncall:       boolean;
+  work_hours: number;  // minutes
+  overtime: number;  // minutes
+  late: number;  // minutes
+  undertime: number;  // minutes
+  is_rest_day: boolean;
+  is_oncall: boolean;
   oncall_schedule: {
-    work_start:  string | null;
-    work_end:    string | null;
+    work_start: string | null;
+    work_end: string | null;
     lunch_start: string | null;
-    lunch_end:   string | null;
+    lunch_end: string | null;
     break_start: string | null;
-    break_end:   string | null;
+    break_end: string | null;
   } | null;
 }
 
 interface UseEmployeesResult {
-  loading:     boolean;
-  error:       string | null;
-  employees:   Employee[];
+  loading: boolean;
+  error: string | null;
+  employees: Employee[];
   departments: { id: number; name: string }[];
 }
 
 interface UseEmployeeAttendanceResult {
-  loading:    boolean;  // true only on first load (no previous data)
+  loading: boolean;  // true only on first load (no previous data)
   refreshing: boolean;  // true on subsequent fetches — previous data stays visible
-  error:      string | null;
-  logs:       EmployeeAttendanceRow[];
-  employee:   Employee | null;
-  refetch:    () => void;
+  error: string | null;
+  logs: EmployeeAttendanceRow[];
+  employee: Employee | null;
+  refetch: () => void;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -133,9 +133,9 @@ function computeUndertime(timeOut: string | null, workEnd: string | null): numbe
 // ── Hook: all employees ────────────────────────────────────────────────────────
 
 export function useEmployees(): UseEmployeesResult {
-  const [loading,     setLoading]     = useState(true);
-  const [error,       setError]       = useState<string | null>(null);
-  const [employees,   setEmployees]   = useState<Employee[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<{ id: number; name: string }[]>([]);
 
   useEffect(() => {
@@ -144,7 +144,7 @@ export function useEmployees(): UseEmployeesResult {
     const run = async () => {
       try {
         const res = await fetch(
-          '/api/hrm/workforce/attendance-report/employee-report',
+          '/api/ids/hrm/workforce/attendance-report/employee-report',
           { credentials: 'include' },
         );
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
@@ -183,17 +183,17 @@ export function useEmployees(): UseEmployeesResult {
 
 export function useEmployeeAttendance(
   userId: number | null,
-  from:   string,
-  to:     string,
+  from: string,
+  to: string,
 ): UseEmployeeAttendanceResult {
   // loading  = no data yet (first fetch for this employee)
   // refreshing = already have data, re-fetching due to date change
-  const [loading,    setLoading]    = useState(false);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [error,      setError]      = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   // Stale data is kept in state until new data arrives — prevents blank flash
-  const [logs,       setLogs]       = useState<EmployeeAttendanceRow[]>([]);
-  const [employee,   setEmployee]   = useState<Employee | null>(null);
+  const [logs, setLogs] = useState<EmployeeAttendanceRow[]>([]);
+  const [employee, setEmployee] = useState<Employee | null>(null);
 
   // Track whether we have ever received data for the current employee
   const hasDataRef = useRef(false);
@@ -220,7 +220,7 @@ export function useEmployeeAttendance(
     try {
       const params = new URLSearchParams({ userId: String(userId), from, to });
       const res = await fetch(
-        `/api/hrm/workforce/attendance-report/employee-report/history?${params}`,
+        `/api/ids/hrm/workforce/attendance-report/employee-report/history?${params}`,
         { credentials: 'include' },
       );
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
@@ -229,46 +229,46 @@ export function useEmployeeAttendance(
       const emp: Employee = data.employee;
       const rawLogs: Record<string, unknown>[] = data.logs ?? [];
 
-      const workStart   = emp.work_start;
-      const workEnd     = emp.work_end;
+      const workStart = emp.work_start;
+      const workEnd = emp.work_end;
       const gracePeriod = emp.grace_period ?? 5;
 
       const mapped: EmployeeAttendanceRow[] = rawLogs.map((l) => {
-        const ti  = extractTime(l.time_in  as string | null);
+        const ti = extractTime(l.time_in as string | null);
         const to_ = extractTime(l.time_out as string | null);
-        const ls  = extractTime(l.lunch_start as string | null);
-        const le  = extractTime(l.lunch_end   as string | null);
-        const wh  = computeWorkHours(ti, to_, ls, le);
+        const ls = extractTime(l.lunch_start as string | null);
+        const le = extractTime(l.lunch_end as string | null);
+        const wh = computeWorkHours(ti, to_, ls, le);
 
-        const logWorkStart   = extractTime(l.work_start as string | null) ?? workStart;
-        const logWorkEnd     = extractTime(l.work_end   as string | null) ?? workEnd;
+        const logWorkStart = extractTime(l.work_start as string | null) ?? workStart;
+        const logWorkEnd = extractTime(l.work_end as string | null) ?? workEnd;
         const logGracePeriod = (l.grace_period as number | null) ?? gracePeriod;
 
         return {
-          log_id:          l.log_id as number,
-          directus_id:     (l.directus_id as number | null) ?? null,
-          log_date:        l.log_date as string,
-          time_in:         ti,
-          lunch_start:     ls,
-          lunch_end:       le,
-          break_start:     extractTime(l.break_start as string | null),
-          break_end:       extractTime(l.break_end   as string | null),
-          time_out:        to_,
-          status:          l.status as string,
+          log_id: l.log_id as number,
+          directus_id: (l.directus_id as number | null) ?? null,
+          log_date: l.log_date as string,
+          time_in: ti,
+          lunch_start: ls,
+          lunch_end: le,
+          break_start: extractTime(l.break_start as string | null),
+          break_end: extractTime(l.break_end as string | null),
+          time_out: to_,
+          status: l.status as string,
           approval_status: l.approval_status as string,
-          work_hours:      wh,
-          overtime:        computeOvertime(ti, to_, logWorkStart, logWorkEnd, ls, le),
-          late:            computeLate(ti, logWorkStart, logGracePeriod),
-          undertime:       computeUndertime(to_, logWorkEnd),
-          is_rest_day:     (l.status as string) === 'Holiday',
-          is_oncall:       !!(l.is_oncall),
+          work_hours: wh,
+          overtime: computeOvertime(ti, to_, logWorkStart, logWorkEnd, ls, le),
+          late: computeLate(ti, logWorkStart, logGracePeriod),
+          undertime: computeUndertime(to_, logWorkEnd),
+          is_rest_day: (l.status as string) === 'Holiday',
+          is_oncall: !!(l.is_oncall),
           oncall_schedule: (l.is_oncall && l.oncall_work_start && l.oncall_work_end) ? {
-            work_start:  extractTime(l.oncall_work_start  as string | null),
-            work_end:    extractTime(l.oncall_work_end    as string | null),
+            work_start: extractTime(l.oncall_work_start as string | null),
+            work_end: extractTime(l.oncall_work_end as string | null),
             lunch_start: extractTime(l.oncall_lunch_start as string | null),
-            lunch_end:   extractTime(l.oncall_lunch_end   as string | null),
+            lunch_end: extractTime(l.oncall_lunch_end as string | null),
             break_start: extractTime(l.oncall_break_start as string | null),
-            break_end:   extractTime(l.oncall_break_end   as string | null),
+            break_end: extractTime(l.oncall_break_end as string | null),
           } : null,
         };
       });
