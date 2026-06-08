@@ -6,14 +6,19 @@ import {
   fetchMeterReadings,
   fetchUnbilledWiwoHeaders,
   updateSiteReading,
+  fetchNextTxSeq,
   fetchNextMeterReadingSeq,
 } from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/metered-wiwo-billing/providers/metered-wiwo.provider";
 import { handleApiError } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/error-handler";
 import { getUserIdFromToken } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/auth-utils";
+import type { TransactionType } from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/metered-wiwo-billing/types";
 
 /**
  * GET /api/ids/scm/lpg-billing-management/metered-billing
- * Query params: type, siteId, customerCode, headerId, search, status, page, limit
+ * Query params:
+ *   type=sites | readings | wiwo-headers | next-tx-seq | next-seq | wiwo-kg
+ *   transactionType=ONBOARDING_BASELINE | REGULAR_BILLING | ALL
+ *   siteId, customerCode, headerId, search, status, page, limit
  */
 export async function GET(request: NextRequest) {
   try {
@@ -26,24 +31,42 @@ export async function GET(request: NextRequest) {
     }
 
     if (type === "readings") {
-      const siteId = searchParams.get("siteId") ? Number(searchParams.get("siteId")) : undefined;
+      const siteId = searchParams.get("siteId")
+        ? Number(searchParams.get("siteId"))
+        : undefined;
       const readings = await fetchMeterReadings(siteId);
       return NextResponse.json({ data: readings });
     }
 
     if (type === "wiwo-headers") {
       const customerCode = searchParams.get("customerCode") || undefined;
-      const siteId = searchParams.get("siteId") ? Number(searchParams.get("siteId")) : undefined;
+      const siteId = searchParams.get("siteId")
+        ? Number(searchParams.get("siteId"))
+        : undefined;
       const headers = await fetchUnbilledWiwoHeaders(customerCode, siteId);
       return NextResponse.json({ data: headers });
     }
 
+    /**
+     * New: per-site, per-day, per-type sequence number
+     * ?type=next-tx-seq&txType=REGULAR_BILLING&siteId=5&date=2025-06-08
+     */
+    if (type === "next-tx-seq") {
+      const txType = (searchParams.get("txType") || "REGULAR_BILLING") as TransactionType;
+      const siteId = Number(searchParams.get("siteId") ?? 0);
+      const date = searchParams.get("date") || new Date().toISOString().split("T")[0];
+      if (!siteId) return NextResponse.json({ seq: 1 });
+      const seq = await fetchNextTxSeq(txType, siteId, date);
+      return NextResponse.json({ seq });
+    }
+
+    /**
+     * Legacy: fallback for old MTR-sequence-number approach (kept for compat)
+     */
     if (type === "next-seq") {
       const customerCode = searchParams.get("customerCode");
       const date = searchParams.get("date");
-      if (!customerCode || !date) {
-        return NextResponse.json({ seq: 1 });
-      }
+      if (!customerCode || !date) return NextResponse.json({ seq: 1 });
       const seq = await fetchNextMeterReadingSeq(customerCode, date);
       return NextResponse.json({ seq });
     }
@@ -51,15 +74,19 @@ export async function GET(request: NextRequest) {
     if (type === "wiwo-kg") {
       const headerId = Number(searchParams.get("headerId"));
       if (!headerId) return NextResponse.json({ wiwo_kg: 0 });
-      
-      const { fetchWiwoById } = await import("@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/kilo-consumption-billing/providers/kilo-consumption.provider");
+      const { fetchWiwoById } = await import(
+        "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/kilo-consumption-billing/providers/kilo-consumption.provider"
+      );
       const wiwo = await fetchWiwoById(headerId);
       return NextResponse.json({ wiwo_kg: wiwo?.total_wiwo_kg ?? 0 });
     }
 
+    // ── Main list ──────────────────────────────────────────────────────────
+    const txTypeParam = searchParams.get("transactionType");
     const params = {
       search: searchParams.get("search") || undefined,
       status: searchParams.get("status") || undefined,
+      transactionType: (txTypeParam || "ALL") as TransactionType | "ALL",
       page: searchParams.get("page") ? Number(searchParams.get("page")) : 1,
       limit: searchParams.get("limit") ? Number(searchParams.get("limit")) : 10,
     };
@@ -83,16 +110,15 @@ export async function POST(request: NextRequest) {
 
     const data = await createMeteredTransaction({
       ...body,
-      transaction_type: "REGULAR_BILLING" as unknown,
       created_by: userId ?? undefined,
     });
 
-    // Update site readings if status is POSTED
+    // Update site last_meter_reading when POSTED
     if (body.status === "POSTED" && body.lpg_site_id && body.current_reading != null) {
       await updateSiteReading(
         Number(body.lpg_site_id),
         Number(body.current_reading),
-        body.transaction_date || new Date().toISOString().split('T')[0]
+        body.transaction_date || new Date().toISOString().split("T")[0]
       );
     }
 
@@ -101,4 +127,3 @@ export async function POST(request: NextRequest) {
     return handleApiError(error);
   }
 }
-

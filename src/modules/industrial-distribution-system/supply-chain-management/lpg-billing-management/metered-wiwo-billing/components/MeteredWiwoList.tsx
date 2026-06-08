@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Search, Plus, RefreshCw } from "lucide-react";
 import { useMeteredWiwoList } from "../hooks/useMeteredWiwoBilling";
 import { format } from "date-fns";
+import type { TransactionType } from "../types";
 
 interface Props {
   selectedId: number | null;
@@ -15,51 +16,78 @@ interface Props {
 }
 
 const STATUS_BADGE: Record<string, React.ReactNode> = {
-  DRAFT: <Badge variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">Draft</Badge>,
+  DRAFT: (
+    <Badge variant="secondary" className="text-[10px] font-bold uppercase tracking-wider">
+      Draft
+    </Badge>
+  ),
   POSTED: (
     <Badge className="bg-green-100 text-green-700 hover:bg-green-200 border-none text-[10px] font-bold uppercase tracking-wider">
       Posted
     </Badge>
   ),
-  CANCELLED: <Badge variant="destructive" className="text-[10px] font-bold uppercase tracking-wider">Cancelled</Badge>,
+  CANCELLED: (
+    <Badge variant="destructive" className="text-[10px] font-bold uppercase tracking-wider">
+      Cancelled
+    </Badge>
+  ),
 };
 
-// const SOURCE_BADGE: Record<string, React.ReactNode> = {
-//   METERED: (
-//     <Badge className="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border-none text-[9px] px-1.5 py-0 font-bold uppercase tracking-wider">
-//       Metered
-//     </Badge>
-//   ),
-//   WIWO: (
-//     <Badge className="bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-450 border-none text-[9px] px-1.5 py-0 font-bold uppercase tracking-wider">
-//       WIWO
-//     </Badge>
-//   ),
-// };
+const TX_TYPE_BADGE: Record<TransactionType, React.ReactNode> = {
+  ONBOARDING_BASELINE: (
+    <Badge className="bg-amber-100 text-amber-700 border-none text-[9px] px-1.5 py-0 font-bold uppercase tracking-wider">
+      Onboarding
+    </Badge>
+  ),
+  REGULAR_BILLING: (
+    <Badge className="bg-violet-100 text-violet-700 dark:bg-violet-900/20 dark:text-violet-400 border-none text-[9px] px-1.5 py-0 font-bold uppercase tracking-wider">
+      Regular
+    </Badge>
+  ),
+};
+
+type TypeFilter = "ALL" | TransactionType;
+
+const TYPE_TABS: { key: TypeFilter; label: string }[] = [
+  { key: "ALL", label: "All" },
+  { key: "REGULAR_BILLING", label: "Regular" },
+  { key: "ONBOARDING_BASELINE", label: "Onboarding" },
+];
 
 export function MeteredWiwoList({ selectedId, onSelect, onNew }: Props) {
   const [search, setSearch] = useState("");
-  const { rows, total, loading, params, setParams, refresh } = useMeteredWiwoList();
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("ALL");
+
+  const { rows, total, loading, params, setParams, refresh } = useMeteredWiwoList({
+    transactionType: "ALL",
+  });
 
   const handleSearch = (v: string) => {
     setSearch(v);
     setParams((p) => ({ ...p, search: v, page: 1 }));
   };
 
+  const handleTypeFilter = (t: TypeFilter) => {
+    setTypeFilter(t);
+    setParams((p) => ({
+      ...p,
+      transactionType: t,
+      page: 1,
+    }));
+  };
+
   const limit = params.limit ?? 10;
   const page = params.page ?? 1;
 
   return (
-    <div className="w-[360px] shrink-0 border-r border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/30 flex flex-col h-full overflow-hidden animate-in fade-in duration-500">
+    <div className="w-[380px] shrink-0 border-r border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/30 flex flex-col h-full overflow-hidden animate-in fade-in duration-500">
       {/* Header */}
       <div className="px-4 py-3 border-b border-zinc-150 dark:border-zinc-800/60 bg-zinc-50/50 dark:bg-zinc-900/30 flex items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="text-sm font-black text-foreground uppercase tracking-tight">
             Metered Transactions
           </div>
-          <div className="text-[11px] text-muted-foreground">
-            {total} items total
-          </div>
+          <div className="text-[11px] text-muted-foreground">{total} items total</div>
         </div>
         <div className="flex items-center gap-1.5">
           <Button
@@ -81,13 +109,37 @@ export function MeteredWiwoList({ selectedId, onSelect, onNew }: Props) {
         </div>
       </div>
 
-      {/* Toolbar (Search) */}
-      <div className="p-3 pb-2 border-b border-zinc-150 dark:border-zinc-800/60 bg-zinc-50/10">
+      {/* Type Filter Tabs */}
+      <div className="px-3 pt-3 pb-2 border-b border-zinc-150 dark:border-zinc-800/60 bg-zinc-50/10">
+        <div className="flex gap-1 p-1 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl">
+          {TYPE_TABS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => handleTypeFilter(tab.key)}
+              className={`flex-1 py-1.5 text-[11px] font-bold rounded-lg transition-all ${
+                typeFilter === tab.key
+                  ? tab.key === "ONBOARDING_BASELINE"
+                    ? "bg-white dark:bg-zinc-700 shadow-sm text-amber-600"
+                    : tab.key === "REGULAR_BILLING"
+                    ? "bg-white dark:bg-zinc-700 shadow-sm text-violet-600"
+                    : "bg-white dark:bg-zinc-700 shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-zinc-900 dark:hover:text-zinc-100"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Search */}
+      <div className="p-3 pb-2 bg-zinc-50/10">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             id="metered-wiwo-search"
-            placeholder="Search PO#, Customer, Site..."
+            placeholder="Search TX#, Customer, Site..."
             value={search}
             onChange={(e) => handleSearch(e.target.value)}
             className="pl-9 h-9 rounded-lg text-xs bg-white dark:bg-zinc-900"
@@ -95,11 +147,14 @@ export function MeteredWiwoList({ selectedId, onSelect, onNew }: Props) {
         </div>
       </div>
 
-      {/* Cards List container */}
+      {/* Cards List */}
       <div className="flex-1 p-3 space-y-2 overflow-y-auto">
         {loading && rows.length === 0 ? (
           Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="rounded-xl border border-zinc-100 dark:border-zinc-800/40 p-4 animate-pulse space-y-2 bg-zinc-50/50 dark:bg-zinc-900/10">
+            <div
+              key={i}
+              className="rounded-xl border border-zinc-100 dark:border-zinc-800/40 p-4 animate-pulse space-y-2 bg-zinc-50/50 dark:bg-zinc-900/10"
+            >
               <div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded w-1/3" />
               <div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded w-2/3" />
               <div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded w-1/2" />
@@ -112,15 +167,23 @@ export function MeteredWiwoList({ selectedId, onSelect, onNew }: Props) {
         ) : (
           rows.map((row) => {
             const id = row.id;
-            const txNo = row.reading_no;
+            const txNo = row.transaction_no ?? row.reading_no;
+            const txType = row.transaction_type ?? "REGULAR_BILLING";
             const date = row.transaction_date
               ? format(new Date(row.transaction_date), "MMM dd, yyyy")
               : "—";
-            const customer = row.customer?.customer_name || row.customer?.store_name || row.customer_code;
-            const site = row.site?.site_name || (row.lpg_site_id ? `Site #${row.lpg_site_id}` : "—");
-            const billableKg = row.billable_kg != null ? Number(row.billable_kg) : 0;
+            const customer =
+              row.customer?.customer_name ||
+              row.customer?.store_name ||
+              row.customer_code;
+            const site =
+              row.site?.site_name ||
+              (row.lpg_site_id ? `Site #${row.lpg_site_id}` : "—");
+            const billableKg =
+              row.billable_kg != null ? Number(row.billable_kg) : 0;
             const netAmt = row.net_amount != null ? Number(row.net_amount) : 0;
             const selected = selectedId === id;
+            const isOnboardingRow = txType === "ONBOARDING_BASELINE";
 
             return (
               <button
@@ -129,13 +192,23 @@ export function MeteredWiwoList({ selectedId, onSelect, onNew }: Props) {
                 onClick={() => onSelect(id ?? null)}
                 className={`w-full text-left rounded-xl border p-3 transition text-sm flex flex-col gap-2 ${
                   selected
-                    ? "border-violet-500 bg-violet-50/20 dark:bg-violet-950/20 ring-1 ring-violet-500/30 shadow-md shadow-violet-500/5"
+                    ? isOnboardingRow
+                      ? "border-amber-500 bg-amber-50/20 dark:bg-amber-950/20 ring-1 ring-amber-500/30 shadow-md"
+                      : "border-violet-500 bg-violet-50/20 dark:bg-violet-950/20 ring-1 ring-violet-500/30 shadow-md shadow-violet-500/5"
                     : "border-zinc-150 dark:border-zinc-800/80 hover:bg-zinc-50/50 dark:hover:bg-zinc-900/40 bg-white dark:bg-zinc-950"
                 }`}
               >
                 <div className="flex items-start justify-between gap-3 w-full">
                   <div className="min-w-0 flex-1 space-y-1">
-                    <div className={`text-xs font-bold truncate font-mono ${selected ? "text-violet-600 dark:text-violet-400" : "text-foreground"}`}>
+                    <div
+                      className={`text-xs font-bold truncate font-mono ${
+                        selected
+                          ? isOnboardingRow
+                            ? "text-amber-600 dark:text-amber-400"
+                            : "text-violet-600 dark:text-violet-400"
+                          : "text-foreground"
+                      }`}
+                    >
                       {txNo}
                     </div>
                     <div className="text-[11px] text-zinc-900 dark:text-zinc-100 font-bold truncate">
@@ -146,16 +219,26 @@ export function MeteredWiwoList({ selectedId, onSelect, onNew }: Props) {
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
-                    {STATUS_BADGE[row.status] ?? <Badge variant="outline">{row.status}</Badge>}
+                    {STATUS_BADGE[row.status] ?? (
+                      <Badge variant="outline">{row.status}</Badge>
+                    )}
+                    {TX_TYPE_BADGE[txType]}
                   </div>
                 </div>
                 <div className="flex justify-between items-center border-t border-dashed border-zinc-150 dark:border-zinc-800/50 pt-2 w-full text-[10px] text-zinc-400 dark:text-zinc-500">
                   <span>{date}</span>
                   <div className="flex items-center gap-1.5">
-                    {/* {SOURCE_BADGE[row.billable_source]} */}
-                    <span className="font-mono font-bold text-foreground bg-zinc-50 dark:bg-zinc-900 px-1.5 py-0.5 rounded text-[10px]">
-                      {billableKg.toFixed(4)} kg (₱{netAmt.toLocaleString(undefined, { maximumFractionDigits: 0 })})
-                    </span>
+                    {isOnboardingRow ? (
+                      <span className="font-mono font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded text-[10px]">
+                        Baseline: {billableKg > 0 ? `${billableKg.toFixed(4)} kg` : `${Number(row.metered_kg ?? 0).toFixed(4)} kg`}
+                      </span>
+                    ) : (
+                      <span className="font-mono font-bold text-foreground bg-zinc-50 dark:bg-zinc-900 px-1.5 py-0.5 rounded text-[10px]">
+                        {billableKg.toFixed(4)} kg (₱
+                        {netAmt.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        )
+                      </span>
+                    )}
                   </div>
                 </div>
               </button>
