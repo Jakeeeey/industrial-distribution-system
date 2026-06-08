@@ -9,7 +9,9 @@ import type {
   WiwoListParams,
   CylinderAsset,
   CustomerSiteCylinder,
-  OnboardCylinderInput
+  OnboardCylinderInput,
+  CustomerSite,
+  MeterReading
 } from "../types";
 
 const DIRECTUS_URL = getDirectusBase();
@@ -56,12 +58,12 @@ export async function fetchWiwoBillingTransactionById(id: number): Promise<Meter
   const tx = res.data ?? null;
   if (tx && tx.wiwo_header_id) {
     // Enrich with wiwo details
-    const headerId = typeof tx.wiwo_header_id === "object" ? (tx.wiwo_header_id as any).id : tx.wiwo_header_id;
+    const headerId = typeof tx.wiwo_header_id === "object" ? (tx.wiwo_header_id as unknown as WiwoHeader).id : tx.wiwo_header_id;
     const detailRes = await directusFetch<{ data: WiwoDetail[] }>(
       `${DIRECTUS_URL}/items/lpg_wiwo_details?filter[wiwo_header_id][_eq]=${headerId}&limit=-1`
     );
     if (tx.wiwo_header_id && typeof tx.wiwo_header_id === "object") {
-      (tx.wiwo_header_id as any).details = detailRes.data ?? [];
+      (tx.wiwo_header_id as unknown as WiwoHeader).details = detailRes.data ?? [];
     }
   }
   return tx;
@@ -75,10 +77,10 @@ export async function fetchCustomers(): Promise<{ customer_code: string; custome
   return res.data ?? [];
 }
 
-export async function fetchSites(customerCode?: string): Promise<any[]> {
+export async function fetchSites(customerCode?: string): Promise<CustomerSite[]> {
   let qs = "fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg&filter[is_active][_eq]=1&sort=site_name&limit=-1";
   if (customerCode) qs += `&filter[customer_code][_eq]=${encodeURIComponent(customerCode)}`;
-  const res = await directusFetch<{ data: any[] }>(`${DIRECTUS_URL}/items/lpg_customer_lpg_sites?${qs}`);
+  const res = await directusFetch<{ data: CustomerSite[] }>(`${DIRECTUS_URL}/items/lpg_customer_lpg_sites?${qs}`);
   return res.data ?? [];
 }
 
@@ -89,14 +91,14 @@ export async function fetchAvailableCylinders(): Promise<CylinderAsset[]> {
 
   // Normalize product relation
   for (const asset of cylinders) {
-    const rawProd = asset.product || (asset.product_id as any);
+    const rawProd = (asset.product || asset.product_id) as { product_id?: number; id?: number; product_name?: string } | undefined;
     if (rawProd && typeof rawProd === "object") {
       asset.product = {
-        id: rawProd.product_id || rawProd.id,
-        product_name: rawProd.product_name
+        id: rawProd.product_id || rawProd.id || 0,
+        product_name: rawProd.product_name || ""
       };
       if (typeof asset.product_id === "object") {
-        asset.product_id = (asset.product_id as any).product_id || (asset.product_id as any).id;
+        asset.product_id = (asset.product_id as unknown as { product_id?: number; id?: number }).product_id || (asset.product_id as unknown as { product_id?: number; id?: number }).id;
       }
     }
   }
@@ -132,7 +134,7 @@ export async function fetchAvailableCylinders(): Promise<CylinderAsset[]> {
 
 export async function validateSerialForOnboarding(serialNumber: string): Promise<CylinderAsset | null> {
   // 1. Check if it exists in consolidator_serial_mappings
-  const mappingRes = await directusFetch<{ data: any[] }>(
+  const mappingRes = await directusFetch<{ data: { serial_number: string }[] }>(
     `${DIRECTUS_URL}/items/consolidator_serial_mappings?filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&limit=1`
   );
   if (!mappingRes.data || mappingRes.data.length === 0) {
@@ -158,14 +160,14 @@ export async function validateSerialForOnboarding(serialNumber: string): Promise
 
   // Normalize product relation
   if (asset) {
-    const rawProd = asset.product || (asset.product_id as any);
+    const rawProd = (asset.product || asset.product_id) as { product_id?: number; id?: number; product_name?: string } | undefined;
     if (rawProd && typeof rawProd === "object") {
       asset.product = {
-        id: rawProd.product_id || rawProd.id,
-        product_name: rawProd.product_name
+        id: rawProd.product_id || rawProd.id || 0,
+        product_name: rawProd.product_name || ""
       };
       if (typeof asset.product_id === "object") {
-        asset.product_id = (asset.product_id as any).product_id || (asset.product_id as any).id;
+        asset.product_id = (asset.product_id as unknown as { product_id?: number; id?: number }).product_id || (asset.product_id as unknown as { product_id?: number; id?: number }).id;
       }
     } else if (asset.product_id && typeof asset.product_id === "number") {
       try {
@@ -189,12 +191,19 @@ export async function validateSerialForOnboarding(serialNumber: string): Promise
 
 export async function fetchActiveSiteCylinders(siteId: number): Promise<CustomerSiteCylinder[]> {
   const qs = `filter[lpg_site_id][_eq]=${siteId}&filter[site_cylinder_status][_in]=CONNECTED,STANDBY&filter[removed_date][_null]=true&fields=*,cylinder_asset_id.*&limit=-1`;
-  const res = await directusFetch<{ data: any[] }>(`${DIRECTUS_URL}/items/lpg_customer_site_cylinders?${qs}`);
-  return (res.data ?? []).map((row) => ({
-    ...row,
-    cylinder_asset: row.cylinder_asset_id,
-    cylinder_asset_id: row.cylinder_asset_id?.id ?? row.cylinder_asset_id,
-  }));
+  interface RawSiteCylinder extends Omit<CustomerSiteCylinder, 'cylinder_asset_id'> {
+    cylinder_asset_id: CylinderAsset | number;
+  }
+  const res = await directusFetch<{ data: RawSiteCylinder[] }>(`${DIRECTUS_URL}/items/lpg_customer_site_cylinders?${qs}`);
+  return (res.data ?? []).map((row) => {
+    const assetObj = typeof row.cylinder_asset_id === "object" ? row.cylinder_asset_id as CylinderAsset : undefined;
+    const assetId = typeof row.cylinder_asset_id === "object" ? (row.cylinder_asset_id as CylinderAsset).id : row.cylinder_asset_id;
+    return {
+      ...row,
+      cylinder_asset: assetObj,
+      cylinder_asset_id: assetId,
+    } as CustomerSiteCylinder;
+  });
 }
 
 // Monogamy Verification
@@ -204,7 +213,7 @@ export async function verifyCylinderMonogamy(cylinderAssetId: number): Promise<b
     removed_date: { _null: true },
     site_cylinder_status: { _in: ["CONNECTED", "STANDBY"] },
   };
-  const res = await directusFetch<{ data: any[] }>(
+  const res = await directusFetch<{ data: unknown[] }>(
     `${DIRECTUS_URL}/items/lpg_customer_site_cylinders?filter=${encodeURIComponent(JSON.stringify(query))}&limit=1`
   );
   return (res.data ?? []).length === 0;
@@ -283,7 +292,7 @@ export async function createSalesInvoice(
   let salesmanId: number | null = null;
   if (userId) {
     try {
-      const smRes = await directusFetch<{ data: any[] }>(
+      const smRes = await directusFetch<{ data: { id: number }[] }>(
         `${DIRECTUS_URL}/items/salesman?filter[user_id][_eq]=${userId}&fields=id&limit=1`
       );
       if (smRes.data && smRes.data.length > 0) {
@@ -327,7 +336,7 @@ export async function processOnboardingBaseline(payload: {
   transactionDate: string;
   cylinders: OnboardCylinderInput[];
   userId?: number;
-}): Promise<any> {
+}): Promise<MeteredWiwoTransaction> {
   // 1. Monogamy validation
   for (const cyl of payload.cylinders) {
     const isSingle = await verifyCylinderMonogamy(cyl.cylinderAssetId);
@@ -474,7 +483,7 @@ export async function processOnboardingBaseline(payload: {
 
   // Create Parent Transaction
   const txNo = `TX-ONB-${Date.now().toString().slice(-6)}`;
-  const parentTx = await directusFetch<{ data: any }>(
+  const parentTx = await directusFetch<{ data: MeteredWiwoTransaction }>(
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions`,
     {
       method: "POST",
@@ -529,7 +538,7 @@ export async function processRegularSwap(payload: {
   varianceReasonCode?: string;
   remarks?: string;
   userId?: number;
-}): Promise<any> {
+}): Promise<MeteredWiwoTransaction> {
   // Input validations:
   // Completeness Checks & Negative Boundaries
   const meteredKg = Math.max(0, payload.currentMeterReading - payload.previousMeterReading);
@@ -548,7 +557,10 @@ export async function processRegularSwap(payload: {
       throw new Error("Returned gross weight is required for all returned cylinders.");
     }
     // Fetch site cylinder info
-    const siteCylRes = await directusFetch<{ data: any }>(
+    interface RawCustomerSiteCylinder extends Omit<CustomerSiteCylinder, 'cylinder_asset_id'> {
+      cylinder_asset_id?: CylinderAsset;
+    }
+    const siteCylRes = await directusFetch<{ data: RawCustomerSiteCylinder }>(
       `${DIRECTUS_URL}/items/lpg_customer_site_cylinders/${ret.siteCylinderId}?fields=*,cylinder_asset_id.*`
     );
     const sc = siteCylRes.data;
@@ -571,7 +583,7 @@ export async function processRegularSwap(payload: {
       sc: {
         ...sc,
         cylinder_asset: sc.cylinder_asset_id,
-        cylinder_asset_id: sc.cylinder_asset_id?.id,
+        cylinder_asset_id: sc.cylinder_asset_id?.id ?? 0,
       },
       returnedGross: ret.returnedGrossWeight,
       tare,
@@ -606,7 +618,7 @@ export async function processRegularSwap(payload: {
   // Create zero-amount Sales Order for logistical cylinder actions
   // Fetch details of new assets
   const newCylIds = payload.newCylinders.map((n) => n.cylinderAssetId);
-  let groupCounts: Record<number, number> = {};
+  const groupCounts: Record<number, number> = {};
   if (newCylIds.length > 0) {
     const newAssetsRes = await directusFetch<{ data: CylinderAsset[] }>(
       `${DIRECTUS_URL}/items/cylinder_assets?filter[id][_in]=${newCylIds.join(",")}&fields=id,product_id`
@@ -652,12 +664,6 @@ export async function processRegularSwap(payload: {
   // 2. Process newly installed cylinders database actions
   const installedCylIds: number[] = [];
   for (const dep of payload.newCylinders) {
-    // Fetch cylinder details
-    const caRes = await directusFetch<{ data: CylinderAsset }>(
-      `${DIRECTUS_URL}/items/cylinder_assets/${dep.cylinderAssetId}?fields=id,serial_number,tare_weight,product_id`
-    );
-    const ca = caRes.data;
-
     const installedRes = await directusFetch<{ data: { id: number } }>(
       `${DIRECTUS_URL}/items/lpg_customer_site_cylinders`,
       {
@@ -833,7 +839,7 @@ export async function processRegularSwap(payload: {
 
   // Create parent Transaction record
   const txNo = `TX-WIWO-${Date.now().toString().slice(-6)}`;
-  const parentRes = await directusFetch<{ data: any }>(
+  const parentRes = await directusFetch<{ data: MeteredWiwoTransaction }>(
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions`,
     {
       method: "POST",
@@ -890,7 +896,7 @@ export async function cancelWiwoBillingTransaction(
     throw new Error("Transaction is already cancelled.");
   }
 
-  const wiwoHeader = tx.wiwo_header_id as any;
+  const wiwoHeader = tx.wiwo_header_id as unknown as WiwoHeader | null | undefined;
   const wiwoHeaderId = wiwoHeader?.id ?? tx.wiwo_header_id;
 
   if (wiwoHeaderId) {
@@ -954,7 +960,7 @@ export async function cancelWiwoBillingTransaction(
 
   // Revert site's last meter reading if meter reading existed
   if (tx.meter_reading_id) {
-    const readingId = (tx.meter_reading_id as any)?.id ?? tx.meter_reading_id;
+    const readingId = (tx.meter_reading_id as unknown as MeterReading | null | undefined)?.id ?? tx.meter_reading_id;
     // Void / delete the reading
     await directusFetch(`${DIRECTUS_URL}/items/lpg_meter_readings/${readingId}`, {
       method: "PATCH",
@@ -965,7 +971,7 @@ export async function cancelWiwoBillingTransaction(
 
     // Reset last meter reading on site
     if (tx.meter_reading_id && typeof tx.meter_reading_id === "object") {
-      const prevVal = (tx.meter_reading_id as any).previous_reading;
+      const prevVal = (tx.meter_reading_id as unknown as MeterReading).previous_reading;
       await directusFetch(`${DIRECTUS_URL}/items/lpg_customer_lpg_sites/${tx.lpg_site_id}`, {
         method: "PATCH",
         body: JSON.stringify({
@@ -977,7 +983,7 @@ export async function cancelWiwoBillingTransaction(
 
   // Revert Sales Order status
   if (tx.sales_order_id) {
-    const orderId = (tx.sales_order_id as any)?.id ?? tx.sales_order_id;
+    const orderId = (tx.sales_order_id as unknown as { id: number } | null | undefined)?.id ?? tx.sales_order_id;
     await directusFetch(`${DIRECTUS_URL}/items/sales_order/${orderId}`, {
       method: "PATCH",
       body: JSON.stringify({
@@ -988,7 +994,7 @@ export async function cancelWiwoBillingTransaction(
 
   // Revert/Void the invoice
   if (tx.sales_invoice_id) {
-    const invoiceId = (tx.sales_invoice_id as any)?.id ?? tx.sales_invoice_id;
+    const invoiceId = (tx.sales_invoice_id as unknown as { id: number } | null | undefined)?.id ?? tx.sales_invoice_id;
     await directusFetch(`${DIRECTUS_URL}/items/sales_invoice/${invoiceId}`, {
       method: "PATCH",
       body: JSON.stringify({

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, Plus, Calendar, Scale, RefreshCw } from "lucide-react";
+import { Search, Plus, Calendar, RefreshCw } from "lucide-react";
 import type { MeteredWiwoTransaction } from "../types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,27 +21,26 @@ export function WiwoList({ selectedId, onSelect, onNew }: WiwoListProps) {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
 
-  const fetchList = async () => {
-    setLoading(true);
-    try {
-      const queryParams = new URLSearchParams({
-        search,
-        status,
-        page: String(page),
-        limit: "10",
-      });
-      const res = await fetch(`/api/ids/scm/lpg-billing-management/wiwo-billing?${queryParams}`);
-      const data = await res.json();
-      setTransactions(data.data || []);
-      setTotal(data.total || 0);
-    } catch (err) {
-      console.error("Failed to load transactions", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    const fetchList = async () => {
+      setLoading(true);
+      try {
+        const queryParams = new URLSearchParams({
+          search,
+          status,
+          page: String(page),
+          limit: "10",
+        });
+        const res = await fetch(`/api/ids/scm/lpg-billing-management/wiwo-billing?${queryParams}`);
+        const data = await res.json();
+        setTransactions(data.data || []);
+        setTotal(data.total || 0);
+      } catch (err) {
+        console.error("Failed to load transactions", err);
+      } finally {
+        setLoading(false);
+      }
+    };
     fetchList();
   }, [search, status, page]);
 

@@ -3,20 +3,17 @@
 import { useEffect, useState } from "react";
 import {
   Trash2,
-  Save,
-  X,
   Plus,
   Scale,
   Gauge,
   AlertCircle,
   TrendingUp,
-  FileText,
   Truck,
   Calendar as CalendarIcon,
   CheckCircle2,
   Loader2
 } from "lucide-react";
-import type { CylinderAsset, CustomerSiteCylinder, MeteredWiwoTransaction, WiwoDetail } from "../types";
+import type { CylinderAsset, CustomerSiteCylinder, MeteredWiwoTransaction, CustomerSite, MeterReading, WiwoHeader } from "../types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -50,7 +47,7 @@ function getCylinderCapacity(productName?: string): number {
 
 export function WiwoForm({ txId, onSuccess, onCancel }: WiwoFormProps) {
   const [loading, setLoading] = useState(false);
-  const [sites, setSites] = useState<any[]>([]);
+  const [sites, setSites] = useState<CustomerSite[]>([]);
   const [availableCylinders, setAvailableCylinders] = useState<CylinderAsset[]>([]);
   const [activeSiteCylinders, setActiveSiteCylinders] = useState<CustomerSiteCylinder[]>([]);
 
@@ -207,8 +204,9 @@ export function WiwoForm({ txId, onSuccess, onCancel }: WiwoFormProps) {
         },
       ]);
       setSerialInput("");
-    } catch (err: any) {
-      alert(err.message || "Invalid serial number.");
+    } catch (err) {
+      const error = err as Error;
+      alert(error.message || "Invalid serial number.");
     } finally {
       setIsValidatingSerial(false);
     }
@@ -265,7 +263,7 @@ export function WiwoForm({ txId, onSuccess, onCancel }: WiwoFormProps) {
 
     setLoading(true);
     try {
-      let payload: any = {};
+      let payload: Record<string, unknown> = {};
       if (flowType === "ONBOARDING") {
         if (selectedOnboardCylinders.length === 0) {
           alert("Please select at least one cylinder for onboarding.");
@@ -342,8 +340,9 @@ export function WiwoForm({ txId, onSuccess, onCancel }: WiwoFormProps) {
 
       alert("Transaction saved and posted successfully!");
       onSuccess();
-    } catch (err: any) {
-      alert(err.message || "An error occurred.");
+    } catch (err) {
+      const error = err as Error;
+      alert(error.message || "An error occurred.");
     } finally {
       setLoading(false);
     }
@@ -375,8 +374,9 @@ export function WiwoForm({ txId, onSuccess, onCancel }: WiwoFormProps) {
       alert("Transaction successfully rolled back and cancelled.");
       setIsCancelModalOpen(false);
       onSuccess();
-    } catch (err: any) {
-      alert(err.message || "An error occurred during cancellation.");
+    } catch (err) {
+      const error = err as Error;
+      alert(error.message || "An error occurred during cancellation.");
     } finally {
       setLoading(false);
     }
@@ -541,7 +541,7 @@ export function WiwoForm({ txId, onSuccess, onCancel }: WiwoFormProps) {
                 ) : (
                   <Combobox
                     value={selectedSite}
-                    onValueChange={(val: any | null) => {
+                    onValueChange={(val: CustomerSite | null) => {
                       setSiteId(val ? String(val.id) : "");
                       if (val) setSiteSearch(val.site_name || `Site #${val.id}`);
                     }}
@@ -649,7 +649,7 @@ export function WiwoForm({ txId, onSuccess, onCancel }: WiwoFormProps) {
                     <Label className="text-xs text-muted-foreground">Previous Reading</Label>
                     <Input
                       type="number"
-                      value={isViewMode ? txDetail.meter_reading_id ? (txDetail as any).meter_reading_id?.previous_reading ?? 0 : 0 : previousReading}
+                      value={isViewMode ? txDetail?.meter_reading_id ? (txDetail.meter_reading_id as unknown as MeterReading).previous_reading : 0 : previousReading}
                       readOnly
                       className="bg-zinc-50 dark:bg-zinc-800 font-mono"
                     />
@@ -659,7 +659,7 @@ export function WiwoForm({ txId, onSuccess, onCancel }: WiwoFormProps) {
                     <Input
                       type="number"
                       step="0.001"
-                      value={isViewMode ? txDetail.meter_reading_id ? (txDetail as any).meter_reading_id?.current_reading ?? 0 : 0 : currentReading}
+                      value={isViewMode ? txDetail?.meter_reading_id ? (txDetail.meter_reading_id as unknown as MeterReading).current_reading : 0 : currentReading}
                       onChange={(e) => setCurrentReading(parseFloat(e.target.value) || 0)}
                       readOnly={isReadOnly || isViewMode}
                       className="font-mono"
@@ -708,8 +708,8 @@ export function WiwoForm({ txId, onSuccess, onCancel }: WiwoFormProps) {
                     </thead>
                     <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/50">
                       {isViewMode ? (
-                        (txDetail.wiwo_header_id as any)?.details ? (
-                          ((txDetail.wiwo_header_id as any).details as WiwoDetail[])
+                        (txDetail?.wiwo_header_id as unknown as WiwoHeader)?.details ? (
+                          ((txDetail.wiwo_header_id as unknown as WiwoHeader).details ?? [])
                             .filter(l => l.line_type === "CONSUMPTION_RETURN")
                             .map((line, idx) => (
                               <tr key={idx} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20">
@@ -823,8 +823,8 @@ export function WiwoForm({ txId, onSuccess, onCancel }: WiwoFormProps) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/50">
-                    {(txDetail.wiwo_header_id as any)?.details ? (
-                      ((txDetail.wiwo_header_id as any).details as WiwoDetail[])
+                    {(txDetail?.wiwo_header_id as unknown as WiwoHeader)?.details ? (
+                      ((txDetail.wiwo_header_id as unknown as WiwoHeader).details ?? [])
                         .filter(l => l.line_type === "NEW_DEPLOYMENT")
                         .map((line, idx) => (
                           <tr key={idx} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20">

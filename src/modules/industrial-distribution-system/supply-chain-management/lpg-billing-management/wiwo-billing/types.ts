@@ -141,3 +141,21 @@ export interface OnboardCylinderInput {
   targetKg: number;
   pricePerKg: number;
 }
+
+export interface CustomerSite {
+  id: number;
+  site_name: string | null;
+  customer_code: string;
+  default_price_per_kg: number;
+  last_meter_reading?: number | null;
+  default_target_lpg_kg?: number | null;
+}
+
+export interface MeterReading {
+  id: number;
+  previous_reading: number;
+  current_reading: number;
+  kg_consumed: number;
+  price_per_kg: number;
+  reading_date: string;
+}
