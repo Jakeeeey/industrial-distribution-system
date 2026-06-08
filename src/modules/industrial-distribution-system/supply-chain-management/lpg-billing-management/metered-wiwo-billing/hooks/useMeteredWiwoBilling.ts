@@ -19,6 +19,7 @@ import {
   calcWiwoDetail,
   generateTxNo,
   generateTxNoPlaceholder,
+  generateReadingNo,
 } from "../utils/metered-wiwo.calc";
 import { updateSiteReading } from "../providers/metered-wiwo.provider";
 
@@ -42,24 +43,25 @@ export function mapMeteredTransaction(tx: unknown): MeteredWiwoTransaction {
     if (rawSite.id) siteId = Number(rawSite.id);
   }
 
-  const txNo = String(raw["transaction_no"] ?? raw["reading_no"] ?? "-");
+  const txNo = String(raw["transaction_no"] ?? "");
+  const readingNo = meterReadingRaw?.reading_no ? String(meterReadingRaw.reading_no) : String(raw["reading_no"] ?? "");
 
   return {
     ...raw,
-    transaction_no: txNo,
-    reading_no: txNo,
+    transaction_no: txNo || readingNo,
+    reading_no: readingNo || txNo,
     transaction_type: (raw["transaction_type"] as TransactionType) ?? "REGULAR_BILLING",
     lpg_site_id: siteId,
     meter_reading_id: meterReadingRaw
       ? Number(meterReadingRaw["id"])
       : raw["meter_reading_id"]
-      ? Number(raw["meter_reading_id"])
-      : null,
+        ? Number(raw["meter_reading_id"])
+        : null,
     wiwo_header_id: wiwoHeaderRaw
       ? Number(wiwoHeaderRaw["id"])
       : raw["wiwo_header_id"]
-      ? Number(raw["wiwo_header_id"])
-      : null,
+        ? Number(raw["wiwo_header_id"])
+        : null,
     metered_kg: Number(raw["metered_kg"] ?? 0),
     wiwo_kg: Number(raw["wiwo_kg"] ?? 0),
     variance_kg: Number(raw["variance_kg"] ?? 0),
@@ -70,31 +72,31 @@ export function mapMeteredTransaction(tx: unknown): MeteredWiwoTransaction {
     net_amount: Number(raw["net_amount"] ?? 0),
     meter_reading: meterReadingRaw
       ? {
-          ...meterReadingRaw,
-          id: Number(meterReadingRaw["id"]),
-          lpg_site_id: meterReadingRaw["lpg_site_id"]
-            ? Number(meterReadingRaw["lpg_site_id"])
-            : (siteId ?? 0),
-          reading_date: meterReadingRaw["reading_date"] as string,
-          previous_reading: Number(meterReadingRaw["previous_reading"] ?? 0),
-          current_reading: Number(meterReadingRaw["current_reading"] ?? 0),
-          kg_consumed: Number(meterReadingRaw["kg_consumed"] ?? 0),
-          price_per_kg: Number(meterReadingRaw["price_per_kg"] ?? 0),
-          raw_consumption: Number(meterReadingRaw["raw_consumption"] ?? 0),
-          created_by: meterReadingRaw["created_by"]
-            ? Number(meterReadingRaw["created_by"])
-            : null,
-          created_date: meterReadingRaw["created_date"] as string | null,
-        }
+        ...meterReadingRaw,
+        id: Number(meterReadingRaw["id"]),
+        lpg_site_id: meterReadingRaw["lpg_site_id"]
+          ? Number(meterReadingRaw["lpg_site_id"])
+          : (siteId ?? 0),
+        reading_date: meterReadingRaw["reading_date"] as string,
+        previous_reading: Number(meterReadingRaw["previous_reading"] ?? 0),
+        current_reading: Number(meterReadingRaw["current_reading"] ?? 0),
+        kg_consumed: Number(meterReadingRaw["kg_consumed"] ?? 0),
+        price_per_kg: Number(meterReadingRaw["price_per_kg"] ?? 0),
+        raw_consumption: Number(meterReadingRaw["raw_consumption"] ?? 0),
+        created_by: meterReadingRaw["created_by"]
+          ? Number(meterReadingRaw["created_by"])
+          : null,
+        created_date: meterReadingRaw["created_date"] as string | null,
+      }
       : undefined,
     wiwo_header: wiwoHeaderRaw
       ? {
-          ...wiwoHeaderRaw,
-          transaction_no: (wiwoHeaderRaw["wiwo_no"] ??
-            wiwoHeaderRaw["transaction_no"]) as string,
-          status: (wiwoHeaderRaw["wiwo_status"] ??
-            wiwoHeaderRaw["status"]) as string,
-        }
+        ...wiwoHeaderRaw,
+        transaction_no: (wiwoHeaderRaw["wiwo_no"] ??
+          wiwoHeaderRaw["transaction_no"]) as string,
+        status: (wiwoHeaderRaw["wiwo_status"] ??
+          wiwoHeaderRaw["status"]) as string,
+      }
       : undefined,
   } as MeteredWiwoTransaction;
 }
@@ -148,6 +150,7 @@ export function useMeteredWiwoList(initialParams: MeteredListParams = {}) {
 
 export interface MeteredBillingFormState {
   transactionNo: string;
+  readingNo: string;
   transactionType: TransactionType;
   transactionDate: string;
   customerCode: string;
@@ -165,6 +168,8 @@ export interface MeteredBillingFormState {
   configLpgVapor: number;
   configPsi: number;
   configCorrectionFactor: number;
+  billingPeriodFrom: string;
+  billingPeriodTo: string;
 }
 
 function defaultFormState(
@@ -174,7 +179,8 @@ function defaultFormState(
 ): MeteredBillingFormState {
   const today = date || new Date().toISOString().slice(0, 10);
   return {
-    transactionNo: generateTxNoPlaceholder(type, siteId ?? null, today),
+    transactionNo: type === "ONBOARDING_BASELINE" ? "" : generateTxNoPlaceholder(type, siteId ?? null, today),
+    readingNo: generateReadingNo(),
     transactionType: type,
     transactionDate: today,
     customerCode: "",
@@ -191,6 +197,8 @@ function defaultFormState(
     configLpgVapor: 2.0183,
     configPsi: 10.0,
     configCorrectionFactor: 14.7,
+    billingPeriodFrom: "",
+    billingPeriodTo: "",
   };
 }
 
@@ -261,7 +269,8 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
         }
 
         setForm({
-          transactionNo: tx.transaction_no ?? tx.reading_no,
+          transactionNo: tx.transaction_no ?? "",
+          readingNo: tx.meter_reading?.reading_no ?? "",
           transactionType: tx.transaction_type ?? "REGULAR_BILLING",
           transactionDate: tx.transaction_date,
           customerCode: tx.customer_code,
@@ -278,6 +287,8 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
           configLpgVapor: lpgVapor,
           configPsi: psi,
           configCorrectionFactor: cf,
+          billingPeriodFrom: tx.billing_period_from ?? "",
+          billingPeriodTo: tx.billing_period_to ?? "",
         });
         setOriginalStatus(tx.status);
         setWiwoKg(tx.wiwo_kg);
@@ -318,6 +329,13 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
   // Fetch sequential transaction number for new transactions
   useEffect(() => {
     if (txId) return;
+    if (form.transactionType === "ONBOARDING_BASELINE") {
+      setForm((f) => {
+        if (f.transactionNo === "") return f;
+        return { ...f, transactionNo: "" };
+      });
+      return;
+    }
     if (!form.customerCode || !form.siteId) {
       setForm((f) => {
         const placeholder = generateTxNoPlaceholder(
@@ -428,9 +446,10 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
         configLpgVapor: lpgVapor,
         configPsi: psi,
         configCorrectionFactor: cf,
+        readingNo: txId ? f.readingNo : generateReadingNo(),
       }));
     },
-    [sites]
+    [sites, txId]
   );
 
   const handleReadingChange = useCallback(
@@ -506,14 +525,14 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
 
   const canPost = isOnboarding
     ? // Onboarding: just needs site + valid reading
-      !!form.siteId && isValidReading
+    !!form.siteId && isValidReading
     : // Regular: needs billing amounts + valid reading + remarks if variance
-      arbitration.billable_kg > 0 &&
-      netAmount > 0 &&
-      !!form.customerCode &&
-      !!form.siteId &&
-      isValidReading &&
-      (!hasVariance || !!form.remarks.trim());
+    arbitration.billable_kg > 0 &&
+    netAmount > 0 &&
+    !!form.customerCode &&
+    !!form.siteId &&
+    isValidReading &&
+    (!hasVariance || !!form.remarks.trim());
 
   const meterUnit = (selectedSite?.meter_unit ?? "KG") as
     | "M3"
@@ -535,7 +554,7 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
           atmospheric_pressure?: number;
           lpg_vapor_factor?: number;
         } = {
-          reading_no: form.transactionNo,
+          reading_no: form.readingNo || form.transactionNo,
           transaction_no: form.transactionNo,
           transaction_type: form.transactionType,
           transaction_date: form.transactionDate,
@@ -565,6 +584,8 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
           meter_unit: meterUnit,
           meter_direction: meterDirection as "INCREASING" | "DECREASING",
           conversion_factor: conversionFactor,
+          billing_period_from: form.billingPeriodFrom || null,
+          billing_period_to: form.billingPeriodTo || null,
         };
 
         const url = txId

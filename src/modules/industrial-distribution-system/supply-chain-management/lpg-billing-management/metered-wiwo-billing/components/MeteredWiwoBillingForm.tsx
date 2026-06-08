@@ -77,7 +77,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
   const isReadOnly = originalStatus === "POSTED" || originalStatus === "CANCELLED";
 
   const handleSubmit = async () => {
-    const ok = await submit();
+    const ok = await submit(isOnboarding ? "POSTED" : undefined);
     if (ok) onSuccess();
   };
 
@@ -146,8 +146,8 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                   ? "Edit Baseline Record"
                   : "Edit Metered Billing"
                 : isOnboarding
-                ? "New Baseline Record"
-                : "New Metered Billing"}
+                  ? "New Baseline Record"
+                  : "New Metered Billing"}
             </h2>
             <Badge className={`text-[10px] font-bold uppercase tracking-wider border-none ${txTypeMeta.color}`}>
               {txTypeMeta.short}
@@ -183,11 +183,10 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
             <Button
               onClick={handleSubmit}
               disabled={submitting || !canPost}
-              className={`h-9 px-6 shadow-lg transition-all active:scale-95 ${
-                isOnboarding
+              className={`h-9 px-6 shadow-lg transition-all active:scale-95 ${isOnboarding
                   ? "bg-amber-500 hover:bg-amber-600 shadow-amber-500/20"
                   : "bg-violet-600 hover:bg-violet-700 shadow-violet-500/20"
-              }`}
+                }`}
             >
               {submitting ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -201,8 +200,8 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
               {isOnboarding
                 ? "Record Baseline"
                 : form.status === "POSTED"
-                ? "Post Billing"
-                : "Save Draft"}
+                  ? "Post Billing"
+                  : "Save Draft"}
             </Button>
           )}
         </div>
@@ -239,13 +238,12 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                             wiwoHeaderId: null,
                           }))
                         }
-                        className={`py-2 px-4 text-xs font-bold rounded-lg transition-all ${
-                          form.transactionType === t
+                        className={`py-2 px-4 text-xs font-bold rounded-lg transition-all ${form.transactionType === t
                             ? t === "ONBOARDING_BASELINE"
                               ? "bg-white dark:bg-zinc-700 shadow-sm text-amber-600"
                               : "bg-white dark:bg-zinc-700 shadow-sm text-violet-600"
                             : "text-muted-foreground hover:text-zinc-900 dark:hover:text-zinc-100"
-                        }`}
+                          }`}
                       >
                         {TX_TYPE_LABELS[t].label}
                       </button>
@@ -267,8 +265,8 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                       form.siteName
                         ? `${form.siteName} (${form.customerCode})`
                         : form.customerCode
-                        ? `${form.customerCode} - Site ID ${form.siteId}`
-                        : "—"
+                          ? `${form.customerCode} - Site ID ${form.siteId}`
+                          : "—"
                     }
                     readOnly
                     className="bg-zinc-50 dark:bg-zinc-800"
@@ -324,7 +322,26 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                       setForm((f) => ({ ...f, transactionNo: e.target.value }))
                     }
                     className="pl-10 font-mono"
+                    readOnly={isReadOnly || isOnboarding}
+                  />
+                </div>
+              </div>
+              {/* Reading No */}
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Reading No
+                </Label>
+                <div className="relative">
+                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="metered-reading-no"
+                    value={form.readingNo}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, readingNo: e.target.value }))
+                    }
+                    className="pl-10 font-mono"
                     readOnly={isReadOnly}
+                    placeholder="MTR-XXXXXXXXX"
                   />
                 </div>
               </div>
@@ -347,8 +364,49 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                   />
                 </div>
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+              {/* Billing Period From */}
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Billing Period From
+                </Label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="metered-billing-from"
+                    type="date"
+                    value={form.billingPeriodFrom}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, billingPeriodFrom: e.target.value }))
+                    }
+                    className="pl-10"
+                    readOnly={isReadOnly}
+                  />
+                </div>
+              </div>
+              {/* Billing Period To */}
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Billing Period To
+                </Label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="metered-billing-to"
+                    type="date"
+                    value={form.billingPeriodTo}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, billingPeriodTo: e.target.value }))
+                    }
+                    className="pl-10"
+                    readOnly={isReadOnly}
+                  />
+                </div>
+              </div>
               {/* Price / KG — hidden for onboarding */}
-              {!isOnboarding && (
+              {!isOnboarding ? (
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Price / KG
@@ -373,6 +431,8 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                     />
                   </div>
                 </div>
+              ) : (
+                <div />
               )}
             </div>
 
@@ -520,8 +580,8 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                       linkedWiwo
                         ? `${linkedWiwo.transaction_no} — ${Number(linkedWiwo.total_wiwo_kg ?? 0).toFixed(4)} kg`
                         : form.wiwoHeaderId
-                        ? `WIWO #${form.wiwoHeaderId}`
-                        : "No WIWO linked"
+                          ? `WIWO #${form.wiwoHeaderId}`
+                          : "No WIWO linked"
                     }
                     readOnly
                     className="bg-zinc-50 dark:bg-zinc-800 font-mono text-xs"
@@ -543,8 +603,8 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                           wiwoLoading
                             ? "Loading WIWO headers..."
                             : wiwoHeaders.length === 0
-                            ? "No pending WIWO headers found"
-                            : "Select WIWO header (optional)..."
+                              ? "No pending WIWO headers found"
+                              : "Select WIWO header (optional)..."
                         }
                       />
                     </SelectTrigger>
@@ -679,15 +739,14 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                       type="button"
                       disabled={isReadOnly}
                       onClick={() => setForm((f) => ({ ...f, status: s }))}
-                      className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-                        form.status === s
+                      className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${form.status === s
                           ? s === "POSTED"
                             ? "bg-white dark:bg-zinc-700 shadow-sm text-green-600"
                             : s === "CANCELLED"
-                            ? "bg-white dark:bg-zinc-700 shadow-sm text-red-600"
-                            : "bg-white dark:bg-zinc-700 shadow-sm text-violet-600"
+                              ? "bg-white dark:bg-zinc-700 shadow-sm text-red-600"
+                              : "bg-white dark:bg-zinc-700 shadow-sm text-violet-600"
                           : "text-muted-foreground hover:text-zinc-900"
-                      } ${isReadOnly ? "opacity-60 cursor-not-allowed" : ""}`}
+                        } ${isReadOnly ? "opacity-60 cursor-not-allowed" : ""}`}
                     >
                       {s}
                     </button>
