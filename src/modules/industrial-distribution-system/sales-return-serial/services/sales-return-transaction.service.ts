@@ -325,7 +325,15 @@ export async function updateReturn(
         const existingSerials = (existingSerialsRes.data || []) as any[];
 
         const serialsToDelete = existingSerials.filter(es => !item.serialNumbers.some((s: any) => (typeof s === "string" ? s : s.serialNumber) === es.serial_number));
-        for (const s of serialsToDelete) await transactionRepo.deleteSerialRecord(s.id);
+        for (const s of serialsToDelete) {
+          await transactionRepo.deleteSerialRecord(s.id);
+          try {
+            const { deleteCylinderAssetBySerial } = await import("./sales-return-cylinder.repo");
+            await deleteCylinderAssetBySerial(s.serial_number);
+          } catch (err) {
+            console.warn(`Failed to delete cylinder asset ${s.serial_number}:`, err);
+          }
+        }
 
         const currentSerialStrings = existingSerials.map(es => es.serial_number);
         const serialsToAdd = item.serialNumbers.filter((sn: any) => {

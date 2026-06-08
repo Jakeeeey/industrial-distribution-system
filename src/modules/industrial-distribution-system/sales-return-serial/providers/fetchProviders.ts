@@ -213,7 +213,7 @@ export const SalesReturnProvider = {
     serial: string,
     branchId: number,
     productId: number,
-  ): Promise<{ isOnInventory: boolean; branchId?: number; branchName?: string }> {
+  ): Promise<{ isOnInventory: boolean; isUnregistered: boolean; branchId?: number; branchName?: string }> {
     const params = new URLSearchParams({
       action: "check-serial-onhand",
       serial,
@@ -221,7 +221,7 @@ export const SalesReturnProvider = {
       productId: String(productId),
     });
     const res = await fetch(`${API_BASE}?${params}`, { cache: "no-store" });
-    return handleResponse<{ isOnInventory: boolean; branchId?: number; branchName?: string }>(res);
+    return handleResponse<{ isOnInventory: boolean; isUnregistered: boolean; branchId?: number; branchName?: string }>(res);
   },
 
   async registerAssets(assets: any[]): Promise<any> {

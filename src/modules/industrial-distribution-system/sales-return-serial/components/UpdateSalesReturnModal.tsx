@@ -967,12 +967,14 @@ export function UpdateSalesReturnModal({
         open={isBulkRegisterOpen}
         onOpenChange={setIsBulkRegisterOpen}
         serials={unregisteredSerials}
-        productId={Number(details[selectedRowIndex]?.productId || details[selectedRowIndex]?.product_id || 0)}
+        productId={selectedRowIndex !== null ? Number(details[selectedRowIndex]?.productId || details[selectedRowIndex]?.product_id || 0) : 0}
         branchId={Number(salesmenOptions.find(s => String(s.value) === String(headerData.salesmanId))?.branchId || headerData.branchId || 0)}
         onSuccess={(registeredSerials) => {
           setDetails((prev) => {
+            const idx = selectedRowIndex;
+            if (idx === null) return prev;
             const next = [...prev];
-            const row = next[selectedRowIndex];
+            const row = next[idx];
             if (!row) return prev;
             
             const newSerials = [...(row.serialNumbers || []), ...registeredSerials];
@@ -986,7 +988,7 @@ export function UpdateSalesReturnModal({
               if (opt) discountAmt = Math.round(grossAmount * (parseFloat(opt.total_percent) / 100) * 100) / 100;
             }
             
-            next[selectedRowIndex] = {
+            next[idx] = {
               ...row,
               serialNumbers: newSerials,
               quantity: newQty,

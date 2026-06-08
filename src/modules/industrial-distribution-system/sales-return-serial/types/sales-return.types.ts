@@ -20,7 +20,12 @@ export interface SalesReturnItem {
   totalAmount: number;
   reason?: string;
   returnType?: string;
-  serialNumbers?: string[];
+  serialNumbers?: (string | {
+    serialNumber: string;
+    tareWeight?: number | string | null;
+    expirationDate?: string | null;
+    cylinderCondition?: string | null;
+  })[];
   // 🟢 Fields for Price Type Recalculation
   priceA?: number;
   priceB?: number;
