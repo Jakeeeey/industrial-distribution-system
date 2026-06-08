@@ -35,6 +35,14 @@ export function generateTxNoPlaceholder(
   return generateTxNo(type, siteId, date, 0).replace("-000", "-...");
 }
 
+/**
+ * Generates a reading number with prefix MTR-XXXXXXXXX
+ */
+export function generateReadingNo(): string {
+  const num = Math.floor(100000000 + Math.random() * 900000000);
+  return `MTR-${num}`;
+}
+
 // ─── WIWO computation ─────────────────────────────────────────────────────────
 
 export function calcWiwoDetail(d: WiwoDetailRef): WiwoDetailRef {
