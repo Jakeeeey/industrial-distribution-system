@@ -1,4 +1,39 @@
-import type { WiwoDetailRef } from "../types";
+import type { TransactionType, WiwoDetailRef, BillableSource } from "../types";
+
+// ─── Transaction Number Generation ───────────────────────────────────────────
+
+/**
+ * Generates a transaction number based on type.
+ *
+ * Format:
+ *   ONBOARDING_BASELINE → TXORB-{YYYYMMDD}-{siteId}-{seq3}
+ *   REGULAR_BILLING     → TXREG-{YYYYMMDD}-{siteId}-{seq3}
+ *
+ * Sequence restarts per site per day.
+ */
+export function generateTxNo(
+  type: TransactionType,
+  siteId: number | null,
+  date: string,
+  seq: number
+): string {
+  const prefix = type === "ONBOARDING_BASELINE" ? "TXORB" : "TXREG";
+  const dateStr = date.replace(/-/g, "").slice(0, 8);
+  const sId = siteId ?? 0;
+  const seqStr = String(seq).padStart(3, "0");
+  return `${prefix}-${dateStr}-${sId}-${seqStr}`;
+}
+
+/**
+ * Generates a placeholder tx number (for display before seq is fetched).
+ */
+export function generateTxNoPlaceholder(
+  type: TransactionType,
+  siteId: number | null,
+  date: string
+): string {
+  return generateTxNo(type, siteId, date, 0).replace("-000", "-...");
+}
 
 // ─── WIWO computation ─────────────────────────────────────────────────────────
 
@@ -46,12 +81,13 @@ export interface ArbitrationResult {
   wiwo_kg: number;
   variance_kg: number;
   billable_kg: number;
-  billable_source: "METERED" | "WIWO";
+  billable_source: BillableSource;
 }
 
 /**
- * Billable KG = MAX(Metered KG)
+ * Billable KG = MAX(Metered KG, WIWO KG)
  * Billable Source = the one that is higher (METERED wins on tie)
+ * If WIWO is 0 (not linked), defaults to Metered only.
  */
 export function computeArbitration(
   meteredKg: number,
@@ -82,4 +118,3 @@ export function calcVatAmount(grossAmount: number, vatRate = 0.12): number {
 export function calcNetAmount(grossAmount: number, vatAmount: number): number {
   return parseFloat((grossAmount + vatAmount).toFixed(2));
 }
-

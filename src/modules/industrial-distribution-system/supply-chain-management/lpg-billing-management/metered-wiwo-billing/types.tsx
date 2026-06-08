@@ -1,6 +1,7 @@
 // ─── Enums / Literals ────────────────────────────────────────────────────────
 
-export type BillableSource = "METERED" | "WIWO";
+export type TransactionType = "ONBOARDING_BASELINE" | "REGULAR_BILLING";
+export type BillableSource = "METERED" | "WIWO" | "NONE";
 export type TransactionStatus = "DRAFT" | "POSTED" | "CANCELLED";
 
 // ─── Meter Reading ────────────────────────────────────────────────────────────
@@ -56,21 +57,27 @@ export interface WiwoDetailRef {
 
 export interface MeteredWiwoTransaction {
   id?: number;
+
+  /** Primary transaction identifier (TXORB-... or TXREG-... prefix) */
+  transaction_no?: string;
+  /** Legacy alias kept for backward compat — maps to transaction_no or reading_no */
   reading_no: string;
+
+  transaction_type: TransactionType;
   transaction_date: string;
   customer_code: string;
   lpg_site_id: number | null;
   meter_reading_id: number | null;
   wiwo_header_id: number | null;
 
-  // KG values
+  // KG values (not applicable for ONBOARDING_BASELINE)
   metered_kg: number;
   wiwo_kg: number;
   variance_kg: number;
   billable_source: BillableSource;
   billable_kg: number;
 
-  // Billing
+  // Billing (not applicable for ONBOARDING_BASELINE)
   price_per_kg: number;
   gross_amount: number;
   vat_amount: number;
@@ -139,6 +146,7 @@ export interface ArbitrationResult {
 export interface MeteredListParams {
   search?: string;
   status?: string;
+  transactionType?: TransactionType | "ALL";
   page?: number;
   limit?: number;
 }
