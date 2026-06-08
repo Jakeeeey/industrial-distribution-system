@@ -5,53 +5,67 @@ import {
 import type {
   MeteredWiwoTransaction,
   MeteredListParams,
+  TransactionType,
   TransactionStatus,
 } from "../types";
 
 const DIRECTUS_URL = getDirectusBase();
 
-function mapMeterReadingToTransaction(mr: unknown): MeteredWiwoTransaction {
-  if (!mr) return mr as MeteredWiwoTransaction;
-  const raw = mr as Record<string, unknown>;
+// ─── Mapping helpers ──────────────────────────────────────────────────────────
 
-  const siteObj = raw["lpg_site_id"] && typeof raw["lpg_site_id"] === "object"
-    ? (raw["lpg_site_id"] as Record<string, unknown>)
+function mapTxRecord(raw: Record<string, unknown>): MeteredWiwoTransaction {
+  const siteObj =
+    raw["lpg_site_id"] && typeof raw["lpg_site_id"] === "object"
+      ? (raw["lpg_site_id"] as Record<string, unknown>)
+      : null;
+  const siteId = siteObj
+    ? Number(siteObj.id)
+    : raw["lpg_site_id"]
+    ? Number(raw["lpg_site_id"])
     : null;
-  const siteId = siteObj ? Number(siteObj.id) : (raw["lpg_site_id"] ? Number(raw["lpg_site_id"]) : null);
 
-  const kgConsumed = Number(raw["kg_consumed"] ?? 0);
-  const pricePerKg = Number(raw["price_per_kg"] ?? 0);
-  const gross = kgConsumed * pricePerKg;
+  const mrObj =
+    raw["meter_reading_id"] && typeof raw["meter_reading_id"] === "object"
+      ? (raw["meter_reading_id"] as Record<string, unknown>)
+      : null;
+  const wiwoObj =
+    raw["wiwo_header_id"] && typeof raw["wiwo_header_id"] === "object"
+      ? (raw["wiwo_header_id"] as Record<string, unknown>)
+      : null;
 
-  const tx: MeteredWiwoTransaction = {
+  const txNo = String(raw["transaction_no"] ?? raw["reading_no"] ?? "-");
+
+  return {
     id: Number(raw["id"]),
-    reading_no: raw["reading_no"] ? String(raw["reading_no"]) : "-",
-    transaction_date: String(raw["reading_date"] ?? ""),
+    transaction_no: txNo,
+    reading_no: txNo,
+    transaction_type: (raw["transaction_type"] as TransactionType) ?? "REGULAR_BILLING",
+    transaction_date: String(raw["transaction_date"] ?? ""),
     customer_code: String(raw["customer_code"] ?? ""),
     lpg_site_id: siteId,
-    meter_reading_id: Number(raw["id"]),
-    wiwo_header_id: null,
-    metered_kg: kgConsumed,
-    wiwo_kg: 0,
-    variance_kg: 0,
-    billable_source: "METERED",
-    billable_kg: kgConsumed,
-    price_per_kg: pricePerKg,
-    gross_amount: Number(raw["gross_amount"] ?? gross),
+    meter_reading_id: mrObj ? Number(mrObj["id"]) : raw["meter_reading_id"] ? Number(raw["meter_reading_id"]) : null,
+    wiwo_header_id: wiwoObj ? Number(wiwoObj["id"]) : raw["wiwo_header_id"] ? Number(raw["wiwo_header_id"]) : null,
+    metered_kg: Number(raw["metered_kg"] ?? 0),
+    wiwo_kg: Number(raw["wiwo_kg"] ?? 0),
+    variance_kg: Number(raw["variance_kg"] ?? 0),
+    billable_source: (raw["billable_source"] as "METERED" | "WIWO" | "NONE") ?? "METERED",
+    billable_kg: Number(raw["billable_kg"] ?? 0),
+    price_per_kg: Number(raw["price_per_kg"] ?? 0),
+    gross_amount: Number(raw["gross_amount"] ?? 0),
     vat_amount: Number(raw["vat_amount"] ?? 0),
-    net_amount: Number(raw["net_amount"] ?? gross),
-    discount_amount: raw["discount_amount"] ? Number(raw["discount_amount"]) : 0.0,
+    net_amount: Number(raw["net_amount"] ?? 0),
+    discount_amount: raw["discount_amount"] ? Number(raw["discount_amount"]) : 0,
     sales_invoice_id: raw["sales_invoice_id"] ? Number(raw["sales_invoice_id"]) : null,
     sales_invoice_no: raw["sales_invoice_no"] ? String(raw["sales_invoice_no"]) : null,
-    status: (raw["reading_status"] ?? "DRAFT") as TransactionStatus,
-    remarks: raw["remarks"] ? String(raw["remarks"]) : "",
-    pressure_line: raw["pressure_line"] ? Number(raw["pressure_line"]) : 1.0,
-    psi: raw["psi"] ? Number(raw["psi"]) : 0.0,
-    atmospheric_pressure: raw["atmospheric_pressure"] ? Number(raw["atmospheric_pressure"]) : 14.7,
-    lpg_vapor_factor: raw["lpg_vapor_factor"] ? Number(raw["lpg_vapor_factor"]) : 1.0,
-    meter_unit: raw["meter_unit"] as "M3" | "LITER" | "KG" | "UNIT",
-    meter_direction: raw["meter_direction"] as "INCREASING" | "DECREASING",
-    conversion_factor: raw["conversion_factor"] ? Number(raw["conversion_factor"]) : 1.0,
+    status: (raw["status"] as TransactionStatus) ?? "DRAFT",
+    remarks: raw["remarks"] ? String(raw["remarks"]) : null,
+    pressure_line: raw["pressure_line"] ? Number(raw["pressure_line"]) : undefined,
+    psi: raw["psi"] ? Number(raw["psi"]) : undefined,
+    atmospheric_pressure: raw["atmospheric_pressure"] ? Number(raw["atmospheric_pressure"]) : undefined,
+    lpg_vapor_factor: raw["lpg_vapor_factor"] ? Number(raw["lpg_vapor_factor"]) : undefined,
+    meter_unit: raw["meter_unit"] as "M3" | "LITER" | "KG" | "UNIT" | undefined,
+    meter_direction: raw["meter_direction"] as "INCREASING" | "DECREASING" | undefined,
+    conversion_factor: raw["conversion_factor"] ? Number(raw["conversion_factor"]) : undefined,
     billing_period_from: raw["billing_period_from"] ? String(raw["billing_period_from"]) : null,
     billing_period_to: raw["billing_period_to"] ? String(raw["billing_period_to"]) : null,
     posted_by: raw["posted_by"] ? Number(raw["posted_by"]) : null,
@@ -63,73 +77,101 @@ function mapMeterReadingToTransaction(mr: unknown): MeteredWiwoTransaction {
     created_date: raw["created_date"] ? String(raw["created_date"]) : null,
     modified_by: raw["modified_by"] ? Number(raw["modified_by"]) : null,
     modified_date: raw["modified_date"] ? String(raw["modified_date"]) : null,
-    site: siteObj ? {
-      id: Number(siteObj.id),
-      site_name: siteObj.site_name ? String(siteObj.site_name) : null,
-      site_address: siteObj.site_address ? String(siteObj.site_address) : null,
-    } : undefined,
-    meter_reading: {
-      id: Number(raw["id"]),
-      lpg_site_id: siteId ?? 0,
-      reading_date: String(raw["reading_date"] ?? ""),
-      previous_reading: Number(raw["previous_reading"] ?? 0),
-      current_reading: Number(raw["current_reading"] ?? 0),
-      raw_consumption: Number(raw["raw_consumption"] ?? 0),
-      kg_consumed: kgConsumed,
-      price_per_kg: pricePerKg,
-      created_by: raw["created_by"] ? Number(raw["created_by"]) : null,
-      created_date: raw["created_date"] ? String(raw["created_date"]) : null,
-    }
+    site: siteObj
+      ? {
+          id: Number(siteObj.id),
+          site_name: siteObj.site_name ? String(siteObj.site_name) : null,
+          site_address: siteObj.site_address ? String(siteObj.site_address) : null,
+          default_pressure_line: siteObj.default_pressure_line ? Number(siteObj.default_pressure_line) : null,
+          default_psi: siteObj.default_psi ? Number(siteObj.default_psi) : null,
+          default_atmospheric_pressure: siteObj.default_atmospheric_pressure ? Number(siteObj.default_atmospheric_pressure) : null,
+        }
+      : undefined,
+    meter_reading: mrObj
+      ? {
+          id: Number(mrObj["id"]),
+          lpg_site_id: siteId ?? 0,
+          reading_date: String(mrObj["reading_date"] ?? ""),
+          previous_reading: Number(mrObj["previous_reading"] ?? 0),
+          current_reading: Number(mrObj["current_reading"] ?? 0),
+          raw_consumption: Number(mrObj["raw_consumption"] ?? 0),
+          kg_consumed: Number(mrObj["kg_consumed"] ?? 0),
+          price_per_kg: Number(mrObj["price_per_kg"] ?? 0),
+          created_by: mrObj["created_by"] ? Number(mrObj["created_by"]) : null,
+          created_date: mrObj["created_date"] ? String(mrObj["created_date"]) : null,
+        }
+      : undefined,
+    wiwo_header: wiwoObj
+      ? {
+          id: Number(wiwoObj["id"]),
+          transaction_no: String(wiwoObj["wiwo_no"] ?? wiwoObj["transaction_no"] ?? ""),
+          transaction_date: String(wiwoObj["transaction_date"] ?? ""),
+          customer_code: String(wiwoObj["customer_code"] ?? ""),
+          lpg_site_id: wiwoObj["lpg_site_id"] ? Number(wiwoObj["lpg_site_id"]) : null,
+          status: String(wiwoObj["wiwo_status"] ?? wiwoObj["status"] ?? ""),
+          total_wiwo_kg: wiwoObj["total_wiwo_kg"] ? Number(wiwoObj["total_wiwo_kg"]) : undefined,
+        }
+      : undefined,
   };
-
-  return tx;
 }
 
-// ─── Transactions ─────────────────────────────────────────────────────────────
+// ─── TX deep fields ───────────────────────────────────────────────────────────
 
-export async function fetchMeterReadingSeqNo(
-  customerCode: string,
-  date: string,
-  id: number
-): Promise<number> {
-  if (!customerCode || !date) return 1;
-  const filter = {
-    customer_code: { _eq: customerCode },
-    reading_date: { _eq: date },
-    id: { _lte: id }
-  };
-  const qs = `filter=${encodeURIComponent(JSON.stringify(filter))}&limit=0&meta=total_count`;
-  try {
-    const res = await directusFetch<{ meta?: { total_count: number } }>(
-      `${DIRECTUS_URL}/items/lpg_meter_readings?${qs}`
-    );
-    return res.meta?.total_count ?? 1;
-  } catch (err) {
-    console.error("fetchMeterReadingSeqNo failed:", err);
-    return 1;
-  }
-}
+const TX_FIELDS = [
+  "*",
+  "lpg_site_id.id",
+  "lpg_site_id.site_name",
+  "lpg_site_id.site_address",
+  "lpg_site_id.default_pressure_line",
+  "lpg_site_id.default_psi",
+  "lpg_site_id.default_atmospheric_pressure",
+  "meter_reading_id.id",
+  "meter_reading_id.reading_date",
+  "meter_reading_id.previous_reading",
+  "meter_reading_id.current_reading",
+  "meter_reading_id.raw_consumption",
+  "meter_reading_id.kg_consumed",
+  "meter_reading_id.price_per_kg",
+  "meter_reading_id.created_by",
+  "meter_reading_id.created_date",
+  "wiwo_header_id.id",
+  "wiwo_header_id.wiwo_no",
+  "wiwo_header_id.transaction_date",
+  "wiwo_header_id.customer_code",
+  "wiwo_header_id.lpg_site_id",
+  "wiwo_header_id.wiwo_status",
+].join(",");
 
-export async function fetchNextMeterReadingSeq(
-  customerCode: string,
+// ─── Sequence Number ──────────────────────────────────────────────────────────
+
+/**
+ * Returns the next sequence number for a given transaction type, site, and date.
+ * Sequence restarts per site per day (count existing records for that site+date+type).
+ */
+export async function fetchNextTxSeq(
+  type: TransactionType,
+  siteId: number,
   date: string
 ): Promise<number> {
-  if (!customerCode || !date) return 1;
+  if (!siteId || !date) return 1;
   const filter = {
-    customer_code: { _eq: customerCode },
-    reading_date: { _eq: date }
+    transaction_type: { _eq: type },
+    lpg_site_id: { _eq: siteId },
+    transaction_date: { _eq: date },
   };
   const qs = `filter=${encodeURIComponent(JSON.stringify(filter))}&limit=0&meta=total_count`;
   try {
     const res = await directusFetch<{ meta?: { total_count: number } }>(
-      `${DIRECTUS_URL}/items/lpg_meter_readings?${qs}`
+      `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions?${qs}`
     );
     return (res.meta?.total_count ?? 0) + 1;
   } catch (err) {
-    console.error("fetchNextMeterReadingSeq failed:", err);
+    console.error("fetchNextTxSeq failed:", err);
     return 1;
   }
 }
+
+// ─── Transactions — List ──────────────────────────────────────────────────────
 
 export async function fetchMeteredTransactions(params: MeteredListParams): Promise<{
   data: MeteredWiwoTransaction[];
@@ -139,51 +181,106 @@ export async function fetchMeteredTransactions(params: MeteredListParams): Promi
   const limit = params.limit ?? 10;
   const offset = (page - 1) * limit;
 
-  const filters: Record<string, unknown> = {};
-  if (params.status) filters.reading_status = { _eq: params.status };
-  if (params.search) {
-    filters._or = [
-      { customer_code: { _icontains: params.search } },
-      { lpg_site_id: { site_name: { _icontains: params.search } } },
-    ];
+  const filterList: Record<string, unknown>[] = [];
+
+  // 1. Transaction Type filter (with special onboarding rules)
+  if (params.transactionType === "REGULAR_BILLING") {
+    filterList.push({ transaction_type: { _eq: "REGULAR_BILLING" } });
+  } else if (params.transactionType === "ONBOARDING_BASELINE") {
+    filterList.push({
+      transaction_type: { _eq: "ONBOARDING_BASELINE" },
+      meter_reading_id: { _null: true },
+      status: { _eq: "DRAFT" },
+    });
+  } else {
+    // "ALL" or undefined
+    filterList.push({
+      _or: [
+        { transaction_type: { _eq: "REGULAR_BILLING" } },
+        {
+          _and: [
+            { transaction_type: { _eq: "ONBOARDING_BASELINE" } },
+            { meter_reading_id: { _null: true } },
+            { status: { _eq: "DRAFT" } },
+          ],
+        },
+      ],
+    });
   }
 
-  let qs = `fields=*,lpg_site_id.id,lpg_site_id.site_name,lpg_site_id.site_address&sort=-modified_date&limit=${limit}&offset=${offset}&meta=total_count`;
+  // 2. Status filter
+  if (params.status) {
+    filterList.push({ status: { _eq: params.status } });
+  }
+
+  // 3. Search filter
+  if (params.search) {
+    filterList.push({
+      _or: [
+        { customer_code: { _icontains: params.search } },
+        { transaction_no: { _icontains: params.search } },
+        { lpg_site_id: { site_name: { _icontains: params.search } } },
+      ],
+    });
+  }
+
+  // Combine into a single filter object
+  let filters: Record<string, unknown> = {};
+  if (filterList.length === 1) {
+    filters = filterList[0];
+  } else if (filterList.length > 1) {
+    filters = { _and: filterList };
+  }
+
+  let qs = `fields=${TX_FIELDS}&sort=-modified_date&limit=${limit}&offset=${offset}&meta=total_count`;
   if (Object.keys(filters).length > 0) {
     qs += `&filter=${encodeURIComponent(JSON.stringify(filters))}`;
   }
 
-  const res = await directusFetch<{ data: Record<string, unknown>[]; meta?: { total_count: number } }>(
-    `${DIRECTUS_URL}/items/lpg_meter_readings?${qs}`
-  );
+  const res = await directusFetch<{
+    data: Record<string, unknown>[];
+    meta?: { total_count: number };
+  }>(`${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions?${qs}`);
 
-  const mapped = (res.data ?? []).map((raw) => mapMeterReadingToTransaction(raw));
-
-  return { data: mapped, total: res.meta?.total_count ?? 0 };
+  return {
+    data: (res.data ?? []).map(mapTxRecord),
+    total: res.meta?.total_count ?? 0,
+  };
 }
 
-export async function fetchMeteredTransactionById(id: number): Promise<MeteredWiwoTransaction | null> {
+// ─── Transactions — Get by ID ─────────────────────────────────────────────────
+
+export async function fetchMeteredTransactionById(
+  id: number
+): Promise<MeteredWiwoTransaction | null> {
   const res = await directusFetch<{ data: Record<string, unknown> }>(
-    `${DIRECTUS_URL}/items/lpg_meter_readings/${id}?fields=*,lpg_site_id.id,lpg_site_id.site_name,lpg_site_id.site_address`
+    `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions/${id}?fields=${TX_FIELDS}`
   );
   if (!res.data) return null;
-  return mapMeterReadingToTransaction(res.data);
+  return mapTxRecord(res.data);
 }
+
+// ─── Meter Reading — create / update ─────────────────────────────────────────
 
 async function createOrUpdateMeterReading(
   payload: Partial<MeteredWiwoTransaction>,
   userId?: number,
-  readingId?: number | null,
+  readingId?: number | null
 ): Promise<number> {
-  const raw = payload as Record<string, unknown>;
+  const raw = payload as unknown as Record<string, unknown>;
   const prevReading = Number(raw.previous_reading ?? 0);
   const currReading = Number(raw.current_reading ?? 0);
-  const rawConsumption = Math.max(0, currReading - prevReading);
+
+  const meterDir = (payload.meter_direction ?? "INCREASING") as string;
+  const rawConsumption =
+    meterDir === "DECREASING"
+      ? Math.max(0, prevReading - currReading)
+      : Math.max(0, currReading - prevReading);
 
   const data = {
     lpg_site_id: payload.lpg_site_id,
     customer_code: payload.customer_code,
-    reading_date: payload.transaction_date || new Date().toISOString().split('T')[0],
+    reading_date: payload.transaction_date || new Date().toISOString().split("T")[0],
     previous_reading: prevReading,
     current_reading: currReading,
     kg_consumed: payload.metered_kg ?? payload.billable_kg ?? 0,
@@ -191,17 +288,15 @@ async function createOrUpdateMeterReading(
     raw_consumption: rawConsumption,
     reading_status: payload.status || "DRAFT",
     reading_no: payload.reading_no,
-    
-    // Additional fields from lpg_meter_readings
     billing_period_from: payload.billing_period_from || null,
     billing_period_to: payload.billing_period_to || null,
     meter_unit: payload.meter_unit || "KG",
     meter_direction: payload.meter_direction || "INCREASING",
-    conversion_factor: payload.conversion_factor ?? 1.000000,
-    pressure_line: payload.pressure_line ?? 1.000000,
-    psi: payload.psi ?? 0.0000,
-    atmospheric_pressure: payload.atmospheric_pressure ?? 14.7000,
-    lpg_vapor_factor: payload.lpg_vapor_factor ?? 1.000000,
+    conversion_factor: payload.conversion_factor ?? 1.0,
+    pressure_line: payload.pressure_line ?? 1.0,
+    psi: payload.psi ?? 0.0,
+    atmospheric_pressure: payload.atmospheric_pressure ?? 14.7,
+    lpg_vapor_factor: payload.lpg_vapor_factor ?? 1.0,
     gross_amount: payload.gross_amount ?? 0,
     discount_amount: payload.discount_amount ?? 0,
     vat_amount: payload.vat_amount ?? 0,
@@ -209,201 +304,292 @@ async function createOrUpdateMeterReading(
     sales_invoice_id: payload.sales_invoice_id || null,
     sales_invoice_no: payload.sales_invoice_no || null,
     remarks: payload.remarks || "",
-    
-    // User / status logs
-    ...(userId ? (payload.status === "POSTED" ? { posted_by: userId, posted_date: new Date().toISOString() } : {}) : {}),
-    ...(userId ? (payload.status === "CANCELLED" ? { cancelled_by: userId, cancelled_date: new Date().toISOString() } : {}) : {}),
-    ...(userId && !readingId ? {
-      created_by: userId,
-      created_date: new Date().toISOString(),
-      modified_by: userId,
-      modified_date: new Date().toISOString()
-    } : {}),
-    ...(userId && readingId ? {
-      modified_by: userId,
-      modified_date: new Date().toISOString()
-    } : {}),
+    ...(userId
+      ? payload.status === "POSTED"
+        ? { posted_by: userId, posted_date: new Date().toISOString() }
+        : {}
+      : {}),
+    ...(userId
+      ? payload.status === "CANCELLED"
+        ? { cancelled_by: userId, cancelled_date: new Date().toISOString() }
+        : {}
+      : {}),
+    ...(userId && !readingId
+      ? {
+          created_by: userId,
+          created_date: new Date().toISOString(),
+          modified_by: userId,
+          modified_date: new Date().toISOString(),
+        }
+      : {}),
+    ...(userId && readingId
+      ? { modified_by: userId, modified_date: new Date().toISOString() }
+      : {}),
   };
 
   if (readingId) {
     await directusFetch(
       `${DIRECTUS_URL}/items/lpg_meter_readings/${readingId}`,
-      {
-        method: "PATCH",
-        body: JSON.stringify(data),
-      }
+      { method: "PATCH", body: JSON.stringify(data) }
     );
     return readingId;
   } else {
     const res = await directusFetch<{ data: { id: number } }>(
       `${DIRECTUS_URL}/items/lpg_meter_readings`,
-      {
-        method: "POST",
-        body: JSON.stringify(data),
-      }
+      { method: "POST", body: JSON.stringify(data) }
     );
     return res.data.id;
   }
 }
 
+// ─── Bridge Transaction — create / update ────────────────────────────────────
+
+async function buildBridgePayload(
+  payload: Partial<MeteredWiwoTransaction>,
+  readingId: number,
+  userId?: number,
+  isUpdate = false
+): Promise<Record<string, unknown>> {
+  const data: Record<string, unknown> = {
+    transaction_no: payload.reading_no,
+    transaction_type: payload.transaction_type ?? "REGULAR_BILLING",
+    transaction_date: payload.transaction_date || new Date().toISOString().split("T")[0],
+    customer_code: payload.customer_code,
+    lpg_site_id: payload.lpg_site_id,
+    meter_reading_id: readingId,
+    wiwo_header_id: payload.wiwo_header_id || null,
+    metered_kg: payload.metered_kg ?? 0,
+    wiwo_kg: payload.wiwo_kg ?? 0,
+    variance_kg: payload.variance_kg ?? 0,
+    billable_source: payload.billable_source ?? "METERED",
+    billable_kg: payload.billable_kg ?? 0,
+    price_per_kg: payload.price_per_kg ?? 0,
+    gross_amount: payload.gross_amount ?? 0,
+    vat_amount: payload.vat_amount ?? 0,
+    net_amount: payload.net_amount ?? 0,
+    discount_amount: payload.discount_amount ?? 0,
+    sales_invoice_id: payload.sales_invoice_id || null,
+    status: payload.status || "DRAFT",
+    remarks: payload.remarks || null,
+    pressure_line: payload.pressure_line ?? null,
+    psi: payload.psi ?? null,
+    atmospheric_pressure: payload.atmospheric_pressure ?? null,
+    lpg_vapor_factor: payload.lpg_vapor_factor ?? null,
+    meter_unit: payload.meter_unit || null,
+    meter_direction: payload.meter_direction || null,
+    conversion_factor: payload.conversion_factor ?? null,
+    billing_period_from: payload.billing_period_from || null,
+    billing_period_to: payload.billing_period_to || null,
+    ...(userId
+      ? payload.status === "POSTED"
+        ? { posted_by: userId, posted_date: new Date().toISOString() }
+        : {}
+      : {}),
+    ...(userId
+      ? payload.status === "CANCELLED"
+        ? { cancelled_by: userId, cancelled_date: new Date().toISOString() }
+        : {}
+      : {}),
+    ...(userId && !isUpdate
+      ? {
+          created_by: userId,
+          created_date: new Date().toISOString(),
+          modified_by: userId,
+          modified_date: new Date().toISOString(),
+        }
+      : {}),
+    ...(userId && isUpdate
+      ? { modified_by: userId, modified_date: new Date().toISOString() }
+      : {}),
+  };
+  return data;
+}
+
+// ─── Public: Create ───────────────────────────────────────────────────────────
+
 export async function createMeteredTransaction(
   payload: Partial<MeteredWiwoTransaction>
 ): Promise<MeteredWiwoTransaction> {
-  const payloadRecord = payload as unknown as Record<string, unknown>;
-  let readingId = payload.meter_reading_id;
+  const raw = payload as unknown as Record<string, unknown>;
+  const userId = payload.created_by ?? undefined;
 
   console.log("[createMeteredTransaction] payload:", JSON.stringify(payload));
 
-  if (payload.lpg_site_id && payloadRecord.previous_reading !== undefined && payloadRecord.current_reading !== undefined) {
-    console.log("[createMeteredTransaction] calling createOrUpdateMeterReading");
-    readingId = await createOrUpdateMeterReading(
-      payload,
-      payload.created_by ?? undefined,
-      payload.meter_reading_id,
-    );
-    console.log("[createMeteredTransaction] createOrUpdateMeterReading returned readingId:", readingId);
-  } else {
-    console.log("[createMeteredTransaction] condition not met for createOrUpdateMeterReading. lpg_site_id:", payload.lpg_site_id, "prev:", payloadRecord.previous_reading, "curr:", payloadRecord.current_reading);
+  // 1. Create meter reading row
+  let readingId: number | null | undefined = payload.meter_reading_id;
+  if (payload.lpg_site_id && raw.previous_reading !== undefined && raw.current_reading !== undefined) {
+    readingId = await createOrUpdateMeterReading(payload, userId as number | undefined, null);
+    console.log("[createMeteredTransaction] meter reading id:", readingId);
   }
 
-  let reading_no = payload.reading_no;
-  if (readingId) {
-    const customerCode = String(payloadRecord.customer_code ?? "");
-    const readingDate = payload.transaction_date || new Date().toISOString().split('T')[0];
-    const seq = await fetchMeterReadingSeqNo(customerCode, readingDate, readingId);
-    const dateStr = readingDate.replace(/-/g, "").slice(0, 8);
-    const sId = payload.lpg_site_id ?? 0;
-    const seqStr = String(seq).padStart(3, "0");
-    reading_no = `MTR-${dateStr}${sId}${seqStr}`;
-  }
+  // 2. Build bridge payload (transaction_no already computed by hook/API)
+  const bridgeData = await buildBridgePayload(
+    payload,
+    readingId!,
+    userId as number | undefined,
+    false
+  );
+
+  // 3. Create bridge transaction row
+  const res = await directusFetch<{ data: { id: number } }>(
+    `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions`,
+    { method: "POST", body: JSON.stringify(bridgeData) }
+  );
 
   return {
     ...payload,
-    reading_no,
-    meter_reading_id: readingId,
+    id: res.data.id,
+    reading_no: payload.reading_no ?? "",
+    transaction_no: payload.reading_no,
+    meter_reading_id: readingId ?? null,
   } as unknown as MeteredWiwoTransaction;
 }
+
+// ─── Public: Update ───────────────────────────────────────────────────────────
 
 export async function updateMeteredTransaction(
   id: number,
   payload: Partial<MeteredWiwoTransaction>
 ): Promise<MeteredWiwoTransaction> {
-  const payloadRecord = payload as unknown as Record<string, unknown>;
-  let readingId = payload.meter_reading_id;
+  const raw = payload as unknown as Record<string, unknown>;
+  const userId = (raw.modified_by as number | undefined) ?? undefined;
 
   console.log("[updateMeteredTransaction] payload:", JSON.stringify(payload));
 
-  if (payload.lpg_site_id && payloadRecord.previous_reading !== undefined && payloadRecord.current_reading !== undefined) {
-    console.log("[updateMeteredTransaction] calling createOrUpdateMeterReading");
+  // 1. Fetch existing transaction to reuse its meter_reading_id if not in payload
+  const existing = await fetchMeteredTransactionById(id);
+  const existingReadingId = existing?.meter_reading_id;
+
+  // 2. Update / create meter reading
+  let readingId: number | null | undefined = payload.meter_reading_id || existingReadingId;
+  if (payload.lpg_site_id && raw.previous_reading !== undefined && raw.current_reading !== undefined) {
     readingId = await createOrUpdateMeterReading(
       payload,
-      payloadRecord.modified_by as number | undefined,
-      payload.meter_reading_id || id,
+      userId,
+      readingId || undefined
     );
-    console.log("[updateMeteredTransaction] createOrUpdateMeterReading returned readingId:", readingId);
-  } else {
-    console.log("[updateMeteredTransaction] condition not met for createOrUpdateMeterReading. lpg_site_id:", payload.lpg_site_id, "prev:", payloadRecord.previous_reading, "curr:", payloadRecord.current_reading);
+    console.log("[updateMeteredTransaction] meter reading id:", readingId);
   }
 
-  let reading_no = payload.reading_no;
-  if (readingId) {
-    const customerCode = String(payloadRecord.customer_code ?? "");
-    const readingDate = payload.transaction_date || new Date().toISOString().split('T')[0];
-    const seq = await fetchMeterReadingSeqNo(customerCode, readingDate, readingId);
-    const dateStr = readingDate.replace(/-/g, "").slice(0, 8);
-    const sId = payload.lpg_site_id ?? 0;
-    const seqStr = String(seq).padStart(3, "0");
-    reading_no = `MTR-${dateStr}${sId}${seqStr}`;
-  }
+  // 3. Build bridge patch payload
+  const bridgeData = await buildBridgePayload(
+    payload,
+    readingId!,
+    userId,
+    true
+  );
+
+  // 4. Update bridge transaction row
+  await directusFetch(
+    `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions/${id}`,
+    { method: "PATCH", body: JSON.stringify(bridgeData) }
+  );
 
   return {
     id,
     ...payload,
-    reading_no,
-    meter_reading_id: readingId,
+    meter_reading_id: readingId ?? null,
   } as unknown as MeteredWiwoTransaction;
 }
 
 // ─── Meter Readings lookup ────────────────────────────────────────────────────
 
-export async function fetchMeterReadings(siteId?: number): Promise<
-  { id: number; reading_date: string; previous_reading: number; current_reading: number; kg_consumed: number; price_per_kg: number }[]
+export async function fetchMeterReadings(
+  siteId?: number
+): Promise<
+  {
+    id: number;
+    reading_date: string;
+    previous_reading: number;
+    current_reading: number;
+    kg_consumed: number;
+    price_per_kg: number;
+  }[]
 > {
-  let qs = "fields=id,reading_date,previous_reading,current_reading,kg_consumed,price_per_kg&sort=-reading_date&limit=50";
+  let qs =
+    "fields=id,reading_date,previous_reading,current_reading,kg_consumed,price_per_kg&sort=-reading_date&limit=50";
   if (siteId) qs += `&filter[lpg_site_id][_eq]=${siteId}`;
   const res = await directusFetch<{
-    data: { id: number; reading_date: string; previous_reading: number; current_reading: number; kg_consumed: number; price_per_kg: number }[];
+    data: {
+      id: number;
+      reading_date: string;
+      previous_reading: number;
+      current_reading: number;
+      kg_consumed: number;
+      price_per_kg: number;
+    }[];
   }>(`${DIRECTUS_URL}/items/lpg_meter_readings?${qs}`);
   return res.data ?? [];
 }
 
-// ─── WIWO Headers lookup (for pairing) ───────────────────────────────────────
+// ─── WIWO Headers lookup ──────────────────────────────────────────────────────
 
 export async function fetchUnbilledWiwoHeaders(
   customerCode?: string,
   siteId?: number
 ): Promise<{ id: number; transaction_no: string; transaction_date: string; total_wiwo_kg?: number }[]> {
-  let qs = "fields=id,wiwo_no,transaction_date&filter[wiwo_status][_eq]=PENDING&sort=-transaction_date&limit=50";
+  let qs =
+    "fields=id,wiwo_no,transaction_date&filter[wiwo_status][_eq]=PENDING&sort=-transaction_date&limit=50";
   if (customerCode) qs += `&filter[customer_code][_eq]=${encodeURIComponent(customerCode)}`;
   if (siteId) qs += `&filter[lpg_site_id][_eq]=${siteId}`;
   const res = await directusFetch<{
-    data: { id: number; wiwo_no?: string; transaction_no?: string; transaction_date: string }[];
+    data: {
+      id: number;
+      wiwo_no?: string;
+      transaction_no?: string;
+      transaction_date: string;
+      total_wiwo_kg?: number;
+    }[];
   }>(`${DIRECTUS_URL}/items/lpg_wiwo_headers?${qs}`);
-  
-  const mapped = (res.data ?? []).map(item => ({
+
+  return (res.data ?? []).map((item) => ({
     id: item.id,
     transaction_no: item.wiwo_no ?? item.transaction_no ?? "",
     transaction_date: item.transaction_date,
+    total_wiwo_kg: undefined,
   }));
-  
-  return mapped;
 }
 
 // ─── Sites lookup ─────────────────────────────────────────────────────────────
 
-export async function fetchMeteredSites(): Promise<
-  {
-    id: number;
-    site_name: string | null;
-    customer_code: string;
-    default_price_per_kg: number;
-    meter_unit?: string | null;
-    meter_direction?: "INCREASING" | "DECREASING" | null;
-    conversion_factor?: number | null;
-    default_pressure_line?: number | null;
-    default_psi?: number | null;
-    default_atmospheric_pressure?: number | null;
-    psi?: number | null;
-    last_meter_reading?: number | null;
-    billing_mode?: string | null;
-  }[]
-> {
-  const res = await directusFetch<{
-    data: Record<string, unknown>[];
-  }>(
-    `${DIRECTUS_URL}/items/lpg_customer_lpg_sites?fields=id,site_name,customer_code,default_price_per_kg,meter_unit,meter_direction,conversion_factor,last_meter_reading,billing_mode&filter[is_active][_eq]=1&filter[billing_mode][_in]=METERED,BOTH&sort=site_name&limit=-1`
+export type MeteredSite = {
+  id: number;
+  site_name: string | null;
+  customer_code: string;
+  default_price_per_kg: number;
+  meter_unit?: string | null;
+  meter_direction?: "INCREASING" | "DECREASING" | null;
+  conversion_factor?: number | null;
+  default_pressure_line?: number | null;
+  default_psi?: number | null;
+  default_atmospheric_pressure?: number | null;
+  last_meter_reading?: number | null;
+  billing_mode?: string | null;
+};
+
+export async function fetchMeteredSites(): Promise<MeteredSite[]> {
+  const res = await directusFetch<{ data: Record<string, unknown>[] }>(
+    `${DIRECTUS_URL}/items/lpg_customer_lpg_sites?fields=id,site_name,customer_code,default_price_per_kg,meter_unit,meter_direction,conversion_factor,last_meter_reading,billing_mode,default_pressure_line,default_psi,default_atmospheric_pressure&filter[is_active][_eq]=1&filter[billing_mode][_in]=METERED,BOTH&sort=site_name&limit=-1`
   );
   return (res.data ?? []).map((site) => ({
     ...site,
-    default_pressure_line: site.default_pressure_line !== undefined && site.default_pressure_line !== null ? Number(site.default_pressure_line) : 2.0183,
-    default_psi: site.default_psi !== undefined && site.default_psi !== null ? Number(site.default_psi) : 10.0,
-    default_atmospheric_pressure: site.default_atmospheric_pressure !== undefined && site.default_atmospheric_pressure !== null ? Number(site.default_atmospheric_pressure) : 14.7,
-  })) as unknown as {
-    id: number;
-    site_name: string | null;
-    customer_code: string;
-    default_price_per_kg: number;
-    meter_unit?: string | null;
-    meter_direction?: "INCREASING" | "DECREASING" | null;
-    conversion_factor?: number | null;
-    default_pressure_line?: number | null;
-    default_psi?: number | null;
-    default_atmospheric_pressure?: number | null;
-    psi?: number | null;
-    last_meter_reading?: number | null;
-    billing_mode?: string | null;
-  }[];
+    default_pressure_line:
+      site.default_pressure_line !== undefined && site.default_pressure_line !== null
+        ? Number(site.default_pressure_line)
+        : 2.0183,
+    default_psi:
+      site.default_psi !== undefined && site.default_psi !== null
+        ? Number(site.default_psi)
+        : 10.0,
+    default_atmospheric_pressure:
+      site.default_atmospheric_pressure !== undefined &&
+      site.default_atmospheric_pressure !== null
+        ? Number(site.default_atmospheric_pressure)
+        : 14.7,
+  })) as MeteredSite[];
 }
+
+// ─── Site last reading update ─────────────────────────────────────────────────
 
 export async function updateSiteReading(
   siteId: number,
@@ -417,9 +603,31 @@ export async function updateSiteReading(
       body: JSON.stringify({
         last_meter_reading: lastReading,
         last_reading_date: readingDate,
-      })
+      }),
     }
   );
   return res.data;
 }
 
+// ─── Legacy: sequence helpers kept for backward compat ────────────────────────
+
+export async function fetchNextMeterReadingSeq(
+  customerCode: string,
+  date: string
+): Promise<number> {
+  if (!customerCode || !date) return 1;
+  const filter = {
+    customer_code: { _eq: customerCode },
+    reading_date: { _eq: date },
+  };
+  const qs = `filter=${encodeURIComponent(JSON.stringify(filter))}&limit=0&meta=total_count`;
+  try {
+    const res = await directusFetch<{ meta?: { total_count: number } }>(
+      `${DIRECTUS_URL}/items/lpg_meter_readings?${qs}`
+    );
+    return (res.meta?.total_count ?? 0) + 1;
+  } catch (err) {
+    console.error("fetchNextMeterReadingSeq failed:", err);
+    return 1;
+  }
+}
