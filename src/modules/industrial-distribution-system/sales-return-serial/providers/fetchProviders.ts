@@ -212,14 +212,25 @@ export const SalesReturnProvider = {
   async checkSerialOnHand(
     serial: string,
     branchId: number,
+    productId: number,
   ): Promise<{ isOnInventory: boolean; branchId?: number; branchName?: string }> {
     const params = new URLSearchParams({
       action: "check-serial-onhand",
       serial,
       branchId: String(branchId),
+      productId: String(productId),
     });
     const res = await fetch(`${API_BASE}?${params}`, { cache: "no-store" });
     return handleResponse<{ isOnInventory: boolean; branchId?: number; branchName?: string }>(res);
+  },
+
+  async registerAssets(assets: any[]): Promise<any> {
+    const res = await fetch(API_BASE, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "register-assets", assets }),
+    });
+    return handleResponse(res);
   },
 
   // --- INTERNAL CACHES ---

@@ -7,7 +7,7 @@ import {
   type UpdateSalesReturnPayload
 } from "../types/sales-return.schema";
 import type { API_SalesReturnType } from "../types/sales-return.types";
-import { formatDateForAPI, cleanId } from "./sales-return.helpers";
+import { formatDateForAPI, cleanId, getManilaTimestamp } from "./sales-return.helpers";
 import * as transactionRepo from "./sales-return-transaction.repo";
 import * as lookupRepo from "./sales-return-lookup.repo";
 import { fetchReturnDetails } from "./sales-return-query.service";
@@ -68,6 +68,7 @@ export async function submitReturn(rawPayload: any, userId: number): Promise<any
   );
 
   const totalNet = Math.round((totalGross - totalDiscount) * 100) / 100;
+  const phNow = getManilaTimestamp();
 
   // We rely on current date if not provided in payload (CreateSalesReturnSchema doesn't have returnDate currently)
   // Or we can just use new Date() if returnDate is removed from payload. Assuming new Date() for now.
@@ -92,6 +93,8 @@ export async function submitReturn(rawPayload: any, userId: number): Promise<any
     order_id: payload.orderNo || "",
     isThirdParty: rawPayload.isThirdParty ? 1 : 0, // Fallback if isThirdParty not in schema
     received_at: null,
+    created_at: phNow,
+    updated_at: phNow,
   };
 
   const headerResult = await transactionRepo.createReturnHeader(headerPayload);
@@ -105,6 +108,9 @@ export async function submitReturn(rawPayload: any, userId: number): Promise<any
         return_no: returnId,
         invoice_no: rawPayload.appliedInvoiceId,
         linked_by: userId,
+        amount: totalNet,
+        created_at: phNow,
+        updated_at: phNow,
       });
     } catch (e) {
       console.error("Failed to create junction link during submission", e);
@@ -138,6 +144,8 @@ export async function submitReturn(rawPayload: any, userId: number): Promise<any
       sales_return_type_id: typeId,
       discount_type: discId,
       reason: item.reason || null,
+      created_at: phNow,
+      updated_at: phNow,
     };
 
     const detailResult = await transactionRepo.createReturnDetail(detailPayload);
@@ -147,10 +155,13 @@ export async function submitReturn(rawPayload: any, userId: number): Promise<any
       const detailId = (detailResult.data as any)?.detail_id || (detailResult.data as any)?.id;
       if (detailId) {
         for (const sn of item.serialNumbers) {
+          const serialNumber = typeof sn === "string" ? sn : sn.serialNumber;
           await transactionRepo.createSerialRecord({
             sales_return_detail_id: detailId,
-            serial_number: sn,
+            serial_number: serialNumber,
             created_by: userId,
+            created_at: phNow,
+            updated_at: phNow,
           });
         }
       }
@@ -202,6 +213,7 @@ export async function updateReturn(
   );
 
   const totalNet = Math.round((totalGross - totalDiscount) * 100) / 100;
+  const phNow = getManilaTimestamp();
 
   const headerPayload = {
     remarks: payload.remarks ?? "",
@@ -211,6 +223,7 @@ export async function updateReturn(
     invoice_no: payload.invoiceNo ?? "",
     order_id: payload.orderNo ?? "",
     isThirdParty: rawPayload.isThirdParty ? 1 : 0,
+    updated_at: phNow,
   };
 
   await transactionRepo.updateReturnHeader(payload.id as number, headerPayload);
@@ -228,12 +241,17 @@ export async function updateReturn(
           await transactionRepo.updateJunctionLink(existingLinks[0].id, {
             invoice_no: rawPayload.appliedInvoiceId,
             linked_by: userId,
+            amount: totalNet,
+            updated_at: phNow,
           });
         } else {
           await transactionRepo.createJunctionLink({
             return_no: payload.id,
             invoice_no: rawPayload.appliedInvoiceId,
             linked_by: userId,
+            amount: totalNet,
+            created_at: phNow,
+            updated_at: phNow,
           });
         }
       } else {
@@ -275,6 +293,7 @@ export async function updateReturn(
       sales_return_type_id: typeId,
       discount_type: discId,
       reason: item.reason || null,
+      updated_at: phNow,
     };
 
     if (typeof item.id === "string" && item.id.startsWith("added-")) {
@@ -282,15 +301,19 @@ export async function updateReturn(
         ...detailPayload,
         return_no: payload.returnNo,
         product_id: Number(item.productId || item.product_id),
+        created_at: phNow,
       });
 
       const detailId = (detailResult.data as any)?.detail_id || (detailResult.data as any)?.id;
       if (detailId && item.serialNumbers && Array.isArray(item.serialNumbers)) {
         for (const sn of item.serialNumbers) {
+          const serialNumber = typeof sn === "string" ? sn : sn.serialNumber;
           await transactionRepo.createSerialRecord({
             sales_return_detail_id: detailId,
-            serial_number: sn,
+            serial_number: serialNumber,
             created_by: userId,
+            created_at: phNow,
+            updated_at: phNow,
           });
         }
       }
@@ -301,16 +324,22 @@ export async function updateReturn(
         const existingSerialsRes = await lookupRepo.getSerialsByDetailId(Number(item.id));
         const existingSerials = (existingSerialsRes.data || []) as any[];
 
-        const serialsToDelete = existingSerials.filter(es => !item.serialNumbers.includes(es.serial_number));
+        const serialsToDelete = existingSerials.filter(es => !item.serialNumbers.some((s: any) => (typeof s === "string" ? s : s.serialNumber) === es.serial_number));
         for (const s of serialsToDelete) await transactionRepo.deleteSerialRecord(s.id);
 
         const currentSerialStrings = existingSerials.map(es => es.serial_number);
-        const serialsToAdd = item.serialNumbers.filter((sn: string) => !currentSerialStrings.includes(sn));
+        const serialsToAdd = item.serialNumbers.filter((sn: any) => {
+          const serialNumber = typeof sn === "string" ? sn : sn.serialNumber;
+          return !currentSerialStrings.includes(serialNumber);
+        });
         for (const sn of serialsToAdd) {
+          const serialNumber = typeof sn === "string" ? sn : sn.serialNumber;
           await transactionRepo.createSerialRecord({
             sales_return_detail_id: Number(item.id),
-            serial_number: sn,
+            serial_number: serialNumber,
             created_by: userId,
+            created_at: phNow,
+            updated_at: phNow,
           });
         }
       }

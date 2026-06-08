@@ -274,17 +274,28 @@ export async function checkSerialDuplicate(serialNumber: string) {
 export async function checkSerialOnHand(
   serial: string,
   branchId: number,
-  token: string): Promise<{ isOnInventory: boolean; branchId?: number; branchName?: string }> {
+  token: string
+): Promise<{ isOnInventory: boolean; isUnregistered: boolean; branchId?: number; branchName?: string }> {
+  // 1. If Serial is on-hand, reject because it is in inventory
   const data = await lookupRepo.getRawSerialOnHand(serial, branchId, token);
   
   if (data && data.length > 0) {
     const item = data[0];
     return {
       isOnInventory: true,
+      isUnregistered: false,
       branchId: item.branch_id || item.branch_code || item.branchCode,
       branchName: item.branch_name || item.branchName,
     };
   }
 
-  return { isOnInventory: false };
+  // 2. If Serial is on cylinder_assets, accepts and proceeds
+  const { getCylinderAssetBySerial } = await import("./sales-return-cylinder.repo");
+  const assetRes = await getCylinderAssetBySerial(serial);
+  if (assetRes && assetRes.data && assetRes.data.length > 0) {
+    return { isOnInventory: false, isUnregistered: false };
+  }
+
+  // 3. If Serial is not found on cylinder_assets AND not in on-hand, it is unregistered
+  return { isOnInventory: false, isUnregistered: true };
 }

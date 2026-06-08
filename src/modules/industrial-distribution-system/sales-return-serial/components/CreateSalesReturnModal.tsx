@@ -42,6 +42,7 @@ import {
 
 // Import Child Modal
 import { ProductLookupModal } from "./ProductLookupModal";
+import { BulkRegisterModal } from "./BulkRegisterModal";
 // Import Provider & Types
 import {
   SalesReturnProvider,
@@ -203,6 +204,8 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
 
   // --- SERIAL STATE ---
   const [isValidatingSerial, setIsValidatingSerial] = useState(false);
+  const [unregisteredSerials, setUnregisteredSerials] = useState<string[]>([]);
+  const [isBulkRegisterOpen, setIsBulkRegisterOpen] = useState(false);
 
   // --- 3. CART STATE ---
   const [items, setItems] = useState<SalesReturnItem[]>([]);
@@ -368,8 +371,8 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
 
     // 1. Session Check (Global within Modal)
     const isGlobalSessionDuplicate = items.some((item) => 
-      item.serialNumbers?.some(sn => sn.toUpperCase() === serial)
-    );
+      item.serialNumbers?.some(sn => (typeof sn === "string" ? sn.toUpperCase() : sn.serialNumber.toUpperCase()) === serial)
+    ) || unregisteredSerials.some(sn => sn.toUpperCase() === serial);
     if (isGlobalSessionDuplicate) {
       toast.error("Duplicate Serial", { description: `Serial "${serial}" is already added to this return session.` });
       return;
@@ -388,16 +391,26 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
       }
 
       const finalBranchId = Number(branchId) || 0;
-      const result = await SalesReturnProvider.checkSerialOnHand(serial, finalBranchId);
+      const result = await SalesReturnProvider.checkSerialOnHand(serial, finalBranchId, Number(selectedRow.productId || selectedRow.product_id));
+      
       if (result && result.isOnInventory) {
         toast.error("Serial Number already in stock");
+        return;
+      }
+
+      if (result && result.isUnregistered) {
+        setUnregisteredSerials((prev) => {
+          if (prev.includes(serial)) return prev;
+          return [...prev, serial];
+        });
+        toast.info(`Serial ${serial} is unregistered. Please register it.`);
         return;
       }
 
       setItems((prev) => {
         // Final Session Check (Race Condition Protection)
         const exists = prev.some((item) => 
-          item.serialNumbers?.some(sn => sn.toUpperCase() === serial)
+          item.serialNumbers?.some(sn => (typeof sn === "string" ? sn.toUpperCase() : sn.serialNumber.toUpperCase()) === serial)
         );
         if (exists) {
           toast.warning("Serial Number already added");
@@ -408,7 +421,14 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
         const row = next[selectedRowIndex];
         if (!row) return prev;
 
-        const newSerials = [...(row.serialNumbers || []), serial];
+        const serialObj = {
+          serialNumber: serial,
+          cylinderCondition: "GOOD",
+          tareWeight: 0,
+          expirationDate: "",
+        };
+
+        const newSerials = [...(row.serialNumbers || []), serialObj];
         const newQty = newSerials.length;
         const unitPrice = Number(row.unitPrice) || 0;
         const grossAmount = Math.round(unitPrice * newQty * 100) / 100;
@@ -1088,6 +1108,32 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
 
           {selectedRowIndex !== null && items[selectedRowIndex] && (
             <div className="bg-background rounded-lg border-2 border-primary/20 shadow-md p-5 mb-6 animate-in slide-in-from-bottom-4 duration-300">
+              
+              {/* Unregistered Serials Alert Banner */}
+              {unregisteredSerials.length > 0 && (
+                <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-5">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-amber-500 rounded-lg text-white font-bold text-xs shrink-0">
+                      ⚠️
+                    </div>
+                    <div>
+                      <h5 className="font-bold text-sm text-amber-900 dark:text-amber-400">{unregisteredSerials.length} UNREGISTERED SERIALS</h5>
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {unregisteredSerials.map(sn => (
+                          <Badge key={sn} variant="outline" className="bg-amber-100/80 border-amber-300 text-amber-800 flex items-center gap-1 py-0.5 px-2 font-mono text-[10px]">
+                            {sn}
+                            <X className="h-3 w-3 cursor-pointer text-amber-600 hover:text-amber-900" onClick={() => setUnregisteredSerials(prev => prev.filter(s => s !== sn))} />
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <Button onClick={() => setIsBulkRegisterOpen(true)} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9 px-4 shrink-0">
+                    REGISTER ALL
+                  </Button>
+                </div>
+              )}
+
               <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-4">
                 <h4 className="font-bold text-foreground flex items-center gap-2 text-base shrink-0"><div className="bg-emerald-500/10 p-1.5 rounded text-emerald-600"><ScanLine className="h-5 w-5" /></div>Serial Management for: <span className="text-primary underline decoration-primary/30 underline-offset-4">{items[selectedRowIndex].description}</span></h4>
                 <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
@@ -1105,38 +1151,56 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
                   <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 px-3 py-1 font-bold shrink-0">{items[selectedRowIndex].serialNumbers?.length || 0} TOTAL</Badge>
                 </div>
               </div>
+              
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 max-h-40 overflow-y-auto p-1">
                 {(items[selectedRowIndex].serialNumbers || [])
-                  .filter(sn => sn.toLowerCase().includes(serialSearch.toLowerCase()))
-                  .map(sn => (
-                    <div key={sn} className="flex items-center justify-between bg-muted/20 border border-border px-3 py-2 rounded-md hover:border-primary/30 transition-all group hover:shadow-sm">
-                      <span className="text-[10px] font-mono font-bold text-foreground truncate">{sn}</span>
-                      <button onClick={() => {
-                        setItems(prev => {
-                          const next = [...prev];
-                          const row = next[selectedRowIndex];
-                          const newSerials = row.serialNumbers!.filter(s => s !== sn);
-                          const newQty = newSerials.length;
-                          const gross = Math.round(row.unitPrice * newQty * 100) / 100;
-                          let discAmt = 0;
-                          if (row.discountType) {
-                            const opt = lineDiscountOptions.find(d => d.id.toString() === row.discountType?.toString());
-                            if (opt) discAmt = Math.round(gross * (parseFloat(opt.total_percent) / 100) * 100) / 100;
-                          }
-                          next[selectedRowIndex] = { 
-                            ...row, 
-                            serialNumbers: newSerials, 
-                            quantity: newQty, 
-                            grossAmount: gross, 
-                            discountAmount: discAmt, 
-                            totalAmount: Math.round((gross - discAmt) * 100) / 100 
-                          };
-                          return next;
-                        });
-                      }} className="p-1 text-destructive/50 hover:text-destructive transition-colors"><X className="h-3 w-3" /></button>
-                    </div>
-                  ))}
-                {(items[selectedRowIndex].serialNumbers || []).filter(sn => sn.toLowerCase().includes(serialSearch.toLowerCase())).length === 0 && (
+                  .filter(sobj => {
+                    const sn = typeof sobj === "string" ? sobj : sobj.serialNumber;
+                    return sn.toLowerCase().includes(serialSearch.toLowerCase());
+                  })
+                  .map(sobj => {
+                    const sn = typeof sobj === "string" ? sobj : sobj.serialNumber;
+                    return (
+                      <div key={sn} className="flex items-center justify-between bg-muted/20 border border-border px-3 py-2 rounded-md hover:border-primary/30 transition-all group hover:shadow-sm">
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-[10px] font-mono font-bold text-foreground truncate">{sn}</span>
+                          {typeof sobj !== "string" && sobj.cylinderCondition && (
+                            <span className="text-[8px] text-muted-foreground uppercase tracking-wider">{sobj.cylinderCondition}</span>
+                          )}
+                        </div>
+                        <button onClick={() => {
+                          setItems(prev => {
+                            const next = [...prev];
+                            const row = next[selectedRowIndex];
+                            const newSerials = row.serialNumbers!.filter(s => {
+                              const sVal = typeof s === "string" ? s : s.serialNumber;
+                              return sVal !== sn;
+                            });
+                            const newQty = newSerials.length;
+                            const gross = Math.round(row.unitPrice * newQty * 100) / 100;
+                            let discAmt = 0;
+                            if (row.discountType) {
+                              const opt = lineDiscountOptions.find(d => d.id.toString() === row.discountType?.toString());
+                              if (opt) discAmt = Math.round(gross * (parseFloat(opt.total_percent) / 100) * 100) / 100;
+                            }
+                            next[selectedRowIndex] = { 
+                              ...row, 
+                              serialNumbers: newSerials, 
+                              quantity: newQty, 
+                              grossAmount: gross, 
+                              discountAmount: discAmt, 
+                              totalAmount: Math.round((gross - discAmt) * 100) / 100 
+                            };
+                            return next;
+                          });
+                        }} className="p-1 text-destructive/50 hover:text-destructive transition-colors"><X className="h-3 w-3" /></button>
+                      </div>
+                    );
+                  })}
+                {(items[selectedRowIndex].serialNumbers || []).filter(sobj => {
+                  const sn = typeof sobj === "string" ? sobj : sobj.serialNumber;
+                  return sn.toLowerCase().includes(serialSearch.toLowerCase());
+                }).length === 0 && (
                   <div className="col-span-full py-8 text-center border border-dashed rounded-lg text-muted-foreground italic">
                     {serialSearch ? "No matching serial numbers found." : "No serial numbers entered yet."}
                   </div>
@@ -1208,6 +1272,44 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
       </div>
 
       <ProductLookupModal isOpen={isProductLookupOpen} onClose={() => setIsProductLookupOpen(false)} onConfirm={handleAddProducts} preselectedItems={items} priceType={priceType} customerCode={customerCode} />
+
+      <BulkRegisterModal
+        open={isBulkRegisterOpen}
+        onOpenChange={setIsBulkRegisterOpen}
+        serials={unregisteredSerials}
+        productId={Number(items[selectedRowIndex]?.productId || items[selectedRowIndex]?.product_id || 0)}
+        branchId={Number(currentBranchId || lockedBranchId || 0)}
+        onSuccess={(registeredSerials) => {
+          setItems((prev) => {
+            const next = [...prev];
+            const row = next[selectedRowIndex];
+            if (!row) return prev;
+            
+            const newSerials = [...(row.serialNumbers || []), ...registeredSerials];
+            const newQty = newSerials.length;
+            const unitPrice = Number(row.unitPrice) || 0;
+            const grossAmount = Math.round(unitPrice * newQty * 100) / 100;
+            
+            let discountAmt = 0;
+            if (row.discountType) {
+              const opt = lineDiscountOptions.find(d => d.id.toString() === row.discountType?.toString());
+              if (opt) discountAmt = Math.round(grossAmount * (parseFloat(opt.total_percent) / 100) * 100) / 100;
+            }
+            
+            next[selectedRowIndex] = {
+              ...row,
+              serialNumbers: newSerials,
+              quantity: newQty,
+              grossAmount,
+              discountAmount: discountAmt,
+              totalAmount: Math.round((grossAmount - discountAmt) * 100) / 100,
+            };
+            return next;
+          });
+          setUnregisteredSerials([]);
+          toast.success("All cylinders registered and added to list");
+        }}
+      />
 
       <Dialog open={isCreateConfirmOpen} onOpenChange={setIsCreateConfirmOpen}>
         <DialogContent className="max-w-[400px] text-center p-8 bg-background border-border rounded-xl">
