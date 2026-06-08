@@ -1,5 +1,6 @@
 "use client";
 
+import React, { useState, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,8 @@ import {
   Gauge,
   Info,
   Link2,
+  Upload,
+  X,
 } from "lucide-react";
 import { MeteredReadingPanel } from "./MeteredReadingPanel";
 import { VariancePanel } from "./VariancePanel";
@@ -27,6 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { format } from "date-fns";
+import { toast } from "sonner";
 import type { TransactionType } from "../types";
 
 interface Props {
@@ -89,7 +93,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
     ) {
       return;
     }
-    const ok = await submit("CANCELLED");
+    const ok = await submit("CANCELLED"); 
     if (ok) onSuccess();
   };
 
@@ -459,6 +463,17 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                   />
                 </div>
               </div>
+              <div className="mt-4">
+                <ImageUploadField
+                  label="Metered Reading Photo"
+                  imageId={form.meteredReadingImageId}
+                  onChange={(id) =>
+                    setForm((f) => ({ ...f, meteredReadingImageId: id }))
+                  }
+                  isReadOnly={isReadOnly}
+                  uploadEndpoint="/api/ids/scm/lpg-billing-management/metered-billing/upload"
+                />
+              </div>
               {!isValidReading && (
                 <p className="text-xs text-red-500 mt-3 font-semibold animate-pulse">
                   ⚠️ Invalid reading: Current reading must be{" "}
@@ -530,6 +545,17 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                     placeholder="e.g. 14.7"
                   />
                 </div>
+              </div>
+              <div className="mt-4">
+                <ImageUploadField
+                  label="PSI Reading Photo"
+                  imageId={form.psiReadingImageId}
+                  onChange={(id) =>
+                    setForm((f) => ({ ...f, psiReadingImageId: id }))
+                  }
+                  isReadOnly={isReadOnly}
+                  uploadEndpoint="/api/ids/scm/lpg-billing-management/metered-billing/upload"
+                />
               </div>
             </div>
 
@@ -749,3 +775,121 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
     </div>
   );
 }
+
+interface ImageUploadFieldProps {
+  label: string;
+  imageId: string;
+  onChange: (id: string) => void;
+  isReadOnly: boolean;
+  folderName?: string;
+  uploadEndpoint: string;
+}
+
+export function ImageUploadField({
+  label,
+  imageId,
+  onChange,
+  isReadOnly,
+  folderName = "metered_billing_attachments",
+  uploadEndpoint,
+}: ImageUploadFieldProps) {
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("File too large", {
+        description: "Maximum size is 10MB.",
+      });
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("folder_name", folderName);
+
+      const res = await fetch(uploadEndpoint, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Upload failed");
+      }
+
+      const result = await res.json();
+      onChange(result.data.id);
+      toast.success(`${label} uploaded successfully`);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Could not upload file";
+      toast.error("Upload failed", {
+        description: msg,
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const previewUrl = imageId
+    ? `${process.env.NEXT_PUBLIC_API_BASE_URL || ""}/assets/${imageId}`
+    : null;
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs text-muted-foreground font-semibold">{label}</Label>
+      {previewUrl ? (
+        <div className="relative group rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center h-28 w-full max-w-[150px] shadow-sm">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={previewUrl} alt={label} className="object-cover h-full w-full" />
+          {!isReadOnly && (
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <Button
+                type="button"
+                variant="destructive"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => onChange("")}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div>
+          <input
+            type="file"
+            accept="image/*"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            className="hidden"
+            disabled={isReadOnly || uploading}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full max-w-[150px] h-28 border-dashed flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-foreground hover:border-violet-500/50 hover:bg-violet-50/10 text-xs transition-all duration-200"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isReadOnly || uploading}
+          >
+            {uploading ? (
+              <Loader2 className="h-5 w-5 animate-spin text-violet-500" />
+            ) : (
+              <>
+                <Upload className="h-5 w-5 text-violet-500" />
+                <span className="font-medium">Upload Photo</span>
+              </>
+            )}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+

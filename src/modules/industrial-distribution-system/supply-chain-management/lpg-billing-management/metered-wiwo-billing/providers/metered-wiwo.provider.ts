@@ -260,7 +260,29 @@ export async function fetchMeteredTransactionById(
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions/${id}?fields=${TX_FIELDS}`
   );
   if (!res.data) return null;
-  return mapTxRecord(res.data);
+  const tx = mapTxRecord(res.data);
+
+  try {
+    const attsRes = await directusFetch<{ data: Record<string, unknown>[] }>(
+      `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments?filter[transaction_id][_eq]=${id}&limit=-1`
+    );
+    if (attsRes.data) {
+      tx.attachments = attsRes.data.map((item) => ({
+        id: Number(item.id),
+        transaction_id: Number(item.transaction_id),
+        site_cylinder_id: item.site_cylinder_id ? Number(item.site_cylinder_id) : null,
+        cylinder_asset_id: item.cylinder_asset_id ? Number(item.cylinder_asset_id) : null,
+        attachment_type: item.attachment_type as "SERIAL_IMAGE" | "WEIGHT_IMAGE" | "GENERAL_PHOTO",
+        directus_file_id: String(item.directus_file_id),
+        created_by: item.created_by ? Number(item.created_by) : null,
+        created_at: item.created_at ? String(item.created_at) : undefined,
+      }));
+    }
+  } catch (err) {
+    console.error("Failed to fetch transaction attachments:", err);
+  }
+
+  return tx;
 }
 
 // ─── Meter Reading — create / update ─────────────────────────────────────────
@@ -439,6 +461,21 @@ export async function createMeteredTransaction(
     { method: "POST", body: JSON.stringify(bridgeData) }
   );
 
+  // 4. Save attachments
+  if (payload.attachments && payload.attachments.length > 0) {
+    for (const att of payload.attachments) {
+      await directusFetch(`${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments`, {
+        method: "POST",
+        body: JSON.stringify({
+          transaction_id: res.data.id,
+          attachment_type: att.attachment_type,
+          directus_file_id: att.directus_file_id,
+          created_by: userId,
+        }),
+      }).catch((err) => console.error("Failed to save attachment:", err));
+    }
+  }
+
   return {
     ...payload,
     id: res.data.id,
@@ -487,6 +524,36 @@ export async function updateMeteredTransaction(
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions/${id}`,
     { method: "PATCH", body: JSON.stringify(bridgeData) }
   );
+
+  // 5. Update attachments (delete existing, then insert new ones)
+  try {
+    const existingAttsRes = await directusFetch<{ data: { id: number }[] }>(
+      `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments?filter[transaction_id][_eq]=${id}&fields=id`
+    );
+    const existingAttIds = (existingAttsRes.data || []).map((a) => a.id);
+    if (existingAttIds.length > 0) {
+      await directusFetch(`${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments`, {
+        method: "DELETE",
+        body: JSON.stringify(existingAttIds),
+      });
+    }
+  } catch (err) {
+    console.error("Failed to delete existing attachments:", err);
+  }
+
+  if (payload.attachments && payload.attachments.length > 0) {
+    for (const att of payload.attachments) {
+      await directusFetch(`${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments`, {
+        method: "POST",
+        body: JSON.stringify({
+          transaction_id: id,
+          attachment_type: att.attachment_type,
+          directus_file_id: att.directus_file_id,
+          created_by: userId,
+        }),
+      }).catch((err) => console.error("Failed to save attachment:", err));
+    }
+  }
 
   return {
     id,

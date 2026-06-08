@@ -130,6 +130,18 @@ export interface MeteredWiwoTransaction {
   };
   meter_reading?: MeterReading;
   wiwo_header?: WiwoHeaderRef;
+  attachments?: MeteredWiwoTransactionAttachment[];
+}
+
+export interface MeteredWiwoTransactionAttachment {
+  id?: number;
+  transaction_id?: number;
+  site_cylinder_id?: number | null;
+  cylinder_asset_id?: number | null;
+  attachment_type: "SERIAL_IMAGE" | "WEIGHT_IMAGE" | "GENERAL_PHOTO";
+  directus_file_id: string;
+  created_by?: number | null;
+  created_at?: string;
 }
 
 // ─── Arbitration Result ───────────────────────────────────────────────────────

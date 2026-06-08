@@ -170,6 +170,8 @@ export interface MeteredBillingFormState {
   configCorrectionFactor: number;
   billingPeriodFrom: string;
   billingPeriodTo: string;
+  meteredReadingImageId: string;
+  psiReadingImageId: string;
 }
 
 function defaultFormState(
@@ -199,6 +201,8 @@ function defaultFormState(
     configCorrectionFactor: 14.7,
     billingPeriodFrom: "",
     billingPeriodTo: "",
+    meteredReadingImageId: "",
+    psiReadingImageId: "",
   };
 }
 
@@ -268,6 +272,13 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
           }
         }
 
+        const meteredReadingImage = tx.attachments?.find(
+          (a) => a.attachment_type === "SERIAL_IMAGE"
+        );
+        const psiReadingImage = tx.attachments?.find(
+          (a) => a.attachment_type === "WEIGHT_IMAGE"
+        );
+
         setForm({
           transactionNo: tx.transaction_no ?? "",
           readingNo: tx.meter_reading?.reading_no ?? "",
@@ -289,6 +300,8 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
           configCorrectionFactor: cf,
           billingPeriodFrom: tx.billing_period_from ?? "",
           billingPeriodTo: tx.billing_period_to ?? "",
+          meteredReadingImageId: meteredReadingImage?.directus_file_id || "",
+          psiReadingImageId: psiReadingImage?.directus_file_id || "",
         });
         setOriginalStatus(tx.status);
         setWiwoKg(tx.wiwo_kg);
@@ -379,35 +392,35 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
   }, [txId, form.customerCode, form.transactionDate, form.siteId, form.transactionType]);
 
   // Load WIWO KG when a header is linked
-  const loadWiwoKg = useCallback(async (headerId: number) => {
-    try {
-      const res = await window.fetch(
-        `/api/ids/scm/lpg-billing-management/kilo-consumption-billing/${headerId}`
-      );
-      const d = await res.json();
-      const wiwo = d.data as WiwoHeaderRef | undefined;
-      if (wiwo) {
-        setLinkedWiwo(wiwo);
-        setWiwoKg(Number(wiwo.total_wiwo_kg ?? 0));
-      } else {
-        setLinkedWiwo(null);
-        setWiwoKg(0);
-      }
-    } catch (e) {
-      console.error("[loadWiwoKg]", e);
-      setLinkedWiwo(null);
-      setWiwoKg(0);
-    }
-  }, []);
+  // const loadWiwoKg = useCallback(async (headerId: number) => {
+  //   try {
+  //     const res = await window.fetch(
+  //       `/api/ids/scm/lpg-billing-management/kilo-consumption-billing/${headerId}`
+  //     );
+  //     const d = await res.json();
+  //     const wiwo = d.data as WiwoHeaderRef | undefined;
+  //     if (wiwo) {
+  //       setLinkedWiwo(wiwo);
+  //       setWiwoKg(Number(wiwo.total_wiwo_kg ?? 0));
+  //     } else {
+  //       setLinkedWiwo(null);
+  //       setWiwoKg(0);
+  //     }
+  //   } catch (e) {
+  //     console.error("[loadWiwoKg]", e);
+  //     setLinkedWiwo(null);
+  //     setWiwoKg(0);
+  //   }
+  // }, []);
 
-  useEffect(() => {
-    if (!form.wiwoHeaderId) {
-      setLinkedWiwo(null);
-      setWiwoKg(0);
-      return;
-    }
-    loadWiwoKg(form.wiwoHeaderId);
-  }, [form.wiwoHeaderId, loadWiwoKg]);
+  // useEffect(() => {
+  //   if (!form.wiwoHeaderId) {
+  //     setLinkedWiwo(null);
+  //     setWiwoKg(0);
+  //     return;
+  //   }
+  //   loadWiwoKg(form.wiwoHeaderId);
+  // }, [form.wiwoHeaderId, loadWiwoKg]);
 
   // ── Site change handler ────────────────────────────────────────────────────
   const handleSiteChange = useCallback(
@@ -433,21 +446,23 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
         }
       }
 
-      setForm((f) => ({
-        ...f,
-        siteId,
-        siteName: (site.site_name ?? null) as string | null,
-        customerCode: (site.customer_code ?? "") as string,
-        pricePerKg: Number(site.default_price_per_kg ?? 0),
-        meterReadingId: null,
-        wiwoHeaderId: null,
-        previousReading: Number(site.last_meter_reading ?? 0),
-        currentReading: 0,
-        configLpgVapor: lpgVapor,
-        configPsi: psi,
-        configCorrectionFactor: cf,
-        readingNo: txId ? f.readingNo : generateReadingNo(),
-      }));
+        setForm((f) => ({
+          ...f,
+          siteId,
+          siteName: (site.site_name ?? null) as string | null,
+          customerCode: (site.customer_code ?? "") as string,
+          pricePerKg: Number(site.default_price_per_kg ?? 0),
+          meterReadingId: null,
+          wiwoHeaderId: null,
+          previousReading: Number(site.last_meter_reading ?? 0),
+          currentReading: 0,
+          configLpgVapor: lpgVapor,
+          configPsi: psi,
+          configCorrectionFactor: cf,
+          readingNo: txId ? f.readingNo : generateReadingNo(),
+          meteredReadingImageId: "",
+          psiReadingImageId: "",
+        }));
     },
     [sites, txId]
   );
@@ -586,6 +601,24 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
           conversion_factor: conversionFactor,
           billing_period_from: form.billingPeriodFrom || null,
           billing_period_to: form.billingPeriodTo || null,
+          attachments: [
+            ...(form.meteredReadingImageId
+              ? [
+                  {
+                    attachment_type: "SERIAL_IMAGE" as const,
+                    directus_file_id: form.meteredReadingImageId,
+                  },
+                ]
+              : []),
+            ...(form.psiReadingImageId
+              ? [
+                  {
+                    attachment_type: "WEIGHT_IMAGE" as const,
+                    directus_file_id: form.psiReadingImageId,
+                  },
+                ]
+              : []),
+          ],
         };
 
         const url = txId
@@ -658,7 +691,7 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
     isOnboarding,
     wiwoKg,
     setWiwoKg,
-    loadWiwoKg,
+    // loadWiwoKg,
     meteredKg,
     arbitration,
     grossAmount,
