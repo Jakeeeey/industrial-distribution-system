@@ -80,7 +80,7 @@ export function MeteredWiwoList({ selectedId, onSelect, onNew }: Props) {
   const page = params.page ?? 1;
 
   return (
-    <div className="w-[380px] shrink-0 border-r border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/30 flex flex-col h-full overflow-hidden animate-in fade-in duration-500">
+    <div className="w-full shrink-0 lg:border-r border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/30 flex flex-col h-full overflow-hidden animate-in fade-in duration-500">
       {/* Header */}
       <div className="px-4 py-3 border-b border-zinc-150 dark:border-zinc-800/60 bg-zinc-50/50 dark:bg-zinc-900/30 flex items-center justify-between gap-3">
         <div className="min-w-0">

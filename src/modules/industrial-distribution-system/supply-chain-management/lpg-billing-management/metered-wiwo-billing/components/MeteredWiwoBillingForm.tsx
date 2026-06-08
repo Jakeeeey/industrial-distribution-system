@@ -137,10 +137,10 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-150 dark:border-zinc-800/60 pb-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-black bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-xl font-black bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent truncate max-w-full sm:max-w-xs md:max-w-none">
               {txId
                 ? isOnboarding
                   ? "Edit Baseline Record"
@@ -149,7 +149,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                   ? "New Baseline Record"
                   : "New Metered Billing"}
             </h2>
-            <Badge className={`text-[10px] font-bold uppercase tracking-wider border-none ${txTypeMeta.color}`}>
+            <Badge className={`text-[10px] font-bold uppercase tracking-wider border-none shrink-0 ${txTypeMeta.color}`}>
               {txTypeMeta.short}
             </Badge>
           </div>
@@ -159,12 +159,12 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
               : "Billing source: MAX(Metered KG, WIWO KG)"}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end w-full sm:w-auto">
           <Button
             variant="ghost"
             size="sm"
             onClick={onCancel}
-            className="h-9 px-4 hover:bg-red-50 hover:text-red-600"
+            className="h-9 px-4 hover:bg-red-50 hover:text-red-600 text-xs sm:text-sm flex-1 sm:flex-none"
           >
             {isReadOnly ? "Close" : "Cancel"}
           </Button>
@@ -174,7 +174,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
               variant="outline"
               disabled={submitting}
               onClick={handleCancelBilling}
-              className="h-9 px-4 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 transition-all active:scale-95"
+              className="h-9 px-4 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 transition-all active:scale-95 text-xs sm:text-sm flex-1 sm:flex-none"
             >
               Cancel Billing
             </Button>
@@ -183,7 +183,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
             <Button
               onClick={handleSubmit}
               disabled={submitting || !canPost}
-              className={`h-9 px-6 shadow-lg transition-all active:scale-95 ${isOnboarding
+              className={`h-9 px-4 sm:px-6 shadow-lg transition-all active:scale-95 text-xs sm:text-sm flex-1 sm:flex-none ${isOnboarding
                   ? "bg-amber-500 hover:bg-amber-600 shadow-amber-500/20"
                   : "bg-violet-600 hover:bg-violet-700 shadow-violet-500/20"
                 }`}
@@ -219,39 +219,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
               <h2 className="font-semibold">Transaction Details</h2>
             </div>
 
-            {/* Transaction Type Selector — only for new records */}
-            {!txId && (
-              <div className="pb-4 border-b border-zinc-100 dark:border-zinc-800/50">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">
-                  Transaction Type
-                </Label>
-                <div className="flex gap-2 p-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl w-fit">
-                  {(["REGULAR_BILLING", "ONBOARDING_BASELINE"] as TransactionType[]).map(
-                    (t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() =>
-                          setForm((f) => ({
-                            ...f,
-                            transactionType: t,
-                            wiwoHeaderId: null,
-                          }))
-                        }
-                        className={`py-2 px-4 text-xs font-bold rounded-lg transition-all ${form.transactionType === t
-                            ? t === "ONBOARDING_BASELINE"
-                              ? "bg-white dark:bg-zinc-700 shadow-sm text-amber-600"
-                              : "bg-white dark:bg-zinc-700 shadow-sm text-violet-600"
-                            : "text-muted-foreground hover:text-zinc-900 dark:hover:text-zinc-100"
-                          }`}
-                      >
-                        {TX_TYPE_LABELS[t].label}
-                      </button>
-                    )
-                  )}
-                </div>
-              </div>
-            )}
+
 
             {/* Site / Customer Selection */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 border-b border-zinc-100 dark:border-zinc-800/50">
@@ -441,7 +409,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
                 Meter Readings
               </p>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">
                     Previous Reading
@@ -508,7 +476,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
                 Meter Configuration
               </p>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">LPG VAPOR</Label>
                   <Input
