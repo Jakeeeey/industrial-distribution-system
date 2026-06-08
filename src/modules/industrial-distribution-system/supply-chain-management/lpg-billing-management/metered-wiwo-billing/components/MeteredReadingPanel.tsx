@@ -52,7 +52,7 @@ export function MeteredReadingPanel({
       </div>
 
       {/* ── Reading Grid ── */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-zinc-50/50 dark:bg-zinc-800/30 border border-zinc-100 dark:border-zinc-800/35 rounded-xl p-3">
           <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
             <Calendar className="h-3.5 w-3.5" />
@@ -77,7 +77,7 @@ export function MeteredReadingPanel({
       </div>
 
       {/* Usage Row */}
-      <div className="flex items-center justify-between bg-zinc-100/60 dark:bg-zinc-800/40 rounded-xl px-4 py-2.5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-zinc-100/60 dark:bg-zinc-800/40 rounded-xl px-4 py-2.5">
         <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">
           Usage ({meterDirection.toLowerCase()} meter)
         </span>
@@ -234,7 +234,7 @@ export function MeteredReadingPanel({
         </p>
 
         {/* Final result */}
-        <div className="flex items-center justify-between border-t border-blue-100/40 dark:border-blue-900/20 pt-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t border-blue-100/40 dark:border-blue-900/20 pt-3">
           <div>
             <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block">Computed Metered KG</span>
             <span className="text-[10px] text-muted-foreground font-mono">
