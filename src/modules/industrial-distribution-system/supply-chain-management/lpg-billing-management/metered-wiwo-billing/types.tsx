@@ -8,6 +8,7 @@ export type TransactionStatus = "DRAFT" | "POSTED" | "CANCELLED";
 
 export interface MeterReading {
   id: number;
+  reading_no?: string;
   lpg_site_id: number;
   reading_date: string;
   previous_reading: number;

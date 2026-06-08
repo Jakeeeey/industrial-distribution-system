@@ -33,12 +33,13 @@ function mapTxRecord(raw: Record<string, unknown>): MeteredWiwoTransaction {
       ? (raw["wiwo_header_id"] as Record<string, unknown>)
       : null;
 
-  const txNo = String(raw["transaction_no"] ?? raw["reading_no"] ?? "-");
+  const txNo = String(raw["transaction_no"] ?? "");
+  const readingNo = mrObj && mrObj["reading_no"] ? String(mrObj["reading_no"]) : String(raw["reading_no"] ?? "");
 
   return {
     id: Number(raw["id"]),
     transaction_no: txNo,
-    reading_no: txNo,
+    reading_no: readingNo,
     transaction_type: (raw["transaction_type"] as TransactionType) ?? "REGULAR_BILLING",
     transaction_date: String(raw["transaction_date"] ?? ""),
     customer_code: String(raw["customer_code"] ?? ""),
@@ -90,6 +91,7 @@ function mapTxRecord(raw: Record<string, unknown>): MeteredWiwoTransaction {
     meter_reading: mrObj
       ? {
           id: Number(mrObj["id"]),
+          reading_no: mrObj["reading_no"] ? String(mrObj["reading_no"]) : undefined,
           lpg_site_id: siteId ?? 0,
           reading_date: String(mrObj["reading_date"] ?? ""),
           previous_reading: Number(mrObj["previous_reading"] ?? 0),
@@ -126,6 +128,7 @@ const TX_FIELDS = [
   "lpg_site_id.default_psi",
   "lpg_site_id.default_atmospheric_pressure",
   "meter_reading_id.id",
+  "meter_reading_id.reading_no",
   "meter_reading_id.reading_date",
   "meter_reading_id.previous_reading",
   "meter_reading_id.current_reading",
@@ -351,7 +354,7 @@ async function buildBridgePayload(
   isUpdate = false
 ): Promise<Record<string, unknown>> {
   const data: Record<string, unknown> = {
-    transaction_no: payload.reading_no,
+    transaction_no: payload.transaction_no || payload.reading_no,
     transaction_type: payload.transaction_type ?? "REGULAR_BILLING",
     transaction_date: payload.transaction_date || new Date().toISOString().split("T")[0],
     customer_code: payload.customer_code,
