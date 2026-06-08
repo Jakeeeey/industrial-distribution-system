@@ -219,39 +219,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
               <h2 className="font-semibold">Transaction Details</h2>
             </div>
 
-            {/* Transaction Type Selector — only for new records */}
-            {!txId && (
-              <div className="pb-4 border-b border-zinc-100 dark:border-zinc-800/50">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">
-                  Transaction Type
-                </Label>
-                <div className="flex gap-2 p-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl w-fit">
-                  {(["REGULAR_BILLING", "ONBOARDING_BASELINE"] as TransactionType[]).map(
-                    (t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() =>
-                          setForm((f) => ({
-                            ...f,
-                            transactionType: t,
-                            wiwoHeaderId: null,
-                          }))
-                        }
-                        className={`py-2 px-4 text-xs font-bold rounded-lg transition-all ${form.transactionType === t
-                            ? t === "ONBOARDING_BASELINE"
-                              ? "bg-white dark:bg-zinc-700 shadow-sm text-amber-600"
-                              : "bg-white dark:bg-zinc-700 shadow-sm text-violet-600"
-                            : "text-muted-foreground hover:text-zinc-900 dark:hover:text-zinc-100"
-                          }`}
-                      >
-                        {TX_TYPE_LABELS[t].label}
-                      </button>
-                    )
-                  )}
-                </div>
-              </div>
-            )}
+
 
             {/* Site / Customer Selection */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 border-b border-zinc-100 dark:border-zinc-800/50">
