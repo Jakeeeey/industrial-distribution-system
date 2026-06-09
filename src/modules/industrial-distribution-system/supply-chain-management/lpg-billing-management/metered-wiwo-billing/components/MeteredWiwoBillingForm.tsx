@@ -15,13 +15,23 @@ import {
   Gauge,
   Info,
   Link2,
-  Upload,
   X,
+  ImagePlus,
+  AlertTriangle,
+  Camera,
+  Settings2,
+  Activity,
 } from "lucide-react";
 import { MeteredReadingPanel } from "./MeteredReadingPanel";
 import { VariancePanel } from "./VariancePanel";
 import { MeteredBillingSummaryCard } from "./MeteredBillingSummaryCard";
 import { useMeteredWiwoBillingForm } from "../hooks/useMeteredWiwoBilling";
+import {
+  Dialog,
+  DialogContent,
+  DialogClose,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -47,13 +57,13 @@ const TX_TYPE_LABELS: Record<
     label: "Onboarding / Baseline",
     short: "Onboarding",
     color:
-      "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+      "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 border-amber-200 dark:border-amber-500/30",
   },
   REGULAR_BILLING: {
     label: "Regular Billing",
     short: "Regular",
     color:
-      "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400",
+      "bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-400 border-violet-200 dark:border-violet-500/30",
   },
 };
 
@@ -105,8 +115,13 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-violet-500" />
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-4 text-violet-500">
+          <Loader2 className="h-10 w-10 animate-spin" />
+          <p className="text-sm font-medium animate-pulse text-zinc-500">
+            Loading transaction data...
+          </p>
+        </div>
       </div>
     );
   }
@@ -114,46 +129,55 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
   const txTypeMeta = TX_TYPE_LABELS[form.transactionType];
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
-      {/* Locked banner */}
-      {isReadOnly && (
-        <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-900/50 rounded-2xl p-4 text-xs text-yellow-800 dark:text-yellow-400 flex items-center gap-3 shadow-md">
-          <span className="text-lg">⚠️</span>
-          <div>
-            <span className="font-bold">Transaction Locked: </span>
-            This metered billing transaction has been{" "}
-            <span className="font-bold text-violet-600 dark:text-violet-400">
-              {originalStatus}
-            </span>{" "}
-            and cannot be modified.
+    <div className="space-y-6 max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12">
+      {/* Alert Banners */}
+      <div className="space-y-3">
+        {isReadOnly && (
+          <div className="bg-yellow-50/80 dark:bg-yellow-500/10 border border-yellow-200 dark:border-yellow-500/20 rounded-xl p-4 text-sm text-yellow-800 dark:text-yellow-300 flex items-start gap-3 shadow-sm backdrop-blur-sm">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-yellow-600 dark:text-yellow-400 mt-0.5" />
+            <div>
+              <span className="font-semibold block mb-0.5">
+                Transaction Locked
+              </span>
+              <span className="opacity-90">
+                This metered billing transaction has been strictly marked as{" "}
+                <strong className="text-yellow-900 dark:text-yellow-200">
+                  {originalStatus}
+                </strong>{" "}
+                and cannot be modified.
+              </span>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Onboarding info banner */}
-      {isOnboarding && !isReadOnly && (
-        <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-2xl p-4 text-xs text-amber-800 dark:text-amber-400 flex items-start gap-3 shadow-md">
-          <Info className="h-4 w-4 mt-0.5 shrink-0" />
-          <div>
-            <span className="font-bold">Onboarding / Baseline Mode — </span>
-            This records the{" "}
-            <span className="font-bold">
-              initial meter baseline reading
-            </span>{" "}
-            after WIWO cylinder deployment.{" "}
-            <span className="font-bold text-amber-700 dark:text-amber-300">
-              No invoice will be generated.
-            </span>{" "}
-            Transaction number prefix: <code className="font-mono">TXORB-</code>
+        {isOnboarding && !isReadOnly && (
+          <div className="bg-amber-50/80 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl p-4 text-sm text-amber-800 dark:text-amber-300 flex items-start gap-3 shadow-sm backdrop-blur-sm">
+            <Info className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+            <div>
+              <span className="font-semibold block mb-0.5">
+                Onboarding / Baseline Mode
+              </span>
+              <span className="opacity-90">
+                Recording the initial meter baseline reading after WIWO cylinder
+                deployment.{" "}
+                <strong className="text-amber-900 dark:text-amber-100">
+                  No invoice will be generated.
+                </strong>{" "}
+                Prefix:{" "}
+                <code className="bg-amber-200/50 dark:bg-amber-900/50 px-1.5 py-0.5 rounded font-mono text-xs">
+                  TXORB-
+                </code>
+              </span>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-150 dark:border-zinc-800/60 pb-4">
-        <div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-xl font-black bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent truncate max-w-full sm:max-w-xs md:max-w-none">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 border-b border-zinc-200 dark:border-zinc-800 pb-6">
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
               {txId
                 ? isOnboarding
                   ? "Edit Baseline Record"
@@ -161,27 +185,28 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                 : isOnboarding
                   ? "New Baseline Record"
                   : "New Metered Billing"}
-            </h2>
+            </h1>
             <Badge
-              className={`text-[10px] font-bold uppercase tracking-wider border-none shrink-0 ${txTypeMeta.color}`}
+              variant="outline"
+              className={`text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 ${txTypeMeta.color}`}
             >
               {txTypeMeta.short}
             </Badge>
           </div>
-          <p className="text-sm text-muted-foreground mt-0.5">
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
             {isOnboarding
-              ? "Records initial cylinder deployment meter baseline — no invoice"
-              : "Billing source: MAX(Metered KG, WIWO KG)"}
+              ? "Establish initial cylinder deployment configuration and starting numbers."
+              : "Compute billing based on MAX(Metered KG, WIWO KG)."}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 sm:justify-end w-full sm:w-auto">
+
+        <div className="flex items-center gap-3 w-full sm:w-auto">
           <Button
-            variant="ghost"
-            size="sm"
+            variant="outline"
             onClick={onCancel}
-            className="h-9 px-4 hover:bg-red-50 hover:text-red-600 text-xs sm:text-sm flex-1 sm:flex-none"
+            className="flex-1 sm:flex-none h-10 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800"
           >
-            {isReadOnly ? "Close" : "Cancel"}
+            {isReadOnly ? "Close" : "Back to List"}
           </Button>
           {!isReadOnly && txId && originalStatus === "DRAFT" && (
             <Button
@@ -189,7 +214,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
               variant="outline"
               disabled={submitting}
               onClick={handleCancelBilling}
-              className="h-9 px-4 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 transition-all active:scale-95 text-xs sm:text-sm flex-1 sm:flex-none"
+              className="flex-1 sm:flex-none h-10 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-900/50 dark:hover:bg-red-950/30"
             >
               Cancel Billing
             </Button>
@@ -198,10 +223,10 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
             <Button
               onClick={handleSubmit}
               disabled={submitting || !canPost}
-              className={`h-9 px-4 sm:px-6 shadow-lg transition-all active:scale-95 text-xs sm:text-sm flex-1 sm:flex-none ${
+              className={`flex-1 sm:flex-none h-10 px-6 font-medium shadow-sm transition-all ${
                 isOnboarding
-                  ? "bg-amber-500 hover:bg-amber-600 shadow-amber-500/20"
-                  : "bg-violet-600 hover:bg-violet-700 shadow-violet-500/20"
+                  ? "bg-amber-600 hover:bg-amber-700 text-white"
+                  : "bg-violet-600 hover:bg-violet-700 text-white"
               }`}
             >
               {submitting ? (
@@ -223,22 +248,28 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Content */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Transaction Header Card */}
-          <div className="bg-white/70 dark:bg-zinc-900/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-6 shadow-xl space-y-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="h-8 w-8 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-violet-600">
-                <Gauge className="h-4 w-4" />
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Main Content Area */}
+        <div className="lg:col-span-8 space-y-8">
+          {/* Card: Identity & Core Details */}
+          <section className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 sm:p-8 shadow-sm space-y-6">
+            <div className="flex items-center gap-3 border-b border-zinc-100 dark:border-zinc-800/60 pb-4">
+              <div className="h-10 w-10 rounded-xl bg-violet-50 dark:bg-violet-500/10 flex items-center justify-center text-violet-600 dark:text-violet-400">
+                <Settings2 className="h-5 w-5" />
               </div>
-              <h2 className="font-semibold">Transaction Details</h2>
+              <div>
+                <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                  Transaction Core
+                </h2>
+                <p className="text-xs text-zinc-500">
+                  Site, references, and timeline details.
+                </p>
+              </div>
             </div>
 
-            {/* Site / Customer Selection */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 border-b border-zinc-100 dark:border-zinc-800/50">
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2.5">
+                <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
                   LPG Site
                 </Label>
                 {txId ? (
@@ -251,14 +282,14 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                           : "—"
                     }
                     readOnly
-                    className="bg-zinc-50 dark:bg-zinc-800"
+                    className="bg-zinc-50 dark:bg-zinc-950/50 border-dashed text-zinc-600 dark:text-zinc-400 font-medium"
                   />
                 ) : (
                   <Select
                     value={form.siteId ? String(form.siteId) : undefined}
                     onValueChange={(v) => handleSiteChange(Number(v))}
                   >
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger className="w-full h-10">
                       <SelectValue
                         placeholder={
                           sitesLoading
@@ -282,65 +313,59 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                   </Select>
                 )}
               </div>
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <div className="space-y-2.5">
+                <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
                   Customer Code
                 </Label>
                 <Input
                   value={form.customerCode || "—"}
                   readOnly
-                  className="bg-zinc-50 dark:bg-zinc-800 font-mono"
+                  className="bg-zinc-50 dark:bg-zinc-950/50 border-dashed text-zinc-600 dark:text-zinc-400 font-mono"
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-              {/* Transaction No */}
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-2.5">
+                <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
                   Transaction No
                 </Label>
                 <div className="relative">
-                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
                   <Input
-                    id="metered-tx-no"
                     value={form.transactionNo}
                     onChange={(e) =>
                       setForm((f) => ({ ...f, transactionNo: e.target.value }))
                     }
-                    className="pl-10 font-mono"
+                    className="pl-9 font-mono"
                     readOnly={isReadOnly || isOnboarding}
                   />
                 </div>
               </div>
-              {/* Reading No */}
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <div className="space-y-2.5">
+                <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
                   Reading No
                 </Label>
                 <div className="relative">
-                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Activity className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
                   <Input
-                    id="metered-reading-no"
                     value={form.readingNo}
                     onChange={(e) =>
                       setForm((f) => ({ ...f, readingNo: e.target.value }))
                     }
-                    className="pl-10 font-mono"
+                    className="pl-9 font-mono"
                     readOnly={isReadOnly}
-                    placeholder="MTR-XXXXXXXXX"
+                    placeholder="MTR-XXXXXXXX"
                   />
                 </div>
               </div>
-              {/* Transaction Date */}
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <div className="space-y-2.5">
+                <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
                   Transaction Date
                 </Label>
                 <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
                   <Input
-                    id="metered-tx-date"
                     type="date"
                     value={form.transactionDate}
                     onChange={(e) =>
@@ -349,23 +374,21 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                         transactionDate: e.target.value,
                       }))
                     }
-                    className="pl-10"
+                    className="pl-9"
                     readOnly={isReadOnly}
                   />
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-              {/* Billing Period From */}
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Billing Period From
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-zinc-50/50 dark:bg-zinc-800/20 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800/50">
+              <div className="space-y-2.5">
+                <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+                  Period From
                 </Label>
                 <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
                   <Input
-                    id="metered-billing-from"
                     type="date"
                     value={form.billingPeriodFrom}
                     onChange={(e) =>
@@ -374,20 +397,18 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                         billingPeriodFrom: e.target.value,
                       }))
                     }
-                    className="pl-10"
+                    className="pl-9 bg-white dark:bg-zinc-900"
                     readOnly={isReadOnly}
                   />
                 </div>
               </div>
-              {/* Billing Period To */}
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Billing Period To
+              <div className="space-y-2.5">
+                <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+                  Period To
                 </Label>
                 <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
                   <Input
-                    id="metered-billing-to"
                     type="date"
                     value={form.billingPeriodTo}
                     onChange={(e) =>
@@ -396,23 +417,21 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                         billingPeriodTo: e.target.value,
                       }))
                     }
-                    className="pl-10"
+                    className="pl-9 bg-white dark:bg-zinc-900"
                     readOnly={isReadOnly}
                   />
                 </div>
               </div>
-              {/* Price / KG — hidden for onboarding */}
-              {!isOnboarding ? (
-                <div className="space-y-2">
-                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              {!isOnboarding && (
+                <div className="space-y-2.5">
+                  <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
                     Price / KG
                   </Label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-bold text-sm">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 font-medium text-sm">
                       ₱
                     </span>
                     <Input
-                      id="metered-price-per-kg"
                       type="number"
                       step="0.01"
                       value={form.pricePerKg}
@@ -422,254 +441,311 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                           pricePerKg: Number(e.target.value),
                         }))
                       }
-                      className="pl-8"
+                      className="pl-8 bg-white dark:bg-zinc-900"
                       readOnly={isReadOnly}
                     />
                   </div>
                 </div>
-              ) : (
-                <div />
               )}
             </div>
+          </section>
 
-            {/* Meter Readings */}
-            <div className="border-t border-zinc-100 dark:border-zinc-800/50 pt-4">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                Meter Readings
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">
-                    Previous Reading
-                  </Label>
-                  <Input
-                    id="metered-prev-reading"
-                    type="number"
-                    step="0.001"
-                    value={form.previousReading}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        previousReading: Number(e.target.value),
-                      }))
-                    }
-                    className="font-mono"
-                    readOnly={isReadOnly}
-                  />
+          {/* Card: Meter Data & Validation */}
+          <section className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 sm:p-8 shadow-sm space-y-8">
+            {/* Meter Readings sub-section */}
+            <div className="space-y-5">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                  <Gauge className="h-5 w-5" />
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">
-                    Current Reading
-                  </Label>
-                  <Input
-                    id="metered-curr-reading"
-                    type="number"
-                    step="0.001"
-                    value={form.currentReading}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        currentReading: Number(e.target.value),
-                      }))
-                    }
-                    className="font-mono"
-                    readOnly={isReadOnly}
-                  />
+                <div>
+                  <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                    Meter Readings
+                  </h2>
+                  <p className="text-xs text-zinc-500">
+                    Capture visual evidence and input physical meter states.
+                  </p>
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">
-                    Metered KG (computed)
-                  </Label>
-                  <Input
-                    value={Number(meteredKg).toFixed(4)}
-                    readOnly
-                    className="font-mono bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 font-bold"
+              </div>
+
+              <div className="flex flex-col md:flex-row gap-8 bg-zinc-50/50 dark:bg-zinc-800/20 p-5 rounded-xl border border-zinc-100 dark:border-zinc-800/50">
+                <div className="flex-1 space-y-5 max-w-sm">
+                  <div className="space-y-2.5">
+                    <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+                      Previous Reading
+                    </Label>
+                    <Input
+                      type="number"
+                      step="0.001"
+                      value={form.previousReading}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          previousReading: Number(e.target.value),
+                        }))
+                      }
+                      className="font-mono bg-white dark:bg-zinc-900"
+                      readOnly={isReadOnly}
+                    />
+                  </div>
+                  <div className="space-y-2.5">
+                    <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+                      Current Reading
+                    </Label>
+                    <Input
+                      type="number"
+                      step="0.001"
+                      value={form.currentReading}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          currentReading: Number(e.target.value),
+                        }))
+                      }
+                      className="font-mono bg-white dark:bg-zinc-900"
+                      readOnly={isReadOnly}
+                    />
+                  </div>
+                  <div className="space-y-2.5 pt-2">
+                    <Label className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                      Metered KG (Computed)
+                    </Label>
+                    <Input
+                      value={Number(meteredKg).toFixed(4)}
+                      readOnly
+                      className="font-mono bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 font-bold border-blue-200 dark:border-blue-800 h-11 text-lg shadow-inner"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col justify-center items-center md:items-start shrink-0">
+                  <ImageUploadField
+                    label="Meter Visual Evidence"
+                    imageId={form.meteredReadingImageId}
+                    onChange={(id) =>
+                      setForm((f) => ({ ...f, meteredReadingImageId: id }))
+                    }
+                    isReadOnly={isReadOnly}
+                    uploadEndpoint="/api/ids/scm/lpg-billing-management/metered-billing/upload"
+                    previewClassName="aspect-square w-[220px] rounded-xl shadow-sm"
                   />
                 </div>
               </div>
-              <div className="mt-4">
-                <ImageUploadField
-                  label="Metered Reading Photo"
-                  imageId={form.meteredReadingImageId}
-                  onChange={(id) =>
-                    setForm((f) => ({ ...f, meteredReadingImageId: id }))
-                  }
-                  isReadOnly={isReadOnly}
-                  uploadEndpoint="/api/ids/scm/lpg-billing-management/metered-billing/upload"
-                />
-              </div>
+
               {!isValidReading && (
-                <p className="text-xs text-red-500 mt-3 font-semibold animate-pulse">
-                  ⚠️ Invalid reading: Current reading must be{" "}
-                  {meterDirection === "DECREASING"
-                    ? "less than or equal to"
-                    : "greater than or equal to"}{" "}
-                  the previous reading ({form.previousReading}) for a{" "}
-                  {meterDirection} meter.
-                </p>
+                <div className="flex items-start gap-3 p-3.5 bg-red-50 dark:bg-red-500/10 rounded-xl border border-red-200 dark:border-red-500/20 text-red-600 dark:text-red-400 text-sm">
+                  <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
+                  <p>
+                    <strong>Invalid reading sequence:</strong> Current reading
+                    must be{" "}
+                    {meterDirection === "DECREASING"
+                      ? "less than or equal to"
+                      : "greater than or equal to"}{" "}
+                    the previous reading ({form.previousReading}) based on a{" "}
+                    <strong>{meterDirection}</strong> meter configuration.
+                  </p>
+                </div>
               )}
             </div>
 
-            {/* Meter Configuration */}
-            <div className="border-t border-zinc-100 dark:border-zinc-800/50 pt-4">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                Meter Configuration
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">
-                    LPG VAPOR
-                  </Label>
-                  <Input
-                    id="metered-config-lpg-vapor"
-                    type="number"
-                    step="0.0001"
-                    value={form.configLpgVapor}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        configLpgVapor: Number(e.target.value),
-                      }))
-                    }
-                    className="font-mono"
-                    readOnly={isReadOnly}
-                    placeholder="e.g. 2.0183"
-                  />
+            <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800" />
+
+            {/* Meter Configuration sub-section */}
+            <div className="space-y-5">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                  <Gauge className="h-5 w-5" />
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">PSI</Label>
-                  <Input
-                    id="metered-config-psi"
-                    type="number"
-                    step="0.0001"
-                    value={form.configPsi}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        configPsi: Number(e.target.value),
-                      }))
-                    }
-                    className="font-mono"
-                    readOnly={isReadOnly}
-                    placeholder="e.g. 10.0"
-                  />
+                <div>
+                  <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                    Meter Configurations
+                  </h2>
+                  <p className="text-xs text-zinc-500">
+                    System calibration and gas computation parameters.
+                  </p>
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">
-                    CORRECTION FACTOR
-                  </Label>
-                  <Input
-                    id="metered-config-correction-factor"
-                    type="number"
-                    step="0.1"
-                    value={form.configCorrectionFactor}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        configCorrectionFactor: Number(e.target.value),
-                      }))
+              </div>
+
+              <div className="flex flex-col md:flex-row gap-8 bg-zinc-50/50 dark:bg-zinc-800/20 p-5 rounded-xl border border-zinc-100 dark:border-zinc-800/50">
+                <div className="flex-1 space-y-5 max-w-sm">
+                  <div className="space-y-2.5">
+                    <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+                      LPG Vapor
+                    </Label>
+                    <Input
+                      type="number"
+                      step="0.001"
+                      value={form.configLpgVapor}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          configLpgVapor: Number(e.target.value),
+                        }))
+                      }
+                      className="font-mono bg-white dark:bg-zinc-900"
+                      readOnly={isReadOnly}
+                      placeholder="2.0183"
+                    />
+                  </div>
+                  <div className="space-y-2.5">
+                    <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+                      PSI
+                    </Label>
+                    <Input
+                      type="number"
+                      step="0.001"
+                      value={form.configPsi}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          configPsi: Number(e.target.value),
+                        }))
+                      }
+                      className="font-mono bg-white dark:bg-zinc-900"
+                      readOnly={isReadOnly}
+                      placeholder="10.0"
+                    />
+                  </div>
+                  <div className="space-y-2.5 pt-2">
+                    <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider text-nowrap">
+                      Correction Factor
+                    </Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      value={form.configCorrectionFactor}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          configCorrectionFactor: Number(e.target.value),
+                        }))
+                      }
+                      // Added background contrast
+                      className="font-mono bg-white dark:bg-zinc-900"
+                      readOnly={isReadOnly}
+                      placeholder="14.7"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col justify-center items-center md:items-start shrink-0">
+                  <ImageUploadField
+                    label="PSI Evidence"
+                    imageId={form.psiReadingImageId}
+                    onChange={(id) =>
+                      setForm((f) => ({ ...f, psiReadingImageId: id }))
                     }
-                    className="font-mono"
-                    readOnly={isReadOnly}
-                    placeholder="e.g. 14.7"
+                    isReadOnly={isReadOnly}
+                    uploadEndpoint="/api/ids/scm/lpg-billing-management/metered-billing/upload"
+                    previewClassName="aspect-square w-[220px] rounded-xl shadow-sm"
+                    compact
                   />
                 </div>
               </div>
-              <div className="mt-4">
-                <ImageUploadField
-                  label="PSI Reading Photo"
-                  imageId={form.psiReadingImageId}
-                  onChange={(id) =>
-                    setForm((f) => ({ ...f, psiReadingImageId: id }))
-                  }
-                  isReadOnly={isReadOnly}
-                  uploadEndpoint="/api/ids/scm/lpg-billing-management/metered-billing/upload"
-                />
-              </div>
+
+              {!isValidReading && (
+                <div className="flex items-start gap-3 p-3.5 bg-red-50 dark:bg-red-500/10 rounded-xl border border-red-200 dark:border-red-500/20 text-red-600 dark:text-red-400 text-sm">
+                  <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
+                  <p>
+                    <strong>Invalid reading sequence:</strong> Current reading
+                    must be{" "}
+                    {meterDirection === "DECREASING"
+                      ? "less than or equal to"
+                      : "greater than or equal to"}{" "}
+                    the previous reading ({form.previousReading}) based on a{" "}
+                    <strong>{meterDirection}</strong> meter configuration.
+                  </p>
+                </div>
+              )}
             </div>
 
-            {/* WIWO Header Linking — Regular Billing only */}
+            {/* WIWO Linking */}
             {!isOnboarding && form.siteId && (
-              <div className="border-t border-zinc-100 dark:border-zinc-800/50 pt-4 space-y-2">
-                <div className="flex items-center gap-2">
-                  <Link2 className="h-3.5 w-3.5 text-muted-foreground" />
-                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    WIWO Validation (optional)
-                  </Label>
-                </div>
-                {txId ? (
-                  <Input
-                    value={
-                      linkedWiwo
-                        ? `${linkedWiwo.transaction_no} — ${Number(linkedWiwo.total_wiwo_kg ?? 0).toFixed(4)} kg`
-                        : form.wiwoHeaderId
-                          ? `WIWO #${form.wiwoHeaderId}`
-                          : "No WIWO linked"
-                    }
-                    readOnly
-                    className="bg-zinc-50 dark:bg-zinc-800 font-mono text-xs"
-                  />
-                ) : (
-                  <Select
-                    value={form.wiwoHeaderId?.toString() ?? "none"}
-                    onValueChange={(v) =>
-                      setForm((f) => ({
-                        ...f,
-                        wiwoHeaderId: v === "none" ? null : Number(v),
-                      }))
-                    }
-                    disabled={isReadOnly}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue
-                        placeholder={
-                          wiwoLoading
-                            ? "Loading WIWO headers..."
-                            : wiwoHeaders.length === 0
-                              ? "No pending WIWO headers found"
-                              : "Select WIWO header (optional)..."
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">
-                        No WIWO link (Metered only)
-                      </SelectItem>
-                      {wiwoHeaders.map((header) => (
-                        <SelectItem
-                          key={header.id}
-                          value={header.id.toString()}
-                        >
-                          {header.transaction_no} —{" "}
-                          {format(
-                            new Date(header.transaction_date),
-                            "MMM dd, yyyy",
-                          )}
-                          {header.total_wiwo_kg !== undefined
-                            ? ` (${Number(header.total_wiwo_kg).toFixed(4)} kg)`
-                            : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-                {linkedWiwo && (
-                  <p className="text-[11px] text-violet-600 dark:text-violet-400 font-semibold">
-                    ✓ WIWO KG:{" "}
-                    {Number(linkedWiwo.total_wiwo_kg ?? 0).toFixed(4)} kg —
-                    Arbitration will use MAX(Metered, WIWO)
-                  </p>
-                )}
-                {!form.wiwoHeaderId && !isReadOnly && (
-                  <p className="text-[11px] text-muted-foreground">
-                    No WIWO selected — billing will use Metered KG only.
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
+              <>
+                <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800" />
+                <div className="bg-violet-50/50 dark:bg-violet-500/5 p-5 rounded-xl border border-violet-100 dark:border-violet-500/20 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Link2 className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                    <Label className="text-sm font-semibold text-violet-900 dark:text-violet-300">
+                      WIWO System Linkage (Arbitration)
+                    </Label>
+                  </div>
 
-          {/* Meter Reading Panel */}
+                  {txId ? (
+                    <Input
+                      value={
+                        linkedWiwo
+                          ? `${linkedWiwo.transaction_no} — ${Number(linkedWiwo.total_wiwo_kg ?? 0).toFixed(4)} kg`
+                          : form.wiwoHeaderId
+                            ? `WIWO #${form.wiwoHeaderId}`
+                            : "No WIWO linked (Metered Only)"
+                      }
+                      readOnly
+                      className="bg-white dark:bg-zinc-950 font-mono text-sm border-dashed"
+                    />
+                  ) : (
+                    <Select
+                      value={form.wiwoHeaderId?.toString() ?? "none"}
+                      onValueChange={(v) =>
+                        setForm((f) => ({
+                          ...f,
+                          wiwoHeaderId: v === "none" ? null : Number(v),
+                        }))
+                      }
+                      disabled={isReadOnly}
+                    >
+                      <SelectTrigger className="w-full h-11 bg-white dark:bg-zinc-950">
+                        <SelectValue
+                          placeholder={
+                            wiwoLoading
+                              ? "Scanning for WIWO headers..."
+                              : "Select WIWO Reference..."
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem
+                          value="none"
+                          className="font-medium text-zinc-500"
+                        >
+                          Standalone (No WIWO Link)
+                        </SelectItem>
+                        {wiwoHeaders.map((header) => (
+                          <SelectItem
+                            key={header.id}
+                            value={header.id.toString()}
+                          >
+                            {header.transaction_no} —{" "}
+                            {format(
+                              new Date(header.transaction_date),
+                              "MMM dd, yyyy",
+                            )}
+                            {header.total_wiwo_kg !== undefined
+                              ? ` (${Number(header.total_wiwo_kg).toFixed(4)} kg)`
+                              : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+
+                  {linkedWiwo ? (
+                    <p className="text-xs text-violet-700 dark:text-violet-400 font-medium flex items-center gap-1.5 pt-1">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Active Arbitration Mode: Billed amount will utilize
+                      MAX(Metered, WIWO).
+                    </p>
+                  ) : !form.wiwoHeaderId && !isReadOnly ? (
+                    <p className="text-xs text-zinc-500 pt-1">
+                      Operating in Standalone Mode. Billing will rely strictly
+                      on computed Metered KG.
+                    </p>
+                  ) : null}
+                </div>
+              </>
+            )}
+          </section>
+
           <MeteredReadingPanel
             readingDate={form.transactionDate}
             previousReading={form.previousReading}
@@ -683,129 +759,134 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
             pressureLine={pressureLine}
           />
 
-          {/* Variance & Arbitration — Regular Billing only */}
           {!isOnboarding && <VariancePanel result={arbitration} />}
         </div>
 
-        {/* Sidebar */}
-        <div className="space-y-6">
-          {isOnboarding ? (
-            /* Onboarding sidebar — just a summary of what was recorded */
-            <div className="bg-white/70 dark:bg-zinc-900/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-6 shadow-xl space-y-4">
-              <div className="flex items-center gap-2 mb-1">
-                <div className="h-7 w-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600">
-                  <Gauge className="h-4 w-4" />
+        {/* Sticky Sidebar Area */}
+        <div className="lg:col-span-4 relative">
+          <div className="sticky top-6 space-y-6">
+            {isOnboarding ? (
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-sm space-y-5">
+                <div className="flex items-center gap-3 border-b border-zinc-100 dark:border-zinc-800/60 pb-4">
+                  <div className="h-9 w-9 rounded-xl bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                    <Gauge className="h-4 w-4" />
+                  </div>
+                  <h3 className="font-semibold text-zinc-900 dark:text-zinc-100">
+                    Baseline Target
+                  </h3>
                 </div>
-                <h3 className="font-semibold text-sm">Baseline Summary</h3>
-              </div>
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between items-center py-2 border-b border-dashed border-zinc-100 dark:border-zinc-800">
-                  <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
-                    Opening Reading
-                  </span>
-                  <span className="font-mono font-bold text-blue-600 dark:text-blue-400">
-                    {form.previousReading.toFixed(3)}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-2 border-b border-dashed border-zinc-100 dark:border-zinc-800">
-                  <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
-                    Baseline Reading
-                  </span>
-                  <span className="font-mono font-bold text-blue-700 dark:text-blue-300">
-                    {form.currentReading.toFixed(3)}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-2 border-b border-dashed border-zinc-100 dark:border-zinc-800">
-                  <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
-                    Initial KG
-                  </span>
-                  <span className="font-mono font-bold">
-                    {Number(meteredKg).toFixed(4)} kg
-                  </span>
-                </div>
-                <div className="bg-amber-50 dark:bg-amber-950/20 rounded-xl p-3 text-xs text-amber-700 dark:text-amber-400 mt-2">
-                  <span className="font-bold">No invoice generated.</span> This
-                  baseline reading will be used as the starting point for future
-                  Regular Billing cycles.
-                </div>
-              </div>
-            </div>
-          ) : (
-            <MeteredBillingSummaryCard
-              meteredKg={arbitration.metered_kg}
-              wiwoKg={arbitration.wiwo_kg}
-              varianceKg={arbitration.variance_kg}
-              billableKg={arbitration.billable_kg}
-              billableSource={arbitration.billable_source}
-              grossAmount={grossAmount}
-              vatAmount={vatAmount}
-              netAmount={netAmount}
-              pricePerKg={form.pricePerKg}
-              isMeteredOnly={!form.wiwoHeaderId}
-            />
-          )}
-
-          {/* Status + Remarks */}
-          <div className="bg-white/70 dark:bg-zinc-900/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-6 shadow-xl space-y-4">
-            {/* Status toggle — only for regular billing */}
-            {!isOnboarding && (
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Status
-                </Label>
-                <div className="flex gap-2 p-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl">
-                  {(
-                    [
-                      "DRAFT",
-                      "POSTED",
-                      ...(form.status === "CANCELLED"
-                        ? (["CANCELLED"] as const)
-                        : []),
-                    ] as const
-                  ).map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      disabled={isReadOnly}
-                      onClick={() => setForm((f) => ({ ...f, status: s }))}
-                      className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-                        form.status === s
-                          ? s === "POSTED"
-                            ? "bg-white dark:bg-zinc-700 shadow-sm text-green-600"
-                            : s === "CANCELLED"
-                              ? "bg-white dark:bg-zinc-700 shadow-sm text-red-600"
-                              : "bg-white dark:bg-zinc-700 shadow-sm text-violet-600"
-                          : "text-muted-foreground hover:text-zinc-900"
-                      } ${isReadOnly ? "opacity-60 cursor-not-allowed" : ""}`}
-                    >
-                      {s}
-                    </button>
-                  ))}
+                <div className="space-y-4 text-sm">
+                  <div className="flex justify-between items-center py-1">
+                    <span className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">
+                      Opening
+                    </span>
+                    <span className="font-mono font-bold text-zinc-700 dark:text-zinc-300">
+                      {form.previousReading.toFixed(3)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-1">
+                    <span className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">
+                      Baseline
+                    </span>
+                    <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
+                      {form.currentReading.toFixed(3)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-3 border-t border-dashed border-zinc-200 dark:border-zinc-800 mt-2">
+                    <span className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">
+                      Initial KG
+                    </span>
+                    <span className="font-mono font-bold text-lg">
+                      {Number(meteredKg).toFixed(4)}{" "}
+                      <span className="text-xs text-zinc-400">kg</span>
+                    </span>
+                  </div>
+                  <div className="bg-zinc-50 dark:bg-zinc-800/50 rounded-xl p-3.5 text-xs text-zinc-500 leading-relaxed">
+                    This reading establishes the system ground truth for the
+                    site. It will be referenced in the subsequent Regular
+                    Billing cycle.
+                  </div>
                 </div>
               </div>
+            ) : (
+              <MeteredBillingSummaryCard
+                meteredKg={arbitration.metered_kg}
+                wiwoKg={arbitration.wiwo_kg}
+                varianceKg={arbitration.variance_kg}
+                billableKg={arbitration.billable_kg}
+                billableSource={arbitration.billable_source}
+                grossAmount={grossAmount}
+                vatAmount={vatAmount}
+                netAmount={netAmount}
+                pricePerKg={form.pricePerKg}
+                isMeteredOnly={!form.wiwoHeaderId}
+              />
             )}
 
-            <div className="space-y-2">
-              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Remarks
-              </Label>
-              <Textarea
-                value={form.remarks}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, remarks: e.target.value }))
-                }
-                placeholder="Internal notes..."
-                className="resize-none h-24"
-                readOnly={isReadOnly}
-              />
-              {Number(arbitration.variance_kg) > 0 &&
-                !isOnboarding &&
-                !form.remarks.trim() && (
-                  <p className="text-[10px] text-red-500 font-semibold mt-1">
-                    ⚠️ Remarks are required because there is a variance between
-                    Metered and WIWO readings.
-                  </p>
-                )}
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-sm space-y-6">
+              {!isOnboarding && (
+                <div className="space-y-3">
+                  <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+                    Workflow Status
+                  </Label>
+                  <div className="flex p-1 bg-zinc-100 dark:bg-zinc-950 rounded-xl border border-zinc-200/50 dark:border-zinc-800 relative">
+                    {(
+                      [
+                        "DRAFT",
+                        "POSTED",
+                        ...(form.status === "CANCELLED"
+                          ? (["CANCELLED"] as const)
+                          : []),
+                      ] as const
+                    ).map((s) => {
+                      const isActive = form.status === s;
+                      return (
+                        <button
+                          key={s}
+                          type="button"
+                          disabled={isReadOnly}
+                          onClick={() => setForm((f) => ({ ...f, status: s }))}
+                          className={`flex-1 py-2 text-[13px] font-semibold rounded-lg transition-all duration-200 z-10 ${
+                            isActive
+                              ? s === "POSTED"
+                                ? "bg-white dark:bg-zinc-800 shadow-sm text-green-600 dark:text-green-400 border border-zinc-200/50 dark:border-zinc-700/50"
+                                : s === "CANCELLED"
+                                  ? "bg-white dark:bg-zinc-800 shadow-sm text-red-600 dark:text-red-400 border border-zinc-200/50 dark:border-zinc-700/50"
+                                  : "bg-white dark:bg-zinc-800 shadow-sm text-violet-600 dark:text-violet-400 border border-zinc-200/50 dark:border-zinc-700/50"
+                              : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 border border-transparent"
+                          } ${isReadOnly ? "opacity-70 cursor-not-allowed" : ""}`}
+                        >
+                          {s}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+                    Internal Remarks
+                  </Label>
+                  {Number(arbitration.variance_kg) > 0 &&
+                    !isOnboarding &&
+                    !form.remarks.trim() && (
+                      <span className="text-[10px] text-red-500 font-bold uppercase tracking-wider bg-red-50 dark:bg-red-500/10 px-2 py-0.5 rounded">
+                        Required
+                      </span>
+                    )}
+                </div>
+                <Textarea
+                  value={form.remarks}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, remarks: e.target.value }))
+                  }
+                  placeholder="Add notes regarding variances, adjustments, or context..."
+                  className="resize-none h-32 bg-zinc-50 dark:bg-zinc-950/50 border-zinc-200 dark:border-zinc-800 focus-visible:ring-violet-500"
+                  readOnly={isReadOnly}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -821,6 +902,8 @@ interface ImageUploadFieldProps {
   isReadOnly: boolean;
   folderName?: string;
   uploadEndpoint: string;
+  previewClassName?: string;
+  compact?: boolean;
 }
 
 export function ImageUploadField({
@@ -830,18 +913,21 @@ export function ImageUploadField({
   isReadOnly,
   folderName = "metered_billing_attachments",
   uploadEndpoint,
+  previewClassName,
+  compact = false,
 }: ImageUploadFieldProps) {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     if (file.size > 10 * 1024 * 1024) {
-      toast.error("File too large", {
-        description: "Maximum size is 10MB.",
+      toast.error("File limit exceeded", {
+        description: "Maximum image size is 10MB.",
       });
       return;
     }
@@ -856,7 +942,6 @@ export function ImageUploadField({
         method: "POST",
         body: formData,
       });
-
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error || "Upload failed");
@@ -864,49 +949,97 @@ export function ImageUploadField({
 
       const result = await res.json();
       onChange(result.data.id);
-      toast.success(`${label} uploaded successfully`);
+      toast.success(`${label} attached successfully`);
     } catch (error: unknown) {
       const msg =
-        error instanceof Error ? error.message : "Could not upload file";
-      toast.error("Upload failed", {
-        description: msg,
-      });
+        error instanceof Error ? error.message : "Could not process image";
+      toast.error("Upload error", { description: msg });
     } finally {
       setUploading(false);
     }
   };
 
+  // Use a same-origin API proxy so mobile/remote devices can fetch images
+  // (avoids embedding DIRECTUS host like http://goatedcodoer:8056 which isn't reachable on mobile)
   const previewUrl = imageId
-    ? `${process.env.NEXT_PUBLIC_API_BASE_URL || ""}/assets/${imageId}`
+    ? `/api/ids/scm/lpg-billing-management/metered-billing/asset?id=${encodeURIComponent(
+        imageId,
+      )}`
     : null;
 
   return (
-    <div className="space-y-2">
-      <Label className="text-xs text-muted-foreground font-semibold">
+    <div className="space-y-2.5 w-full">
+      <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider block">
         {label}
       </Label>
+
       {previewUrl ? (
-        <div className="relative group rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center h-28 w-full max-w-[150px] shadow-sm">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={previewUrl}
-            alt={label}
-            className="object-cover h-full w-full"
-          />
-          {!isReadOnly && (
-            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-              <Button
-                type="button"
-                variant="destructive"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => onChange("")}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
-        </div>
+        <>
+          {/* 1. Changed <button> to <div> to fix hydration error */}
+          <div
+            className={`relative group overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center rounded-xl shadow-sm transition-all hover:ring-2 hover:ring-violet-500/50 ${previewClassName ?? "h-32 w-full"}`}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={previewUrl}
+              alt={label}
+              // 2. Moved onClick to the image and added cursor-zoom-in
+              onClick={() => setIsPreviewOpen(true)}
+              className="object-cover h-full w-full cursor-zoom-in"
+            />
+            {!isReadOnly && (
+              // 3. Added pointer-events-none to overlay, pointer-events-auto to the button
+              <div className="absolute inset-0 bg-zinc-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[1px] pointer-events-none">
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="icon"
+                  className="h-8 w-8 rounded-full shadow-lg pointer-events-auto"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onChange("");
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </div>
+
+          <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+            <DialogContent
+              showCloseButton={false}
+              // 4. Added aria-describedby={undefined} for screen readers
+              aria-describedby={undefined}
+              className="sm:max-w-4xl w-full rounded-2xl p-0 overflow-hidden border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950"
+            >
+              <div className="flex justify-between items-center p-4 border-b border-zinc-200 dark:border-zinc-800">
+                {/* 5. Swapped <h3> for DialogTitle */}
+                <DialogTitle className="font-semibold text-zinc-900 dark:text-zinc-100 text-sm">
+                  {label}
+                </DialogTitle>
+                <DialogClose asChild>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-800"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </DialogClose>
+              </div>
+              <div className="p-6 bg-zinc-100/50 dark:bg-black/20 flex justify-center items-center min-h-[50vh]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={previewUrl}
+                  alt={label}
+                  className="w-full max-h-[75vh] object-contain rounded-lg shadow-sm"
+                />
+              </div>
+            </DialogContent>
+          </Dialog>
+        </>
       ) : (
         <div>
           <input
@@ -926,33 +1059,58 @@ export function ImageUploadField({
             className="hidden"
             disabled={isReadOnly || uploading}
           />
-          <div className="grid gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full max-w-[150px] h-28 border-dashed flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-foreground hover:border-violet-500/50 hover:bg-violet-50/10 text-xs transition-all duration-200"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isReadOnly || uploading}
-            >
+
+          <div
+            onClick={() =>
+              !isReadOnly && !uploading && fileInputRef.current?.click()
+            }
+            className={`relative group transition-all duration-200 rounded-xl overflow-hidden border-2 border-dashed ${
+              isReadOnly
+                ? "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 cursor-not-allowed"
+                : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 hover:border-violet-400 dark:hover:border-violet-600 hover:bg-violet-50/50 dark:hover:bg-violet-500/5 cursor-pointer"
+            } flex items-center justify-center ${previewClassName ?? "h-32 w-full"}`}
+          >
+            <div className="flex flex-col items-center justify-center gap-2 p-4 text-center">
               {uploading ? (
-                <Loader2 className="h-5 w-5 animate-spin text-violet-500" />
+                <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
               ) : (
                 <>
-                  <Upload className="h-5 w-5 text-violet-500" />
-                  <span className="font-medium">Choose Photo</span>
+                  <ImagePlus
+                    className={`h-6 w-6 mb-1 ${isReadOnly ? "text-zinc-300 dark:text-zinc-700" : "text-zinc-400 group-hover:text-violet-500 transition-colors"}`}
+                  />
+                  {!compact && (
+                    <div className="space-y-1">
+                      <span
+                        className={`text-sm font-medium ${isReadOnly ? "text-zinc-400" : "text-zinc-600 dark:text-zinc-300 group-hover:text-violet-700 dark:group-hover:text-violet-400"}`}
+                      >
+                        Click to upload
+                      </span>
+                      <p className="text-[10px] text-zinc-400">
+                        PNG, JPG up to 10MB
+                      </p>
+                    </div>
+                  )}
                 </>
               )}
-            </Button>
-            {!isReadOnly && (
-              <Button
-                type="button"
-                variant="secondary"
-                className="w-full max-w-[150px] h-10 text-xs"
-                onClick={() => cameraInputRef.current?.click()}
-                disabled={isReadOnly || uploading}
-              >
-                Use Camera
-              </Button>
+            </div>
+
+            {/* Quick Camera Action - Only shows on hover or if compact is true to save space */}
+            {!isReadOnly && !uploading && (
+              <div className="absolute bottom-2 right-2">
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="secondary"
+                  className="h-7 w-7 rounded-full bg-white dark:bg-zinc-800 shadow-sm border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-500 hover:text-violet-600 transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    cameraInputRef.current?.click();
+                  }}
+                  title="Take Photo"
+                >
+                  <Camera className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             )}
           </div>
         </div>
