@@ -86,6 +86,8 @@ export interface MeteredWiwoTransaction {
   id: number;
   transaction_no?: string;
   transaction_date: string;
+  billing_period_from?: string | null;
+  billing_period_to?: string | null;
   transaction_type?: string;
   customer_code: string;
   lpg_site_id: number;

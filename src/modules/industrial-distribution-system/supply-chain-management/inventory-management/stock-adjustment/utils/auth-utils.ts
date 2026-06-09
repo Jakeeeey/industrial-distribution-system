@@ -48,6 +48,18 @@ export function getUserIdFromToken(token: string | null | undefined): number | n
 }
 
 /**
+ * Extract user email from JWT payload (Spring backend uses lowercase 'email' claim).
+ */
+export function getUserEmailFromToken(token: string | null | undefined): string | null {
+  if (!token) return null;
+  const payload = decodeJwtPayload(token);
+  if (!payload) return null;
+  const email = payload.email ?? payload.Email ?? payload.sub;
+  if (typeof email === "string" && email.includes("@")) return email;
+  return null;
+}
+
+/**
  * Extract User Full Name from JWT Payload
  */
 export function getUserNameFromToken(token: string | null | undefined): string {
