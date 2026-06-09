@@ -39,16 +39,21 @@ interface Props {
   onCancel: () => void;
 }
 
-const TX_TYPE_LABELS: Record<TransactionType, { label: string; short: string; color: string }> = {
+const TX_TYPE_LABELS: Record<
+  TransactionType,
+  { label: string; short: string; color: string }
+> = {
   ONBOARDING_BASELINE: {
     label: "Onboarding / Baseline",
     short: "Onboarding",
-    color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+    color:
+      "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
   },
   REGULAR_BILLING: {
     label: "Regular Billing",
     short: "Regular",
-    color: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400",
+    color:
+      "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400",
   },
 };
 
@@ -78,7 +83,8 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
     pressureLine,
   } = useMeteredWiwoBillingForm(txId);
 
-  const isReadOnly = originalStatus === "POSTED" || originalStatus === "CANCELLED";
+  const isReadOnly =
+    originalStatus === "POSTED" || originalStatus === "CANCELLED";
 
   const handleSubmit = async () => {
     const ok = await submit(isOnboarding ? "POSTED" : undefined);
@@ -88,12 +94,12 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
   const handleCancelBilling = async () => {
     if (
       !window.confirm(
-        "Are you sure you want to cancel this billing transaction? This will mark it as CANCELLED and lock the readings."
+        "Are you sure you want to cancel this billing transaction? This will mark it as CANCELLED and lock the readings.",
       )
     ) {
       return;
     }
-    const ok = await submit("CANCELLED"); 
+    const ok = await submit("CANCELLED");
     if (ok) onSuccess();
   };
 
@@ -130,8 +136,11 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
           <Info className="h-4 w-4 mt-0.5 shrink-0" />
           <div>
             <span className="font-bold">Onboarding / Baseline Mode — </span>
-            This records the <span className="font-bold">initial meter baseline reading</span> after
-            WIWO cylinder deployment.{" "}
+            This records the{" "}
+            <span className="font-bold">
+              initial meter baseline reading
+            </span>{" "}
+            after WIWO cylinder deployment.{" "}
             <span className="font-bold text-amber-700 dark:text-amber-300">
               No invoice will be generated.
             </span>{" "}
@@ -153,7 +162,9 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                   ? "New Baseline Record"
                   : "New Metered Billing"}
             </h2>
-            <Badge className={`text-[10px] font-bold uppercase tracking-wider border-none shrink-0 ${txTypeMeta.color}`}>
+            <Badge
+              className={`text-[10px] font-bold uppercase tracking-wider border-none shrink-0 ${txTypeMeta.color}`}
+            >
               {txTypeMeta.short}
             </Badge>
           </div>
@@ -187,10 +198,11 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
             <Button
               onClick={handleSubmit}
               disabled={submitting || !canPost}
-              className={`h-9 px-4 sm:px-6 shadow-lg transition-all active:scale-95 text-xs sm:text-sm flex-1 sm:flex-none ${isOnboarding
+              className={`h-9 px-4 sm:px-6 shadow-lg transition-all active:scale-95 text-xs sm:text-sm flex-1 sm:flex-none ${
+                isOnboarding
                   ? "bg-amber-500 hover:bg-amber-600 shadow-amber-500/20"
                   : "bg-violet-600 hover:bg-violet-700 shadow-violet-500/20"
-                }`}
+              }`}
             >
               {submitting ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -223,8 +235,6 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
               <h2 className="font-semibold">Transaction Details</h2>
             </div>
 
-
-
             {/* Site / Customer Selection */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 border-b border-zinc-100 dark:border-zinc-800/50">
               <div className="space-y-2">
@@ -251,13 +261,18 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                     <SelectTrigger className="w-full">
                       <SelectValue
                         placeholder={
-                          sitesLoading ? "Loading sites..." : "Select LPG Site..."
+                          sitesLoading
+                            ? "Loading sites..."
+                            : "Select LPG Site..."
                         }
                       />
                     </SelectTrigger>
                     <SelectContent>
                       {sites.map((site) => (
-                        <SelectItem key={String(site.id)} value={String(site.id)}>
+                        <SelectItem
+                          key={String(site.id)}
+                          value={String(site.id)}
+                        >
                           {site.site_name
                             ? `${site.site_name} (${site.customer_code})`
                             : `Site #${site.id} (${site.customer_code})`}
@@ -329,7 +344,10 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                     type="date"
                     value={form.transactionDate}
                     onChange={(e) =>
-                      setForm((f) => ({ ...f, transactionDate: e.target.value }))
+                      setForm((f) => ({
+                        ...f,
+                        transactionDate: e.target.value,
+                      }))
                     }
                     className="pl-10"
                     readOnly={isReadOnly}
@@ -351,7 +369,10 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                     type="date"
                     value={form.billingPeriodFrom}
                     onChange={(e) =>
-                      setForm((f) => ({ ...f, billingPeriodFrom: e.target.value }))
+                      setForm((f) => ({
+                        ...f,
+                        billingPeriodFrom: e.target.value,
+                      }))
                     }
                     className="pl-10"
                     readOnly={isReadOnly}
@@ -370,7 +391,10 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                     type="date"
                     value={form.billingPeriodTo}
                     onChange={(e) =>
-                      setForm((f) => ({ ...f, billingPeriodTo: e.target.value }))
+                      setForm((f) => ({
+                        ...f,
+                        billingPeriodTo: e.target.value,
+                      }))
                     }
                     className="pl-10"
                     readOnly={isReadOnly}
@@ -493,7 +517,9 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
               </p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">LPG VAPOR</Label>
+                  <Label className="text-xs text-muted-foreground">
+                    LPG VAPOR
+                  </Label>
                   <Input
                     id="metered-config-lpg-vapor"
                     type="number"
@@ -518,7 +544,10 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                     step="0.0001"
                     value={form.configPsi}
                     onChange={(e) =>
-                      setForm((f) => ({ ...f, configPsi: Number(e.target.value) }))
+                      setForm((f) => ({
+                        ...f,
+                        configPsi: Number(e.target.value),
+                      }))
                     }
                     className="font-mono"
                     readOnly={isReadOnly}
@@ -612,7 +641,10 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                           value={header.id.toString()}
                         >
                           {header.transaction_no} —{" "}
-                          {format(new Date(header.transaction_date), "MMM dd, yyyy")}
+                          {format(
+                            new Date(header.transaction_date),
+                            "MMM dd, yyyy",
+                          )}
                           {header.total_wiwo_kg !== undefined
                             ? ` (${Number(header.total_wiwo_kg).toFixed(4)} kg)`
                             : ""}
@@ -623,7 +655,8 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                 )}
                 {linkedWiwo && (
                   <p className="text-[11px] text-violet-600 dark:text-violet-400 font-semibold">
-                    ✓ WIWO KG: {Number(linkedWiwo.total_wiwo_kg ?? 0).toFixed(4)} kg —
+                    ✓ WIWO KG:{" "}
+                    {Number(linkedWiwo.total_wiwo_kg ?? 0).toFixed(4)} kg —
                     Arbitration will use MAX(Metered, WIWO)
                   </p>
                 )}
@@ -691,9 +724,9 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                   </span>
                 </div>
                 <div className="bg-amber-50 dark:bg-amber-950/20 rounded-xl p-3 text-xs text-amber-700 dark:text-amber-400 mt-2">
-                  <span className="font-bold">No invoice generated.</span> This baseline
-                  reading will be used as the starting point for future Regular Billing
-                  cycles.
+                  <span className="font-bold">No invoice generated.</span> This
+                  baseline reading will be used as the starting point for future
+                  Regular Billing cycles.
                 </div>
               </div>
             </div>
@@ -725,7 +758,9 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                     [
                       "DRAFT",
                       "POSTED",
-                      ...(form.status === "CANCELLED" ? (["CANCELLED"] as const) : []),
+                      ...(form.status === "CANCELLED"
+                        ? (["CANCELLED"] as const)
+                        : []),
                     ] as const
                   ).map((s) => (
                     <button
@@ -733,14 +768,15 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                       type="button"
                       disabled={isReadOnly}
                       onClick={() => setForm((f) => ({ ...f, status: s }))}
-                      className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${form.status === s
+                      className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                        form.status === s
                           ? s === "POSTED"
                             ? "bg-white dark:bg-zinc-700 shadow-sm text-green-600"
                             : s === "CANCELLED"
                               ? "bg-white dark:bg-zinc-700 shadow-sm text-red-600"
                               : "bg-white dark:bg-zinc-700 shadow-sm text-violet-600"
                           : "text-muted-foreground hover:text-zinc-900"
-                        } ${isReadOnly ? "opacity-60 cursor-not-allowed" : ""}`}
+                      } ${isReadOnly ? "opacity-60 cursor-not-allowed" : ""}`}
                     >
                       {s}
                     </button>
@@ -755,7 +791,9 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
               </Label>
               <Textarea
                 value={form.remarks}
-                onChange={(e) => setForm((f) => ({ ...f, remarks: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, remarks: e.target.value }))
+                }
                 placeholder="Internal notes..."
                 className="resize-none h-24"
                 readOnly={isReadOnly}
@@ -764,8 +802,8 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                 !isOnboarding &&
                 !form.remarks.trim() && (
                   <p className="text-[10px] text-red-500 font-semibold mt-1">
-                    ⚠️ Remarks are required because there is a variance between Metered
-                    and WIWO readings.
+                    ⚠️ Remarks are required because there is a variance between
+                    Metered and WIWO readings.
                   </p>
                 )}
             </div>
@@ -795,6 +833,7 @@ export function ImageUploadField({
 }: ImageUploadFieldProps) {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -827,7 +866,8 @@ export function ImageUploadField({
       onChange(result.data.id);
       toast.success(`${label} uploaded successfully`);
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : "Could not upload file";
+      const msg =
+        error instanceof Error ? error.message : "Could not upload file";
       toast.error("Upload failed", {
         description: msg,
       });
@@ -842,11 +882,17 @@ export function ImageUploadField({
 
   return (
     <div className="space-y-2">
-      <Label className="text-xs text-muted-foreground font-semibold">{label}</Label>
+      <Label className="text-xs text-muted-foreground font-semibold">
+        {label}
+      </Label>
       {previewUrl ? (
         <div className="relative group rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center h-28 w-full max-w-[150px] shadow-sm">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={previewUrl} alt={label} className="object-cover h-full w-full" />
+          <img
+            src={previewUrl}
+            alt={label}
+            className="object-cover h-full w-full"
+          />
           {!isReadOnly && (
             <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
               <Button
@@ -871,25 +917,46 @@ export function ImageUploadField({
             className="hidden"
             disabled={isReadOnly || uploading}
           />
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full max-w-[150px] h-28 border-dashed flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-foreground hover:border-violet-500/50 hover:bg-violet-50/10 text-xs transition-all duration-200"
-            onClick={() => fileInputRef.current?.click()}
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            ref={cameraInputRef}
+            onChange={handleFileChange}
+            className="hidden"
             disabled={isReadOnly || uploading}
-          >
-            {uploading ? (
-              <Loader2 className="h-5 w-5 animate-spin text-violet-500" />
-            ) : (
-              <>
-                <Upload className="h-5 w-5 text-violet-500" />
-                <span className="font-medium">Upload Photo</span>
-              </>
+          />
+          <div className="grid gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full max-w-[150px] h-28 border-dashed flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-foreground hover:border-violet-500/50 hover:bg-violet-50/10 text-xs transition-all duration-200"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isReadOnly || uploading}
+            >
+              {uploading ? (
+                <Loader2 className="h-5 w-5 animate-spin text-violet-500" />
+              ) : (
+                <>
+                  <Upload className="h-5 w-5 text-violet-500" />
+                  <span className="font-medium">Choose Photo</span>
+                </>
+              )}
+            </Button>
+            {!isReadOnly && (
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full max-w-[150px] h-10 text-xs"
+                onClick={() => cameraInputRef.current?.click()}
+                disabled={isReadOnly || uploading}
+              >
+                Use Camera
+              </Button>
             )}
-          </Button>
+          </div>
         </div>
       )}
     </div>
   );
 }
-
