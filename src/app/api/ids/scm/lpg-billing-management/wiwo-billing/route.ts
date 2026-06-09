@@ -124,6 +124,7 @@ export async function POST(request: NextRequest) {
         transactionDate: body.transaction_date,
         previousMeterReading: Number(body.previous_reading ?? 0),
         currentMeterReading: Number(body.current_reading ?? 0),
+        meteredKg: typeof body.metered_kg === "number" ? body.metered_kg : undefined,
         pricePerKg: Number(body.price_per_kg ?? 0),
         returnedCylinders: body.returned_cylinders || [],
         newCylinders: body.new_cylinders || [],

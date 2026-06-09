@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
       `${DIRECTUS_URL}/folders?filter[name][_eq]=${targetFolderName}&fields=id`,
       {
         headers: { Authorization: `Bearer ${DIRECTUS_TOKEN}` },
+        cache: "no-store",
       },
     );
     const folderSearch = await folderSearchRes.json();
@@ -41,9 +42,15 @@ export async function POST(req: NextRequest) {
     if (folderId) {
       uploadFormData.append("folder", folderId);
     }
+    
     // Copy all fields from original formData
     for (const [key, value] of formData.entries()) {
-      uploadFormData.append(key, value);
+      if (typeof value === "object" && "name" in value) {
+        // Explicitly pass filename for File objects to ensure undici serializes it correctly
+        uploadFormData.append(key, value, (value as File).name);
+      } else {
+        uploadFormData.append(key, value);
+      }
     }
 
     const response = await fetch(`${DIRECTUS_URL}/files`, {
