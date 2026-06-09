@@ -225,6 +225,7 @@ export default function InventoryControlModule() {
 
       {/* Detail Modal */}
       <InventoryDetailModal
+        key={selectedProduct ? selectedProduct.productId : "none"}
         product={selectedProduct}
         open={selectedProduct !== null}
         onClose={closeModal}

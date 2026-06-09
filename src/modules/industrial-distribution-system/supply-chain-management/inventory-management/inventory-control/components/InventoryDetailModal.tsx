@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useReactToPrint } from "react-to-print";
 
 import {
@@ -64,19 +64,18 @@ export function InventoryDetailModal({
 }: InventoryDetailModalProps) {
   const [activeMode, setActiveMode] = useState<
     "list" | "choice" | "serial" | "barcode"
-  >("list");
-  const [prevProduct, setPrevProduct] = useState<ProductGroup | null>(null);
-  const [selectedSerialIds, setSelectedSerialIds] = useState<Set<number>>(
-    new Set(),
+  >(() => "list");
+
+  const [activeStockFilter, setActiveStockFilter] = useState<
+    "full" | "empty" | null
+  >(() => initialStockFilter ?? null);
+
+  const [selectedSerialIds, setSelectedSerialIds] = useState<Set<number>>(() =>
+    new Set(filteredSerials.map((s) => s.id)),
   );
   const printRef = useRef<HTMLDivElement>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1.0);
-
-  // Track applied stock filter (full / empty / null = all)
-  const [activeStockFilter, setActiveStockFilter] = useState<
-    "full" | "empty" | null
-  >(null);
 
   const toggleSelectAll = () => {
     if (selectedSerialIds.size === displayedSerials.length) {
@@ -230,14 +229,10 @@ export function InventoryDetailModal({
     handlePrint();
   }, [handlePrint]);
 
-  // Reset view selection to list when product changes/dialog opens
-  useEffect(() => {
-    if (!product) return;
-
-    setActiveMode("list");
-    setActiveStockFilter(initialStockFilter ?? null);
-    setSelectedSerialIds(new Set(filteredSerials.map((s) => s.id)));
-  }, [product, initialStockFilter, filteredSerials]);
+  // Note: initial state for mode, stock filter, and selected serials is
+  // provided via useState initializers. We rely on the parent to remount
+  // this component when `product` changes (pass a `key` based on product id)
+  // so the initializers run with the latest props and no effect is needed.
 
   if (!product) return null;
 
