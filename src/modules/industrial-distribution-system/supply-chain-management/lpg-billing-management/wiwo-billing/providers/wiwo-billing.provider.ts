@@ -437,7 +437,7 @@ export async function processOnboardingBaseline(payload: {
         total_returned_cylinders: 0,
         total_deployed_cylinders: assets.length,
         total_billable_kg: 0.000,
-        wiwo_status: "POSTED",
+        wiwo_status: "DRAFT",
         sales_invoice_id: invoice.id,
         sales_invoice_no: invoice.invoice_no,
         remarks: "Onboarding baseline initial setup",
@@ -507,8 +507,8 @@ export async function processOnboardingBaseline(payload: {
         variance_kg: 0,
         billable_source: "NONE",
         billable_kg: 0,
-        status: "POSTED",
-        remarks: "Onboarding baseline initial setup posted.",
+        status: "DRAFT",
+        remarks: "Onboarding baseline initial setup draft.",
         ...withUser(payload.userId, ["created_by", "posted_by"]),
         posted_date: new Date().toISOString(),
       }),
@@ -522,6 +522,7 @@ export async function processOnboardingBaseline(payload: {
 export interface RoutineSwapLineInput {
   siteCylinderId: number; // The active cylinder being swapped out
   returnedGrossWeight: number;
+  isSwapped: boolean;
 }
 
 export interface NewDeploymentLineInput {
@@ -543,6 +544,7 @@ export async function processRegularSwap(payload: {
   userId?: number;
   transactionId?: number;
   isNoSwap?: boolean;
+  meteredKg?: number;
   attachments?: {
     siteCylinderId: number;
     cylinderAssetId: number;
@@ -552,7 +554,7 @@ export async function processRegularSwap(payload: {
 }): Promise<MeteredWiwoTransaction> {
   // Input validations:
   // Completeness Checks & Negative Boundaries
-  const meteredKg = Math.max(0, payload.currentMeterReading - payload.previousMeterReading);
+  const meteredKg = payload.meteredKg !== undefined ? payload.meteredKg : Math.max(0, payload.currentMeterReading - payload.previousMeterReading);
 
   // Gather returned cylinder records
   const returnedDetails: {
@@ -561,6 +563,7 @@ export async function processRegularSwap(payload: {
     tare: number;
     remaining: number;
     consumed: number;
+    isSwapped: boolean;
   }[] = [];
 
   for (const ret of payload.returnedCylinders) {
@@ -580,14 +583,15 @@ export async function processRegularSwap(payload: {
     }
 
     const tare = Number(sc.cylinder_asset_id?.tare_weight ?? 0);
-    const opening = Number(sc.previous_lpg_kg ?? 0);
+    const opening = Number(sc.current_lpg_kg ?? 0);
+    const openingNet = Math.max(0, opening - tare);
 
-    // Guard remaining weight to not exceed the previous/opening LPG kg
+    // Guard remaining weight to not exceed the opening net LPG kg
     let remaining = ret.returnedGrossWeight - tare;
-    if (remaining > opening) {
-      remaining = opening;
+    if (remaining > openingNet) {
+      remaining = openingNet;
     }
-    const consumed = opening - remaining;
+    const consumed = openingNet - remaining;
 
     if (remaining < 0 || consumed < 0) {
       throw new Error(
@@ -605,6 +609,7 @@ export async function processRegularSwap(payload: {
       tare,
       remaining,
       consumed,
+      isSwapped: ret.isSwapped,
     });
   }
 
@@ -658,26 +663,24 @@ export async function processRegularSwap(payload: {
 
   // 1. Process returned cylinders database actions (mark EMPTY/RETURNED and removed_date OR update in-place weight)
   for (const retItem of returnedDetails) {
-    if (payload.isNoSwap) {
-      await directusFetch(`${DIRECTUS_URL}/items/lpg_customer_site_cylinders/${retItem.sc.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          previous_lpg_kg: retItem.remaining,
-          current_lpg_kg: retItem.remaining,
-          ...withUser(payload.userId, ["modified_by"]),
-        }),
-      });
-    } else {
-      await directusFetch(`${DIRECTUS_URL}/items/lpg_customer_site_cylinders/${retItem.sc.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          site_cylinder_status: "RETURNED",
-          removed_date: payload.transactionDate,
-          ...withUser(payload.userId, ["modified_by"]),
-        }),
-      });
+    const isSwapped = retItem.isSwapped;
+    const siteCylUpdate: Record<string, string | number | null> = {
+        previous_lpg_kg: retItem.sc.current_lpg_kg,
+        current_lpg_kg: retItem.returnedGross,
+        ...withUser(payload.userId, ["modified_by"]),
+    };
+    
+    if (isSwapped) {
+        siteCylUpdate.site_cylinder_status = "RETURNED";
+        siteCylUpdate.removed_date = payload.transactionDate;
+    }
 
-      // Reset cylinder asset registry to EMPTY
+    await directusFetch(`${DIRECTUS_URL}/items/lpg_customer_site_cylinders/${retItem.sc.id}`, {
+      method: "PATCH",
+      body: JSON.stringify(siteCylUpdate),
+    });
+
+    if (isSwapped) {
       await directusFetch(`${DIRECTUS_URL}/items/cylinder_assets/${retItem.sc.cylinder_asset_id}`, {
         method: "PATCH",
         body: JSON.stringify({
@@ -825,8 +828,8 @@ export async function processRegularSwap(payload: {
         vat_amount: parseFloat((retItem.consumed * payload.pricePerKg * 0.12).toFixed(2)),
         net_amount: parseFloat((retItem.consumed * payload.pricePerKg * 1.12).toFixed(2)),
         is_billable: 1,
-        result_site_cylinder_status: payload.isNoSwap ? "CONNECTED" : "RETURNED",
-        result_asset_status: payload.isNoSwap ? "WITH_CUSTOMER" : "EMPTY",
+        result_site_cylinder_status: retItem.isSwapped ? "RETURNED" : "CONNECTED",
+        result_asset_status: retItem.isSwapped ? "EMPTY" : "WITH_CUSTOMER",
         ...withUser(payload.userId, ["created_by"]),
       }),
     });
@@ -890,6 +893,7 @@ export async function processRegularSwap(payload: {
           variance_reason_code: payload.varianceReasonCode || "NONE",
           billable_source: billableSource,
           billable_kg: billableKg,
+          price_per_kg: payload.pricePerKg,
           gross_amount: grossAmount,
           vat_amount: vatAmount,
           net_amount: netAmount,
