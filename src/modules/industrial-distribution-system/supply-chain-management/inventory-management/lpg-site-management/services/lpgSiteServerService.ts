@@ -32,9 +32,15 @@ export const lpgSiteService = {
     query += `&filter=${encodeURIComponent(JSON.stringify(filters))}`;
 
     const res = await directusFetch<{ data: LpgSite[]; meta?: { total_count: number } }>(`${DIRECTUS_URL}/items/lpg_customer_lpg_sites?${query}`);
+    const mappedData = (res.data ?? []).map(site => ({
+      ...site,
+      default_pressure_line: site.default_pressure_line ?? 2.0183,
+      default_psi: site.default_psi ?? 10.0,
+      default_atmospheric_pressure: site.default_atmospheric_pressure ?? 14.7,
+    }));
     return {
-      data: res.data,
-      total: res.meta?.total_count || res.data.length
+      data: mappedData,
+      total: res.meta?.total_count || mappedData.length
     };
   },
 
@@ -43,6 +49,11 @@ export const lpgSiteService = {
     // We fetch basic details; cylinders are handled by the SiteCylinderManager's own fetch
     const query = `fields=*,customer.customer_name`;
     const res = await directusFetch<{ data: LpgSite }>(`${DIRECTUS_URL}/items/lpg_customer_lpg_sites/${id}?${query}`);
+    if (res.data) {
+      res.data.default_pressure_line = res.data.default_pressure_line ?? 2.0183;
+      res.data.default_psi = res.data.default_psi ?? 10.0;
+      res.data.default_atmospheric_pressure = res.data.default_atmospheric_pressure ?? 14.7;
+    }
     return res.data;
   },
 

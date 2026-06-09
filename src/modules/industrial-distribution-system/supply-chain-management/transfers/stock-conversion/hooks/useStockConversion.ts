@@ -30,7 +30,7 @@ export function useStockConversion() {
   const validateDuplicateTag = useCallback(async (rfid: string, mode: "source" | "target" = "target"): Promise<{ exists: boolean; reason?: string }> => {
     try {
       const sp = new URLSearchParams({ action: "validate_tag", rfid, mode });
-      const res = await fetch(`/api/scm/transfers/stock-conversion/validate-rfid?${sp.toString()}`, { cache: "no-store" });
+      const res = await fetch(`/api/ids/scm/transfers/stock-conversion/validate-rfid?${sp.toString()}`, { cache: "no-store" });
       if (!res.ok) throw new Error("Validation failed");
       const data = await res.json();
       return { exists: !!data.exists, reason: data.reason };
@@ -47,10 +47,10 @@ export function useStockConversion() {
   const loadProductsInventory = useCallback(async (productIds: number[]) => {
     const fetchableIds = productIds.filter(id => !loadingProductsRef.current.has(id));
     if (!fetchableIds.length) return;
-    
+
     fetchableIds.forEach(id => loadingProductsRef.current.add(id));
 
-    setData(prev => prev.map(p => 
+    setData(prev => prev.map(p =>
       fetchableIds.includes(p.productId) ? { ...p, inventoryLoaded: p.inventoryLoaded ?? false } : p
     ));
 
@@ -59,7 +59,7 @@ export function useStockConversion() {
       const activeBranchId = filters.branchId || "";
       if (activeBranchId !== undefined && activeBranchId !== "") sp.set("branchId", String(activeBranchId));
 
-      const res = await fetch(`/api/scm/transfers/stock-conversion?${sp.toString()}`, { cache: "no-store" });
+      const res = await fetch(`/api/ids/scm/transfers/stock-conversion?${sp.toString()}`, { cache: "no-store" });
       const invJson = await res.json();
       if (!res.ok) throw new Error(invJson.error || "Inventory load failed");
 
@@ -81,7 +81,7 @@ export function useStockConversion() {
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Unknown error";
       console.warn("Inventory fetch failed:", message);
-      setData(prev => prev.map(p => 
+      setData(prev => prev.map(p =>
         fetchableIds.includes(p.productId) ? { ...p, inventoryLoaded: true, inventoryError: true } : p
       ));
     } finally {
@@ -104,15 +104,15 @@ export function useStockConversion() {
       });
       if (activeBranchId) sp.set("branchId", String(activeBranchId));
 
-      const res = await fetch(`/api/scm/transfers/stock-conversion?${sp.toString()}`, { cache: "no-store" });
+      const res = await fetch(`/api/ids/scm/transfers/stock-conversion?${sp.toString()}`, { cache: "no-store" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to fetch stock conversion data");
-      
+
       const newData = json.data || [];
       setData(newData);
       setTotalCount(json.totalCount || 0);
       if (json.options) setOptions(json.options);
-      
+
       if (newData.length && !newData[0].inventoryLoaded) {
         loadProductsInventory(newData.map((p: StockConversionProduct) => p.productId));
       }
@@ -132,7 +132,7 @@ export function useStockConversion() {
     setIsUpdating(true);
     setConvertingId(payload.productId);
     try {
-      const res = await fetch("/api/scm/transfers/stock-conversion", {
+      const res = await fetch("/api/ids/scm/transfers/stock-conversion", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -141,7 +141,7 @@ export function useStockConversion() {
       if (!res.ok) throw new Error(resData.error || "Failed to convert stock");
 
       toast.success("Stock conversion complete!");
-      
+
       setData(prev => prev.map(p => {
         if (p.productId === payload.productId) {
           const newQty = Math.max(0, p.quantity - payload.quantityToConvert);

@@ -4,60 +4,60 @@ import { useEffect, useState, useCallback } from 'react';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface DeptAttendanceRow {
-  log_id:          number | null;
-  user_id:         number;
-  user_fname:      string;
-  user_lname:      string;
-  user_position:   string;
-  user_image:      string | null;
-  department_id:   number;
+  log_id: number | null;
+  user_id: number;
+  user_fname: string;
+  user_lname: string;
+  user_position: string;
+  user_image: string | null;
+  department_id: number;
   department_name: string;
-  log_date:        string;       // always YYYY-MM-DD
-  time_in:         string | null;
-  time_out:        string | null;
-  lunch_start:     string | null;
-  lunch_end:       string | null;
-  break_start:     string | null;
-  break_end:       string | null;
-  status:          string;
-  work_start:      string | null;
-  work_end:        string | null;
-  grace_period:    number;
+  log_date: string;       // always YYYY-MM-DD
+  time_in: string | null;
+  time_out: string | null;
+  lunch_start: string | null;
+  lunch_end: string | null;
+  break_start: string | null;
+  break_end: string | null;
+  status: string;
+  work_start: string | null;
+  work_end: string | null;
+  grace_period: number;
   // Server-computed — never re-derived on the client
-  work_hours:      number;       // minutes
-  overtime:        number;       // minutes
-  late:            number;       // minutes
-  punctuality:     string | null; // "On Time" | "Late" | null
+  work_hours: number;       // minutes
+  overtime: number;       // minutes
+  late: number;       // minutes
+  punctuality: string | null; // "On Time" | "Late" | null
   // On-call
-  is_oncall:           boolean;
-  oncall_work_start:   string | null;
-  oncall_work_end:     string | null;
-  oncall_lunch_start:  string | null;
-  oncall_lunch_end:    string | null;
-  oncall_break_start:  string | null;
-  oncall_break_end:    string | null;
+  is_oncall: boolean;
+  oncall_work_start: string | null;
+  oncall_work_end: string | null;
+  oncall_lunch_start: string | null;
+  oncall_lunch_end: string | null;
+  oncall_break_start: string | null;
+  oncall_break_end: string | null;
 }
 
 export interface Department {
-  department_id:   number;
+  department_id: number;
   department_name: string;
-  work_start:      string | null;
-  work_end:        string | null;
-  grace_period:    number;
+  work_start: string | null;
+  work_end: string | null;
+  grace_period: number;
 }
 
 interface UseDepartmentReportResult {
-  loading:      boolean;
+  loading: boolean;
   loadingDepts: boolean;
-  error:        string | null;
-  rows:         DeptAttendanceRow[];
-  departments:  Department[];
-  refetch:      () => void;
+  error: string | null;
+  rows: DeptAttendanceRow[];
+  departments: Department[];
+  refetch: () => void;
 }
 
 // ─── Base API path ────────────────────────────────────────────────────────────
 // Single source of truth — change here if the route moves again.
-const API_BASE = '/api/hrm/workforce/attendance-report/department-report';
+const API_BASE = '/api/ids/hrm/workforce/attendance-report/department-report';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -87,10 +87,10 @@ function extractDate(raw: unknown): string {
 }
 
 function mapLog(l: Record<string, unknown>): DeptAttendanceRow {
-  const serverLate     = Number(l.late      ?? 0);
-  const serverOvertime = Number(l.overtime  ?? 0);
+  const serverLate = Number(l.late ?? 0);
+  const serverOvertime = Number(l.overtime ?? 0);
   const serverWorkMins = Number(l.work_mins ?? 0);
-  const status         = String(l.status ?? 'Absent');
+  const status = String(l.status ?? 'Absent');
 
   // Prefer server-computed punctuality field; fall back to late-based derivation
   // only if the server omits it (shouldn't happen with current route).
@@ -106,38 +106,38 @@ function mapLog(l: Record<string, unknown>): DeptAttendanceRow {
           : null;
 
   return {
-    log_id:          l.log_id != null ? Number(l.log_id) : null,
-    user_id:         Number(l.user_id),
-    user_fname:      String(l.user_fname    ?? '—'),
-    user_lname:      String(l.user_lname    ?? '—'),
-    user_position:   String(l.user_position ?? '—'),
-    user_image:      (l.user_image as string | null) ?? null,
-    department_id:   Number(l.department_id ?? 0),
+    log_id: l.log_id != null ? Number(l.log_id) : null,
+    user_id: Number(l.user_id),
+    user_fname: String(l.user_fname ?? '—'),
+    user_lname: String(l.user_lname ?? '—'),
+    user_position: String(l.user_position ?? '—'),
+    user_image: (l.user_image as string | null) ?? null,
+    department_id: Number(l.department_id ?? 0),
     department_name: String(l.department_name ?? '—'),
-    log_date:        extractDate(l.log_date),
-    time_in:         extractTime(l.time_in),
-    time_out:        extractTime(l.time_out),
-    lunch_start:     extractTime(l.lunch_start),
-    lunch_end:       extractTime(l.lunch_end),
-    break_start:     extractTime(l.break_start),
-    break_end:       extractTime(l.break_end),
-    status:          status,
-    work_start:      extractTime(l.work_start),
-    work_end:        extractTime(l.work_end),
-    grace_period:    Number(l.grace_period ?? 5),
+    log_date: extractDate(l.log_date),
+    time_in: extractTime(l.time_in),
+    time_out: extractTime(l.time_out),
+    lunch_start: extractTime(l.lunch_start),
+    lunch_end: extractTime(l.lunch_end),
+    break_start: extractTime(l.break_start),
+    break_end: extractTime(l.break_end),
+    status: status,
+    work_start: extractTime(l.work_start),
+    work_end: extractTime(l.work_end),
+    grace_period: Number(l.grace_period ?? 5),
     // Server-computed fields — coerced to number, never undefined
-    work_hours:      serverWorkMins,
-    overtime:        serverOvertime,
-    late:            serverLate,
-    punctuality:     serverPunctuality,
+    work_hours: serverWorkMins,
+    overtime: serverOvertime,
+    late: serverLate,
+    punctuality: serverPunctuality,
     // On-call
-    is_oncall:           !!(l.is_oncall),
-    oncall_work_start:   extractTime(l.oncall_work_start)  ?? null,
-    oncall_work_end:     extractTime(l.oncall_work_end)    ?? null,
-    oncall_lunch_start:  extractTime(l.oncall_lunch_start) ?? null,
-    oncall_lunch_end:    extractTime(l.oncall_lunch_end)   ?? null,
-    oncall_break_start:  extractTime(l.oncall_break_start) ?? null,
-    oncall_break_end:    extractTime(l.oncall_break_end)   ?? null,
+    is_oncall: !!(l.is_oncall),
+    oncall_work_start: extractTime(l.oncall_work_start) ?? null,
+    oncall_work_end: extractTime(l.oncall_work_end) ?? null,
+    oncall_lunch_start: extractTime(l.oncall_lunch_start) ?? null,
+    oncall_lunch_end: extractTime(l.oncall_lunch_end) ?? null,
+    oncall_break_start: extractTime(l.oncall_break_start) ?? null,
+    oncall_break_end: extractTime(l.oncall_break_end) ?? null,
   };
 }
 
@@ -154,14 +154,14 @@ function mapLog(l: Record<string, unknown>): DeptAttendanceRow {
  */
 export function useDepartmentReport(
   deptId: number | null,
-  from:   string,
-  to:     string,
+  from: string,
+  to: string,
 ): UseDepartmentReportResult {
   const [loadingDepts, setLoadingDepts] = useState(true);
-  const [loading,      setLoading]      = useState(false);
-  const [error,        setError]        = useState<string | null>(null);
-  const [rows,         setRows]         = useState<DeptAttendanceRow[]>([]);
-  const [departments,  setDepartments]  = useState<Department[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [rows, setRows] = useState<DeptAttendanceRow[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
 
   // ── Step 1: fetch department list once on mount ───────────────────────────
   // Lightweight — dummy date range returns zero logs, only the dept array.
@@ -180,11 +180,11 @@ export function useDepartmentReport(
         if (cancelled) return;
         const depts: Department[] = (data.departments ?? []).map(
           (d: Record<string, unknown>) => ({
-            department_id:   Number(d.department_id),
+            department_id: Number(d.department_id),
             department_name: String(d.department_name ?? ''),
-            work_start:      d.work_start ? String(d.work_start).slice(0, 5) : null,
-            work_end:        d.work_end   ? String(d.work_end).slice(0, 5)   : null,
-            grace_period:    Number(d.grace_period ?? 5),
+            work_start: d.work_start ? String(d.work_start).slice(0, 5) : null,
+            work_end: d.work_end ? String(d.work_end).slice(0, 5) : null,
+            grace_period: Number(d.grace_period ?? 5),
           }),
         );
         setDepartments(depts);
@@ -211,7 +211,7 @@ export function useDepartmentReport(
     try {
       // Ensure dates are in correct order for the API
       const [fromDate, toDate] = from <= to ? [from, to] : [to, from];
-      
+
       const params = new URLSearchParams({
         from: fromDate,
         to: toDate,
@@ -223,7 +223,7 @@ export function useDepartmentReport(
 
       const data = await res.json();
       const rawLogs: Record<string, unknown>[] = data.logs ?? [];
-      const mapped  = rawLogs.map(mapLog);
+      const mapped = rawLogs.map(mapLog);
 
       // Client-side date guard — protects against server timezone edge cases
       // Only filter if we have valid log_date values

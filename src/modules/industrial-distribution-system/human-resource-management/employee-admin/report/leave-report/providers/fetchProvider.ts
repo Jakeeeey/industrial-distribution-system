@@ -10,7 +10,7 @@ import type {
 
 export async function fetchLeaveReportData() {
   try {
-    const response = await fetch("/api/hrm/employee-admin/report/leave-report", {
+    const response = await fetch("/api/ids/hrm/employee-admin/report/leave-report", {
       credentials: "include",
     });
 

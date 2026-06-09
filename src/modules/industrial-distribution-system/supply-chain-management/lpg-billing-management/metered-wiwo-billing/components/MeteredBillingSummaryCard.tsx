@@ -15,19 +15,31 @@ interface Props {
   netAmount: number;
   pricePerKg: number;
   isMeteredOnly?: boolean;
+  /** LPG VAPOR constant (e.g. 2.0183) */
+  lpgVapor?: number;
+  /** PSI gauge pressure (e.g. 10.0000) */
+  psi?: number;
+  /** Computed Pressure Line = (PSI + CF) / CF (e.g. 1.6803) */
+  pressureLine?: number;
 }
 
 export function MeteredBillingSummaryCard(props: Props) {
   const {
     meteredKg,
-    wiwoKg,
+    // wiwoKg,
     varianceKg,
     billableKg,
     billableSource,
     netAmount,
     pricePerKg,
     isMeteredOnly = false,
+    lpgVapor,
+    psi = 0,
+    pressureLine,
   } = props;
+
+  const hasPsi = psi > 0;
+
   return (
     <div className="bg-gradient-to-br from-violet-600 via-purple-700 to-indigo-800 rounded-2xl p-6 text-white shadow-2xl shadow-violet-500/30 space-y-4">
       <div className="flex items-center gap-2 mb-1">
@@ -42,15 +54,15 @@ export function MeteredBillingSummaryCard(props: Props) {
         <div className="bg-white/10 rounded-xl p-3 space-y-1.5 text-sm">
           <div className="flex justify-between text-violet-100">
             <span>Metered KG</span>
-            <span className="font-mono font-bold">{Number(meteredKg).toFixed(3)} kg</span>
+            <span className="font-mono font-bold">{Number(meteredKg).toFixed(4)} kg</span>
           </div>
-          <div className="flex justify-between text-violet-100">
+          {/* <div className="flex justify-between text-violet-100">
             <span>WIWO KG</span>
-            <span className="font-mono font-bold">{Number(wiwoKg).toFixed(3)} kg</span>
-          </div>
+            <span className="font-mono font-bold">{Number(wiwoKg).toFixed(4)} kg</span>
+          </div> */}
           <div className="flex justify-between text-violet-200 border-t border-white/10 pt-1.5">
             <span>Variance</span>
-            <span className="font-mono">{Number(varianceKg).toFixed(3)} kg</span>
+            <span className="font-mono">{Number(varianceKg).toFixed(4)} kg</span>
           </div>
         </div>
       )}
@@ -74,11 +86,44 @@ export function MeteredBillingSummaryCard(props: Props) {
         </div>
       )}
 
+      {/* PSI Conversion — matching billing table columns */}
+      {hasPsi && lpgVapor !== undefined && pressureLine !== undefined && (
+        <div className="bg-white/10 rounded-xl overflow-hidden">
+          <div className="px-3 py-1.5 bg-white/10 border-b border-white/10">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/70">PSI Conversion</p>
+          </div>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-white/10">
+                <th className="text-right px-3 py-1.5 text-[10px] font-bold text-violet-200 uppercase tracking-wider">
+                  Pressure Line
+                </th>
+                <th className="text-right px-3 py-1.5 text-[10px] font-bold text-orange-200 uppercase tracking-wider">
+                  LPG Vapor
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                {/* Pressure Line column = LPG Vapor constant (matching physical bill table) */}
+                <td className="text-right px-3 py-2 font-mono font-bold text-violet-200">
+                  {lpgVapor.toFixed(4)}
+                </td>
+                {/* LPG Vapor column = computed pressure line (matching physical bill table) */}
+                <td className="text-right px-3 py-2 font-mono font-bold text-orange-200">
+                  {pressureLine.toFixed(4)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {/* Billing breakdown */}
       <div className="space-y-2.5 text-sm">
         <div className="flex justify-between text-violet-100">
           <span>{isMeteredOnly ? "Metered KG" : "Billable KG"}</span>
-          <span className="font-bold font-mono">{Number(billableKg).toFixed(3)} kg</span>
+          <span className="font-bold font-mono">{Number(billableKg).toFixed(4)} kg</span>
         </div>
         <div className="flex justify-between text-violet-100">
           <span>Price / KG</span>
@@ -95,4 +140,3 @@ export function MeteredBillingSummaryCard(props: Props) {
     </div>
   );
 }
-

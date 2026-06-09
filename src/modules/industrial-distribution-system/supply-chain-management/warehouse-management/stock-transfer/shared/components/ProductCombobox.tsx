@@ -27,7 +27,7 @@ export function ProductCombobox({ onSelect }: ProductComboboxProps) {
       setLoading(true);
       try {
         const query = search ? `&search=${encodeURIComponent(search)}` : '';
-        const res = await fetch(`/api/scm/warehouse-management/stock-transfer?action=products${query}`);
+        const res = await fetch(`/api/ids/scm/warehouse-management/stock-transfer?action=products${query}`);
         if (!res.ok) throw new Error('Failed to fetch products');
         const json = await res.json();
         if (active) {
@@ -74,8 +74,8 @@ export function ProductCombobox({ onSelect }: ProductComboboxProps) {
                 <span className="font-bold text-xs">{product.product_name}</span>
                 <span className="text-[9px] text-muted-foreground uppercase font-black tracking-widest opacity-70">
                   {product.barcode || (product as { product_code?: string }).product_code || 'NO-REF'} • {' '}
-                  {typeof product.product_brand === 'object' && product.product_brand !== null 
-                    ? (product.product_brand as { brand_name?: string }).brand_name || 'GENERIC' 
+                  {typeof product.product_brand === 'object' && product.product_brand !== null
+                    ? (product.product_brand as { brand_name?: string }).brand_name || 'GENERIC'
                     : String(product.product_brand || 'GENERIC')}
                 </span>
               </div>

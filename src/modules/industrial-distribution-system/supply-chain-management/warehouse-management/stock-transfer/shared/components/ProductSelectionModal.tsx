@@ -34,14 +34,14 @@ export function ProductSelectionModal({ open, onOpenChange, onSelect, sourceBran
   // Fetch products
   useEffect(() => {
     if (!open) return;
-    
+
     let active = true;
     (async () => {
       setLoading(true);
       try {
         const query = search ? `&search=${encodeURIComponent(search)}` : '';
         const branchQuery = sourceBranch ? `&branch_id=${sourceBranch}` : '';
-        const res = await fetch(`/api/scm/warehouse-management/stock-transfer?action=products${query}${branchQuery}`);
+        const res = await fetch(`/api/ids/scm/warehouse-management/stock-transfer?action=products${query}${branchQuery}`);
         if (!res.ok) throw new Error('Failed to fetch products');
         const json = await res.json();
         if (active) {
@@ -79,7 +79,7 @@ export function ProductSelectionModal({ open, onOpenChange, onSelect, sourceBran
                     Select products from Master SKU for this transfer.
                   </DialogDescription>
                 </div>
-                <Button 
+                <Button
                   size="sm"
                   variant="default"
                   onClick={() => onOpenChange(false)}
@@ -89,7 +89,7 @@ export function ProductSelectionModal({ open, onOpenChange, onSelect, sourceBran
                   Save Selection
                 </Button>
               </div>
-              
+
               <div className="mt-4 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/40" />
                 <Input
@@ -116,7 +116,7 @@ export function ProductSelectionModal({ open, onOpenChange, onSelect, sourceBran
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-8">
                   {products.map((product) => (
-                    <div 
+                    <div
                       key={product.product_id}
                       className="group relative bg-background border border-border/60 rounded-xl overflow-hidden hover:border-primary/30 hover:shadow-sm transition-all duration-300 flex flex-col"
                     >
@@ -126,20 +126,20 @@ export function ProductSelectionModal({ open, onOpenChange, onSelect, sourceBran
                         </div>
                         <div className="absolute top-2 left-2">
                           <Badge variant="outline" className="bg-background/80 backdrop-blur-sm text-[8px] font-black tracking-widest uppercase border-border/50">
-                            {typeof product.product_brand === 'object' && product.product_brand !== null 
-                              ? (product.product_brand as { brand_name?: string }).brand_name 
+                            {typeof product.product_brand === 'object' && product.product_brand !== null
+                              ? (product.product_brand as { brand_name?: string }).brand_name
                               : product.product_brand || 'GENERIC'}
                           </Badge>
                         </div>
                       </div>
-                      
+
                       <div className="p-3 flex-1 flex flex-col gap-3">
                         <div className="space-y-1.5 flex-1">
                           <h3 className="font-bold text-xs line-clamp-2 leading-[1.3] text-foreground/90 font-sans group-hover:text-primary transition-colors">
                             {product.product_name}
                           </h3>
                           <div className="flex flex-wrap gap-2">
-                             <div className="flex items-center gap-1 text-[9px] text-muted-foreground/60 font-mono">
+                            <div className="flex items-center gap-1 text-[9px] text-muted-foreground/60 font-mono">
                               <span>ID: {product.product_id}</span>
                             </div>
                             <div className="flex items-center gap-1 text-[9px] text-primary/70 font-bold uppercase tracking-tighter">
@@ -153,9 +153,9 @@ export function ProductSelectionModal({ open, onOpenChange, onSelect, sourceBran
                           <div className="text-xs font-black text-primary font-mono bg-primary/5 px-2 py-0.5 rounded">
                             ₱{Number((product as { cost_per_unit?: number }).cost_per_unit || 0).toLocaleString()}
                           </div>
-                          <Button 
-                            size="sm" 
-                            variant="ghost" 
+                          <Button
+                            size="sm"
+                            variant="ghost"
                             className="h-7 text-[10px] font-black uppercase tracking-widest hov hover:bg-primary/10 hover:text-primary rounded-md"
                             onClick={() => handleSelect(product)}
                           >
@@ -189,8 +189,8 @@ export function ProductSelectionModal({ open, onOpenChange, onSelect, sourceBran
                 ) : (
                   selectedProducts.map((p, idx) => {
                     const pid = p.product_id;
-                    const uom = typeof p.unit_of_measurement === 'object' && p.unit_of_measurement !== null 
-                      ? (p.unit_of_measurement as { unit_name?: string }).unit_name 
+                    const uom = typeof p.unit_of_measurement === 'object' && p.unit_of_measurement !== null
+                      ? (p.unit_of_measurement as { unit_name?: string }).unit_name
                       : (p.unit_of_measurement || 'PCS');
                     const qty = (p as EnrichedProduct & { quantity?: number }).quantity || 1;
 
@@ -207,15 +207,15 @@ export function ProductSelectionModal({ open, onOpenChange, onSelect, sourceBran
                             <Trash2 className="w-3 h-3" />
                           </Button>
                         </div>
-                        
+
                         <div className="flex items-center justify-between">
-                           <QuantityStepper 
-                             value={qty}
-                             max={9999}
-                             onChange={(val) => onUpdateQty?.(Number(pid), val)}
-                             className="h-7 w-fit"
-                             size="sm"
-                           />
+                          <QuantityStepper
+                            value={qty}
+                            max={9999}
+                            onChange={(val) => onUpdateQty?.(Number(pid), val)}
+                            className="h-7 w-fit"
+                            size="sm"
+                          />
                           <div className="flex flex-col items-end">
                             <span className="font-black text-primary text-[11px] font-mono tracking-tighter">₱{Number((p as { totalAmount?: number }).totalAmount || (p as { cost_per_unit?: number }).cost_per_unit || 0).toLocaleString()}</span>
                             <span className="text-[8px] font-bold text-muted-foreground/50 uppercase tracking-widest">{uom}</span>
