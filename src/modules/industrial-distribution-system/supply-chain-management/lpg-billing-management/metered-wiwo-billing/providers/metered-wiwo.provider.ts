@@ -33,12 +33,13 @@ function mapTxRecord(raw: Record<string, unknown>): MeteredWiwoTransaction {
       ? (raw["wiwo_header_id"] as Record<string, unknown>)
       : null;
 
-  const txNo = String(raw["transaction_no"] ?? raw["reading_no"] ?? "-");
+  const txNo = String(raw["transaction_no"] ?? "");
+  const readingNo = mrObj && mrObj["reading_no"] ? String(mrObj["reading_no"]) : String(raw["reading_no"] ?? "");
 
   return {
     id: Number(raw["id"]),
     transaction_no: txNo,
-    reading_no: txNo,
+    reading_no: readingNo,
     transaction_type: (raw["transaction_type"] as TransactionType) ?? "REGULAR_BILLING",
     transaction_date: String(raw["transaction_date"] ?? ""),
     customer_code: String(raw["customer_code"] ?? ""),
@@ -90,6 +91,7 @@ function mapTxRecord(raw: Record<string, unknown>): MeteredWiwoTransaction {
     meter_reading: mrObj
       ? {
           id: Number(mrObj["id"]),
+          reading_no: mrObj["reading_no"] ? String(mrObj["reading_no"]) : undefined,
           lpg_site_id: siteId ?? 0,
           reading_date: String(mrObj["reading_date"] ?? ""),
           previous_reading: Number(mrObj["previous_reading"] ?? 0),
@@ -126,6 +128,7 @@ const TX_FIELDS = [
   "lpg_site_id.default_psi",
   "lpg_site_id.default_atmospheric_pressure",
   "meter_reading_id.id",
+  "meter_reading_id.reading_no",
   "meter_reading_id.reading_date",
   "meter_reading_id.previous_reading",
   "meter_reading_id.current_reading",
@@ -257,7 +260,29 @@ export async function fetchMeteredTransactionById(
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions/${id}?fields=${TX_FIELDS}`
   );
   if (!res.data) return null;
-  return mapTxRecord(res.data);
+  const tx = mapTxRecord(res.data);
+
+  try {
+    const attsRes = await directusFetch<{ data: Record<string, unknown>[] }>(
+      `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments?filter[transaction_id][_eq]=${id}&limit=-1`
+    );
+    if (attsRes.data) {
+      tx.attachments = attsRes.data.map((item) => ({
+        id: Number(item.id),
+        transaction_id: Number(item.transaction_id),
+        site_cylinder_id: item.site_cylinder_id ? Number(item.site_cylinder_id) : null,
+        cylinder_asset_id: item.cylinder_asset_id ? Number(item.cylinder_asset_id) : null,
+        attachment_type: item.attachment_type as "SERIAL_IMAGE" | "WEIGHT_IMAGE" | "GENERAL_PHOTO",
+        directus_file_id: String(item.directus_file_id),
+        created_by: item.created_by ? Number(item.created_by) : null,
+        created_at: item.created_at ? String(item.created_at) : undefined,
+      }));
+    }
+  } catch (err) {
+    console.error("Failed to fetch transaction attachments:", err);
+  }
+
+  return tx;
 }
 
 // ─── Meter Reading — create / update ─────────────────────────────────────────
@@ -351,7 +376,7 @@ async function buildBridgePayload(
   isUpdate = false
 ): Promise<Record<string, unknown>> {
   const data: Record<string, unknown> = {
-    transaction_no: payload.reading_no,
+    transaction_no: payload.transaction_no || payload.reading_no,
     transaction_type: payload.transaction_type ?? "REGULAR_BILLING",
     transaction_date: payload.transaction_date || new Date().toISOString().split("T")[0],
     customer_code: payload.customer_code,
@@ -436,6 +461,21 @@ export async function createMeteredTransaction(
     { method: "POST", body: JSON.stringify(bridgeData) }
   );
 
+  // 4. Save attachments
+  if (payload.attachments && payload.attachments.length > 0) {
+    for (const att of payload.attachments) {
+      await directusFetch(`${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments`, {
+        method: "POST",
+        body: JSON.stringify({
+          transaction_id: res.data.id,
+          attachment_type: att.attachment_type,
+          directus_file_id: att.directus_file_id,
+          created_by: userId,
+        }),
+      }).catch((err) => console.error("Failed to save attachment:", err));
+    }
+  }
+
   return {
     ...payload,
     id: res.data.id,
@@ -484,6 +524,36 @@ export async function updateMeteredTransaction(
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions/${id}`,
     { method: "PATCH", body: JSON.stringify(bridgeData) }
   );
+
+  // 5. Update attachments (delete existing, then insert new ones)
+  try {
+    const existingAttsRes = await directusFetch<{ data: { id: number }[] }>(
+      `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments?filter[transaction_id][_eq]=${id}&fields=id`
+    );
+    const existingAttIds = (existingAttsRes.data || []).map((a) => a.id);
+    if (existingAttIds.length > 0) {
+      await directusFetch(`${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments`, {
+        method: "DELETE",
+        body: JSON.stringify(existingAttIds),
+      });
+    }
+  } catch (err) {
+    console.error("Failed to delete existing attachments:", err);
+  }
+
+  if (payload.attachments && payload.attachments.length > 0) {
+    for (const att of payload.attachments) {
+      await directusFetch(`${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments`, {
+        method: "POST",
+        body: JSON.stringify({
+          transaction_id: id,
+          attachment_type: att.attachment_type,
+          directus_file_id: att.directus_file_id,
+          created_by: userId,
+        }),
+      }).catch((err) => console.error("Failed to save attachment:", err));
+    }
+  }
 
   return {
     id,

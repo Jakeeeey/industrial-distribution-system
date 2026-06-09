@@ -1,5 +1,6 @@
 "use client";
 
+import React, { useState, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,8 @@ import {
   Gauge,
   Info,
   Link2,
+  Upload,
+  X,
 } from "lucide-react";
 import { MeteredReadingPanel } from "./MeteredReadingPanel";
 import { VariancePanel } from "./VariancePanel";
@@ -27,6 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { format } from "date-fns";
+import { toast } from "sonner";
 import type { TransactionType } from "../types";
 
 interface Props {
@@ -77,7 +81,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
   const isReadOnly = originalStatus === "POSTED" || originalStatus === "CANCELLED";
 
   const handleSubmit = async () => {
-    const ok = await submit();
+    const ok = await submit(isOnboarding ? "POSTED" : undefined);
     if (ok) onSuccess();
   };
 
@@ -89,7 +93,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
     ) {
       return;
     }
-    const ok = await submit("CANCELLED");
+    const ok = await submit("CANCELLED"); 
     if (ok) onSuccess();
   };
 
@@ -137,19 +141,19 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-150 dark:border-zinc-800/60 pb-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-black bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-xl font-black bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent truncate max-w-full sm:max-w-xs md:max-w-none">
               {txId
                 ? isOnboarding
                   ? "Edit Baseline Record"
                   : "Edit Metered Billing"
                 : isOnboarding
-                ? "New Baseline Record"
-                : "New Metered Billing"}
+                  ? "New Baseline Record"
+                  : "New Metered Billing"}
             </h2>
-            <Badge className={`text-[10px] font-bold uppercase tracking-wider border-none ${txTypeMeta.color}`}>
+            <Badge className={`text-[10px] font-bold uppercase tracking-wider border-none shrink-0 ${txTypeMeta.color}`}>
               {txTypeMeta.short}
             </Badge>
           </div>
@@ -159,12 +163,12 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
               : "Billing source: MAX(Metered KG, WIWO KG)"}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end w-full sm:w-auto">
           <Button
             variant="ghost"
             size="sm"
             onClick={onCancel}
-            className="h-9 px-4 hover:bg-red-50 hover:text-red-600"
+            className="h-9 px-4 hover:bg-red-50 hover:text-red-600 text-xs sm:text-sm flex-1 sm:flex-none"
           >
             {isReadOnly ? "Close" : "Cancel"}
           </Button>
@@ -174,7 +178,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
               variant="outline"
               disabled={submitting}
               onClick={handleCancelBilling}
-              className="h-9 px-4 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 transition-all active:scale-95"
+              className="h-9 px-4 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 transition-all active:scale-95 text-xs sm:text-sm flex-1 sm:flex-none"
             >
               Cancel Billing
             </Button>
@@ -183,11 +187,10 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
             <Button
               onClick={handleSubmit}
               disabled={submitting || !canPost}
-              className={`h-9 px-6 shadow-lg transition-all active:scale-95 ${
-                isOnboarding
+              className={`h-9 px-4 sm:px-6 shadow-lg transition-all active:scale-95 text-xs sm:text-sm flex-1 sm:flex-none ${isOnboarding
                   ? "bg-amber-500 hover:bg-amber-600 shadow-amber-500/20"
                   : "bg-violet-600 hover:bg-violet-700 shadow-violet-500/20"
-              }`}
+                }`}
             >
               {submitting ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -201,8 +204,8 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
               {isOnboarding
                 ? "Record Baseline"
                 : form.status === "POSTED"
-                ? "Post Billing"
-                : "Save Draft"}
+                  ? "Post Billing"
+                  : "Save Draft"}
             </Button>
           )}
         </div>
@@ -220,40 +223,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
               <h2 className="font-semibold">Transaction Details</h2>
             </div>
 
-            {/* Transaction Type Selector — only for new records */}
-            {!txId && (
-              <div className="pb-4 border-b border-zinc-100 dark:border-zinc-800/50">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">
-                  Transaction Type
-                </Label>
-                <div className="flex gap-2 p-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl w-fit">
-                  {(["REGULAR_BILLING", "ONBOARDING_BASELINE"] as TransactionType[]).map(
-                    (t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() =>
-                          setForm((f) => ({
-                            ...f,
-                            transactionType: t,
-                            wiwoHeaderId: null,
-                          }))
-                        }
-                        className={`py-2 px-4 text-xs font-bold rounded-lg transition-all ${
-                          form.transactionType === t
-                            ? t === "ONBOARDING_BASELINE"
-                              ? "bg-white dark:bg-zinc-700 shadow-sm text-amber-600"
-                              : "bg-white dark:bg-zinc-700 shadow-sm text-violet-600"
-                            : "text-muted-foreground hover:text-zinc-900 dark:hover:text-zinc-100"
-                        }`}
-                      >
-                        {TX_TYPE_LABELS[t].label}
-                      </button>
-                    )
-                  )}
-                </div>
-              </div>
-            )}
+
 
             {/* Site / Customer Selection */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 border-b border-zinc-100 dark:border-zinc-800/50">
@@ -267,8 +237,8 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                       form.siteName
                         ? `${form.siteName} (${form.customerCode})`
                         : form.customerCode
-                        ? `${form.customerCode} - Site ID ${form.siteId}`
-                        : "—"
+                          ? `${form.customerCode} - Site ID ${form.siteId}`
+                          : "—"
                     }
                     readOnly
                     className="bg-zinc-50 dark:bg-zinc-800"
@@ -324,7 +294,26 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                       setForm((f) => ({ ...f, transactionNo: e.target.value }))
                     }
                     className="pl-10 font-mono"
+                    readOnly={isReadOnly || isOnboarding}
+                  />
+                </div>
+              </div>
+              {/* Reading No */}
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Reading No
+                </Label>
+                <div className="relative">
+                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="metered-reading-no"
+                    value={form.readingNo}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, readingNo: e.target.value }))
+                    }
+                    className="pl-10 font-mono"
                     readOnly={isReadOnly}
+                    placeholder="MTR-XXXXXXXXX"
                   />
                 </div>
               </div>
@@ -347,8 +336,49 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                   />
                 </div>
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+              {/* Billing Period From */}
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Billing Period From
+                </Label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="metered-billing-from"
+                    type="date"
+                    value={form.billingPeriodFrom}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, billingPeriodFrom: e.target.value }))
+                    }
+                    className="pl-10"
+                    readOnly={isReadOnly}
+                  />
+                </div>
+              </div>
+              {/* Billing Period To */}
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Billing Period To
+                </Label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="metered-billing-to"
+                    type="date"
+                    value={form.billingPeriodTo}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, billingPeriodTo: e.target.value }))
+                    }
+                    className="pl-10"
+                    readOnly={isReadOnly}
+                  />
+                </div>
+              </div>
               {/* Price / KG — hidden for onboarding */}
-              {!isOnboarding && (
+              {!isOnboarding ? (
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Price / KG
@@ -373,6 +403,8 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                     />
                   </div>
                 </div>
+              ) : (
+                <div />
               )}
             </div>
 
@@ -381,7 +413,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
                 Meter Readings
               </p>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">
                     Previous Reading
@@ -431,6 +463,17 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                   />
                 </div>
               </div>
+              <div className="mt-4">
+                <ImageUploadField
+                  label="Metered Reading Photo"
+                  imageId={form.meteredReadingImageId}
+                  onChange={(id) =>
+                    setForm((f) => ({ ...f, meteredReadingImageId: id }))
+                  }
+                  isReadOnly={isReadOnly}
+                  uploadEndpoint="/api/ids/scm/lpg-billing-management/metered-billing/upload"
+                />
+              </div>
               {!isValidReading && (
                 <p className="text-xs text-red-500 mt-3 font-semibold animate-pulse">
                   ⚠️ Invalid reading: Current reading must be{" "}
@@ -448,7 +491,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
                 Meter Configuration
               </p>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">LPG VAPOR</Label>
                   <Input
@@ -503,6 +546,17 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                   />
                 </div>
               </div>
+              <div className="mt-4">
+                <ImageUploadField
+                  label="PSI Reading Photo"
+                  imageId={form.psiReadingImageId}
+                  onChange={(id) =>
+                    setForm((f) => ({ ...f, psiReadingImageId: id }))
+                  }
+                  isReadOnly={isReadOnly}
+                  uploadEndpoint="/api/ids/scm/lpg-billing-management/metered-billing/upload"
+                />
+              </div>
             </div>
 
             {/* WIWO Header Linking — Regular Billing only */}
@@ -520,8 +574,8 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                       linkedWiwo
                         ? `${linkedWiwo.transaction_no} — ${Number(linkedWiwo.total_wiwo_kg ?? 0).toFixed(4)} kg`
                         : form.wiwoHeaderId
-                        ? `WIWO #${form.wiwoHeaderId}`
-                        : "No WIWO linked"
+                          ? `WIWO #${form.wiwoHeaderId}`
+                          : "No WIWO linked"
                     }
                     readOnly
                     className="bg-zinc-50 dark:bg-zinc-800 font-mono text-xs"
@@ -543,8 +597,8 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                           wiwoLoading
                             ? "Loading WIWO headers..."
                             : wiwoHeaders.length === 0
-                            ? "No pending WIWO headers found"
-                            : "Select WIWO header (optional)..."
+                              ? "No pending WIWO headers found"
+                              : "Select WIWO header (optional)..."
                         }
                       />
                     </SelectTrigger>
@@ -679,15 +733,14 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                       type="button"
                       disabled={isReadOnly}
                       onClick={() => setForm((f) => ({ ...f, status: s }))}
-                      className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-                        form.status === s
+                      className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${form.status === s
                           ? s === "POSTED"
                             ? "bg-white dark:bg-zinc-700 shadow-sm text-green-600"
                             : s === "CANCELLED"
-                            ? "bg-white dark:bg-zinc-700 shadow-sm text-red-600"
-                            : "bg-white dark:bg-zinc-700 shadow-sm text-violet-600"
+                              ? "bg-white dark:bg-zinc-700 shadow-sm text-red-600"
+                              : "bg-white dark:bg-zinc-700 shadow-sm text-violet-600"
                           : "text-muted-foreground hover:text-zinc-900"
-                      } ${isReadOnly ? "opacity-60 cursor-not-allowed" : ""}`}
+                        } ${isReadOnly ? "opacity-60 cursor-not-allowed" : ""}`}
                     >
                       {s}
                     </button>
@@ -722,3 +775,121 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
     </div>
   );
 }
+
+interface ImageUploadFieldProps {
+  label: string;
+  imageId: string;
+  onChange: (id: string) => void;
+  isReadOnly: boolean;
+  folderName?: string;
+  uploadEndpoint: string;
+}
+
+export function ImageUploadField({
+  label,
+  imageId,
+  onChange,
+  isReadOnly,
+  folderName = "metered_billing_attachments",
+  uploadEndpoint,
+}: ImageUploadFieldProps) {
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("File too large", {
+        description: "Maximum size is 10MB.",
+      });
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("folder_name", folderName);
+
+      const res = await fetch(uploadEndpoint, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Upload failed");
+      }
+
+      const result = await res.json();
+      onChange(result.data.id);
+      toast.success(`${label} uploaded successfully`);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Could not upload file";
+      toast.error("Upload failed", {
+        description: msg,
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const previewUrl = imageId
+    ? `${process.env.NEXT_PUBLIC_API_BASE_URL || ""}/assets/${imageId}`
+    : null;
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs text-muted-foreground font-semibold">{label}</Label>
+      {previewUrl ? (
+        <div className="relative group rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center h-28 w-full max-w-[150px] shadow-sm">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={previewUrl} alt={label} className="object-cover h-full w-full" />
+          {!isReadOnly && (
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <Button
+                type="button"
+                variant="destructive"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => onChange("")}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div>
+          <input
+            type="file"
+            accept="image/*"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            className="hidden"
+            disabled={isReadOnly || uploading}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full max-w-[150px] h-28 border-dashed flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-foreground hover:border-violet-500/50 hover:bg-violet-50/10 text-xs transition-all duration-200"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isReadOnly || uploading}
+          >
+            {uploading ? (
+              <Loader2 className="h-5 w-5 animate-spin text-violet-500" />
+            ) : (
+              <>
+                <Upload className="h-5 w-5 text-violet-500" />
+                <span className="font-medium">Upload Photo</span>
+              </>
+            )}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+

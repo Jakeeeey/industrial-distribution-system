@@ -80,7 +80,7 @@ export function MeteredWiwoList({ selectedId, onSelect, onNew }: Props) {
   const page = params.page ?? 1;
 
   return (
-    <div className="w-[380px] shrink-0 border-r border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/30 flex flex-col h-full overflow-hidden animate-in fade-in duration-500">
+    <div className="w-full shrink-0 lg:border-r border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/30 flex flex-col h-full overflow-hidden animate-in fade-in duration-500">
       {/* Header */}
       <div className="px-4 py-3 border-b border-zinc-150 dark:border-zinc-800/60 bg-zinc-50/50 dark:bg-zinc-900/30 flex items-center justify-between gap-3">
         <div className="min-w-0">
@@ -117,15 +117,14 @@ export function MeteredWiwoList({ selectedId, onSelect, onNew }: Props) {
               key={tab.key}
               type="button"
               onClick={() => handleTypeFilter(tab.key)}
-              className={`flex-1 py-1.5 text-[11px] font-bold rounded-lg transition-all ${
-                typeFilter === tab.key
+              className={`flex-1 py-1.5 text-[11px] font-bold rounded-lg transition-all ${typeFilter === tab.key
                   ? tab.key === "ONBOARDING_BASELINE"
                     ? "bg-white dark:bg-zinc-700 shadow-sm text-amber-600"
                     : tab.key === "REGULAR_BILLING"
-                    ? "bg-white dark:bg-zinc-700 shadow-sm text-violet-600"
-                    : "bg-white dark:bg-zinc-700 shadow-sm text-foreground"
+                      ? "bg-white dark:bg-zinc-700 shadow-sm text-violet-600"
+                      : "bg-white dark:bg-zinc-700 shadow-sm text-foreground"
                   : "text-muted-foreground hover:text-zinc-900 dark:hover:text-zinc-100"
-              }`}
+                }`}
             >
               {tab.label}
             </button>
@@ -190,24 +189,22 @@ export function MeteredWiwoList({ selectedId, onSelect, onNew }: Props) {
                 key={id}
                 type="button"
                 onClick={() => onSelect(id ?? null)}
-                className={`w-full text-left rounded-xl border p-3 transition text-sm flex flex-col gap-2 ${
-                  selected
+                className={`w-full text-left rounded-xl border p-3 transition text-sm flex flex-col gap-2 ${selected
                     ? isOnboardingRow
                       ? "border-amber-500 bg-amber-50/20 dark:bg-amber-950/20 ring-1 ring-amber-500/30 shadow-md"
                       : "border-violet-500 bg-violet-50/20 dark:bg-violet-950/20 ring-1 ring-violet-500/30 shadow-md shadow-violet-500/5"
                     : "border-zinc-150 dark:border-zinc-800/80 hover:bg-zinc-50/50 dark:hover:bg-zinc-900/40 bg-white dark:bg-zinc-950"
-                }`}
+                  }`}
               >
                 <div className="flex items-start justify-between gap-3 w-full">
                   <div className="min-w-0 flex-1 space-y-1">
                     <div
-                      className={`text-xs font-bold truncate font-mono ${
-                        selected
+                      className={`text-xs font-bold truncate font-mono ${selected
                           ? isOnboardingRow
                             ? "text-amber-600 dark:text-amber-400"
                             : "text-violet-600 dark:text-violet-400"
                           : "text-foreground"
-                      }`}
+                        }`}
                     >
                       {txNo}
                     </div>

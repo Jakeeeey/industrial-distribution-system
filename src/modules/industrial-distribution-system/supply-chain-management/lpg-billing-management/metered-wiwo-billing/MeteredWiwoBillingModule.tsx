@@ -1,14 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Gauge } from "lucide-react";
 import { MeteredWiwoList } from "./components/MeteredWiwoList";
 import { MeteredWiwoBillingForm } from "./components/MeteredWiwoBillingForm";
+import { useSidebar } from "@/components/ui/sidebar";
 
 export default function MeteredWiwoBillingModule() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [isNewMode, setIsNewMode] = useState(false);
   const [listKey, setListKey] = useState(0);
+
+  const { setOpen, isMobile } = useSidebar();
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 1024 && !isMobile) {
+        setOpen(false);
+      }
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [setOpen, isMobile]);
 
   const handleNew = () => {
     setSelectedId(null);
@@ -48,15 +62,25 @@ export default function MeteredWiwoBillingModule() {
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Left Side: Sidebar List */}
-        <MeteredWiwoList
-          selectedId={selectedId}
-          onSelect={handleSelect}
-          onNew={handleNew}
-          key={listKey}
-        />
+        <div
+          className={`${
+            isNewMode || selectedId ? "hidden lg:flex" : "flex w-full"
+          } lg:w-[380px] lg:shrink-0 h-full`}
+        >
+          <MeteredWiwoList
+            selectedId={selectedId}
+            onSelect={handleSelect}
+            onNew={handleNew}
+            key={listKey}
+          />
+        </div>
 
         {/* Right Side: Detail Form Panel */}
-        <div className="flex-1 h-full overflow-y-auto p-6 bg-zinc-50/10 dark:bg-zinc-900/5">
+        <div
+          className={`flex-1 h-full overflow-y-auto p-4 sm:p-6 bg-zinc-50/10 dark:bg-zinc-900/5 ${
+            isNewMode || selectedId ? "block" : "hidden lg:block"
+          }`}
+        >
           {!isNewMode && !selectedId ? (
             <div className="border border-dashed border-zinc-200 dark:border-zinc-800/80 rounded-2xl p-12 text-center text-sm text-muted-foreground bg-zinc-50/20 dark:bg-zinc-900/5 flex flex-col items-center justify-center gap-3 h-[450px]">
               <Gauge className="h-10 w-10 text-muted-foreground opacity-20 animate-pulse" />
@@ -68,7 +92,7 @@ export default function MeteredWiwoBillingModule() {
               </div>
             </div>
           ) : (
-            <div className="bg-white/50 dark:bg-zinc-900/50 border border-white/10 p-6 rounded-2xl">
+            <div className="bg-white/50 dark:bg-zinc-900/50 border border-white/10 p-4 sm:p-6 rounded-2xl">
               <MeteredWiwoBillingForm
                 txId={selectedId}
                 onSuccess={handleSuccess}
