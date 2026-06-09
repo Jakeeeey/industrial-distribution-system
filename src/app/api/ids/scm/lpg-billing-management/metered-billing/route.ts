@@ -4,6 +4,7 @@ import {
   createMeteredTransaction,
   fetchMeteredSites,
   fetchMeterReadings,
+  fetchLastMeteredTransaction,
   fetchUnbilledWiwoHeaders,
   updateSiteReading,
   fetchNextTxSeq,
@@ -69,6 +70,14 @@ export async function GET(request: NextRequest) {
       if (!customerCode || !date) return NextResponse.json({ seq: 1 });
       const seq = await fetchNextMeterReadingSeq(customerCode, date);
       return NextResponse.json({ seq });
+    }
+
+    if (type === "last-transaction") {
+      const siteId = Number(searchParams.get("siteId") ?? 0);
+      if (!siteId) return NextResponse.json({ data: null });
+
+      const lastTx = await fetchLastMeteredTransaction(siteId);
+      return NextResponse.json({ data: lastTx });
     }
 
     if (type === "wiwo-kg") {

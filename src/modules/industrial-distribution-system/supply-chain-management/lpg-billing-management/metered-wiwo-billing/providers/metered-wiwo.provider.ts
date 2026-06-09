@@ -309,6 +309,19 @@ export async function fetchMeteredTransactions(
 
 // ─── Transactions — Get by ID ─────────────────────────────────────────────────
 
+export async function fetchLastMeteredTransaction(
+  siteId: number,
+): Promise<MeteredWiwoTransaction | null> {
+  if (!siteId) return null;
+
+  const res = await directusFetch<{ data: Record<string, unknown>[] }>(
+    `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions?fields=${TX_FIELDS}&filter[lpg_site_id][_eq]=${siteId}&sort=-transaction_date,-id&limit=1`,
+  );
+
+  const tx = res.data?.[0];
+  return tx ? mapTxRecord(tx) : null;
+}
+
 export async function fetchMeteredTransactionById(
   id: number,
 ): Promise<MeteredWiwoTransaction | null> {
