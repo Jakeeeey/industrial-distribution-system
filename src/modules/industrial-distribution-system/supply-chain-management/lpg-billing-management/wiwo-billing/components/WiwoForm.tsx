@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, Fragment } from "react";
 import { createPortal } from "react-dom";
 import {
   Trash2,
@@ -13,12 +13,12 @@ import {
   Truck,
   Calendar as CalendarIcon,
   CheckCircle2,
-  Loader2
+  Loader2,
+  ScanBarcode
 } from "lucide-react";
 import type { CylinderAsset, CustomerSiteCylinder, MeteredWiwoTransaction, CustomerSite, MeterReading, WiwoHeader } from "../types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -58,6 +58,9 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   const [sites, setSites] = useState<CustomerSite[]>([]);
   const [, setAvailableCylinders] = useState<CylinderAsset[]>([]);
   const [activeSiteCylinders, setActiveSiteCylinders] = useState<CustomerSiteCylinder[]>([]);
+  const [isScannerModalOpen, setIsScannerModalOpen] = useState(false);
+  const [scannerInput, setScannerInput] = useState("");
+  const [scannerError, setScannerError] = useState("");
 
   // Form State
   const [customerCode, setCustomerCode] = useState("");
@@ -93,10 +96,11 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
     try {
       for (let i = localStorage.length - 1; i >= 0; i--) {
         const key = localStorage.key(i);
-        if (key && key.startsWith("wiwo_weigh_cache_")) {
+        if (key && (key.startsWith("wiwo_weigh_cache_") || key.startsWith("wiwo_draft_cache_"))) {
           localStorage.removeItem(key);
         }
       }
+      localStorage.removeItem("wiwo_draft_transaction");
     } catch (e) {
       console.error("Failed to clear localStorage cache", e);
     }
@@ -105,7 +109,6 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   // Weigh Cylinder Modal States (In-place)
   const [isWeighModalOpen, setIsWeighModalOpen] = useState(false);
   const [weighingCylinderId, setWeighingCylinderId] = useState<number | null>(null);
-  const [weighingCylinderSearch, setWeighingCylinderSearch] = useState("");
   const [weighingGross, setWeighingGross] = useState("");
 
   const [, setSerialFile] = useState<File | null>(null);
@@ -142,9 +145,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   const [draftMeteredKg, setDraftMeteredKg] = useState<number | null>(null);
 
   const [remarks, setRemarks] = useState("");
-  const [operationMode, setOperationMode] = useState<"SWAP_AND_SYNC" | "METER_SYNC_ONLY">("SWAP_AND_SYNC");
   const [varianceReasonCode, setVarianceReasonCode] = useState<string>("NONE");
-  const [status, setStatus] = useState<"DRAFT" | "POSTED" | "CANCELLED">("DRAFT");
 
   // Existing View State
   const [txDetail, setTxDetail] = useState<MeteredWiwoTransaction | null>(null);
@@ -158,6 +159,8 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   const [selectedTxId, setSelectedTxId] = useState<string>("");
   const [isDraftModalOpen, setIsDraftModalOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [expandedRowId, setExpandedRowId] = useState<number | null>(null);
+  const [mobileEditingCylinderId, setMobileEditingCylinderId] = useState<number | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -202,7 +205,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
     setSiteId(String(tx.lpg_site_id));
     setCustomerCode(tx.customer_code);
     setTransactionDate(tx.transaction_date);
-    setPricePerKg(Number(tx.price_per_kg));
+    // Price per kg will be finalized after resolving knownSite below
     setBillingPeriodFrom(tx.billing_period_from ?? "");
     setBillingPeriodTo(tx.billing_period_to ?? "");
     setDraftMeteredKg(Number(tx.metered_kg));
@@ -221,20 +224,74 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
       setSiteSearch(`Site #${tx.lpg_site_id}`);
     }
 
+    setPricePerKg(Number(tx.price_per_kg) || (knownSite ? Number(knownSite.default_price_per_kg) : 0));
+
     // Directly fetch site cylinders (avoids race with useEffect)
     try {
       const res = await fetch(`/api/ids/scm/lpg-billing-management/wiwo-billing?type=site-cylinders&siteId=${tx.lpg_site_id}`);
       const data = await res.json();
       const cylinders = data.data || [];
       setActiveSiteCylinders(cylinders);
-      setReturnedWeights({});
-      setSwappedCylinders({});
+
+      // Load cached draft state if exists
+      const cacheKey = `wiwo_draft_cache_${tx.id}`;
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          setReturnedWeights(parsed.returnedWeights || {});
+          setSwappedCylinders(parsed.swappedCylinders || {});
+          if (parsed.selectedReplacementCylinders) setSelectedReplacementCylinders(parsed.selectedReplacementCylinders);
+          if (parsed.remarks !== undefined) setRemarks(parsed.remarks);
+          if (parsed.varianceReasonCode) setVarianceReasonCode(parsed.varianceReasonCode);
+          if (parsed.currentReading) setCurrentReading(parsed.currentReading);
+          if (parsed.previousReading) setPreviousReading(parsed.previousReading);
+        } catch {
+          setReturnedWeights({});
+          setSwappedCylinders({});
+        }
+      } else {
+        setReturnedWeights({});
+        setSwappedCylinders({});
+        setSelectedReplacementCylinders([]);
+        setRemarks("");
+        setVarianceReasonCode("NONE");
+      }
     } catch (err) {
       console.error("Failed to pre-load site cylinders for draft", err);
     }
 
     setIsDraftModalOpen(false);
   };
+
+  // Auto-save routine check progress to localStorage based on selected draft
+  useEffect(() => {
+    if (flowType === "ROUTINE" && selectedTxId && !isViewMode && mounted) {
+      const cacheKey = `wiwo_draft_cache_${selectedTxId}`;
+      const stateToCache = {
+        returnedWeights,
+        swappedCylinders,
+        selectedReplacementCylinders,
+        remarks,
+        varianceReasonCode,
+        currentReading,
+        previousReading,
+      };
+      localStorage.setItem(cacheKey, JSON.stringify(stateToCache));
+    }
+  }, [
+    flowType,
+    selectedTxId,
+    isViewMode,
+    mounted,
+    returnedWeights,
+    swappedCylinders,
+    selectedReplacementCylinders,
+    remarks,
+    varianceReasonCode,
+    currentReading,
+    previousReading,
+  ]);
 
   // Load Sites & Available Cylinders
   useEffect(() => {
@@ -263,12 +320,14 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
       setCustomerCode("");
       return;
     }
-    const selectedSite = sites.find((s) => String(s.id) === siteId);
-    if (selectedSite) {
-      setCustomerCode(selectedSite.customer_code);
-      setPreviousReading(Number(selectedSite.last_meter_reading ?? 0));
-      setCurrentReading(Number(selectedSite.last_meter_reading ?? 0));
-      setPricePerKg(Number(selectedSite.default_price_per_kg ?? 0));
+    if (!selectedTxId) {
+      const selectedSite = sites.find((s) => String(s.id) === siteId);
+      if (selectedSite) {
+        setCustomerCode(selectedSite.customer_code);
+        setPreviousReading(Number(selectedSite.last_meter_reading ?? 0));
+        setCurrentReading(Number(selectedSite.last_meter_reading ?? 0));
+        setPricePerKg(Number(selectedSite.default_price_per_kg ?? 0));
+      }
     }
 
     const fetchCylinders = async () => {
@@ -276,17 +335,39 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
         const res = await fetch(`/api/ids/scm/lpg-billing-management/wiwo-billing?type=site-cylinders&siteId=${siteId}`);
         const data = await res.json();
         setActiveSiteCylinders(data.data || []);
+        const draftStr = localStorage.getItem("wiwo_draft_transaction");
+        let hydrated = false;
+        if (draftStr && !isViewMode && flowType === "ROUTINE") {
+          try {
+            const draft = JSON.parse(draftStr);
+            if (draft.siteId === siteId) {
+              setReturnedWeights(draft.returnedWeights || {});
+              setSwappedCylinders(draft.swappedCylinders || {});
+              setSelectedReplacementCylinders(draft.selectedReplacementCylinders || []);
+              setAttachmentsState(draft.attachmentsState || []);
+              setCustomerCode(draft.customerCode || "");
+              setSiteSearch(draft.siteSearch || "");
+              hydrated = true;
+            }
+          } catch (e) {
+            console.error("Failed to parse draft", e);
+          }
+        }
         
-        // Reset returned weights mapping
-        setReturnedWeights({});
-        setSwappedCylinders({});
-        clearWeighingCache();
+        if (!hydrated) {
+          // Reset returned weights mapping
+          setReturnedWeights({});
+          setSwappedCylinders({});
+          setSelectedReplacementCylinders([]);
+          setAttachmentsState([]);
+          clearWeighingCache();
+        }
       } catch (err) {
         console.error("Failed to load active site cylinders", err);
       }
     };
     fetchCylinders();
-  }, [siteId, sites]);
+  }, [siteId, sites, selectedTxId, flowType, isViewMode]);
 
   // Load Existing Transaction Details
   useEffect(() => {
@@ -301,7 +382,6 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
         const data = await res.json();
         setTxDetail(data.data || null);
         if (data.data) {
-          setStatus(data.data.status);
           setVarianceReasonCode(data.data.variance_reason_code || "NONE");
         }
       } catch (err) {
@@ -312,6 +392,23 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
     };
     fetchDetails();
   }, [txId]);
+
+  // Persist Form State to Local Storage
+  useEffect(() => {
+    if (isViewMode || flowType !== "ROUTINE") return;
+    if (!siteId) return;
+    
+    const draft = {
+      siteId,
+      customerCode,
+      siteSearch,
+      returnedWeights,
+      swappedCylinders,
+      selectedReplacementCylinders,
+      attachmentsState
+    };
+    localStorage.setItem("wiwo_draft_transaction", JSON.stringify(draft));
+  }, [siteId, customerCode, siteSearch, returnedWeights, swappedCylinders, selectedReplacementCylinders, attachmentsState, isViewMode, flowType]);
 
   const handleAddSerial = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -483,17 +580,20 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   };
 
   // ─── Mathematical Calculations (Flow B) ─────────────────────────────────────
-  const meteredKg = Math.max(0, currentReading - previousReading);
+  const meteredKg = draftMeteredKg !== null 
+    ? draftMeteredKg 
+    : Math.max(0, currentReading - previousReading);
 
   // Map and calculate returned cylinders
   const calculatedReturnedCylinders = activeSiteCylinders.map((sc) => {
     const isSwapped = swappedCylinders[sc.id] ?? false;
     const returnedGross = returnedWeights[sc.id] ?? 0;
     const tare = Number(sc.cylinder_asset?.tare_weight ?? 0);
-    const opening = Number(sc.previous_lpg_kg ?? 0);
+    const opening = Number(sc.current_lpg_kg ?? 0); // Treats current_lpg_kg as Previous Gross
 
-    const remaining = isSwapped ? Math.min(opening, Math.max(0, returnedGross - tare)) : opening;
-    const consumed = isSwapped ? Math.max(0, opening - remaining) : 0;
+    const openingNet = Math.max(0, opening - tare);
+    const remaining = returnedGross > 0 ? Math.min(openingNet, Math.max(0, returnedGross - tare)) : openingNet;
+    const consumed = returnedGross > 0 ? Math.max(0, openingNet - remaining) : 0;
 
     return {
       ...sc,
@@ -527,6 +627,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
       alert("A text explanation in the remarks field is required due to Metered vs WIWO discrepancy.");
       return;
     }
+
 
     if (hasNegativeWeightErrors) {
       alert("Returned gross weight cannot be less than the cylinder's empty tare weight.");
@@ -579,35 +680,22 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
         };
       } else {
         // Routine check & swap
-        if (operationMode === "METER_SYNC_ONLY") {
-          const returnedCylindersPayload = calculatedReturnedCylinders
-            .filter((c) => c.isSwapped)
-            .map((c) => ({
-              siteCylinderId: c.id,
-              returnedGrossWeight: c.returnedGross,
-            }));
-          payload = {
-            transaction_type: "REGULAR_BILLING",
-            transaction_id: selectedTxId ? Number(selectedTxId) : undefined,
-            customer_code: customerCode,
-            lpg_site_id: Number(siteId),
-            transaction_date: transactionDate,
-            previous_reading: previousReading,
-            current_reading: currentReading,
-            price_per_kg: pricePerKg,
-            returned_cylinders: returnedCylindersPayload,
-            new_cylinders: [],
-            varianceReasonCode: varianceReasonCode,
-            remarks: remarks,
-            is_no_swap: true,
-            attachments: attachmentsState.map(att => ({
-              siteCylinderId: att.siteCylinderId,
-              cylinderAssetId: att.cylinderAssetId,
-              attachmentType: att.attachmentType,
-              directusFileId: att.directusFileId,
-            })),
-          };
-        } else {
+        const missingAttachments = calculatedReturnedCylinders.find((c) => {
+          if (c.returnedGross > 0) {
+            const hasSerial = attachmentsState.some(a => a.siteCylinderId === c.id && a.attachmentType === "SERIAL_IMAGE");
+            const hasWeight = attachmentsState.some(a => a.siteCylinderId === c.id && a.attachmentType === "WEIGHT_IMAGE");
+            return !hasSerial || !hasWeight;
+          }
+          return false;
+        });
+
+        if (missingAttachments) {
+          alert(`Please capture both serial and weight images for cylinder ${missingAttachments.cylinder_asset?.serial_number}.`);
+          setLoading(false);
+          return;
+        }
+
+        if (selectedReplacementCylinders.length > 0) {
           if (selectedReplacementCylinders.some(c => !c.cylinderAssetId)) {
             alert("Please verify all replacement cylinder serial numbers.");
             setLoading(false);
@@ -642,32 +730,41 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
             setLoading(false);
             return;
           }
-
-          const returnedCylindersPayload = calculatedReturnedCylinders
-            .filter((c) => c.isSwapped)
-            .map((c) => ({
-              siteCylinderId: c.id,
-              returnedGrossWeight: c.returnedGross,
-            }));
-
-          payload = {
-            transaction_type: "REGULAR_BILLING",
-            transaction_id: selectedTxId ? Number(selectedTxId) : undefined,
-            customer_code: customerCode,
-            lpg_site_id: Number(siteId),
-            transaction_date: transactionDate,
-            previous_reading: previousReading,
-            current_reading: currentReading,
-            price_per_kg: pricePerKg,
-            returned_cylinders: returnedCylindersPayload,
-            new_cylinders: selectedReplacementCylinders.map(c => ({
-              cylinderAssetId: c.cylinderAssetId,
-              targetKg: Number(c.targetKg)
-            })),
-            varianceReasonCode: varianceReasonCode,
-            remarks: remarks,
-          };
         }
+
+        const returnedCylindersPayload = calculatedReturnedCylinders
+          .filter((c) => c.returnedGross > 0)
+          .map((c) => ({
+            siteCylinderId: c.id,
+            returnedGrossWeight: c.returnedGross,
+            isSwapped: c.isSwapped,
+          }));
+
+        payload = {
+          transaction_type: "REGULAR_BILLING",
+          transaction_id: selectedTxId ? Number(selectedTxId) : undefined,
+          customer_code: customerCode,
+          lpg_site_id: Number(siteId),
+          transaction_date: transactionDate,
+          previous_reading: previousReading,
+          current_reading: currentReading,
+          metered_kg: meteredKg,
+          price_per_kg: pricePerKg,
+          returned_cylinders: returnedCylindersPayload,
+          new_cylinders: selectedReplacementCylinders.map(c => ({
+            cylinderAssetId: c.cylinderAssetId,
+            targetKg: Number(c.targetKg)
+          })),
+          varianceReasonCode: varianceReasonCode,
+          remarks: remarks,
+          is_no_swap: selectedReplacementCylinders.length === 0,
+          attachments: attachmentsState.map(att => ({
+            siteCylinderId: att.siteCylinderId,
+            cylinderAssetId: att.cylinderAssetId,
+            attachmentType: att.attachmentType,
+            directusFileId: att.directusFileId,
+          })),
+        };
       }
 
       const res = await fetch("/api/ids/scm/lpg-billing-management/wiwo-billing", {
@@ -792,52 +889,14 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
               : "Dual Meter-Sync & Weigh-In / Weigh-Out consumption verification"}
           </p>
         </div>
-
-        <div className="flex flex-wrap gap-2 shrink-0">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onCancel}
-            className="h-9 px-4 hover:bg-red-50 hover:text-red-600"
-          >
-            {isReadOnly ? "Close" : "Cancel"}
-          </Button>
-
-          {isPosted && (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={loading}
-              onClick={() => setIsCancelModalOpen(true)}
-              className="h-9 px-4 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 transition-all active:scale-95"
-            >
-              Cancel & Rollback
-            </Button>
-          )}
-
-          {!isReadOnly && !isViewMode && (
-            <Button
-              onClick={handleSubmit}
-              disabled={loading || (flowType === "ROUTINE" && mismatchExists && !remarks.trim()) || hasNegativeWeightErrors}
-              className="h-9 px-6 bg-violet-600 hover:bg-violet-700 shadow-lg shadow-violet-500/20 transition-all active:scale-95 text-white"
-            >
-              {loading ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <CheckCircle2 className="h-4 w-4 mr-2" />
-              )}
-              Post Validation
-            </Button>
-          )}
-        </div>
-      </div>
+    </div>
 
       {/* Main Layout: single column on mobile, 3-col on lg+ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left 2 Columns */}
         <div className="lg:col-span-2 space-y-6">
           {/* Card A: Transaction Info */}
-          <div className="bg-white/70 dark:bg-zinc-900/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-6 shadow-xl space-y-4">
+          <div className="bg-white/70 dark:bg-zinc-900/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
             <div className="flex items-center gap-2 mb-2">
               <div className="h-8 w-8 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-violet-600">
                 <Gauge className="h-4 w-4" />
@@ -997,42 +1056,13 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
               )}
             </div>
 
-            {flowType === "ROUTINE" && !isViewMode && (
-              <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800/50 flex flex-col gap-2">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Transaction Flow</Label>
-                <div className="flex bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-xl max-w-sm">
-                  <button
-                    type="button"
-                    onClick={() => setOperationMode("SWAP_AND_SYNC")}
-                    className={`flex-1 py-1.5 px-3 text-xs font-bold rounded-lg transition-all ${
-                      operationMode === "SWAP_AND_SYNC"
-                        ? "bg-white dark:bg-zinc-900 text-violet-600 dark:text-violet-400 shadow-sm shadow-zinc-200/50"
-                        : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-800"
-                    }`}
-                  >
-                    Cylinder Swap & Meter Sync
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setOperationMode("METER_SYNC_ONLY")}
-                    className={`flex-1 py-1.5 px-3 text-xs font-bold rounded-lg transition-all ${
-                      operationMode === "METER_SYNC_ONLY"
-                        ? "bg-white dark:bg-zinc-900 text-violet-600 dark:text-violet-400 shadow-sm shadow-zinc-200/50"
-                        : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-800"
-                    }`}
-                  >
-                    Meter Sync Only (No Swap)
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Card B: Flow B Readings and Scales */}
           {flowType === "ROUTINE" && (
             <>
               {/* Meter Sync panel */}
-              <div className="bg-white/70 dark:bg-zinc-900/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-6 shadow-xl space-y-4">
+              <div className="bg-white/70 dark:bg-zinc-900/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="h-8 w-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600">
                     <Gauge className="h-4 w-4" />
@@ -1092,78 +1122,122 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
               </div>
 
               {/* Connected cylinders returns weights table */}
-              {(isViewMode || operationMode === "SWAP_AND_SYNC" || operationMode === "METER_SYNC_ONLY") && (
-                <div className="bg-white/70 dark:bg-zinc-900/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-6 shadow-xl space-y-4">
+              {(isViewMode || flowType === "ROUTINE") && (
+                <div className="bg-white/70 dark:bg-zinc-900/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
                   <div className="flex items-center justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2">
                       <div className="h-8 w-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600">
                         <Scale className="h-4 w-4" />
                       </div>
-                      <h2 className="font-semibold text-sm">
-                        {operationMode === "METER_SYNC_ONLY" ? "Cylinder In-Place Weighing (No Swap)" : "Returned Cylinders (Weigh-Out)"}
-                      </h2>
+                      <h2 className="font-semibold text-sm">Connected Cylinders & Weight Check</h2>
                     </div>
-                    {operationMode === "METER_SYNC_ONLY" && !isReadOnly && !isViewMode && (
+                    {!isViewMode && flowType === "ROUTINE" && (
                       <Button
                         type="button"
+                        variant="outline"
+                        size="sm"
                         onClick={() => {
-                          setWeighingCylinderId(null);
-                          setWeighingCylinderSearch("");
-                          setWeighingGross("");
-                          setSerialFile(null);
-                          setSerialFileUrl(null);
-                          setSerialDirectusId(null);
-                          setWeightFile(null);
-                          setWeightFileUrl(null);
-                          setWeightDirectusId(null);
-                          setIsWeighModalOpen(true);
+                          setScannerError("");
+                          setScannerInput("");
+                          setIsScannerModalOpen(true);
                         }}
-                        className="text-xs h-8 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 rounded-lg flex items-center gap-1.5 shadow"
+                        className="bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 hover:text-emerald-600 dark:hover:text-emerald-400 text-xs px-2 sm:px-3 h-8 shadow-sm border-zinc-200 dark:border-zinc-800"
                       >
-                        <Plus className="h-3.5 w-3.5" />
-                        Weigh Cylinder
+                        <ScanBarcode className="h-4 w-4 sm:mr-1.5 text-emerald-500" />
+                        <span className="hidden sm:inline">Scan Cylinder</span>
                       </Button>
                     )}
                   </div>
 
                   <div className="border border-zinc-200 dark:border-zinc-800/80 rounded-xl overflow-hidden text-xs bg-white dark:bg-zinc-955/10">
                     <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse min-w-[520px]">
+                    <table className="w-full text-left border-collapse min-w-full">
                       <thead className="bg-zinc-50 dark:bg-zinc-900 font-bold text-zinc-500 border-b border-zinc-200 dark:border-zinc-800">
                         <tr>
-                          {!isViewMode && <th className="p-3 w-16 text-center">{operationMode === "METER_SYNC_ONLY" ? "Weighed" : "Swap"}</th>}
-                          <th className="p-3">Serial</th>
-                          <th className="p-3 text-right">Tare Weight</th>
-                          <th className="p-3 text-right">Previous KG</th>
-                          <th className="p-3 w-40">{operationMode === "METER_SYNC_ONLY" ? "Gross Weight" : "Ret. Gross Weight"}</th>
-                          <th className="p-3 text-right">Remaining KG</th>
-                          <th className="p-3 text-right">Consumed KG</th>
+                          <th className="p-2 sm:p-3 sticky left-0 bg-zinc-50 dark:bg-zinc-900 z-10 text-[10px] sm:text-xs">Serial</th>
+                          <th className="p-2 sm:p-3 text-[10px] sm:text-xs">Product Name</th>
+                          <th className="p-2 sm:p-3 text-center text-[10px] sm:text-xs">Status</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/50">
                         {isViewMode ? (
-                          (txDetail?.wiwo_header_id as unknown as WiwoHeader)?.details ? (
-                            ((txDetail.wiwo_header_id as unknown as WiwoHeader).details ?? [])
-                              .filter(l => l.line_type === "CONSUMPTION_RETURN")
-                              .map((line, idx) => (
-                                <tr key={idx} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20">
-                                  <td className="p-3 font-mono font-bold">{line.serial_number}</td>
-                                  <td className="p-3 text-right font-mono">{line.tare_weight_kg} KG</td>
-                                  <td className="p-3 text-right font-mono">{line.previous_lpg_kg} KG</td>
-                                  <td className="p-3 font-mono">{line.returned_gross_weight_kg} KG</td>
-                                  <td className="p-3 text-right font-mono text-zinc-500">{line.remaining_lpg_kg} KG</td>
-                                  <td className="p-3 text-right font-mono font-semibold text-zinc-700 dark:text-zinc-300">{line.consumed_lpg_kg} KG</td>
-                                </tr>
-                              ))
-                          ) : (
-                            <tr>
-                              <td colSpan={6} className="p-4 text-center text-muted-foreground">No return lines found.</td>
-                            </tr>
-                          )
+                          ((txDetail?.wiwo_header_id as unknown as WiwoHeader)?.details ?? [])
+                            .filter(l => l.line_type === "CONSUMPTION_RETURN")
+                            .map((line, idx) => {
+                              const details = (txDetail?.wiwo_header_id as unknown as WiwoHeader)?.details ?? [];
+                              const deploymentLines = details.filter(d => d.line_type === "NEW_DEPLOYMENT");
+                              const matchedDeployment = deploymentLines[idx];
+                              const isSwapped = !!matchedDeployment;
+                              
+                              return (
+                                <Fragment key={idx}>
+                                  <tr className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20">
+                                    <td className="p-2 sm:p-3 font-mono font-bold sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r border-zinc-100 dark:border-zinc-800 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] text-[10px] sm:text-xs">{line.serial_number}</td>
+                                    <td className="p-2 sm:p-3 font-semibold text-zinc-700 dark:text-zinc-300 text-[10px] sm:text-xs">
+                                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                                      {(line as any).cylinder_asset?.product?.product_name || (line as any).product_name || "LPG Cylinder"}
+                                    </td>
+                                    <td className="p-2 sm:p-3 text-center">
+                                      {isSwapped ? (
+                                        <Badge variant="outline" className="border-emerald-255 text-emerald-700 bg-emerald-50 dark:bg-emerald-950/20 dark:text-emerald-400 text-[9px] sm:text-xs px-1.5 py-0 sm:px-2 sm:py-0.5">
+                                          Swapped
+                                        </Badge>
+                                      ) : (
+                                        <Badge variant="outline" className="border-zinc-200 text-zinc-500 bg-zinc-50 dark:bg-zinc-800/20 dark:text-zinc-400 text-[9px] sm:text-xs px-1.5 py-0 sm:px-2 sm:py-0.5">
+                                          In-Place
+                                        </Badge>
+                                      )}
+                                    </td>
+                                  </tr>
+                                  <tr className="bg-zinc-50/20 dark:bg-zinc-900/5">
+                                    <td colSpan={3} className="p-4 border-l-2 border-zinc-300 dark:border-zinc-700">
+                                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-2">
+                                        <div>
+                                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Tare Weight</span>
+                                          <span className="font-mono text-xs">{line.tare_weight_kg} KG</span>
+                                        </div>
+                                        <div>
+                                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Previous Gross KG</span>
+                                          <span className="font-mono text-xs">{line.previous_lpg_kg} KG</span>
+                                        </div>
+                                        <div>
+                                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Remaining KG</span>
+                                          <span className="font-mono text-xs text-zinc-600 dark:text-zinc-400">{line.remaining_lpg_kg} KG</span>
+                                        </div>
+                                        <div>
+                                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Consumed KG</span>
+                                          <span className="font-mono text-xs font-bold text-zinc-800 dark:text-zinc-200">{line.consumed_lpg_kg} KG</span>
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                  {isSwapped && (
+                                    <tr className="bg-zinc-50/40 dark:bg-zinc-900/10">
+                                      <td colSpan={3} className="p-4 border-l-2 border-emerald-500 bg-zinc-50/30 dark:bg-zinc-900/10">
+                                        <div className="flex flex-col sm:flex-row gap-6 text-xs">
+                                          <div>
+                                            <span className="font-semibold text-muted-foreground uppercase tracking-wider block text-[10px] mb-0.5">Replacement Cylinder Serial</span>
+                                            <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200">{matchedDeployment.serial_number}</span>
+                                          </div>
+                                          <div>
+                                            <span className="font-semibold text-muted-foreground uppercase tracking-wider block text-[10px] mb-0.5">Tare Weight</span>
+                                            <span className="font-mono">{matchedDeployment.tare_weight_kg} KG</span>
+                                          </div>
+                                          <div>
+                                            <span className="font-semibold text-muted-foreground uppercase tracking-wider block text-[10px] mb-0.5">Deployed Gross Weight</span>
+                                            <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{matchedDeployment.previous_lpg_kg} KG</span>
+                                          </div>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </Fragment>
+                              );
+                            })
                         ) : (
                           calculatedReturnedCylinders.length === 0 ? (
                             <tr>
-                              <td colSpan={7} className="p-6 text-center text-muted-foreground">
+                              <td colSpan={3} className="p-6 text-center text-muted-foreground">
                                 No connected cylinders found for this site. Must run onboarding setup first.
                               </td>
                             </tr>
@@ -1172,80 +1246,327 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                               const weightError = row.isSwapped && row.returnedGross > 0 && row.returnedGross < row.tare;
                               const hasSerial = attachmentsState.some(a => a.siteCylinderId === row.id && a.attachmentType === "SERIAL_IMAGE");
                               const hasWeight = attachmentsState.some(a => a.siteCylinderId === row.id && a.attachmentType === "WEIGHT_IMAGE");
+                              const repIndex = selectedReplacementCylinders.findIndex(c => c.swappedOutCylinderId === row.id);
+                              const repItem = repIndex !== -1 ? selectedReplacementCylinders[repIndex] : null;
+                              const isExpanded = expandedRowId === row.id;
+
                               return (
-                                <tr key={row.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20">
-                                  <td className="p-3 text-center">
-                                    {operationMode === "METER_SYNC_ONLY" ? (
-                                      row.isSwapped ? (
-                                        <Badge variant="outline" className="border-emerald-200 text-emerald-700 bg-emerald-50 dark:bg-emerald-950/20 dark:text-emerald-400">
-                                          ✓ Yes
+                                <Fragment key={row.id}>
+                                  <tr 
+                                    onClick={() => {
+                                      if (typeof window !== "undefined" && window.innerWidth < 768) {
+                                        setMobileEditingCylinderId(row.id);
+                                      } else {
+                                        setExpandedRowId(isExpanded ? null : row.id);
+                                      }
+                                    }}
+                                    className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20 cursor-pointer transition-colors"
+                                  >
+                                    <td className="p-2 sm:p-3 font-mono font-bold sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r border-zinc-100 dark:border-zinc-800 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] text-[10px] sm:text-xs">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-[10px] text-zinc-400">
+                                          {isExpanded ? "▼" : "▶"}
+                                        </span>
+                                        {row.cylinder_asset?.serial_number}
+                                      </div>
+                                    </td>
+                                    <td className="p-2 sm:p-3 font-semibold text-zinc-700 dark:text-zinc-300 text-[10px] sm:text-xs">
+                                      {row.cylinder_asset?.product?.product_name || "LPG Cylinder"}
+                                    </td>
+                                    <td className="p-2 sm:p-3 text-center">
+                                      {row.isSwapped ? (
+                                        <Badge variant="outline" className="border-violet-250 text-violet-700 bg-violet-50 dark:bg-violet-950/20 dark:text-violet-400 text-[9px] sm:text-xs px-1.5 py-0 sm:px-2 sm:py-0.5">
+                                          Swapping Out
+                                        </Badge>
+                                      ) : returnedWeights[row.id] > 0 ? (
+                                        <Badge variant="outline" className="border-emerald-250 text-emerald-700 bg-emerald-50 dark:bg-emerald-955/20 dark:text-emerald-400 text-[9px] sm:text-xs px-1.5 py-0 sm:px-2 sm:py-0.5">
+                                          Weighed In-Place
                                         </Badge>
                                       ) : (
-                                        <span className="text-muted-foreground">—</span>
-                                      )
-                                    ) : (
-                                      <Checkbox
-                                        checked={row.isSwapped}
-                                        onCheckedChange={(checked) => {
-                                          setSwappedCylinders((prev) => ({ ...prev, [row.id]: !!checked }));
-                                        }}
-                                      />
-                                    )}
-                                  </td>
-                                  <td className="p-3 font-mono font-bold">{row.cylinder_asset?.serial_number}</td>
-                                  <td className="p-3 text-right font-mono">{row.tare} KG</td>
-                                  <td className="p-3 text-right font-mono">{row.opening} KG</td>
-                                  <td className="p-2">
-                                    {operationMode === "METER_SYNC_ONLY" ? (
-                                      <div className="space-y-1">
-                                        <div className="font-mono font-bold text-zinc-800 dark:text-zinc-200 text-xs">
-                                          {row.isSwapped ? `${row.returnedGross} KG` : "—"}
-                                        </div>
-                                        {row.isSwapped && (
-                                          <div className="flex gap-1.5 flex-wrap">
-                                            <Badge variant="secondary" className={`text-[9px] px-1 py-0 ${hasSerial ? "bg-emerald-105 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400" : "bg-zinc-100 text-zinc-400"}`}>
-                                              Serial: {hasSerial ? "✓ Saved" : "Missing"}
-                                            </Badge>
-                                            <Badge variant="secondary" className={`text-[9px] px-1 py-0 ${hasWeight ? "bg-emerald-105 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400" : "bg-zinc-100 text-zinc-400"}`}>
-                                              Weight: {hasWeight ? "✓ Saved" : "Missing"}
-                                            </Badge>
+                                        <Badge variant="outline" className="border-zinc-200 text-zinc-400 bg-zinc-50 dark:bg-zinc-800/10 text-[9px] sm:text-xs px-1.5 py-0 sm:px-2 sm:py-0.5">
+                                          Active In-Place
+                                        </Badge>
+                                      )}
+                                    </td>
+                                  </tr>
+                                  {isExpanded && (
+                                    <tr className="bg-zinc-50/40 dark:bg-zinc-900/10">
+                                      <td colSpan={3} className="p-0 border-l-2 border-violet-500 bg-zinc-50/20 dark:bg-zinc-900/5">
+                                        <div className="p-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300 ease-out" onClick={(e) => e.stopPropagation()}>
+                                          
+                                          <div className="grid grid-cols-4 gap-4 bg-white/50 dark:bg-zinc-950/50 p-3 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                                            <div>
+                                              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Tare Weight</span>
+                                              <span className="font-mono text-xs">{row.tare} KG</span>
+                                            </div>
+                                            <div>
+                                              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Previous Gross KG</span>
+                                              <span className="font-mono text-xs">{row.opening} KG</span>
+                                            </div>
+                                            <div>
+                                              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Remaining KG</span>
+                                              <span className="font-mono text-xs text-zinc-600 dark:text-zinc-400">{row.remaining} KG</span>
+                                            </div>
+                                            <div>
+                                              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Consumed KG</span>
+                                              <span className="font-mono text-xs font-bold text-zinc-800 dark:text-zinc-200">{row.consumed} KG</span>
+                                            </div>
                                           </div>
-                                        )}
-                                      </div>
-                                    ) : (
-                                      <>
-                                        <div className="relative">
-                                          <Input
-                                            type="number"
-                                            step="0.001"
-                                            value={row.isSwapped ? (returnedWeights[row.id] ?? "") : ""}
-                                            placeholder={row.isSwapped ? `Max ${row.opening} KG` : "N/A - Not Swapped"}
-                                            disabled={!row.isSwapped}
-                                            onChange={(e) => {
-                                              let val = parseFloat(e.target.value);
-                                              const maxGross = row.opening;
-                                              if (!isNaN(val) && val > maxGross) {
-                                                val = maxGross;
-                                              }
-                                              setReturnedWeights((prev) => ({ ...prev, [row.id]: isNaN(val) ? 0 : val }));
-                                            }}
-                                            className={`pr-8 h-8 text-xs ${weightError ? "border-rose-500" : ""}`}
-                                          />
-                                          {row.isSwapped && <span className="absolute right-2 top-2 text-[10px] text-zinc-400">KG</span>}
+
+                                          {/* Action Segmented Toggle */}
+                                          <div className="space-y-1">
+                                            <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Cylinder Action</Label>
+                                            <div className="flex bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-xl max-w-xs border border-zinc-200 dark:border-zinc-850">
+                                              <button
+                                                type="button"
+                                                disabled={isReadOnly}
+                                                onClick={() => {
+                                                  setSwappedCylinders((prev) => ({ ...prev, [row.id]: false }));
+                                                  setSelectedReplacementCylinders((prev) =>
+                                                    prev.filter(c => c.swappedOutCylinderId !== row.id)
+                                                  );
+                                                }}
+                                                className={`flex-1 py-1 px-2.5 text-xs font-bold rounded-lg transition-all ${
+                                                  !row.isSwapped
+                                                    ? "bg-white dark:bg-zinc-900 text-violet-600 dark:text-violet-400 shadow-sm"
+                                                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                                                }`}
+                                              >
+                                                Keep In-Place
+                                              </button>
+                                              <button
+                                                type="button"
+                                                disabled={isReadOnly}
+                                                onClick={() => {
+                                                  setSwappedCylinders((prev) => ({ ...prev, [row.id]: true }));
+                                                  setSelectedReplacementCylinders((prev) => {
+                                                    if (prev.some(c => c.swappedOutCylinderId === row.id)) return prev;
+                                                    return [
+                                                      ...prev,
+                                                      {
+                                                        cylinderAssetId: 0,
+                                                        serialNumber: "",
+                                                        productName: "",
+                                                        tareWeight: 0,
+                                                        capacity: 0,
+                                                        targetKg: "",
+                                                        swappedOutCylinderId: row.id,
+                                                      }
+                                                    ];
+                                                  });
+                                                }}
+                                                className={`flex-1 py-1 px-2.5 text-xs font-bold rounded-lg transition-all ${
+                                                  row.isSwapped
+                                                    ? "bg-white dark:bg-zinc-900 text-violet-600 dark:text-violet-400 shadow-sm"
+                                                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                                                }`}
+                                              >
+                                                Swap Cylinder
+                                              </button>
+                                            </div>
+                                          </div>
+
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                                            {/* Column 1: Gross Weight details of Returned Cylinder */}
+                                            <div className="space-y-2">
+                                              <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                                                {row.isSwapped ? "Returned Gross Weight (Weigh-Out)" : "Current Gross Weight"}
+                                              </Label>
+                                              <div className="flex items-center gap-2">
+                                                <div className="relative flex-1">
+                                                  <Input
+                                                    type="number"
+                                                    step="0.001"
+                                                    value={returnedWeights[row.id] !== undefined ? (returnedWeights[row.id] ?? "") : ""}
+                                                    placeholder={row.isSwapped ? `Max ${row.opening} KG` : "Current Weight"}
+                                                    readOnly={true}
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      if (isReadOnly || isViewMode) return;
+                                                      setWeighingCylinderId(row.id);
+                                                      const savedGross = returnedWeights[row.id] !== undefined ? String(returnedWeights[row.id]) : "";
+                                                      setWeighingGross(savedGross);
+                                                      
+                                                      const serialAtt = attachmentsState.find(a => a.siteCylinderId === row.id && a.attachmentType === "SERIAL_IMAGE");
+                                                      const weightAtt = attachmentsState.find(a => a.siteCylinderId === row.id && a.attachmentType === "WEIGHT_IMAGE");
+                                                      const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8055";
+                                                      const sId = serialAtt?.directusFileId || null;
+                                                      const wId = weightAtt?.directusFileId || null;
+                                                      
+                                                      setSerialFile(null);
+                                                      setSerialFileUrl(sId ? `${apiBaseUrl}/assets/${sId}` : null);
+                                                      setSerialDirectusId(sId);
+                                                      setWeightFile(null);
+                                                      setWeightFileUrl(wId ? `${apiBaseUrl}/assets/${wId}` : null);
+                                                      setWeightDirectusId(wId);
+                                                      
+                                                      setIsWeighModalOpen(true);
+                                                    }}
+                                                    className={`pr-8 h-9 text-xs cursor-pointer ${weightError ? "border-rose-500" : ""}`}
+                                                  />
+                                                  <span className="absolute right-2 top-2.5 text-[10px] text-zinc-400 font-bold">KG</span>
+                                                </div>
+                                                {!isReadOnly && !isViewMode && (
+                                                  <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => {
+                                                      setWeighingCylinderId(row.id);
+                                                      const savedGross = returnedWeights[row.id] !== undefined ? String(returnedWeights[row.id]) : "";
+                                                      setWeighingGross(savedGross);
+                                                      
+                                                      const serialAtt = attachmentsState.find(a => a.siteCylinderId === row.id && a.attachmentType === "SERIAL_IMAGE");
+                                                      const weightAtt = attachmentsState.find(a => a.siteCylinderId === row.id && a.attachmentType === "WEIGHT_IMAGE");
+                                                      const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8055";
+                                                      const sId = serialAtt?.directusFileId || null;
+                                                      const wId = weightAtt?.directusFileId || null;
+                                                      
+                                                      setSerialFile(null);
+                                                      setSerialFileUrl(sId ? `${apiBaseUrl}/assets/${sId}` : null);
+                                                      setSerialDirectusId(sId);
+                                                      setWeightFile(null);
+                                                      setWeightFileUrl(wId ? `${apiBaseUrl}/assets/${wId}` : null);
+                                                      setWeightDirectusId(wId);
+                                                      
+                                                      setIsWeighModalOpen(true);
+                                                    }}
+                                                    className={`h-9 w-9 rounded-lg shrink-0 ${hasSerial && hasWeight ? "border-emerald-250 text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20" : ""}`}
+                                                    title="Upload Photos"
+                                                  >
+                                                    <Scale className="h-3.5 w-3.5" />
+                                                  </Button>
+                                                )}
+                                              </div>
+                                              <div className="flex gap-1.5">
+                                                {hasSerial && (
+                                                  <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400">
+                                                    Serial: ✓
+                                                  </Badge>
+                                                )}
+                                                {hasWeight && (
+                                                  <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400">
+                                                    Weight: ✓
+                                                  </Badge>
+                                                )}
+                                              </div>
+                                              {weightError && (
+                                                <span className="text-[9px] text-rose-500 block mt-0.5 font-semibold">Below Tare weight!</span>
+                                              )}
+                                            </div>
+
+                                            {/* Column 2: Replacement cylinder sub-form */}
+                                            {row.isSwapped && repItem ? (
+                                              <div className="space-y-3 p-3.5 border border-zinc-150 dark:border-zinc-800/80 rounded-xl bg-zinc-50/40 dark:bg-zinc-950/20 animate-in fade-in duration-300">
+                                                {/* Scan/Input Serial */}
+                                                <div className="space-y-1.5">
+                                                  <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Scan / Input New Serial</Label>
+                                                  <div className="flex gap-1.5 items-center w-full">
+                                                    <Input
+                                                      type="text"
+                                                      placeholder="Serial number..."
+                                                      value={repItem.serialNumber}
+                                                      onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        setSelectedReplacementCylinders((prev) => {
+                                                          const copy = [...prev];
+                                                          const idx = copy.findIndex(c => c.swappedOutCylinderId === row.id);
+                                                          if (idx !== -1) {
+                                                            copy[idx] = {
+                                                              ...copy[idx],
+                                                              serialNumber: val,
+                                                              cylinderAssetId: 0,
+                                                              productName: "",
+                                                              tareWeight: 0,
+                                                              capacity: 0,
+                                                              error: undefined,
+                                                            };
+                                                          }
+                                                          return copy;
+                                                        });
+                                                      }}
+                                                      onKeyDown={(e) => {
+                                                        if (e.key === "Enter") {
+                                                          e.preventDefault();
+                                                          const idx = selectedReplacementCylinders.findIndex(c => c.swappedOutCylinderId === row.id);
+                                                          if (idx !== -1) {
+                                                            handleValidateReplacementSerial(idx, repItem.serialNumber);
+                                                          }
+                                                        }
+                                                      }}
+                                                      className={`text-xs h-8 w-full ${repItem.error ? "border-rose-500" : repItem.cylinderAssetId ? "border-emerald-500 bg-emerald-50/10" : ""}`}
+                                                    />
+                                                    <Button
+                                                      type="button"
+                                                      variant="outline"
+                                                      size="xs"
+                                                      onClick={() => {
+                                                        const idx = selectedReplacementCylinders.findIndex(c => c.swappedOutCylinderId === row.id);
+                                                        if (idx !== -1) {
+                                                          handleValidateReplacementSerial(idx, repItem.serialNumber);
+                                                        }
+                                                      }}
+                                                      disabled={repItem.isValidating || !repItem.serialNumber.trim()}
+                                                      className="h-8 font-bold text-xs shrink-0"
+                                                    >
+                                                      {repItem.isValidating ? (
+                                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                                      ) : repItem.cylinderAssetId ? (
+                                                        <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                                                      ) : (
+                                                        "Verify"
+                                                      )}
+                                                    </Button>
+                                                  </div>
+                                                  {repItem.error && (
+                                                    <span className="text-[9px] text-rose-500 block mt-0.5 font-semibold">{repItem.error}</span>
+                                                  )}
+                                                  {repItem.cylinderAssetId > 0 && (
+                                                    <span className="text-[9px] text-emerald-600 block mt-0.5 font-semibold">
+                                                      Verified: {repItem.productName} (Tare: {repItem.tareWeight} KG)
+                                                    </span>
+                                                  )}
+                                                </div>
+
+                                                {/* Starting Gross KG */}
+                                                <div className="space-y-1.5">
+                                                  <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">New Cylinder Gross Weight</Label>
+                                                  <div className="relative">
+                                                    <Input
+                                                      type="number"
+                                                      step="0.01"
+                                                      value={repItem.targetKg}
+                                                      disabled={!repItem.cylinderAssetId}
+                                                      onChange={(e) => {
+                                                        const raw = e.target.value;
+                                                        const val = raw === "" ? "" : parseFloat(raw);
+                                                        setSelectedReplacementCylinders((prev) => {
+                                                          const copy = [...prev];
+                                                          const idx = copy.findIndex(c => c.swappedOutCylinderId === row.id);
+                                                          if (idx !== -1) {
+                                                            copy[idx].targetKg = val;
+                                                          }
+                                                          return copy;
+                                                        });
+                                                      }}
+                                                      placeholder={repItem.cylinderAssetId ? String(repItem.tareWeight + repItem.capacity) : "N/A"}
+                                                      className="text-xs h-8 pr-8"
+                                                    />
+                                                    {repItem.cylinderAssetId > 0 && <span className="absolute right-2 top-2.5 text-[10px] text-zinc-400 font-bold">KG</span>}
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            ) : (
+                                              <div className="flex items-center justify-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl p-4 text-center text-muted-foreground bg-zinc-50/10 text-[10px]">
+                                                Cylinder stays in service. No replacement needed.
+                                              </div>
+                                            )}
+                                          </div>
                                         </div>
-                                        {weightError && (
-                                          <span className="text-[9px] text-rose-500 block mt-0.5">Below Tare weight!</span>
-                                        )}
-                                      </>
-                                    )}
-                                  </td>
-                                  <td className="p-3 text-right font-mono font-medium text-zinc-600 dark:text-zinc-400">
-                                    {row.remaining} KG
-                                  </td>
-                                  <td className="p-3 text-right font-mono font-bold text-zinc-800 dark:text-zinc-200">
-                                    {row.consumed} KG
-                                  </td>
-                                </tr>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </Fragment>
                               );
                             })
                           )
@@ -1259,82 +1580,20 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
             </>
           )}
 
-          {/* Card C: Cylinder Allocations/Deployments */}
-          {(isViewMode || flowType === "ONBOARDING" || operationMode === "SWAP_AND_SYNC") && (
-            <div className="bg-white/70 dark:bg-zinc-900/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-6 shadow-xl space-y-4">
+          {/* Card C: Cylinder Allocations/Deployments for Onboarding setup only */}
+          {flowType === "ONBOARDING" && (
+            <div className="bg-white/70 dark:bg-zinc-900/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <div className="h-8 w-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600">
                     <Truck className="h-4 w-4" />
                   </div>
                   <h2 className="font-semibold text-sm">
-                    {flowType === "ONBOARDING" ? "Baseline Connected Cylinders" : "New Cylinders Deployed (Swapping In)"}
+                    Baseline Connected Cylinders
                   </h2>
                 </div>
-                {!isReadOnly && !isViewMode && flowType === "ROUTINE" && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="xs"
-                    onClick={() => {
-                      setSelectedReplacementCylinders((prev) => [
-                        ...prev,
-                        {
-                          cylinderAssetId: 0,
-                          serialNumber: "",
-                          productName: "",
-                          tareWeight: 0,
-                          capacity: 0,
-                          targetKg: "",
-                          swappedOutCylinderId: null,
-                        },
-                      ]);
-                    }}
-                    className="flex items-center gap-1 font-bold text-[10px] uppercase"
-                  >
-                    <Plus className="h-3 w-3" /> Add Cylinder
-                  </Button>
-                )}
               </div>
 
-              {isViewMode ? (
-                <div className="border border-zinc-200 dark:border-zinc-800/80 rounded-xl overflow-hidden text-xs bg-white dark:bg-zinc-955/10">
-                  <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse min-w-[420px]">
-                    <thead className="bg-zinc-50 dark:bg-zinc-900 font-bold text-zinc-500 border-b border-zinc-200 dark:border-zinc-800">
-                      <tr>
-                        <th className="p-3">Serial</th>
-                        <th className="p-3 text-right">Tare Weight</th>
-                        <th className="p-3 text-right">Previous Weight</th>
-                        <th className="p-3">Resulting State</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/50">
-                      {(txDetail?.wiwo_header_id as unknown as WiwoHeader)?.details ? (
-                        ((txDetail.wiwo_header_id as unknown as WiwoHeader).details ?? [])
-                          .filter(l => l.line_type === "NEW_DEPLOYMENT")
-                          .map((line, idx) => (
-                            <tr key={idx} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20">
-                              <td className="p-3 font-mono font-bold">{line.serial_number}</td>
-                              <td className="p-3 text-right font-mono">{line.tare_weight_kg} KG</td>
-                              <td className="p-3 text-right font-mono">{line.previous_lpg_kg} KG</td>
-                              <td className="p-3">
-                                <Badge variant="secondary" className="text-[10px] uppercase font-bold tracking-wider">
-                                  Connected
-                                </Badge>
-                              </td>
-                            </tr>
-                          ))
-                      ) : (
-                        <tr>
-                          <td colSpan={4} className="p-4 text-center text-muted-foreground">No deployment details loaded.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                  </div>
-                </div>
-              ) : flowType === "ONBOARDING" ? (
                 <div className="space-y-3">
                   <div className="border border-zinc-200 dark:border-zinc-800/80 rounded-xl p-4 bg-white dark:bg-zinc-955/10 text-xs">
                     <form onSubmit={handleAddSerial} className="flex items-center gap-2">
@@ -1361,10 +1620,10 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                   {selectedOnboardCylinders.length > 0 && (
                     <div className="border border-zinc-200 dark:border-zinc-800/80 rounded-xl overflow-hidden text-xs bg-white dark:bg-zinc-955/10 mt-3 shadow-sm">
                       <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse min-w-[480px]">
+                      <table className="w-full text-left border-collapse min-w-full">
                         <thead className="bg-zinc-50 dark:bg-zinc-900 font-bold text-zinc-500 border-b border-zinc-200 dark:border-zinc-800">
                           <tr>
-                            <th className="p-3">Serial</th>
+                            <th className="p-3 sticky left-0 bg-zinc-50 dark:bg-zinc-900 z-10">Serial</th>
                             <th className="p-3">Product Name</th>
                             <th className="p-3 text-right">Tare Weight</th>
                             <th className="p-3 text-right w-44">Starting Gross Weight (KG)</th>
@@ -1374,7 +1633,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                         <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/50">
                           {selectedOnboardCylinders.map((cyl, idx) => (
                             <tr key={cyl.cylinderAssetId} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20">
-                              <td className="p-3 font-mono font-bold text-zinc-700 dark:text-zinc-300">{cyl.serialNumber}</td>
+                              <td className="p-3 font-mono font-bold text-zinc-700 dark:text-zinc-300 sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r border-zinc-100 dark:border-zinc-800 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">{cyl.serialNumber}</td>
                               <td className="p-3 text-zinc-600">{cyl.productName}</td>
                               <td className="p-3 text-right font-mono text-zinc-600">{cyl.tareWeight} KG</td>
                               <td className="p-3">
@@ -1415,145 +1674,14 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                     </div>
                   )}
                 </div>
-              ) : (
-                <div className="space-y-2 text-xs">
-                  {selectedReplacementCylinders.length === 0 ? (
-                    <div className="border border-dashed border-zinc-250 dark:border-zinc-800 rounded-xl p-6 text-center text-muted-foreground bg-zinc-50/10">
-                      No replacement cylinders added to deployment details.
-                    </div>
-                  ) : (
-                    selectedReplacementCylinders.map((item, idx) => {
-                      return (
-                        <div key={idx} className="flex flex-col md:flex-row gap-3 items-start md:items-center bg-zinc-50/50 dark:bg-zinc-900/20 p-3.5 border border-zinc-150 dark:border-zinc-850 rounded-xl relative">
-                          {/* Swapped-out cylinder selection dropdown */}
-                          <div className="flex-1 w-full space-y-1 flex flex-col justify-end">
-                            <Label className="text-[10px] font-bold text-zinc-400 mb-0.5">Swapped-out Cylinder (Empty)</Label>
-                            <select
-                              value={item.swappedOutCylinderId ?? ""}
-                              onChange={(e) => {
-                                const val = e.target.value ? Number(e.target.value) : null;
-                                setSelectedReplacementCylinders((prev) => {
-                                  const copy = [...prev];
-                                  copy[idx].swappedOutCylinderId = val;
-                                  return copy;
-                                });
-                              }}
-                              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                            >
-                              <option value="">-- Select Cylinder --</option>
-                              {calculatedReturnedCylinders
-                                .filter((c) => c.isSwapped)
-                                .map((c) => (
-                                  <option key={c.id} value={c.id}>
-                                    {c.cylinder_asset?.serial_number} (Tare: {c.tare} KG)
-                                  </option>
-                                ))}
-                            </select>
-                          </div>
-
-                          {/* Scan/Input Serial with Verification */}
-                          <div className="flex-1 w-full space-y-1 flex flex-col justify-end">
-                            <Label className="text-[10px] font-bold text-zinc-400 mb-0.5">Scan / Input New Serial</Label>
-                            <div className="flex gap-1.5 items-center w-full">
-                              <Input
-                                type="text"
-                                placeholder="Serial number..."
-                                value={item.serialNumber}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setSelectedReplacementCylinders((prev) => {
-                                    const copy = [...prev];
-                                    copy[idx].serialNumber = val;
-                                    copy[idx].cylinderAssetId = 0;
-                                    copy[idx].productName = "";
-                                    copy[idx].tareWeight = 0;
-                                    copy[idx].capacity = 0;
-                                    copy[idx].error = undefined;
-                                    return copy;
-                                  });
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") {
-                                    e.preventDefault();
-                                    handleValidateReplacementSerial(idx, item.serialNumber);
-                                  }
-                                }}
-                                className={`text-xs h-9 w-full ${item.error ? "border-rose-500" : item.cylinderAssetId ? "border-emerald-500 bg-emerald-50/10" : ""}`}
-                              />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleValidateReplacementSerial(idx, item.serialNumber)}
-                                disabled={item.isValidating || !item.serialNumber.trim()}
-                                className="h-9 font-bold text-xs shrink-0"
-                              >
-                                {item.isValidating ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                ) : item.cylinderAssetId ? (
-                                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                                ) : (
-                                  "Verify"
-                                )}
-                              </Button>
-                            </div>
-                            {item.error && (
-                              <span className="text-[9px] text-rose-500 block mt-0.5">{item.error}</span>
-                            )}
-                            {item.cylinderAssetId > 0 && (
-                              <span className="text-[9px] text-emerald-600 block mt-0.5">
-                                Verified: {item.productName} (Tare: {item.tareWeight} KG)
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Starting Gross KG */}
-                          <div className="w-full md:w-32 space-y-1 flex flex-col justify-end">
-                            <Label className="text-[10px] font-bold text-zinc-400 mb-0.5">Gross Weight (KG)</Label>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              value={item.targetKg}
-                              disabled={!item.cylinderAssetId}
-                              onChange={(e) => {
-                                const raw = e.target.value;
-                                  const val = raw === "" ? "" : parseFloat(raw);
-                                setSelectedReplacementCylinders((prev) => {
-                                  const copy = [...prev];
-                                  copy[idx].targetKg = val;
-                                  return copy;
-                                });
-                              }}
-                              placeholder={item.cylinderAssetId ? String(item.tareWeight + item.capacity) : "N/A"}
-                              className="text-xs h-9"
-                            />
-                          </div>
-
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-xs"
-                            onClick={() => {
-                              setSelectedReplacementCylinders((prev) => prev.filter((_, i) => i !== idx));
-                            }}
-                            className="text-rose-500 hover:text-rose-700 mt-2 md:mt-5 self-end md:self-center shrink-0"
-                          >
-                            <Trash2 className="h-4.5 w-4.5" />
-                          </Button>
-                        </div>
-                      );
-                    })
-                  )}
                 </div>
               )}
             </div>
-          )}
-        </div>
 
         {/* Right Column (Sidebar) */}
         <div className="space-y-6">
           {/* Card D: Summary Card */}
-          <div className="bg-gradient-to-br from-violet-600 via-purple-700 to-indigo-800 rounded-2xl p-6 text-white shadow-2xl shadow-violet-500/30 space-y-4">
+          <div className="bg-gradient-to-br from-violet-600 via-purple-700 to-indigo-800 rounded-2xl p-4 sm:p-6 text-white shadow-2xl shadow-violet-500/30 space-y-4">
             <div className="flex items-center gap-2 mb-1">
               <div className="h-9 w-9 rounded-xl bg-white/20 flex items-center justify-center">
                 <Gauge className="h-5 w-5" />
@@ -1562,18 +1690,54 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
             </div>
 
             {flowType === "ROUTINE" && (
-              <div className="bg-white/10 rounded-xl p-3 space-y-1.5 text-sm">
-                <div className="flex justify-between text-violet-100">
-                  <span>Metered KG</span>
-                  <span className="font-mono font-bold">{meteredKg.toFixed(3)} kg</span>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Metered Calculation Box */}
+                  <div className="bg-white/10 rounded-xl p-3 space-y-1.5 text-xs">
+                    <div className="text-violet-200 font-bold mb-1.5 uppercase tracking-wider text-[10px]">Metered Calc</div>
+                    <div className="flex justify-between text-violet-100">
+                      <span>KG</span>
+                      <span className="font-mono font-bold">{meteredKg.toFixed(3)}</span>
+                    </div>
+                    <div className="flex justify-between text-violet-100">
+                      <span>Gross</span>
+                      <span className="font-mono">₱ {(meteredKg * pricePerKg).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-violet-100">
+                      <span>VAT</span>
+                      <span className="font-mono">₱ {(meteredKg * pricePerKg * 0.12).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-white border-t border-white/10 pt-1.5 font-bold">
+                      <span>Total</span>
+                      <span className="font-mono">₱ {(meteredKg * pricePerKg * 1.12).toFixed(2)}</span>
+                    </div>
+                  </div>
+
+                  {/* WIWO Calculation Box */}
+                  <div className="bg-white/10 rounded-xl p-3 space-y-1.5 text-xs">
+                    <div className="text-violet-200 font-bold mb-1.5 uppercase tracking-wider text-[10px]">WIWO Calc</div>
+                    <div className="flex justify-between text-violet-100">
+                      <span>KG</span>
+                      <span className="font-mono font-bold">{totalWiwoKg.toFixed(3)}</span>
+                    </div>
+                    <div className="flex justify-between text-violet-100">
+                      <span>Gross</span>
+                      <span className="font-mono">₱ {(totalWiwoKg * pricePerKg).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-violet-100">
+                      <span>VAT</span>
+                      <span className="font-mono">₱ {(totalWiwoKg * pricePerKg * 0.12).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-white border-t border-white/10 pt-1.5 font-bold">
+                      <span>Total</span>
+                      <span className="font-mono">₱ {(totalWiwoKg * pricePerKg * 1.12).toFixed(2)}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex justify-between text-violet-100">
-                  <span>WIWO KG</span>
-                  <span className="font-mono font-bold">{totalWiwoKg.toFixed(3)} kg</span>
-                </div>
-                <div className="flex justify-between text-violet-200 border-t border-white/10 pt-1.5">
-                  <span>Variance</span>
-                  <span className="font-mono">{varianceKg.toFixed(3)} kg</span>
+
+                <div className="flex justify-between items-center text-violet-200 bg-white/5 border border-white/10 rounded-xl p-2.5 text-xs">
+                  <span className="font-semibold">Variance (Difference)</span>
+                  <span className="font-mono font-bold">{varianceKg.toFixed(3)} kg</span>
                 </div>
               </div>
             )}
@@ -1622,37 +1786,13 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
             </div>
           </div>
 
-          {/* Card E: Status Selection & Remarks notes */}
-          <div className="bg-white/70 dark:bg-zinc-900/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-6 shadow-xl space-y-4">
-            <div className="space-y-2">
-              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</Label>
-              <div className="flex gap-2 p-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl">
-                {([ "DRAFT", "POSTED", ...(status === "CANCELLED" ? ["CANCELLED"] as const : []) ] as const).map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    disabled={isReadOnly || isViewMode}
-                    onClick={() => setStatus(s)}
-                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                      status === s
-                        ? s === "POSTED"
-                          ? "bg-white dark:bg-zinc-700 shadow-sm text-green-600"
-                          : s === "CANCELLED"
-                          ? "bg-white dark:bg-zinc-700 shadow-sm text-red-600"
-                          : "bg-white dark:bg-zinc-700 shadow-sm text-violet-600"
-                        : "text-muted-foreground hover:text-zinc-900"
-                    } ${(isReadOnly || isViewMode) ? "opacity-60 cursor-not-allowed" : ""}`}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
+          {/* Card E: Remarks notes (Status removed per user request) */}
+          <div className="bg-white/70 dark:bg-zinc-900/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
 
             {flowType === "ROUTINE" && mismatchExists && (
               <div className="space-y-2">
                 <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Variance Reason
+                  Variance Reason (Optional)
                 </Label>
                 <select
                   value={isViewMode ? txDetail?.variance_reason_code || "NONE" : varianceReasonCode}
@@ -1690,8 +1830,47 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
               )}
             </div>
           </div>
-        </div>
       </div>
+      </div>
+      {/* Form Action Buttons (Moved to bottom) */}
+      <div className="flex flex-wrap gap-4 items-center justify-end border-t border-zinc-200 dark:border-zinc-800 pt-6 mt-6">
+        <Button
+          variant="ghost"
+          size="default"
+          onClick={onCancel}
+          className="h-11 px-6 hover:bg-red-50 hover:text-red-600 font-semibold"
+        >
+          {isReadOnly ? "Close" : "Cancel"}
+        </Button>
+
+        {isPosted && (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={loading}
+            onClick={() => setIsCancelModalOpen(true)}
+            className="h-11 px-6 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 transition-all active:scale-95 font-semibold"
+          >
+            Cancel & Rollback
+          </Button>
+        )}
+
+        {!isReadOnly && !isViewMode && (
+          <Button
+            onClick={handleSubmit}
+            disabled={loading || (flowType === "ROUTINE" && mismatchExists && !remarks.trim()) || hasNegativeWeightErrors}
+            className="h-11 px-8 bg-violet-600 hover:bg-violet-700 shadow-lg shadow-violet-500/20 transition-all active:scale-95 text-white font-bold text-sm"
+          >
+            {loading ? (
+              <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+            ) : (
+              <CheckCircle2 className="h-5 w-5 mr-2" />
+            )}
+            Post Validation
+          </Button>
+        )}
+      </div>
+
 
       {/* Cancel/Rollback Confirmation Modal */}
       {isCancelModalOpen && mounted && createPortal(
@@ -1834,7 +2013,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
               <table className="hidden sm:table w-full text-left text-xs border-collapse">
                 <thead className="bg-zinc-50 dark:bg-zinc-900 font-bold text-zinc-500 border-b border-zinc-200 dark:border-zinc-800 sticky top-0">
                   <tr>
-                    <th className="p-3">Tx No</th>
+                    <th className="p-3 sticky left-0 bg-zinc-50 dark:bg-zinc-900 z-10">Tx No</th>
                     <th className="p-3">Site</th>
                     <th className="p-3">Customer</th>
                     <th className="p-3">Date</th>
@@ -1852,7 +2031,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                   ) : (
                     filteredDrafts.map((tx) => (
                       <tr key={tx.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20 transition-colors">
-                        <td className="p-3 font-mono font-bold text-zinc-700 dark:text-zinc-300">{tx.transaction_no}</td>
+                        <td className="p-3 font-mono font-bold text-zinc-700 dark:text-zinc-300 sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r border-zinc-100 dark:border-zinc-800 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">{tx.transaction_no}</td>
                         <td className="p-3 text-violet-600 dark:text-violet-400 font-semibold truncate max-w-[130px]">
                           {(() => { const s = sites.find(st => st.id === tx.lpg_site_id); return s?.site_name || `Site #${tx.lpg_site_id}`; })()}
                         </td>
@@ -1921,83 +2100,17 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
 
           {/* Body */}
           <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
-            {/* Select Cylinder */}
+            {/* Selected Cylinder */}
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Select Cylinder</Label>
-              <Combobox
-                value={activeSiteCylinders.find(c => c.id === weighingCylinderId) || null}
-                onValueChange={(val: CustomerSiteCylinder | null) => {
-                  const id = val ? val.id : null;
-                  setWeighingCylinderId(id);
-                  setWeighingCylinderSearch(val ? (val.cylinder_asset?.serial_number ?? "") : "");
-                  
-                  if (id) {
-                    const cachedData = localStorage.getItem(`wiwo_weigh_cache_${id}`);
-                    if (cachedData) {
-                      try {
-                        const parsed = JSON.parse(cachedData);
-                        setWeighingGross(parsed.gross || "");
-                        setSerialFile(null);
-                        setSerialFileUrl(parsed.serialFileUrl || null);
-                        setSerialDirectusId(parsed.serialDirectusId || null);
-                        setWeightFile(null);
-                        setWeightFileUrl(parsed.weightFileUrl || null);
-                        setWeightDirectusId(parsed.weightDirectusId || null);
-                      } catch (e) {
-                        console.error("Failed to parse cached data", e);
-                      }
-                    } else {
-                      // Fallback to saved state if any
-                      const savedGross = returnedWeights[id] !== undefined ? String(returnedWeights[id]) : "";
-                      const serialAtt = attachmentsState.find(a => a.siteCylinderId === id && a.attachmentType === "SERIAL_IMAGE");
-                      const weightAtt = attachmentsState.find(a => a.siteCylinderId === id && a.attachmentType === "WEIGHT_IMAGE");
-                      const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8055";
-                      const sId = serialAtt?.directusFileId || null;
-                      const wId = weightAtt?.directusFileId || null;
-                      
-                      setWeighingGross(savedGross);
-                      setSerialFile(null);
-                      setSerialFileUrl(sId ? `${apiBaseUrl}/assets/${sId}` : null);
-                      setSerialDirectusId(sId);
-                      setWeightFile(null);
-                      setWeightFileUrl(wId ? `${apiBaseUrl}/assets/${wId}` : null);
-                      setWeightDirectusId(wId);
-                    }
-                  } else {
-                    setWeighingGross("");
-                    setSerialFile(null);
-                    setSerialFileUrl(null);
-                    setSerialDirectusId(null);
-                    setWeightFile(null);
-                    setWeightFileUrl(null);
-                    setWeightDirectusId(null);
-                  }
-                }}
-              >
-                <ComboboxInput
-                  placeholder="Select Cylinder to Weigh..."
-                  value={weighingCylinderSearch}
-                  onChange={(e) => setWeighingCylinderSearch(e.target.value)}
-                  showTrigger
-                />
-                <ComboboxContent>
-                  <ComboboxList>
-                    {activeSiteCylinders.length === 0 && <ComboboxEmpty>No cylinders connected.</ComboboxEmpty>}
-                    {activeSiteCylinders
-                      .filter((c) =>
-                        (c.cylinder_asset?.serial_number || "").toLowerCase().includes(weighingCylinderSearch.toLowerCase())
-                      )
-                      .map((c) => {
-                        const hasWeight = returnedWeights[c.id] !== undefined;
-                        return (
-                          <ComboboxItem key={c.id} value={c}>
-                            {c.cylinder_asset?.serial_number} ({c.cylinder_asset?.tare_weight} KG Tare) {hasWeight ? " - [Re-weigh]" : ""}
-                          </ComboboxItem>
-                        );
-                      })}
-                  </ComboboxList>
-                </ComboboxContent>
-              </Combobox>
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Cylinder</Label>
+              <Input
+                readOnly
+                value={(() => {
+                  const cyl = activeSiteCylinders.find(c => c.id === weighingCylinderId);
+                  return cyl ? `${cyl.cylinder_asset?.serial_number} (Tare: ${cyl.cylinder_asset?.tare_weight} KG)` : "";
+                })()}
+                className="bg-zinc-50 dark:bg-zinc-800 font-mono font-bold"
+              />
             </div>
 
             {weighingCylinderId && (() => {
@@ -2005,35 +2118,52 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
               if (!selectedCyl) return null;
               const tare = Number(selectedCyl.cylinder_asset?.tare_weight ?? 0);
               const opening = Number(selectedCyl.previous_lpg_kg ?? 0);
+              const currentLpgKg = Number(selectedCyl.current_lpg_kg ?? 0);
               const maxGross = opening;
               const isWeightInvalid = weighingGross ? parseFloat(weighingGross) < tare : false;
 
               return (
                 <>
-                  {/* Gross Weight input */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Gross Weight (Scale Reading)</Label>
-                    <div className="relative">
-                      <Input
-                        type="number"
-                        step="0.001"
-                        placeholder="Scale gross weight"
-                        value={weighingGross}
-                        onChange={(e) => {
-                          const val = parseFloat(e.target.value);
-                          if (!isNaN(val) && val > maxGross) {
-                            setWeighingGross(String(maxGross));
-                          } else {
-                            setWeighingGross(e.target.value);
-                          }
-                        }}
-                        className={`pr-8 h-10 text-sm ${isWeightInvalid ? "border-rose-500" : ""}`}
-                      />
-                      <span className="absolute right-3 top-3 text-xs text-zinc-400 font-bold">KG</span>
+                  {/* Weight Inputs (Inline) */}
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Previous Reading */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Previous Reading</Label>
+                      <div className="relative">
+                        <Input
+                          readOnly
+                          value={currentLpgKg}
+                          className="pr-8 h-10 text-sm bg-zinc-50 dark:bg-zinc-800 font-mono"
+                        />
+                        <span className="absolute right-3 top-3 text-xs text-zinc-400 font-bold">KG</span>
+                      </div>
                     </div>
-                    {isWeightInvalid && (
-                      <span className="text-[11px] text-rose-500 block mt-0.5">Gross weight cannot be below tare weight of {tare} KG!</span>
-                    )}
+
+                    {/* Gross Weight input */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Gross Weight</Label>
+                      <div className="relative">
+                        <Input
+                          type="number"
+                          step="0.001"
+                          placeholder="Scale gross weight"
+                          value={weighingGross}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value);
+                            if (!isNaN(val) && val > maxGross) {
+                              setWeighingGross(String(maxGross));
+                            } else {
+                              setWeighingGross(e.target.value);
+                            }
+                          }}
+                          className={`pr-8 h-10 text-sm ${isWeightInvalid ? "border-rose-500" : ""}`}
+                        />
+                        <span className="absolute right-3 top-3 text-xs text-zinc-400 font-bold">KG</span>
+                      </div>
+                      {isWeightInvalid && (
+                        <span className="text-[11px] text-rose-500 block mt-0.5">Below tare weight of {tare} KG!</span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Camera Photo Captures */}
@@ -2165,11 +2295,6 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                   ...prev,
                   [weighingCylinderId]: parseFloat(weighingGross),
                 }));
-                // Set cylinder marked as "weighed"
-                setSwappedCylinders(prev => ({
-                  ...prev,
-                  [weighingCylinderId]: true,
-                }));
 
                 // Update attachments
                 setAttachmentsState((prev) => {
@@ -2206,11 +2331,392 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                 }
 
                 setIsWeighModalOpen(false);
+                setScannerError("");
+                setScannerInput("");
+                setIsScannerModalOpen(true);
               }}
               className="text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-5 h-9"
             >
               Save Weighing
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Mobile Cylinder Actions Modal */}
+      <Dialog open={mobileEditingCylinderId !== null} onOpenChange={(open) => { if (!open) setMobileEditingCylinderId(null); }}>
+        {mobileEditingCylinderId && (() => {
+          const row = calculatedReturnedCylinders.find(c => c.id === mobileEditingCylinderId);
+          if (!row) return null;
+          const weightError = row.isSwapped && row.returnedGross > 0 && row.returnedGross < row.tare;
+          const hasSerial = attachmentsState.some(a => a.siteCylinderId === row.id && a.attachmentType === "SERIAL_IMAGE");
+          const hasWeight = attachmentsState.some(a => a.siteCylinderId === row.id && a.attachmentType === "WEIGHT_IMAGE");
+          const repIndex = selectedReplacementCylinders.findIndex(c => c.swappedOutCylinderId === row.id);
+          const repItem = repIndex !== -1 ? selectedReplacementCylinders[repIndex] : null;
+
+          return (
+            <DialogContent 
+              onPointerDownOutside={(e) => e.preventDefault()}
+              onInteractOutside={(e) => e.preventDefault()}
+              className="max-w-md w-[92vw] sm:w-full p-5 rounded-2xl bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 shadow-2xl gap-0"
+            >
+              <DialogTitle className="text-sm font-extrabold text-zinc-800 dark:text-zinc-100 flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-3">
+                <Scale className="h-4 w-4 text-violet-500" />
+                Cylinder Actions: {row.cylinder_asset?.serial_number}
+              </DialogTitle>
+
+              <div className="space-y-5 pt-4 max-h-[70vh] overflow-y-auto pr-1">
+                
+                <div className="grid grid-cols-2 gap-4 bg-zinc-50 dark:bg-zinc-900/40 p-3 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                  <div>
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Tare Weight</span>
+                    <span className="font-mono text-sm">{row.tare} KG</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Previous KG</span>
+                    <span className="font-mono text-sm">{row.opening} KG</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Remaining KG</span>
+                    <span className="font-mono text-sm text-zinc-600 dark:text-zinc-400">{row.remaining} KG</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Consumed KG</span>
+                    <span className="font-mono text-sm font-bold text-zinc-800 dark:text-zinc-200">{row.consumed} KG</span>
+                  </div>
+                </div>
+
+                {/* Action Segmented Toggle */}
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Cylinder Action</Label>
+                  <div className="flex bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-xl w-full border border-zinc-200 dark:border-zinc-850">
+                    <button
+                      type="button"
+                      disabled={isReadOnly}
+                      onClick={() => {
+                        setSwappedCylinders((prev) => ({ ...prev, [row.id]: false }));
+                        setSelectedReplacementCylinders((prev) =>
+                          prev.filter(c => c.swappedOutCylinderId !== row.id)
+                        );
+                      }}
+                      className={`flex-1 py-1.5 px-3 text-xs font-bold rounded-lg transition-all ${
+                        !row.isSwapped
+                          ? "bg-white dark:bg-zinc-900 text-violet-600 dark:text-violet-400 shadow-sm"
+                          : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                      }`}
+                    >
+                      Keep In-Place
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isReadOnly}
+                      onClick={() => {
+                        setSwappedCylinders((prev) => ({ ...prev, [row.id]: true }));
+                        setSelectedReplacementCylinders((prev) => {
+                          if (prev.some(c => c.swappedOutCylinderId === row.id)) return prev;
+                          return [
+                            ...prev,
+                            {
+                              cylinderAssetId: 0,
+                              serialNumber: "",
+                              productName: "",
+                              tareWeight: 0,
+                              capacity: 0,
+                              targetKg: "",
+                              swappedOutCylinderId: row.id,
+                            }
+                          ];
+                        });
+                      }}
+                      className={`flex-1 py-1.5 px-3 text-xs font-bold rounded-lg transition-all ${
+                        row.isSwapped
+                          ? "bg-white dark:bg-zinc-900 text-violet-600 dark:text-violet-400 shadow-sm"
+                          : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                      }`}
+                    >
+                      Swap Cylinder
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Gross Weight details */}
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                      {row.isSwapped ? "Returned Gross Weight (Weigh-Out)" : "Current Gross Weight"}
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <Input
+                          type="number"
+                          step="0.001"
+                          value={returnedWeights[row.id] !== undefined ? (returnedWeights[row.id] ?? "") : ""}
+                          placeholder={row.isSwapped ? `Max ${row.opening} KG` : "Current Weight"}
+                          readOnly={true}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isReadOnly || isViewMode) return;
+                            setWeighingCylinderId(row.id);
+                            const savedGross = returnedWeights[row.id] !== undefined ? String(returnedWeights[row.id]) : "";
+                            setWeighingGross(savedGross);
+                            
+                            const serialAtt = attachmentsState.find(a => a.siteCylinderId === row.id && a.attachmentType === "SERIAL_IMAGE");
+                            const weightAtt = attachmentsState.find(a => a.siteCylinderId === row.id && a.attachmentType === "WEIGHT_IMAGE");
+                            const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8055";
+                            const sId = serialAtt?.directusFileId || null;
+                            const wId = weightAtt?.directusFileId || null;
+                            
+                            setSerialFile(null);
+                            setSerialFileUrl(sId ? `${apiBaseUrl}/assets/${sId}` : null);
+                            setSerialDirectusId(sId);
+                            setWeightFile(null);
+                            setWeightFileUrl(wId ? `${apiBaseUrl}/assets/${wId}` : null);
+                            setWeightDirectusId(wId);
+                            
+                            setIsWeighModalOpen(true);
+                          }}
+                          className={`pr-8 h-9 text-xs cursor-pointer ${weightError ? "border-rose-500" : ""}`}
+                        />
+                        <span className="absolute right-2 top-2.5 text-[10px] text-zinc-400 font-bold">KG</span>
+                      </div>
+                      {!isReadOnly && !isViewMode && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setWeighingCylinderId(row.id);
+                            const savedGross = returnedWeights[row.id] !== undefined ? String(returnedWeights[row.id]) : "";
+                            setWeighingGross(savedGross);
+                            
+                            const serialAtt = attachmentsState.find(a => a.siteCylinderId === row.id && a.attachmentType === "SERIAL_IMAGE");
+                            const weightAtt = attachmentsState.find(a => a.siteCylinderId === row.id && a.attachmentType === "WEIGHT_IMAGE");
+                            const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8055";
+                            const sId = serialAtt?.directusFileId || null;
+                            const wId = weightAtt?.directusFileId || null;
+                            
+                            setSerialFile(null);
+                            setSerialFileUrl(sId ? `${apiBaseUrl}/assets/${sId}` : null);
+                            setSerialDirectusId(sId);
+                            setWeightFile(null);
+                            setWeightFileUrl(wId ? `${apiBaseUrl}/assets/${wId}` : null);
+                            setWeightDirectusId(wId);
+                            
+                            setIsWeighModalOpen(true);
+                          }}
+                          className={`h-9 w-9 rounded-lg shrink-0 ${hasSerial && hasWeight ? "border-emerald-250 text-emerald-600 bg-emerald-50 dark:bg-emerald-955/20" : ""}`}
+                          title="Upload Photos"
+                        >
+                          <Scale className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                    <div className="flex gap-1.5">
+                      {hasSerial && (
+                        <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400">
+                          Serial: ✓
+                        </Badge>
+                      )}
+                      {hasWeight && (
+                        <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400">
+                          Weight: ✓
+                        </Badge>
+                      )}
+                    </div>
+                    {weightError && (
+                      <span className="text-[9px] text-rose-500 block mt-0.5 font-semibold">Below Tare weight!</span>
+                    )}
+                  </div>
+
+                  {/* Replacement cylinder sub-form */}
+                  {row.isSwapped && repItem ? (
+                    <div className="space-y-3 p-3.5 border border-zinc-150 dark:border-zinc-800/80 rounded-xl bg-zinc-50/40 dark:bg-zinc-950/20 animate-in fade-in duration-300">
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Scan / Input New Serial</Label>
+                        <div className="flex gap-1.5 items-center w-full">
+                          <Input
+                            type="text"
+                            placeholder="Serial number..."
+                            value={repItem.serialNumber}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setSelectedReplacementCylinders((prev) => {
+                                const copy = [...prev];
+                                const idx = copy.findIndex(c => c.swappedOutCylinderId === row.id);
+                                if (idx !== -1) {
+                                  copy[idx] = {
+                                    ...copy[idx],
+                                    serialNumber: val,
+                                    cylinderAssetId: 0,
+                                    productName: "",
+                                    tareWeight: 0,
+                                    capacity: 0,
+                                    error: undefined,
+                                  };
+                                }
+                                return copy;
+                              });
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                const idx = selectedReplacementCylinders.findIndex(c => c.swappedOutCylinderId === row.id);
+                                if (idx !== -1) {
+                                  handleValidateReplacementSerial(idx, repItem.serialNumber);
+                                }
+                              }
+                            }}
+                            className={`text-xs h-8 w-full ${repItem.error ? "border-rose-500" : repItem.cylinderAssetId ? "border-emerald-500 bg-emerald-50/10" : ""}`}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="xs"
+                            onClick={() => {
+                              const idx = selectedReplacementCylinders.findIndex(c => c.swappedOutCylinderId === row.id);
+                              if (idx !== -1) {
+                                handleValidateReplacementSerial(idx, repItem.serialNumber);
+                              }
+                            }}
+                            disabled={repItem.isValidating || !repItem.serialNumber.trim()}
+                            className="h-8 font-bold text-xs shrink-0"
+                          >
+                            {repItem.isValidating ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : repItem.cylinderAssetId ? (
+                              <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                            ) : (
+                              "Verify"
+                            )}
+                          </Button>
+                        </div>
+                        {repItem.error && (
+                          <span className="text-[9px] text-rose-500 block mt-0.5 font-semibold">{repItem.error}</span>
+                        )}
+                        {repItem.cylinderAssetId > 0 && (
+                          <span className="text-[9px] text-emerald-600 block mt-0.5 font-semibold">
+                            Verified: {repItem.productName} (Tare: {repItem.tareWeight} KG)
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">New Cylinder Gross Weight</Label>
+                        <div className="relative">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={repItem.targetKg}
+                            disabled={!repItem.cylinderAssetId}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              const val = raw === "" ? "" : parseFloat(raw);
+                              setSelectedReplacementCylinders((prev) => {
+                                const copy = [...prev];
+                                const idx = copy.findIndex(c => c.swappedOutCylinderId === row.id);
+                                if (idx !== -1) {
+                                  copy[idx].targetKg = val;
+                                }
+                                return copy;
+                              });
+                            }}
+                            placeholder={repItem.cylinderAssetId ? String(repItem.tareWeight + repItem.capacity) : "N/A"}
+                            className="text-xs h-8 pr-8"
+                          />
+                          {repItem.cylinderAssetId > 0 && <span className="absolute right-2 top-2.5 text-[10px] text-zinc-400 font-bold">KG</span>}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl p-4 text-center text-muted-foreground bg-zinc-50/10 text-[10px]">
+                      Cylinder stays in service. No replacement needed.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-4 border-t border-zinc-100 dark:border-zinc-800 mt-5">
+                <Button
+                  type="button"
+                  onClick={() => setMobileEditingCylinderId(null)}
+                  className="bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs px-5 h-9"
+                >
+                  Done
+                </Button>
+              </div>
+            </DialogContent>
+          );
+        })()}
+      </Dialog>
+
+      <Dialog open={isScannerModalOpen} onOpenChange={setIsScannerModalOpen}>
+        <DialogContent className="max-w-md sm:rounded-2xl p-0 overflow-hidden bg-white/95 dark:bg-zinc-950/95 backdrop-blur-xl border border-zinc-200 dark:border-zinc-800">
+          <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+            <DialogTitle className="text-sm font-bold flex items-center gap-2">
+              <ScanBarcode className="h-4 w-4 text-emerald-600" />
+              Scan Cylinder Serial
+            </DialogTitle>
+          </div>
+          <div className="p-6">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                setScannerError("");
+                if (!scannerInput.trim()) return;
+                
+                const foundRow = calculatedReturnedCylinders.find(
+                  c => c.cylinder_asset?.serial_number?.toLowerCase() === scannerInput.trim().toLowerCase()
+                );
+                
+                if (foundRow) {
+                  if (typeof window !== "undefined" && window.innerWidth < 768) {
+                    setMobileEditingCylinderId(foundRow.id);
+                  } else {
+                    setExpandedRowId(foundRow.id);
+                  }
+                  setIsScannerModalOpen(false);
+                  setScannerInput("");
+                } else {
+                  setScannerError("Serial number not found in connected cylinders.");
+                }
+              }}
+              className="space-y-4"
+            >
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-zinc-600 dark:text-zinc-400">Scanner Input</Label>
+                <Input
+                  type="text"
+                  autoFocus
+                  placeholder="Scan or type serial..."
+                  value={scannerInput}
+                  onChange={(e) => {
+                    setScannerInput(e.target.value);
+                    setScannerError("");
+                  }}
+                  className={`font-mono text-sm ${scannerError ? "border-rose-500 focus-visible:ring-rose-500" : ""}`}
+                />
+                {scannerError && (
+                  <p className="text-xs text-rose-500 font-semibold">{scannerError}</p>
+                )}
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsScannerModalOpen(false)}
+                  className="text-xs px-4"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={scannerInput.trim() === ""}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5"
+                >
+                  Search
+                </Button>
+              </div>
+            </form>
           </div>
         </DialogContent>
       </Dialog>
