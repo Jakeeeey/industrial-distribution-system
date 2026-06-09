@@ -70,8 +70,8 @@ export function InventoryDetailModal({
     "full" | "empty" | null
   >(() => initialStockFilter ?? null);
 
-  const [selectedSerialIds, setSelectedSerialIds] = useState<Set<number>>(() =>
-    new Set(filteredSerials.map((s) => s.id)),
+  const [selectedSerialIds, setSelectedSerialIds] = useState<Set<number>>(
+    () => new Set(filteredSerials.map((s) => s.id)),
   );
   const printRef = useRef<HTMLDivElement>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);

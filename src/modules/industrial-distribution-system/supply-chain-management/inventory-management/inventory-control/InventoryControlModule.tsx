@@ -105,7 +105,7 @@ export default function InventoryControlModule() {
           <div className="space-y-2 sm:space-y-0.5 shrink-0 w-full sm:w-auto">
             <h2 className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tighter uppercase italic leading-none whitespace-nowrap flex items-center gap-2">
               <Layers className="h-5 w-5 sm:hidden text-primary stroke-[3px] -mt-0.5" />
-            <span className="text-primary">Inventory Control</span>
+              <span className="text-primary">Inventory Control</span>
             </h2>
             <div className="w-full sm:w-auto">
               <BranchSelector
