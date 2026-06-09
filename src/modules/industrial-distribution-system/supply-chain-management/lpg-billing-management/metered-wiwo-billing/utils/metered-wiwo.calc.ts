@@ -23,7 +23,7 @@ export function generateTxNo(
   const seqStr = String(seq).padStart(3, "0");
   return `${prefix}-${dateStr}-${sId}-${seqStr}`;
 }
-
+ 
 /**
  * Generates a placeholder tx number (for display before seq is fetched).
  */
