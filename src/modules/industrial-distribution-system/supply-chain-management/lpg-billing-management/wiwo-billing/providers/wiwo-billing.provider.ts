@@ -21,6 +21,11 @@ const FIELDS_TX =
   "meter_reading_id.id,meter_reading_id.previous_reading,meter_reading_id.current_reading,meter_reading_id.kg_consumed,meter_reading_id.price_per_kg,meter_reading_id.reading_date," +
   "wiwo_header_id.id,wiwo_header_id.wiwo_no,wiwo_header_id.transaction_date,wiwo_header_id.wiwo_status";
 
+function withUser(userId: number | null | undefined, fields: ("created_by" | "posted_by" | "modified_by" | "cancelled_by")[]) {
+  if (!userId) return {};
+  return Object.fromEntries(fields.map(f => [f, userId]));
+}
+
 // ─── Transactions List ────────────────────────────────────────────────────────
 export async function fetchWiwoBillingTransactions(params: WiwoListParams): Promise<{
   data: MeteredWiwoTransaction[];
@@ -391,7 +396,7 @@ export async function processOnboardingBaseline(payload: {
           current_lpg_kg: targetKg,
           installed_date: payload.transactionDate,
           removed_date: null,
-          created_by: payload.userId,
+          ...withUser(payload.userId, ["created_by"]),
         }),
       }
     );
@@ -414,7 +419,7 @@ export async function processOnboardingBaseline(payload: {
     payload.customerCode,
     0,
     "Onboarding baseline initial setup invoice",
-    payload.userId
+    undefined
   );
 
   // Create WIWO Header
@@ -436,8 +441,7 @@ export async function processOnboardingBaseline(payload: {
         sales_invoice_id: invoice.id,
         sales_invoice_no: invoice.invoice_no,
         remarks: "Onboarding baseline initial setup",
-        created_by: payload.userId,
-        posted_by: payload.userId,
+        ...withUser(payload.userId, ["created_by", "posted_by"]),
         posted_date: new Date().toISOString(),
       }),
     }
@@ -476,7 +480,7 @@ export async function processOnboardingBaseline(payload: {
         price_per_kg: pricePerKg,
         result_site_cylinder_status: "CONNECTED",
         result_asset_status: "WITH_CUSTOMER",
-        created_by: payload.userId,
+        ...withUser(payload.userId, ["created_by"]),
       }),
     });
   }
@@ -505,8 +509,7 @@ export async function processOnboardingBaseline(payload: {
         billable_kg: 0,
         status: "POSTED",
         remarks: "Onboarding baseline initial setup posted.",
-        created_by: payload.userId,
-        posted_by: payload.userId,
+        ...withUser(payload.userId, ["created_by", "posted_by"]),
         posted_date: new Date().toISOString(),
       }),
     }
@@ -538,6 +541,14 @@ export async function processRegularSwap(payload: {
   varianceReasonCode?: string;
   remarks?: string;
   userId?: number;
+  transactionId?: number;
+  isNoSwap?: boolean;
+  attachments?: {
+    siteCylinderId: number;
+    cylinderAssetId: number;
+    attachmentType: "SERIAL_IMAGE" | "WEIGHT_IMAGE";
+    directusFileId: string;
+  }[];
 }): Promise<MeteredWiwoTransaction> {
   // Input validations:
   // Completeness Checks & Negative Boundaries
@@ -570,7 +581,12 @@ export async function processRegularSwap(payload: {
 
     const tare = Number(sc.cylinder_asset_id?.tare_weight ?? 0);
     const opening = Number(sc.previous_lpg_kg ?? 0);
-    const remaining = ret.returnedGrossWeight - tare;
+
+    // Guard remaining weight to not exceed the previous/opening LPG kg
+    let remaining = ret.returnedGrossWeight - tare;
+    if (remaining > opening) {
+      remaining = opening;
+    }
     const consumed = opening - remaining;
 
     if (remaining < 0 || consumed < 0) {
@@ -640,25 +656,36 @@ export async function processRegularSwap(payload: {
     items
   );
 
-  // 1. Process returned cylinders database actions (mark EMPTY/RETURNED and removed_date)
+  // 1. Process returned cylinders database actions (mark EMPTY/RETURNED and removed_date OR update in-place weight)
   for (const retItem of returnedDetails) {
-    await directusFetch(`${DIRECTUS_URL}/items/lpg_customer_site_cylinders/${retItem.sc.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        site_cylinder_status: "RETURNED",
-        removed_date: payload.transactionDate,
-        modified_by: payload.userId,
-      }),
-    });
+    if (payload.isNoSwap) {
+      await directusFetch(`${DIRECTUS_URL}/items/lpg_customer_site_cylinders/${retItem.sc.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          previous_lpg_kg: retItem.remaining,
+          current_lpg_kg: retItem.remaining,
+          ...withUser(payload.userId, ["modified_by"]),
+        }),
+      });
+    } else {
+      await directusFetch(`${DIRECTUS_URL}/items/lpg_customer_site_cylinders/${retItem.sc.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          site_cylinder_status: "RETURNED",
+          removed_date: payload.transactionDate,
+          ...withUser(payload.userId, ["modified_by"]),
+        }),
+      });
 
-    // Reset cylinder asset registry to EMPTY
-    await directusFetch(`${DIRECTUS_URL}/items/cylinder_assets/${retItem.sc.cylinder_asset_id}`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        cylinder_status: "EMPTY",
-        current_customer_code: null,
-      }),
-    });
+      // Reset cylinder asset registry to EMPTY
+      await directusFetch(`${DIRECTUS_URL}/items/cylinder_assets/${retItem.sc.cylinder_asset_id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          cylinder_status: "EMPTY",
+          current_customer_code: null,
+        }),
+      });
+    }
   }
 
   // 2. Process newly installed cylinders database actions
@@ -677,7 +704,7 @@ export async function processRegularSwap(payload: {
           current_lpg_kg: dep.targetKg,
           installed_date: payload.transactionDate,
           removed_date: null,
-          created_by: payload.userId,
+          ...withUser(payload.userId, ["created_by"]),
         }),
       }
     );
@@ -704,30 +731,42 @@ export async function processRegularSwap(payload: {
       payload.customerCode,
       grossAmount,
       `WIWO physical validation invoice. Source: ${billableSource}.`,
-      payload.userId
+      undefined
     );
   }
 
-  // Create Meter reading
-  const meterReadingRes = await directusFetch<{ data: { id: number } }>(
-    `${DIRECTUS_URL}/items/lpg_meter_readings`,
-    {
-      method: "POST",
-      body: JSON.stringify({
-        lpg_site_id: payload.siteId,
-        customer_code: payload.customerCode,
-        reading_date: payload.transactionDate,
-        previous_reading: payload.previousMeterReading,
-        current_reading: payload.currentMeterReading,
-        kg_consumed: meteredKg,
-        price_per_kg: payload.pricePerKg,
-        raw_consumption: meteredKg,
-        reading_status: "POSTED",
-        created_by: payload.userId,
-      }),
+  let meterReadingId: number | null = null;
+  if (payload.transactionId) {
+    const existingTx = await fetchWiwoBillingTransactionById(payload.transactionId);
+    if (existingTx && existingTx.meter_reading_id) {
+      meterReadingId = typeof existingTx.meter_reading_id === "object"
+        ? (existingTx.meter_reading_id as unknown as { id: number }).id
+        : existingTx.meter_reading_id;
     }
-  );
-  const meterReadingId = meterReadingRes.data.id;
+  }
+
+  if (!meterReadingId) {
+    // Create Meter reading
+    const meterReadingRes = await directusFetch<{ data: { id: number } }>(
+      `${DIRECTUS_URL}/items/lpg_meter_readings`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          lpg_site_id: payload.siteId,
+          customer_code: payload.customerCode,
+          reading_date: payload.transactionDate,
+          previous_reading: payload.previousMeterReading,
+          current_reading: payload.currentMeterReading,
+          kg_consumed: meteredKg,
+          price_per_kg: payload.pricePerKg,
+          raw_consumption: meteredKg,
+          reading_status: "POSTED",
+          ...withUser(payload.userId, ["created_by"]),
+        }),
+      }
+    );
+    meterReadingId = meterReadingRes.data.id;
+  }
 
   // Create WIWO Header
   const wiwoNo = `WIWO-${Date.now().toString().slice(-6)}`;
@@ -752,8 +791,7 @@ export async function processRegularSwap(payload: {
         sales_invoice_id: invoice?.id ?? null,
         sales_invoice_no: invoice?.invoice_no ?? null,
         remarks: payload.remarks || "",
-        created_by: payload.userId,
-        posted_by: payload.userId,
+        ...withUser(payload.userId, ["created_by", "posted_by"]),
         posted_date: new Date().toISOString(),
       }),
     }
@@ -787,9 +825,9 @@ export async function processRegularSwap(payload: {
         vat_amount: parseFloat((retItem.consumed * payload.pricePerKg * 0.12).toFixed(2)),
         net_amount: parseFloat((retItem.consumed * payload.pricePerKg * 1.12).toFixed(2)),
         is_billable: 1,
-        result_site_cylinder_status: "RETURNED",
-        result_asset_status: "EMPTY",
-        created_by: payload.userId,
+        result_site_cylinder_status: payload.isNoSwap ? "CONNECTED" : "RETURNED",
+        result_asset_status: payload.isNoSwap ? "WITH_CUSTOMER" : "EMPTY",
+        ...withUser(payload.userId, ["created_by"]),
       }),
     });
   }
@@ -823,7 +861,7 @@ export async function processRegularSwap(payload: {
         is_billable: 0,
         result_site_cylinder_status: "CONNECTED",
         result_asset_status: "WITH_CUSTOMER",
-        created_by: payload.userId,
+        ...withUser(payload.userId, ["created_by"]),
       }),
     });
   }
@@ -837,44 +875,96 @@ export async function processRegularSwap(payload: {
     }),
   });
 
-  // Create parent Transaction record
-  const txNo = `TX-WIWO-${Date.now().toString().slice(-6)}`;
-  const parentRes = await directusFetch<{ data: MeteredWiwoTransaction }>(
-    `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions`,
-    {
-      method: "POST",
-      body: JSON.stringify({
-        transaction_no: txNo,
-        transaction_type: "REGULAR_BILLING",
-        lpg_site_id: payload.siteId,
-        customer_code: payload.customerCode,
-        sales_order_id: so.id,
-        sales_order_no: so.order_no,
-        meter_reading_id: meterReadingId,
-        wiwo_header_id: wiwoHeaderId,
-        transaction_date: payload.transactionDate,
-        metered_kg: meteredKg,
-        wiwo_kg: totalWiwoKg,
-        variance_kg: varianceKg,
-        variance_reason_code: payload.varianceReasonCode || "NONE",
-        billable_source: billableSource,
-        billable_kg: billableKg,
-        price_per_kg: payload.pricePerKg,
-        gross_amount: grossAmount,
-        vat_amount: vatAmount,
-        net_amount: netAmount,
-        sales_invoice_id: invoice?.id ?? null,
-        sales_invoice_no: invoice?.invoice_no ?? null,
-        status: "POSTED",
-        remarks: payload.remarks || "",
-        created_by: payload.userId,
-        posted_by: payload.userId,
-        posted_date: new Date().toISOString(),
-      }),
-    }
-  );
+  let parentTxData: MeteredWiwoTransaction;
+  if (payload.transactionId) {
+    const parentRes = await directusFetch<{ data: MeteredWiwoTransaction }>(
+      `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions/${payload.transactionId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          sales_order_id: so.id,
+          sales_order_no: so.order_no,
+          wiwo_header_id: wiwoHeaderId,
+          wiwo_kg: totalWiwoKg,
+          variance_kg: varianceKg,
+          variance_reason_code: payload.varianceReasonCode || "NONE",
+          billable_source: billableSource,
+          billable_kg: billableKg,
+          gross_amount: grossAmount,
+          vat_amount: vatAmount,
+          net_amount: netAmount,
+          sales_invoice_id: invoice?.id ?? null,
+          sales_invoice_no: invoice?.invoice_no ?? null,
+          status: "POSTED",
+          remarks: payload.remarks || "",
+          ...withUser(payload.userId, ["posted_by", "modified_by"]),
+          posted_date: new Date().toISOString(),
+          modified_date: new Date().toISOString(),
+        }),
+      }
+    );
+    parentTxData = parentRes.data;
+  } else {
+    // Create parent Transaction record
+    const txNo = `TX-WIWO-${Date.now().toString().slice(-6)}`;
+    const parentRes = await directusFetch<{ data: MeteredWiwoTransaction }>(
+      `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          transaction_no: txNo,
+          transaction_type: "REGULAR_BILLING",
+          lpg_site_id: payload.siteId,
+          customer_code: payload.customerCode,
+          sales_order_id: so.id,
+          sales_order_no: so.order_no,
+          meter_reading_id: meterReadingId,
+          wiwo_header_id: wiwoHeaderId,
+          transaction_date: payload.transactionDate,
+          metered_kg: meteredKg,
+          wiwo_kg: totalWiwoKg,
+          variance_kg: varianceKg,
+          variance_reason_code: payload.varianceReasonCode || "NONE",
+          billable_source: billableSource,
+          billable_kg: billableKg,
+          price_per_kg: payload.pricePerKg,
+          gross_amount: grossAmount,
+          vat_amount: vatAmount,
+          net_amount: netAmount,
+          sales_invoice_id: invoice?.id ?? null,
+          sales_invoice_no: invoice?.invoice_no ?? null,
+          status: "POSTED",
+          remarks: payload.remarks || "",
+          ...withUser(payload.userId, ["created_by", "posted_by"]),
+          posted_date: new Date().toISOString(),
+        }),
+      }
+    );
+    parentTxData = parentRes.data;
+  }
 
-  return parentRes.data;
+  // Save attachments
+  if (payload.attachments && payload.attachments.length > 0) {
+    for (const att of payload.attachments) {
+      try {
+        await directusFetch(`${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments`, {
+          method: "POST",
+          body: JSON.stringify({
+            transaction_id: parentTxData.id,
+            site_cylinder_id: att.siteCylinderId || null,
+            cylinder_asset_id: att.cylinderAssetId || null,
+            attachment_type: att.attachmentType,
+            directus_file_id: att.directusFileId,
+            ...withUser(payload.userId, ["created_by"]),
+          }),
+        });
+      } catch (err) {
+        console.error("Failed to insert transaction attachment:", err);
+      }
+    }
+  }
+
+  return parentTxData;
 }
 
 // ─── Flow C: Rollback & Cancellation Flow ─────────────────────────────────────

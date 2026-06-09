@@ -7,7 +7,7 @@ import {
   fetchActiveSiteCylinders,
   validateSerialForOnboarding,
   processOnboardingBaseline,
-  processRegularSwap
+  processRegularSwap,
 } from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/wiwo-billing/providers/wiwo-billing.provider";
 import { handleApiError } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/error-handler";
 import { getUserIdFromToken } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/auth-utils";
@@ -70,26 +70,57 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const token = request.cookies.get("vos_access_token")?.value;
-    const userId = getUserIdFromToken(token);
+    const authorization = request.headers.get("authorization");
+    const bearerToken = authorization?.startsWith("Bearer ")
+      ? authorization.slice(7).trim()
+      : undefined;
+    const token = request.cookies.get("vos_access_token")?.value ?? bearerToken;
+    const tokenUserId = getUserIdFromToken(token);
+    const developmentUserId =
+      process.env.NEXT_PUBLIC_AUTH_DISABLED === "true"
+        ? Number(process.env.WIWO_DEV_USER_ID ?? 24)
+        : null;
+    const userId =
+      tokenUserId ??
+      (developmentUserId !== null &&
+      Number.isInteger(developmentUserId) &&
+      developmentUserId > 0
+        ? developmentUserId
+        : null);
 
     const txType = body.transaction_type;
+    const customerCode =
+      typeof body.customer_code === "string" ? body.customer_code.trim() : "";
+    const siteId = Number(body.lpg_site_id);
+
+    if (!customerCode) {
+      return NextResponse.json({ error: "customer_code is required" }, { status: 400 });
+    }
+    if (!Number.isInteger(siteId) || siteId <= 0) {
+      return NextResponse.json({ error: "lpg_site_id is required" }, { status: 400 });
+    }
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Authenticated user is required to post WIWO billing." },
+        { status: 401 }
+      );
+    }
 
     if (txType === "ONBOARDING_BASELINE") {
       const data = await processOnboardingBaseline({
-        customerCode: body.customer_code,
-        siteId: Number(body.lpg_site_id),
+        customerCode,
+        siteId,
         transactionDate: body.transaction_date,
         cylinders: body.cylinders || [],
-        userId: userId ?? undefined
+        userId,
       });
       return NextResponse.json({ data });
     }
 
     if (txType === "REGULAR_BILLING") {
       const data = await processRegularSwap({
-        customerCode: body.customer_code,
-        siteId: Number(body.lpg_site_id),
+        customerCode,
+        siteId,
         transactionDate: body.transaction_date,
         previousMeterReading: Number(body.previous_reading ?? 0),
         currentMeterReading: Number(body.current_reading ?? 0),
@@ -98,7 +129,10 @@ export async function POST(request: NextRequest) {
         newCylinders: body.new_cylinders || [],
         varianceReasonCode: body.varianceReasonCode || "NONE",
         remarks: body.remarks || "",
-        userId: userId ?? undefined
+        userId,
+        transactionId: body.transaction_id ? Number(body.transaction_id) : undefined,
+        isNoSwap: !!body.is_no_swap,
+        attachments: body.attachments || [],
       });
       return NextResponse.json({ data });
     }
