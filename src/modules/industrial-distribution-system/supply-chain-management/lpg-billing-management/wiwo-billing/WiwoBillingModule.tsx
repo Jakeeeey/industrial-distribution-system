@@ -1,19 +1,28 @@
 "use client";
 
 import { useState } from "react";
-import { Scale } from "lucide-react";
+import { CalendarRange, Scale } from "lucide-react";
 import { WiwoForm } from "./components/WiwoForm";
+import { TransactionHeaderWorkspace } from "./components/TransactionHeaderWorkspace";
+import { CreateBillingWorkspace } from "./components/CreateBillingWorkspace";
+import type { LpgTransactionHeader } from "./types";
 
 export default function WiwoBillingModule() {
-  const [activeTab, setActiveTab] = useState<"ROUTINE" | "ONBOARDING">("ROUTINE");
   const [formKey, setFormKey] = useState(0);
+  const [selectedHeader, setSelectedHeader] = useState<LpgTransactionHeader | null>(null);
+  const [billingContext, setBillingContext] = useState<{
+    type: "ROUTINE" | "ONBOARDING";
+    invoice: { invoice_id: number; invoice_no: string; total_amount: number; invoice_date: string; transaction_status: string };
+  } | null>(null);
 
   const handleSuccess = () => {
-    setFormKey((k) => k + 1); // refresh form to reset inputs on success
+    setBillingContext(null); // Return to header view
+    setFormKey((k) => k + 1);
   };
 
   const handleCancel = () => {
-    setFormKey((k) => k + 1); // refresh form to reset inputs on cancel
+    setBillingContext(null); // Return to create billing or header
+    setFormKey((k) => k + 1);
   };
 
   return (
@@ -35,50 +44,54 @@ export default function WiwoBillingModule() {
             </div>
           </div>
 
-          {/* Premium Tab Selector */}
-          <div className="flex rounded-xl bg-zinc-100 dark:bg-zinc-800/50 p-1 border border-zinc-200/50 dark:border-zinc-850 w-full sm:w-auto">
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("ROUTINE");
-                setFormKey((k) => k + 1);
-              }}
-              className={`flex-1 sm:flex-none px-4 py-1.5 text-xs font-bold rounded-lg transition-all duration-200 cursor-pointer ${
-                activeTab === "ROUTINE"
-                  ? "bg-white dark:bg-zinc-700 shadow-sm text-emerald-600 dark:text-emerald-400"
-                  : "text-muted-foreground hover:text-zinc-900 dark:hover:text-zinc-200"
-              }`}
-            >
-              Regular Routine Check & Swap
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("ONBOARDING");
-                setFormKey((k) => k + 1);
-              }}
-              className={`flex-1 sm:flex-none px-4 py-1.5 text-xs font-bold rounded-lg transition-all duration-200 cursor-pointer ${
-                activeTab === "ONBOARDING"
-                  ? "bg-white dark:bg-zinc-700 shadow-sm text-emerald-600 dark:text-emerald-400"
-                  : "text-muted-foreground hover:text-zinc-900 dark:hover:text-zinc-200"
-              }`}
-            >
-              Onboarding Baseline Setup
-            </button>
-          </div>
+          {/* Transaction Type Selector (Removed since it's now in CreateBillingWorkspace) */}
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-zinc-50/10 dark:bg-zinc-900/5 h-full">
-        <div className="bg-white/80 dark:bg-zinc-900/40 backdrop-blur-md border border-zinc-200 dark:border-zinc-800/60 p-4 sm:p-6 rounded-3xl shadow-md w-full max-w-6xl mx-auto">
-          <WiwoForm
-            key={`${activeTab}-${formKey}`}
-            txId={null}
-            initialFlowType={activeTab}
-            onSuccess={handleSuccess}
-            onCancel={handleCancel}
-          />
+      <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
+        <TransactionHeaderWorkspace selectedHeader={selectedHeader} onSelect={setSelectedHeader} />
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-zinc-50/10 dark:bg-zinc-900/5">
+          {selectedHeader ? (
+            <div className="space-y-4">
+              <div className="rounded-2xl border bg-white dark:bg-zinc-900 p-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Selected Header</p>
+                  <h2 className="font-bold">{selectedHeader.header_no || `Header #${selectedHeader.header_id}`}</h2>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedHeader.site?.site_name || `Site #${selectedHeader.customer_site_id}`} | {selectedHeader.period_from} to {selectedHeader.period_to}
+                  </p>
+                </div>
+                <span className="rounded-full bg-amber-100 px-3 py-1 text-[10px] font-bold text-amber-800">
+                  {selectedHeader.status}
+                </span>
+              </div>
+              <div className="bg-white/80 dark:bg-zinc-900/40 backdrop-blur-md border border-zinc-200 dark:border-zinc-800/60 p-4 sm:p-6 rounded-3xl shadow-md w-full max-w-6xl mx-auto">
+                {!billingContext ? (
+                  <CreateBillingWorkspace
+                    header={selectedHeader}
+                    onProceed={(type, invoice) => setBillingContext({ type, invoice })}
+                    onCancel={() => setSelectedHeader(null)}
+                  />
+                ) : (
+                  <WiwoForm
+                    key={`${selectedHeader.header_id}-${billingContext.type}-${formKey}`}
+                    txId={null}
+                    transactionHeader={selectedHeader}
+                    initialFlowType={billingContext.type}
+                    salesInvoice={billingContext.invoice}
+                    onSuccess={handleSuccess}
+                    onCancel={handleCancel}
+                  />
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="h-full min-h-80 flex flex-col items-center justify-center text-center text-muted-foreground">
+              <CalendarRange className="h-10 w-10 mb-3" />
+              <h2 className="font-bold text-foreground">Select a transaction header</h2>
+              <p className="text-xs mt-1">Choose an existing site-period header or create a new one.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
