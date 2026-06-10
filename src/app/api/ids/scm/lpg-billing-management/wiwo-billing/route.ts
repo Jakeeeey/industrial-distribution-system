@@ -8,6 +8,9 @@ import {
   validateSerialForOnboarding,
   processOnboardingBaseline,
   processRegularSwap,
+  fetchTransactionHeaders,
+  createTransactionHeader,
+  fetchInvoicesForCustomer,
 } from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/wiwo-billing/providers/wiwo-billing.provider";
 import { handleApiError } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/error-handler";
 import { getUserIdFromToken } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/auth-utils";
@@ -19,6 +22,14 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type");
+
+    if (type === "headers") {
+      const data = await fetchTransactionHeaders({
+        status: searchParams.get("status") || undefined,
+        search: searchParams.get("search") || undefined,
+      });
+      return NextResponse.json({ data });
+    }
 
     if (type === "customers") {
       const data = await fetchCustomers();
@@ -47,6 +58,12 @@ export async function GET(request: NextRequest) {
       const serial = searchParams.get("serial");
       if (!serial) return NextResponse.json({ error: "Serial number is required" }, { status: 400 });
       const data = await validateSerialForOnboarding(serial);
+      return NextResponse.json({ data });
+    }
+
+    if (type === "invoices") {
+      const customerCode = searchParams.get("customerCode") || undefined;
+      const data = await fetchInvoicesForCustomer(customerCode);
       return NextResponse.json({ data });
     }
 
@@ -106,12 +123,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (body.action === "CREATE_HEADER") {
+      const data = await createTransactionHeader({
+        siteId,
+        periodFrom: String(body.period_from || ""),
+        periodTo: String(body.period_to || ""),
+        remarks: typeof body.remarks === "string" ? body.remarks : "",
+        userId,
+      });
+      return NextResponse.json({ data });
+    }
+
+    const transactionHeaderId = Number(body.transaction_header_id);
+    if (!Number.isInteger(transactionHeaderId) || transactionHeaderId <= 0) {
+      return NextResponse.json({ error: "transaction_header_id is required" }, { status: 400 });
+    }
+
     if (txType === "ONBOARDING_BASELINE") {
       const data = await processOnboardingBaseline({
+        transactionHeaderId,
         customerCode,
         siteId,
         transactionDate: body.transaction_date,
         cylinders: body.cylinders || [],
+        salesInvoiceId: body.sales_invoice_id ? Number(body.sales_invoice_id) : null,
+        salesInvoiceNo: typeof body.sales_invoice_no === "string" ? body.sales_invoice_no : null,
         userId,
       });
       return NextResponse.json({ data });
@@ -119,6 +155,7 @@ export async function POST(request: NextRequest) {
 
     if (txType === "REGULAR_BILLING") {
       const data = await processRegularSwap({
+        transactionHeaderId,
         customerCode,
         siteId,
         transactionDate: body.transaction_date,
@@ -127,11 +164,18 @@ export async function POST(request: NextRequest) {
         meteredKg: typeof body.metered_kg === "number" ? body.metered_kg : undefined,
         pricePerKg: Number(body.price_per_kg ?? 0),
         returnedCylinders: body.returned_cylinders || [],
-        newCylinders: body.new_cylinders || [],
+        newCylinders: (body.new_cylinders || []).map((cylinder: Record<string, unknown>) => ({
+          cylinderAssetId: Number(cylinder.cylinderAssetId),
+          targetKg: Number(cylinder.targetKg),
+          serialPhotoId: typeof cylinder.serialPhotoId === "string" ? cylinder.serialPhotoId : undefined,
+          weightPhotoId: typeof cylinder.weightPhotoId === "string" ? cylinder.weightPhotoId : undefined,
+        })),
         varianceReasonCode: body.varianceReasonCode || "NONE",
         remarks: body.remarks || "",
         userId,
         transactionId: body.transaction_id ? Number(body.transaction_id) : undefined,
+        salesInvoiceId: body.sales_invoice_id ? Number(body.sales_invoice_id) : null,
+        salesInvoiceNo: typeof body.sales_invoice_no === "string" ? body.sales_invoice_no : null,
         isNoSwap: !!body.is_no_swap,
         attachments: body.attachments || [],
       });

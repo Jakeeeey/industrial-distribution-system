@@ -2,6 +2,29 @@ export type WiwoType = 'CONSUMPTION_SWAP' | 'RETURN_ONLY' | 'DEPLOYMENT_ONLY' | 
 export type WiwoStatus = 'DRAFT' | 'POSTED' | 'CANCELLED';
 export type DetailLineType = 'CONSUMPTION_RETURN' | 'NEW_DEPLOYMENT' | 'RETURN_ONLY' | 'ADJUSTMENT';
 export type BillingSource = 'NONE' | 'WIWO' | 'METERED';
+export type TransactionHeaderStatus = 'DRAFT' | 'POSTED' | 'CANCELLED';
+
+export interface LpgTransactionHeader {
+  header_id: number;
+  header_no: string | null;
+  customer_id: string;
+  customer_site_id: number;
+  period_from: string;
+  period_to: string;
+  status: TransactionHeaderStatus;
+  is_billed: number;
+  remarks: string | null;
+  created_by?: number | null;
+  posted_by?: number | null;
+  posted_at?: string | null;
+  cancelled_by?: number | null;
+  cancelled_at?: string | null;
+  cancelled_reason?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  site?: CustomerSite;
+  customer_name?: string;
+}
 
 export interface CylinderAsset {
   id: number;
@@ -84,6 +107,7 @@ export interface WiwoDetail {
 
 export interface MeteredWiwoTransaction {
   id: number;
+  transaction_header_id?: number | null;
   transaction_no?: string;
   transaction_date: string;
   billing_period_from?: string | null;

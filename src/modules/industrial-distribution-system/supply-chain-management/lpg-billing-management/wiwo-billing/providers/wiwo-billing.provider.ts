@@ -12,6 +12,7 @@ import type {
   OnboardCylinderInput,
   CustomerSite,
   MeterReading
+  ,LpgTransactionHeader
 } from "../types";
 
 const DIRECTUS_URL = getDirectusBase();
@@ -24,6 +25,104 @@ const FIELDS_TX =
 function withUser(userId: number | null | undefined, fields: ("created_by" | "posted_by" | "modified_by" | "cancelled_by")[]) {
   if (!userId) return {};
   return Object.fromEntries(fields.map(f => [f, userId]));
+}
+
+export async function fetchTransactionHeaders(params: {
+  status?: string;
+  search?: string;
+  limit?: number;
+} = {}): Promise<LpgTransactionHeader[]> {
+  const limit = params.limit ?? 100;
+  const filters: Record<string, unknown> = {};
+  if (params.status) filters.status = { _eq: params.status };
+  if (params.search) {
+    filters._or = [
+      { header_no: { _icontains: params.search } },
+      { customer_id: { _icontains: params.search } },
+      { site: { site_name: { _icontains: params.search } } },
+    ];
+  }
+
+  let qs =
+    `fields=*,customer_site_id.id,customer_site_id.site_name,` +
+    `customer_site_id.customer_code,customer_site_id.default_price_per_kg,` +
+    `customer_site_id.last_meter_reading,customer_site_id.default_target_lpg_kg` +
+    `&sort=-period_from,-header_id&limit=${limit}`;
+  if (Object.keys(filters).length) {
+    qs += `&filter=${encodeURIComponent(JSON.stringify(filters))}`;
+  }
+
+  const res = await directusFetch<{
+    data: (Omit<LpgTransactionHeader, "customer_site_id" | "customer_id"> & {
+      customer_site_id: number | CustomerSite;
+      customer_id?: string | { id?: string; customer_code?: string; customer_name?: string };
+    })[];
+  }>(
+    `${DIRECTUS_URL}/items/lpg_transaction_headers?${qs}`
+  );
+  return (res.data ?? []).map((header) => {
+    const site = typeof header.customer_site_id === "object" ? header.customer_site_id : undefined;
+    const customer_name = typeof header.customer_id === "object" ? header.customer_id?.customer_name : undefined;
+    const customer_id = typeof header.customer_id === "object" ? header.customer_id?.customer_code || header.customer_id?.id : header.customer_id;
+    return {
+      ...header,
+      customer_id,
+      customer_name,
+      customer_site_id: site?.id ?? header.customer_site_id,
+      site,
+    } as LpgTransactionHeader;
+  });
+}
+
+export async function createTransactionHeader(payload: {
+  siteId: number;
+  periodFrom: string;
+  periodTo: string;
+  remarks?: string;
+  userId: number;
+}): Promise<LpgTransactionHeader> {
+  if (!payload.periodFrom || !payload.periodTo || payload.periodFrom > payload.periodTo) {
+    throw new Error("A valid billing period is required.");
+  }
+
+  const siteRes = await directusFetch<{ data: CustomerSite }>(
+    `${DIRECTUS_URL}/items/lpg_customer_lpg_sites/${payload.siteId}?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg`
+  );
+  const site = siteRes.data;
+  if (!site?.customer_code) throw new Error("Customer site not found.");
+
+  const overlapFilter = {
+    customer_site_id: { _eq: payload.siteId },
+    status: { _neq: "CANCELLED" },
+    period_from: { _lte: payload.periodTo },
+    period_to: { _gte: payload.periodFrom },
+  };
+  const overlapRes = await directusFetch<{ data: { header_id: number }[] }>(
+    `${DIRECTUS_URL}/items/lpg_transaction_headers?fields=header_id&filter=${encodeURIComponent(JSON.stringify(overlapFilter))}&limit=1`
+  );
+  if (overlapRes.data?.length) {
+    throw new Error("This site already has an active transaction header overlapping the selected period.");
+  }
+
+  const headerNo = `LPGH-${payload.periodFrom.replaceAll("-", "")}-${payload.siteId}-${Date.now().toString().slice(-4)}`;
+  const res = await directusFetch<{ data: LpgTransactionHeader }>(
+    `${DIRECTUS_URL}/items/lpg_transaction_headers`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        header_no: headerNo,
+        customer_id: site.customer_code,
+        customer_site_id: payload.siteId,
+        period_from: payload.periodFrom,
+        period_to: payload.periodTo,
+        status: "DRAFT",
+        is_billed: 0,
+        remarks: payload.remarks || null,
+        created_by: payload.userId,
+      }),
+    }
+  );
+  return { ...res.data, site };
 }
 
 // ─── Transactions List ────────────────────────────────────────────────────────
@@ -86,6 +185,15 @@ export async function fetchSites(customerCode?: string): Promise<CustomerSite[]>
   let qs = "fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg&filter[is_active][_eq]=1&sort=site_name&limit=-1";
   if (customerCode) qs += `&filter[customer_code][_eq]=${encodeURIComponent(customerCode)}`;
   const res = await directusFetch<{ data: CustomerSite[] }>(`${DIRECTUS_URL}/items/lpg_customer_lpg_sites?${qs}`);
+  return res.data ?? [];
+}
+
+export async function fetchInvoicesForCustomer(customerCode?: string): Promise<{ invoice_id: number; invoice_no: string; total_amount: number; invoice_date: string; transaction_status: string }[]> {
+  let url = "/items/sales_invoice?limit=-1&fields=invoice_id,invoice_no,invoice_date,total_amount,transaction_status,customer_code,order_id,salesman_id";
+  if (customerCode) {
+    url += `&filter[customer_code][_eq]=${encodeURIComponent(customerCode)}`;
+  }
+  const res = await directusFetch<{ data: { invoice_id: number; invoice_no: string; total_amount: number; invoice_date: string; transaction_status: string }[] }>(`${DIRECTUS_URL}${url}`);
   return res.data ?? [];
 }
 
@@ -195,7 +303,7 @@ export async function validateSerialForOnboarding(serialNumber: string): Promise
 }
 
 export async function fetchActiveSiteCylinders(siteId: number): Promise<CustomerSiteCylinder[]> {
-  const qs = `filter[lpg_site_id][_eq]=${siteId}&filter[site_cylinder_status][_in]=CONNECTED,STANDBY&filter[removed_date][_null]=true&fields=*,cylinder_asset_id.*&limit=-1`;
+  const qs = `filter[lpg_site_id][_eq]=${siteId}&filter[site_cylinder_status][_in]=CONNECTED,STANDBY&filter[site_cylinder_status][_neq]=REMOVED&filter[removed_date][_null]=true&fields=*,cylinder_asset_id.*&limit=-1`;
   interface RawSiteCylinder extends Omit<CustomerSiteCylinder, 'cylinder_asset_id'> {
     cylinder_asset_id: CylinderAsset | number;
   }
@@ -336,10 +444,13 @@ export async function createSalesInvoice(
 
 // ─── Flow A: Onboarding Baseline Setup ────────────────────────────────────────
 export async function processOnboardingBaseline(payload: {
+  transactionHeaderId: number;
   customerCode: string;
   siteId: number;
   transactionDate: string;
   cylinders: OnboardCylinderInput[];
+  salesInvoiceId?: number | null;
+  salesInvoiceNo?: string | null;
   userId?: number;
 }): Promise<MeteredWiwoTransaction> {
   // 1. Monogamy validation
@@ -412,15 +523,9 @@ export async function processOnboardingBaseline(payload: {
     });
   }
 
-
-
-  // Create zero-amount sales invoice for onboarding baseline
-  const invoice = await createSalesInvoice(
-    payload.customerCode,
-    0,
-    "Onboarding baseline initial setup invoice",
-    undefined
-  );
+  // Use provided sales invoice or fallback (we should require it, but for safety keep null)
+  const invoiceId = payload.salesInvoiceId ?? null;
+  const invoiceNo = payload.salesInvoiceNo ?? null;
 
   // Create WIWO Header
   const wiwoNo = `WIWO-ONB-${Date.now().toString().slice(-6)}`;
@@ -438,8 +543,8 @@ export async function processOnboardingBaseline(payload: {
         total_deployed_cylinders: assets.length,
         total_billable_kg: 0.000,
         wiwo_status: "DRAFT",
-        sales_invoice_id: invoice.id,
-        sales_invoice_no: invoice.invoice_no,
+        sales_invoice_id: invoiceId,
+        sales_invoice_no: invoiceNo,
         remarks: "Onboarding baseline initial setup",
         ...withUser(payload.userId, ["created_by", "posted_by"]),
         posted_date: new Date().toISOString(),
@@ -493,13 +598,14 @@ export async function processOnboardingBaseline(payload: {
       method: "POST",
       body: JSON.stringify({
         transaction_no: txNo,
+        transaction_header_id: payload.transactionHeaderId,
         transaction_type: "ONBOARDING_BASELINE",
         lpg_site_id: payload.siteId,
         customer_code: payload.customerCode,
         sales_order_id: so.id,
         sales_order_no: so.order_no,
-        sales_invoice_id: invoice.id,
-        sales_invoice_no: invoice.invoice_no,
+        sales_invoice_id: invoiceId,
+        sales_invoice_no: invoiceNo,
         wiwo_header_id: headerId,
         transaction_date: payload.transactionDate,
         metered_kg: 0,
@@ -515,6 +621,19 @@ export async function processOnboardingBaseline(payload: {
     }
   );
 
+  // Link invoice to header
+  if (invoiceId) {
+    await directusFetch(`${DIRECTUS_URL}/items/lpg_transaction_header_invoices`, {
+      method: "POST",
+      body: JSON.stringify({
+        header_id: payload.transactionHeaderId,
+        sales_invoice_id: invoiceId,
+        invoice_role: "SOURCE_DELIVERY",
+        linked_by: payload.userId,
+      }),
+    });
+  }
+
   return parentTx.data;
 }
 
@@ -528,9 +647,12 @@ export interface RoutineSwapLineInput {
 export interface NewDeploymentLineInput {
   cylinderAssetId: number; // Selected from available warehouse inventory
   targetKg: number;
+  serialPhotoId?: string;
+  weightPhotoId?: string;
 }
 
 export async function processRegularSwap(payload: {
+  transactionHeaderId: number;
   customerCode: string;
   siteId: number;
   transactionDate: string;
@@ -545,8 +667,10 @@ export async function processRegularSwap(payload: {
   transactionId?: number;
   isNoSwap?: boolean;
   meteredKg?: number;
+  salesInvoiceId?: number | null;
+  salesInvoiceNo?: string | null;
   attachments?: {
-    siteCylinderId: number;
+    siteCylinderId: number | null;
     cylinderAssetId: number;
     attachmentType: "SERIAL_IMAGE" | "WEIGHT_IMAGE";
     directusFileId: string;
@@ -615,9 +739,31 @@ export async function processRegularSwap(payload: {
 
   // Monogamy validation for new deployments
   for (const dep of payload.newCylinders) {
+    if (!Number.isFinite(dep.targetKg) || dep.targetKg <= 0) {
+      throw new Error(`A valid gross weight is required for new cylinder asset ${dep.cylinderAssetId}.`);
+    }
+    if (!dep.serialPhotoId || !dep.weightPhotoId) {
+      throw new Error(`Serial and weight photos are required for new cylinder asset ${dep.cylinderAssetId}.`);
+    }
     const isSingle = await verifyCylinderMonogamy(dep.cylinderAssetId);
     if (!isSingle) {
       throw new Error(`New cylinder asset ${dep.cylinderAssetId} is actively assigned elsewhere.`);
+    }
+
+    const assetRes = await directusFetch<{ data: CylinderAsset }>(
+      `${DIRECTUS_URL}/items/cylinder_assets/${dep.cylinderAssetId}?fields=id,serial_number,tare_weight,cylinder_status,cylinder_condition`
+    );
+    const asset = assetRes.data;
+    if (!asset || asset.cylinder_condition !== "GOOD") {
+      throw new Error(`New cylinder asset ${dep.cylinderAssetId} must be in GOOD condition.`);
+    }
+    if (asset.cylinder_status !== "AVAILABLE" && asset.cylinder_status !== "LOADED") {
+      throw new Error(`New cylinder ${asset.serial_number} must be AVAILABLE or LOADED.`);
+    }
+    if (dep.targetKg < Number(asset.tare_weight ?? 0)) {
+      throw new Error(
+        `New cylinder ${asset.serial_number} gross weight cannot be below its tare weight of ${asset.tare_weight} kg.`
+      );
     }
   }
 
@@ -671,7 +817,7 @@ export async function processRegularSwap(payload: {
     };
     
     if (isSwapped) {
-        siteCylUpdate.site_cylinder_status = "RETURNED";
+        siteCylUpdate.site_cylinder_status = "REMOVED";
         siteCylUpdate.removed_date = payload.transactionDate;
     }
 
@@ -723,20 +869,9 @@ export async function processRegularSwap(payload: {
     });
   }
 
-  // Create sales invoice if billable_kg > 0
-  let invoice: { id: number; invoice_no: string } | null = null;
-  const grossAmount = parseFloat((billableKg * payload.pricePerKg).toFixed(2));
-  const vatAmount = parseFloat((grossAmount * 0.12).toFixed(2));
-  const netAmount = parseFloat((grossAmount + vatAmount).toFixed(2));
-
-  if (billableKg > 0) {
-    invoice = await createSalesInvoice(
-      payload.customerCode,
-      grossAmount,
-      `WIWO physical validation invoice. Source: ${billableSource}.`,
-      undefined
-    );
-  }
+  // Use provided sales invoice (fallback to null if not provided)
+  const invoiceId = payload.salesInvoiceId ?? null;
+  const invoiceNo = payload.salesInvoiceNo ?? null;
 
   let meterReadingId: number | null = null;
   if (payload.transactionId) {
@@ -773,6 +908,10 @@ export async function processRegularSwap(payload: {
 
   // Create WIWO Header
   const wiwoNo = `WIWO-${Date.now().toString().slice(-6)}`;
+  const grossAmount = Number((totalWiwoKg * payload.pricePerKg).toFixed(2));
+  const netAmount = Number((grossAmount / 1.12).toFixed(2));
+  const vatAmount = Number((grossAmount - netAmount).toFixed(2));
+
   const headerRes = await directusFetch<{ data: { id: number } }>(
     `${DIRECTUS_URL}/items/lpg_wiwo_headers`,
     {
@@ -791,8 +930,8 @@ export async function processRegularSwap(payload: {
         vat_amount: vatAmount,
         net_amount: netAmount,
         wiwo_status: "POSTED",
-        sales_invoice_id: invoice?.id ?? null,
-        sales_invoice_no: invoice?.invoice_no ?? null,
+        sales_invoice_id: invoiceId,
+        sales_invoice_no: invoiceNo,
         remarks: payload.remarks || "",
         ...withUser(payload.userId, ["created_by", "posted_by"]),
         posted_date: new Date().toISOString(),
@@ -828,7 +967,7 @@ export async function processRegularSwap(payload: {
         vat_amount: parseFloat((retItem.consumed * payload.pricePerKg * 0.12).toFixed(2)),
         net_amount: parseFloat((retItem.consumed * payload.pricePerKg * 1.12).toFixed(2)),
         is_billable: 1,
-        result_site_cylinder_status: retItem.isSwapped ? "RETURNED" : "CONNECTED",
+        result_site_cylinder_status: retItem.isSwapped ? "REMOVED" : "CONNECTED",
         result_asset_status: retItem.isSwapped ? "EMPTY" : "WITH_CUSTOMER",
         ...withUser(payload.userId, ["created_by"]),
       }),
@@ -886,6 +1025,7 @@ export async function processRegularSwap(payload: {
         method: "PATCH",
         body: JSON.stringify({
           sales_order_id: so.id,
+          transaction_header_id: payload.transactionHeaderId,
           sales_order_no: so.order_no,
           wiwo_header_id: wiwoHeaderId,
           wiwo_kg: totalWiwoKg,
@@ -897,8 +1037,8 @@ export async function processRegularSwap(payload: {
           gross_amount: grossAmount,
           vat_amount: vatAmount,
           net_amount: netAmount,
-          sales_invoice_id: invoice?.id ?? null,
-          sales_invoice_no: invoice?.invoice_no ?? null,
+          sales_invoice_id: invoiceId,
+          sales_invoice_no: invoiceNo,
           status: "POSTED",
           remarks: payload.remarks || "",
           ...withUser(payload.userId, ["posted_by", "modified_by"]),
@@ -908,6 +1048,10 @@ export async function processRegularSwap(payload: {
       }
     );
     parentTxData = parentRes.data;
+
+    if (invoiceId && !payload.transactionId) {
+      // In case we want to attach invoice on patch, but let's do it on POST mostly.
+    }
   } else {
     // Create parent Transaction record
     const txNo = `TX-WIWO-${Date.now().toString().slice(-6)}`;
@@ -917,6 +1061,7 @@ export async function processRegularSwap(payload: {
         method: "POST",
         body: JSON.stringify({
           transaction_no: txNo,
+          transaction_header_id: payload.transactionHeaderId,
           transaction_type: "REGULAR_BILLING",
           lpg_site_id: payload.siteId,
           customer_code: payload.customerCode,
@@ -935,8 +1080,8 @@ export async function processRegularSwap(payload: {
           gross_amount: grossAmount,
           vat_amount: vatAmount,
           net_amount: netAmount,
-          sales_invoice_id: invoice?.id ?? null,
-          sales_invoice_no: invoice?.invoice_no ?? null,
+          sales_invoice_id: invoiceId,
+          sales_invoice_no: invoiceNo,
           status: "POSTED",
           remarks: payload.remarks || "",
           ...withUser(payload.userId, ["created_by", "posted_by"]),
@@ -945,6 +1090,19 @@ export async function processRegularSwap(payload: {
       }
     );
     parentTxData = parentRes.data;
+
+    // Link invoice to header
+    if (invoiceId) {
+      await directusFetch(`${DIRECTUS_URL}/items/lpg_transaction_header_invoices`, {
+        method: "POST",
+        body: JSON.stringify({
+          header_id: payload.transactionHeaderId,
+          sales_invoice_id: invoiceId,
+          invoice_role: "SOURCE_DELIVERY",
+          linked_by: payload.userId,
+        }),
+      });
+    }
   }
 
   // Save attachments
