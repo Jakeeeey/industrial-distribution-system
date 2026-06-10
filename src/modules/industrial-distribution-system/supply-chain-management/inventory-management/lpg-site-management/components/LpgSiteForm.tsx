@@ -405,7 +405,7 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
                     </Select>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                {/* <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Meter Direction</Label>
                     <Select
@@ -433,7 +433,7 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
                       className="rounded-xl border-zinc-200 dark:border-zinc-800"
                     />
                   </div>
-                </div>
+                </div> */}
 
                 {/* Commented out last_meter_reading and last_reading_date for now
                 <div className="grid grid-cols-2 gap-4">
@@ -533,33 +533,33 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
                         <tr className="bg-white dark:bg-zinc-900/40">
                           <td className="px-3 py-2 font-semibold text-zinc-700 dark:text-zinc-300">LPG VAPOR</td>
                           <td className="px-3 py-2 text-right font-mono font-bold text-violet-700 dark:text-violet-400">
-                            {(formData?.default_pressure_line ?? 1).toFixed(4)}
+                            {Number(formData?.default_pressure_line ?? 1).toFixed(4)}
                           </td>
                           <td className="px-3 py-2 text-right text-[10px] text-muted-foreground font-semibold uppercase">CONSTANT</td>
                         </tr>
                         <tr className="bg-zinc-50/50 dark:bg-zinc-900/20">
                           <td className="px-3 py-2 font-semibold text-zinc-700 dark:text-zinc-300">PSI</td>
                           <td className="px-3 py-2 text-right font-mono font-bold text-zinc-700 dark:text-zinc-300">
-                            {(formData?.default_psi ?? 0).toFixed(4)}
+                            {Number(formData?.default_psi ?? 0).toFixed(4)}
                           </td>
                           <td className="px-3 py-2 text-right text-[10px] text-muted-foreground font-semibold uppercase">CONSTANT</td>
                         </tr>
                         <tr className="bg-white dark:bg-zinc-900/40">
                           <td className="px-3 py-2 font-semibold text-zinc-700 dark:text-zinc-300">CORRECTION FACTOR</td>
                           <td className="px-3 py-2 text-right font-mono font-bold text-zinc-700 dark:text-zinc-300">
-                            {(formData?.default_atmospheric_pressure ?? 14.7).toFixed(1)}
+                            {Number(formData?.default_atmospheric_pressure ?? 14.7).toFixed(1)}
                           </td>
                           <td className="px-3 py-2 text-right text-[10px] text-muted-foreground font-semibold uppercase">CONSTANT</td>
                         </tr>
                         <tr className="bg-orange-50/40 dark:bg-orange-950/10">
                           <td className="px-3 py-2 font-semibold text-orange-700 dark:text-orange-400">PRESSURE LINE</td>
                           <td className="px-3 py-2 text-right font-mono font-bold text-orange-700 dark:text-orange-400">
-                            {(formData?.default_psi ?? 0) > 0
-                              ? (((formData?.default_psi ?? 0) + (formData?.default_atmospheric_pressure ?? 14.7)) / (formData?.default_atmospheric_pressure ?? 14.7)).toFixed(4)
+                            {Number(formData?.default_psi ?? 0) > 0
+                              ? ((Number(formData?.default_psi ?? 0) + Number(formData?.default_atmospheric_pressure ?? 14.7)) / Number(formData?.default_atmospheric_pressure ?? 14.7)).toFixed(4)
                               : "—"}
                           </td>
                           <td className="px-3 py-2 text-right text-[10px] text-orange-600 dark:text-orange-500 font-semibold uppercase">
-                            {(formData?.default_psi ?? 0) > 0 ? "PSI + CF / CF" : "N/A"}
+                            {Number(formData?.default_psi ?? 0) > 0 ? "PSI + CF / CF" : "N/A"}
                           </td>
                         </tr>
                       </tbody>
@@ -567,11 +567,11 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
                   </div>
 
                   {/* Live formula */}
-                  {(formData?.default_psi ?? 0) > 0 && (
+                  {Number(formData?.default_psi ?? 0) > 0 && (
                     <div className="bg-blue-50/30 dark:bg-blue-950/10 border border-blue-100 dark:border-blue-900/20 rounded-xl px-4 py-2.5">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400 mb-0.5">KG Formula Preview</p>
                       <p className="text-xs font-mono text-zinc-700 dark:text-zinc-300">
-                        Kilo = Usage × {(formData?.default_pressure_line ?? 1).toFixed(4)} × {(((formData?.default_psi ?? 0) + (formData?.default_atmospheric_pressure ?? 14.7)) / (formData?.default_atmospheric_pressure ?? 14.7)).toFixed(4)}
+                        Kilo = Usage × {Number(formData?.default_pressure_line ?? 1).toFixed(4)} × {((Number(formData?.default_psi ?? 0) + Number(formData?.default_atmospheric_pressure ?? 14.7)) / Number(formData?.default_atmospheric_pressure ?? 14.7)).toFixed(4)}
                       </p>
                     </div>
                   )}

@@ -10,7 +10,10 @@ import {
   Calendar,
   Weight,
   AlertCircle,
-  PackageCheck
+  PackageCheck,
+  Check,
+  ChevronsUpDown,
+  Pencil
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,7 +44,6 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Check, ChevronsUpDown, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Command,
@@ -156,29 +158,35 @@ export function SiteCylinderManager({ siteId, customerCode, stagedCylinders, onS
   }, [open, selectedProductId, editingCylinder, loadAvailableAssets]);
 
   const handleInstall = async () => {
-    if (!installForm.cylinder_asset_id && !editingCylinder) return toast.error("Please select a cylinder");
+    const currentAssetId = typeof installForm.cylinder_asset_id === 'object' 
+      ? (installForm.cylinder_asset_id as any)?.id 
+      : installForm.cylinder_asset_id;
+
+    if (!currentAssetId && !editingCylinder) return toast.error("Please select a cylinder");
 
     try {
       if (editingCylinder) {
         if (!siteId) {
           const updated = stagedCylinders?.map(c =>
-            c.id === editingCylinder.id ? { ...c, ...installForm } : c
+            c.id === editingCylinder.id ? { ...c, ...installForm, cylinder_asset_id: currentAssetId } : c
           );
           onStagedChange?.(updated || []);
         } else {
-          await lpgSiteService.updateSiteCylinder(editingCylinder.id, installForm);
+          await lpgSiteService.updateSiteCylinder(editingCylinder.id, {
+            ...installForm,
+            cylinder_asset_id: currentAssetId
+          });
           await loadCylinders();
         }
         toast.success("Cylinder updated");
       } else {
         if (!siteId) {
-          const currentAssetId = typeof installForm.cylinder_asset_id === 'object' ? (installForm.cylinder_asset_id as { id: number })?.id : installForm.cylinder_asset_id;
           const selectedAsset = availableAssets.find(a => a.id === currentAssetId);
           const newStaged: SiteCylinder = {
             id: Math.random(),
             lpg_site_id: 0,
             customer_code: customerCode,
-            cylinder_asset_id: installForm.cylinder_asset_id!,
+            cylinder_asset_id: currentAssetId!,
             installed_date: installForm.installed_date || new Date().toISOString().split('T')[0],
             removed_date: null,
             site_cylinder_status: installForm.site_cylinder_status || 'CONNECTED',
@@ -205,6 +213,7 @@ export function SiteCylinderManager({ siteId, customerCode, stagedCylinders, onS
         } else {
           await lpgSiteService.installCylinder({
             ...installForm,
+            cylinder_asset_id: currentAssetId,
             lpg_site_id: siteId,
             customer_code: customerCode
           });
@@ -214,6 +223,7 @@ export function SiteCylinderManager({ siteId, customerCode, stagedCylinders, onS
       }
       setOpen(false);
       setEditingCylinder(null);
+      setSelectedProductId(null);
       setInstallForm({
         site_cylinder_status: 'CONNECTED',
         opening_lpg_kg: 50,
@@ -231,7 +241,7 @@ export function SiteCylinderManager({ siteId, customerCode, stagedCylinders, onS
     }
     if (!confirm("Are you sure you want to remove this cylinder from the site?")) return;
     try {
-      const assetId = typeof sc.cylinder_asset_id === 'object' ? sc.cylinder_asset_id.id : sc.cylinder_asset_id;
+      const assetId = typeof sc.cylinder_asset_id === 'object' ? (sc.cylinder_asset_id as any).id : sc.cylinder_asset_id;
       await lpgSiteService.removeCylinder(sc.id, assetId);
       toast.success("Cylinder removed successfully");
       loadCylinders();
@@ -349,7 +359,7 @@ export function SiteCylinderManager({ siteId, customerCode, stagedCylinders, onS
                         {editingCylinder
                           ? (editingCylinder.asset?.serial_number || "Existing Asset")
                           : (installForm.cylinder_asset_id
-                            ? availableAssets.find(a => a.id === (typeof installForm.cylinder_asset_id === 'object' ? installForm.cylinder_asset_id.id : installForm.cylinder_asset_id))?.serial_number
+                            ? (availableAssets.find(a => a.id === (typeof installForm.cylinder_asset_id === 'object' ? (installForm.cylinder_asset_id as any).id : installForm.cylinder_asset_id))?.serial_number || "Select available serial...")
                             : (!selectedProductId ? "Select product first..." : "Select available serial..."))
                         }
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -379,7 +389,7 @@ export function SiteCylinderManager({ siteId, customerCode, stagedCylinders, onS
                                 <Check
                                   className={cn(
                                     "mr-2 h-4 w-4",
-                                    (typeof installForm.cylinder_asset_id === 'object' ? installForm.cylinder_asset_id.id : installForm.cylinder_asset_id) === asset.id ? "opacity-100" : "opacity-0"
+                                    (typeof installForm.cylinder_asset_id === 'object' ? (installForm.cylinder_asset_id as any).id : installForm.cylinder_asset_id) === asset.id ? "opacity-100" : "opacity-0"
                                   )}
                                 />
                                 <div className="flex flex-col">
@@ -466,70 +476,76 @@ export function SiteCylinderManager({ siteId, customerCode, stagedCylinders, onS
                   </TableCell>
                 </TableRow>
               ) : (
-                cylinders.map((sc) => (
-                  <TableRow key={sc.id} className="group">
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div className="h-8 w-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center">
-                          <Cylinder className="h-4 w-4 text-zinc-600" />
+                cylinders.map((sc) => {
+                  const displaySerial = sc.asset?.serial_number || 
+                    (typeof sc.cylinder_asset_id === 'object' ? (sc.cylinder_asset_id as any)?.serial_number : null) || 
+                    "Unknown";
+
+                  return (
+                    <TableRow key={sc.id} className="group">
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div className="h-8 w-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center">
+                            <Cylinder className="h-4 w-4 text-zinc-600" />
+                          </div>
+                          <span className="font-mono font-medium">{displaySerial}</span>
                         </div>
-                        <span className="font-mono font-medium">{sc.asset?.serial_number || (typeof sc.cylinder_asset_id === 'object' ? sc.cylinder_asset_id?.serial_number : "Unknown")}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={sc.site_cylinder_status === 'CONNECTED' ? 'default' : 'outline'}
-                        className={`rounded-md text-[10px] uppercase ${sc.site_cylinder_status === 'CONNECTED' ? 'bg-green-100 text-green-700 hover:bg-green-100 border-green-200' : ''}`}
-                      >
-                        {sc.site_cylinder_status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5 text-sm">
-                        <Weight className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span className="font-bold">{Number(sc.current_estimated_lpg_kg ?? sc.opening_lpg_kg ?? 0).toFixed(2)}</span>
-                        <span className="text-[10px] text-muted-foreground">KG</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Calendar className="h-3.5 w-3.5" />
-                        {sc.installed_date}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2 justify-end">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                          onClick={() => {
-                            setEditingCylinder(sc);
-                            const assetObj = sc.asset || (typeof sc.cylinder_asset_id === 'object' ? sc.cylinder_asset_id : undefined);
-                            setInstallForm({
-                              site_cylinder_status: sc.site_cylinder_status,
-                              opening_lpg_kg: sc.opening_lpg_kg || 0,
-                              installed_date: sc.installed_date,
-                              cylinder_asset_id: assetObj?.id
-                            });
-                            setSelectedProductId(assetObj?.product_id ?? null);
-                            setOpen(true);
-                          }}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={sc.site_cylinder_status === 'CONNECTED' ? 'default' : 'outline'}
+                          className={`rounded-md text-[10px] uppercase ${sc.site_cylinder_status === 'CONNECTED' ? 'bg-green-100 text-green-700 hover:bg-green-100 border-green-200' : ''}`}
                         >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => handleRemove(sc)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
+                          {sc.site_cylinder_status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5 text-sm">
+                          <Weight className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="font-bold">{Number(sc.current_estimated_lpg_kg ?? sc.opening_lpg_kg ?? 0).toFixed(2)}</span>
+                          <span className="text-[10px] text-muted-foreground">KG</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Calendar className="h-3.5 w-3.5" />
+                          {sc.installed_date}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2 justify-end">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            onClick={() => {
+                              setEditingCylinder(sc);
+                              const assetObj = sc.asset || (typeof sc.cylinder_asset_id === 'object' ? sc.cylinder_asset_id : undefined);
+                              setInstallForm({
+                                site_cylinder_status: sc.site_cylinder_status,
+                                opening_lpg_kg: sc.opening_lpg_kg || 0,
+                                installed_date: sc.installed_date,
+                                cylinder_asset_id: assetObj?.id
+                              });
+                              setSelectedProductId(assetObj?.product_id ?? null);
+                              setOpen(true);
+                            }}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            onClick={() => handleRemove(sc)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>
