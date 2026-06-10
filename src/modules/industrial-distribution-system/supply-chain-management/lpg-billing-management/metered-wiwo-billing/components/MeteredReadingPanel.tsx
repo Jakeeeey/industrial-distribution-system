@@ -193,11 +193,11 @@ export function MeteredReadingPanel({
                   Usage
                 </th>
                 <th className="text-right px-3 py-1.5 text-[10px] font-bold text-violet-600 dark:text-violet-400 uppercase tracking-wider">
-                  Pressure Line
+                  LPG Vapor
                 </th>
                 {hasPsi && (
                   <th className="text-right px-3 py-1.5 text-[10px] font-bold text-orange-600 dark:text-orange-400 uppercase tracking-wider">
-                    LPG Vapor
+                    Pressure Line
                   </th>
                 )}
                 <th className="text-right px-3 py-1.5 text-[10px] font-bold text-blue-700 dark:text-blue-400 uppercase tracking-wider">

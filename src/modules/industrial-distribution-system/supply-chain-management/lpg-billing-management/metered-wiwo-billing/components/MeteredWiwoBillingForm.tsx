@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -92,6 +92,38 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
     meterDirection,
     pressureLine,
   } = useMeteredWiwoBillingForm(txId);
+
+  // --- AUTOMATIC DATE HANDLER ---
+  useEffect(() => {
+    // Only run this logic for NEW transactions when a site is selected
+    if (!txId && form.siteId) {
+      const fetchLastTransactionDate = async () => {
+        try {
+          // TODO: Replace this with your actual API fetch to get the last billingPeriodTo for this siteId
+          // const response = await fetch(`/api/your-endpoint/last-transaction?siteId=${form.siteId}`);
+          // const lastTx = await response.json();
+          // const lastDate = lastTx?.billingPeriodTo;
+
+          const today = new Date().toISOString().split("T")[0];
+
+          setForm((prev) => ({
+            ...prev,
+            // 1. Chain the dates
+            // billingPeriodFrom: lastDate,
+            billingPeriodFrom: prev.billingPeriodFrom, // Temporary fallback until API is hooked up
+            billingPeriodTo: today,
+
+            // 2. Chain the meter readings
+            // previousReading: lastReading !== undefined ? Number(lastReading) : prev.previousReading,
+          }));
+        } catch (error) {
+          console.error("Failed to fetch previous transaction data:", error);
+        }
+      };
+      fetchLastTransactionDate();
+    }
+  }, [txId, form.siteId, setForm]);
+  // -------------------------------
 
   const isReadOnly =
     originalStatus === "POSTED" || originalStatus === "CANCELLED";
@@ -333,12 +365,11 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                 <div className="relative">
                   <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
                   <Input
-                    value={form.transactionNo}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, transactionNo: e.target.value }))
-                    }
-                    className="pl-9 font-mono"
-                    readOnly={isReadOnly || isOnboarding}
+                    value={form.transactionNo || ""}
+                    className="pl-9 font-mono bg-zinc-50 dark:bg-zinc-950/50 border-dashed text-zinc-600 dark:text-zinc-400 cursor-not-allowed"
+                    readOnly
+                    placeholder={form.transactionNo || ""}
+                    tabIndex={-1}
                   />
                 </div>
               </div>
@@ -349,13 +380,11 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                 <div className="relative">
                   <Activity className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
                   <Input
-                    value={form.readingNo}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, readingNo: e.target.value }))
-                    }
-                    className="pl-9 font-mono"
-                    readOnly={isReadOnly}
-                    placeholder="MTR-XXXXXXXX"
+                    value={form.readingNo || ""}
+                    className="pl-9 font-mono bg-zinc-50 dark:bg-zinc-950/50 border-dashed text-zinc-600 dark:text-zinc-400 cursor-not-allowed"
+                    readOnly
+                    placeholder={form.readingNo || ""}
+                    tabIndex={-1}
                   />
                 </div>
               </div>
@@ -390,15 +419,17 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                   <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
                   <Input
                     type="date"
-                    value={form.billingPeriodFrom}
+                    value={form.billingPeriodFrom || ""}
                     onChange={(e) =>
                       setForm((f) => ({
                         ...f,
                         billingPeriodFrom: e.target.value,
                       }))
                     }
+                    // Locked to prevent manual gaps/overlaps
                     className="pl-9 bg-white dark:bg-zinc-900"
                     readOnly={isReadOnly}
+                    title="Auto-filled from previous billing cycle"
                   />
                 </div>
               </div>
@@ -410,7 +441,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                   <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
                   <Input
                     type="date"
-                    value={form.billingPeriodTo}
+                    value={form.billingPeriodTo || ""}
                     onChange={(e) =>
                       setForm((f) => ({
                         ...f,
@@ -620,7 +651,6 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                           configCorrectionFactor: Number(e.target.value),
                         }))
                       }
-                      // Added background contrast
                       className="font-mono bg-white dark:bg-zinc-900"
                       readOnly={isReadOnly}
                       placeholder="14.7"
@@ -959,8 +989,6 @@ export function ImageUploadField({
     }
   };
 
-  // Use a same-origin API proxy so mobile/remote devices can fetch images
-  // (avoids embedding DIRECTUS host like http://goatedcodoer:8056 which isn't reachable on mobile)
   const previewUrl = imageId
     ? `/api/ids/scm/lpg-billing-management/metered-billing/asset?id=${encodeURIComponent(
         imageId,
@@ -975,7 +1003,6 @@ export function ImageUploadField({
 
       {previewUrl ? (
         <>
-          {/* 1. Changed <button> to <div> to fix hydration error */}
           <div
             className={`relative group overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center rounded-xl shadow-sm transition-all hover:ring-2 hover:ring-violet-500/50 ${previewClassName ?? "h-32 w-full"}`}
           >
@@ -983,12 +1010,10 @@ export function ImageUploadField({
             <img
               src={previewUrl}
               alt={label}
-              // 2. Moved onClick to the image and added cursor-zoom-in
               onClick={() => setIsPreviewOpen(true)}
               className="object-cover h-full w-full cursor-zoom-in"
             />
             {!isReadOnly && (
-              // 3. Added pointer-events-none to overlay, pointer-events-auto to the button
               <div className="absolute inset-0 bg-zinc-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[1px] pointer-events-none">
                 <Button
                   type="button"
@@ -1010,12 +1035,10 @@ export function ImageUploadField({
           <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
             <DialogContent
               showCloseButton={false}
-              // 4. Added aria-describedby={undefined} for screen readers
               aria-describedby={undefined}
               className="sm:max-w-4xl w-full rounded-2xl p-0 overflow-hidden border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950"
             >
               <div className="flex justify-between items-center p-4 border-b border-zinc-200 dark:border-zinc-800">
-                {/* 5. Swapped <h3> for DialogTitle */}
                 <DialogTitle className="font-semibold text-zinc-900 dark:text-zinc-100 text-sm">
                   {label}
                 </DialogTitle>
@@ -1094,7 +1117,6 @@ export function ImageUploadField({
               )}
             </div>
 
-            {/* Quick Camera Action - Only shows on hover or if compact is true to save space */}
             {!isReadOnly && !uploading && (
               <div className="absolute bottom-2 right-2">
                 <Button
