@@ -16,7 +16,7 @@ import {
   Loader2,
   ScanBarcode
 } from "lucide-react";
-import type { CylinderAsset, CustomerSiteCylinder, MeteredWiwoTransaction, CustomerSite, MeterReading, WiwoHeader } from "../types";
+import type { CylinderAsset, CustomerSiteCylinder, MeteredWiwoTransaction, CustomerSite, MeterReading, WiwoHeader, LpgTransactionHeader } from "../types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -40,6 +40,8 @@ interface WiwoFormProps {
   onSuccess: () => void;
   onCancel: () => void;
   initialFlowType?: "ROUTINE" | "ONBOARDING";
+  transactionHeader: LpgTransactionHeader;
+  salesInvoice?: { invoice_id: number; invoice_no: string; total_amount: number; invoice_date: string; transaction_status: string };
 }
 
 function getCylinderCapacity(productName?: string): number {
@@ -50,7 +52,7 @@ function getCylinderCapacity(productName?: string): number {
   return numMatch ? parseInt(numMatch[0]) : 50;
 }
 
-export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE" }: WiwoFormProps) {
+export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE", transactionHeader, salesInvoice }: WiwoFormProps) {
 
   const serialPhotoInputRef = useRef<HTMLInputElement>(null);
   const weightPhotoInputRef = useRef<HTMLInputElement>(null);
@@ -72,6 +74,20 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   useEffect(() => {
     setFlowType(initialFlowType);
   }, [initialFlowType]);
+
+  useEffect(() => {
+    setSiteId(String(transactionHeader.customer_site_id));
+    setCustomerCode(transactionHeader.customer_id);
+    setBillingPeriodFrom(transactionHeader.period_from);
+    setBillingPeriodTo(transactionHeader.period_to);
+    const headerSite = transactionHeader.site;
+    if (headerSite) {
+      setSiteSearch(headerSite.site_name || `Site #${headerSite.id}`);
+      setPreviousReading(Number(headerSite.last_meter_reading ?? 0));
+      setCurrentReading(Number(headerSite.last_meter_reading ?? 0));
+      setPricePerKg(Number(headerSite.default_price_per_kg ?? 0));
+    }
+  }, [transactionHeader]);
   const [pricePerKg, setPricePerKg] = useState(0);
 
   // Flow A state: Onboarding
@@ -110,6 +126,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   const [isWeighModalOpen, setIsWeighModalOpen] = useState(false);
   const [weighingCylinderId, setWeighingCylinderId] = useState<number | null>(null);
   const [weighingGross, setWeighingGross] = useState("");
+  const [replacementModalIndex, setReplacementModalIndex] = useState<number | null>(null);
 
   const [, setSerialFile] = useState<File | null>(null);
   const [serialFileUrl, setSerialFileUrl] = useState<string | null>(null);
@@ -122,7 +139,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   const [isUploadingWeight, setIsUploadingWeight] = useState(false);
 
   const [attachmentsState, setAttachmentsState] = useState<{
-    siteCylinderId: number;
+    siteCylinderId: number | null;
     cylinderAssetId: number;
     attachmentType: "SERIAL_IMAGE" | "WEIGHT_IMAGE";
     directusFileId: string;
@@ -135,9 +152,17 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
     capacity: number;
     targetKg: number | string;
     swappedOutCylinderId: number | null;
+    serialPhotoId?: string | null;
+    serialPhotoUrl?: string | null;
+    weightPhotoId?: string | null;
+    weightPhotoUrl?: string | null;
+    isUploadingSerial?: boolean;
+    isUploadingWeight?: boolean;
     isValidating?: boolean;
     error?: string;
   }[]>([]);
+  const replacementModalItem =
+    replacementModalIndex === null ? null : selectedReplacementCylinders[replacementModalIndex] ?? null;
 
   // Draft pre-fill extras
   const [billingPeriodFrom, setBillingPeriodFrom] = useState("");
@@ -579,6 +604,64 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
     }
   };
 
+  const handleReplacementFileUpload = async (
+    index: number,
+    file: File,
+    type: "SERIAL" | "WEIGHT",
+  ) => {
+    const isSerial = type === "SERIAL";
+    const previewUrl = URL.createObjectURL(file);
+
+    setSelectedReplacementCylinders((prev) => {
+      const copy = [...prev];
+      copy[index] = {
+        ...copy[index],
+        ...(isSerial
+          ? { isUploadingSerial: true, serialPhotoUrl: previewUrl, serialPhotoId: null }
+          : { isUploadingWeight: true, weightPhotoUrl: previewUrl, weightPhotoId: null }),
+      };
+      return copy;
+    });
+
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/ids/scm/lpg-billing-management/wiwo-billing/upload", {
+        method: "POST",
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok || data.error || !data.data?.id) {
+        throw new Error(data.error || "Upload failed");
+      }
+
+      setSelectedReplacementCylinders((prev) => {
+        const copy = [...prev];
+        copy[index] = {
+          ...copy[index],
+          ...(isSerial
+            ? { isUploadingSerial: false, serialPhotoId: data.data.id }
+            : { isUploadingWeight: false, weightPhotoId: data.data.id }),
+        };
+        return copy;
+      });
+    } catch (err) {
+      console.error(err);
+      URL.revokeObjectURL(previewUrl);
+      setSelectedReplacementCylinders((prev) => {
+        const copy = [...prev];
+        copy[index] = {
+          ...copy[index],
+          ...(isSerial
+            ? { isUploadingSerial: false, serialPhotoUrl: null, serialPhotoId: null }
+            : { isUploadingWeight: false, weightPhotoUrl: null, weightPhotoId: null }),
+        };
+        return copy;
+      });
+      alert(`Failed to upload new cylinder ${isSerial ? "serial" : "weight"} photo.`);
+    }
+  };
+
   // ─── Mathematical Calculations (Flow B) ─────────────────────────────────────
   const meteredKg = draftMeteredKg !== null 
     ? draftMeteredKg 
@@ -668,6 +751,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
           return;
         }
         payload = {
+          transaction_header_id: transactionHeader.header_id,
           transaction_type: "ONBOARDING_BASELINE",
           customer_code: customerCode,
           lpg_site_id: Number(siteId),
@@ -730,6 +814,14 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
             setLoading(false);
             return;
           }
+          const missingReplacementEvidence = selectedReplacementCylinders.find(
+            c => !c.serialPhotoId || !c.weightPhotoId
+          );
+          if (missingReplacementEvidence) {
+            alert(`Please capture both serial and weight images for new cylinder ${missingReplacementEvidence.serialNumber}.`);
+            setLoading(false);
+            return;
+          }
         }
 
         const returnedCylindersPayload = calculatedReturnedCylinders
@@ -741,6 +833,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
           }));
 
         payload = {
+          transaction_header_id: transactionHeader.header_id,
           transaction_type: "REGULAR_BILLING",
           transaction_id: selectedTxId ? Number(selectedTxId) : undefined,
           customer_code: customerCode,
@@ -753,17 +846,34 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
           returned_cylinders: returnedCylindersPayload,
           new_cylinders: selectedReplacementCylinders.map(c => ({
             cylinderAssetId: c.cylinderAssetId,
-            targetKg: Number(c.targetKg)
+            targetKg: Number(c.targetKg),
+            serialPhotoId: c.serialPhotoId,
+            weightPhotoId: c.weightPhotoId,
           })),
           varianceReasonCode: varianceReasonCode,
           remarks: remarks,
+          sales_invoice_id: salesInvoice?.invoice_id,
+          sales_invoice_no: salesInvoice?.invoice_no,
           is_no_swap: selectedReplacementCylinders.length === 0,
           attachments: attachmentsState.map(att => ({
             siteCylinderId: att.siteCylinderId,
             cylinderAssetId: att.cylinderAssetId,
             attachmentType: att.attachmentType,
             directusFileId: att.directusFileId,
-          })),
+          })).concat(selectedReplacementCylinders.flatMap(c => [
+            {
+              siteCylinderId: null,
+              cylinderAssetId: c.cylinderAssetId,
+              attachmentType: "SERIAL_IMAGE",
+              directusFileId: c.serialPhotoId!,
+            },
+            {
+              siteCylinderId: null,
+              cylinderAssetId: c.cylinderAssetId,
+              attachmentType: "WEIGHT_IMAGE",
+              directusFileId: c.weightPhotoId!,
+            },
+          ])),
         };
       }
 
@@ -1458,6 +1568,31 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                             {/* Column 2: Replacement cylinder sub-form */}
                                             {row.isSwapped && repItem ? (
                                               <div className="space-y-3 p-3.5 border border-zinc-150 dark:border-zinc-800/80 rounded-xl bg-zinc-50/40 dark:bg-zinc-950/20 animate-in fade-in duration-300">
+                                                <div className="flex items-center justify-between gap-3">
+                                                  <div className="min-w-0">
+                                                    <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Cylinder In</p>
+                                                    <p className="text-xs font-semibold truncate">
+                                                      {repItem.cylinderAssetId ? repItem.serialNumber : "New cylinder not captured"}
+                                                    </p>
+                                                    {repItem.cylinderAssetId > 0 && (
+                                                      <p className="text-[9px] text-emerald-600">
+                                                        {repItem.targetKg} KG gross
+                                                        {repItem.serialPhotoId && repItem.weightPhotoId ? " | Evidence complete" : " | Evidence required"}
+                                                      </p>
+                                                    )}
+                                                  </div>
+                                                  <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => setReplacementModalIndex(repIndex)}
+                                                    className="h-9 shrink-0 text-xs font-bold"
+                                                  >
+                                                    <Scale className="h-3.5 w-3.5" />
+                                                    {repItem.cylinderAssetId ? "Edit Cylinder In" : "Capture Cylinder In"}
+                                                  </Button>
+                                                </div>
+                                                <div className="hidden">
                                                 {/* Scan/Input Serial */}
                                                 <div className="space-y-1.5">
                                                   <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Scan / Input New Serial</Label>
@@ -1554,6 +1689,50 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                                     />
                                                     {repItem.cylinderAssetId > 0 && <span className="absolute right-2 top-2.5 text-[10px] text-zinc-400 font-bold">KG</span>}
                                                   </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-2">
+                                                  {(["SERIAL", "WEIGHT"] as const).map((photoType) => {
+                                                    const isSerialPhoto = photoType === "SERIAL";
+                                                    const photoUrl = isSerialPhoto ? repItem.serialPhotoUrl : repItem.weightPhotoUrl;
+                                                    const photoId = isSerialPhoto ? repItem.serialPhotoId : repItem.weightPhotoId;
+                                                    const uploading = isSerialPhoto ? repItem.isUploadingSerial : repItem.isUploadingWeight;
+                                                    return (
+                                                      <label
+                                                        key={photoType}
+                                                        className={`min-h-20 rounded-lg border border-dashed p-2 text-center text-[9px] font-bold cursor-pointer flex flex-col items-center justify-center ${
+                                                          photoId ? "border-emerald-400 text-emerald-700" : "border-zinc-300 text-zinc-500"
+                                                        }`}
+                                                      >
+                                                        {uploading ? (
+                                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                                        ) : photoUrl ? (
+                                                          <>
+                                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                            <img src={photoUrl} alt={`New cylinder ${photoType.toLowerCase()}`} className="h-12 max-w-full object-contain rounded mb-1" />
+                                                            {isSerialPhoto ? "Serial photo saved" : "Weight photo saved"}
+                                                          </>
+                                                        ) : (
+                                                          <>
+                                                            <Plus className="h-4 w-4 mb-1" />
+                                                            {isSerialPhoto ? "Capture new serial" : "Capture new weight"}
+                                                          </>
+                                                        )}
+                                                        <input
+                                                          type="file"
+                                                          accept="image/*"
+                                                          capture="environment"
+                                                          className="hidden"
+                                                          disabled={!repItem.cylinderAssetId || uploading}
+                                                          onChange={(e) => {
+                                                            const file = e.target.files?.[0];
+                                                            if (file) handleReplacementFileUpload(repIndex, file, photoType);
+                                                          }}
+                                                        />
+                                                      </label>
+                                                    );
+                                                  })}
+                                                </div>
                                                 </div>
                                               </div>
                                             ) : (
@@ -2083,6 +2262,193 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
         document.body
       )}
 
+      {/* Replacement Cylinder In Modal */}
+      <Dialog
+        open={replacementModalIndex !== null}
+        onOpenChange={(open) => {
+          if (!open) setReplacementModalIndex(null);
+        }}
+      >
+        <DialogContent className="max-w-xl p-0 overflow-hidden bg-white dark:bg-zinc-950">
+          <div className="p-5 border-b border-zinc-100 dark:border-zinc-800">
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <Truck className="h-5 w-5 text-violet-600" />
+              Cylinder In Weighing
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              Verify the incoming cylinder, record its gross weight, and capture both required photos.
+            </p>
+          </div>
+
+          {replacementModalItem && replacementModalIndex !== null && (
+            <div className="p-5 space-y-5 max-h-[70vh] overflow-y-auto">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  New Cylinder Serial
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={replacementModalItem.serialNumber}
+                    placeholder="Scan or input serial number..."
+                    onChange={(e) => {
+                      const serialNumber = e.target.value;
+                      setSelectedReplacementCylinders((prev) => {
+                        const copy = [...prev];
+                        copy[replacementModalIndex] = {
+                          ...copy[replacementModalIndex],
+                          serialNumber,
+                          cylinderAssetId: 0,
+                          productName: "",
+                          tareWeight: 0,
+                          capacity: 0,
+                          targetKg: "",
+                          serialPhotoId: null,
+                          serialPhotoUrl: null,
+                          weightPhotoId: null,
+                          weightPhotoUrl: null,
+                          error: undefined,
+                        };
+                        return copy;
+                      });
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleValidateReplacementSerial(replacementModalIndex, replacementModalItem.serialNumber);
+                      }
+                    }}
+                    className={replacementModalItem.error ? "border-rose-500" : ""}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => handleValidateReplacementSerial(replacementModalIndex, replacementModalItem.serialNumber)}
+                    disabled={replacementModalItem.isValidating || !replacementModalItem.serialNumber.trim()}
+                    className="font-bold"
+                  >
+                    {replacementModalItem.isValidating ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : replacementModalItem.cylinderAssetId ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    ) : (
+                      "Verify"
+                    )}
+                  </Button>
+                </div>
+                {replacementModalItem.error && (
+                  <p className="text-xs font-semibold text-rose-500">{replacementModalItem.error}</p>
+                )}
+                {replacementModalItem.cylinderAssetId > 0 && (
+                  <p className="text-xs font-semibold text-emerald-600">
+                    {replacementModalItem.productName} | Tare {replacementModalItem.tareWeight} KG
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Incoming Gross Weight
+                </Label>
+                <div className="relative">
+                  <Input
+                    type="number"
+                    step="0.001"
+                    value={replacementModalItem.targetKg}
+                    disabled={!replacementModalItem.cylinderAssetId}
+                    onChange={(e) => {
+                      const value = e.target.value === "" ? "" : Number(e.target.value);
+                      setSelectedReplacementCylinders((prev) => {
+                        const copy = [...prev];
+                        copy[replacementModalIndex] = { ...copy[replacementModalIndex], targetKg: value };
+                        return copy;
+                      });
+                    }}
+                    className="pr-10"
+                  />
+                  <span className="absolute right-3 top-3 text-xs font-bold text-zinc-400">KG</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {(["SERIAL", "WEIGHT"] as const).map((photoType) => {
+                  const serialPhoto = photoType === "SERIAL";
+                  const photoUrl = serialPhoto
+                    ? replacementModalItem.serialPhotoUrl
+                    : replacementModalItem.weightPhotoUrl;
+                  const photoId = serialPhoto
+                    ? replacementModalItem.serialPhotoId
+                    : replacementModalItem.weightPhotoId;
+                  const uploading = serialPhoto
+                    ? replacementModalItem.isUploadingSerial
+                    : replacementModalItem.isUploadingWeight;
+
+                  return (
+                    <label
+                      key={photoType}
+                      className={`min-h-36 rounded-xl border border-dashed p-3 cursor-pointer flex flex-col items-center justify-center text-center ${
+                        photoId ? "border-emerald-400 bg-emerald-50/30" : "border-zinc-300 dark:border-zinc-700"
+                      }`}
+                    >
+                      {uploading ? (
+                        <Loader2 className="h-6 w-6 animate-spin text-violet-600" />
+                      ) : photoUrl ? (
+                        <>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={photoUrl} alt={`${photoType} evidence`} className="max-h-24 max-w-full object-contain rounded-lg mb-2" />
+                          <span className="text-[10px] font-bold text-emerald-700">
+                            {serialPhoto ? "Serial photo saved" : "Weight photo saved"}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="h-6 w-6 text-zinc-400 mb-2" />
+                          <span className="text-xs font-bold">
+                            {serialPhoto ? "Capture Serial Photo" : "Capture Scale Photo"}
+                          </span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                        disabled={!replacementModalItem.cylinderAssetId || uploading}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleReplacementFileUpload(replacementModalIndex, file, photoType);
+                        }}
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3 px-5 py-4 border-t border-zinc-100 dark:border-zinc-800">
+            <Button type="button" variant="secondary" onClick={() => setReplacementModalIndex(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => setReplacementModalIndex(null)}
+              disabled={
+                !replacementModalItem?.cylinderAssetId ||
+                !replacementModalItem.targetKg ||
+                Number(replacementModalItem.targetKg) < replacementModalItem.tareWeight ||
+                !replacementModalItem.serialPhotoId ||
+                !replacementModalItem.weightPhotoId ||
+                replacementModalItem.isUploadingSerial ||
+                replacementModalItem.isUploadingWeight
+              }
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+            >
+              Save Cylinder In
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Cylinder In-Place Weighing Modal */}
       <Dialog open={isWeighModalOpen} onOpenChange={setIsWeighModalOpen}>
         <DialogContent 
@@ -2531,6 +2897,31 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                   {/* Replacement cylinder sub-form */}
                   {row.isSwapped && repItem ? (
                     <div className="space-y-3 p-3.5 border border-zinc-150 dark:border-zinc-800/80 rounded-xl bg-zinc-50/40 dark:bg-zinc-950/20 animate-in fade-in duration-300">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Cylinder In</p>
+                          <p className="text-xs font-semibold truncate">
+                            {repItem.cylinderAssetId ? repItem.serialNumber : "New cylinder not captured"}
+                          </p>
+                          {repItem.cylinderAssetId > 0 && (
+                            <p className="text-[9px] text-emerald-600">
+                              {repItem.targetKg} KG gross
+                              {repItem.serialPhotoId && repItem.weightPhotoId ? " | Evidence complete" : " | Evidence required"}
+                            </p>
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setReplacementModalIndex(repIndex)}
+                          className="h-9 shrink-0 text-xs font-bold"
+                        >
+                          <Scale className="h-3.5 w-3.5" />
+                          {repItem.cylinderAssetId ? "Edit Cylinder In" : "Capture Cylinder In"}
+                        </Button>
+                      </div>
+                      <div className="hidden">
                       <div className="space-y-1.5">
                         <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Scan / Input New Serial</Label>
                         <div className="flex gap-1.5 items-center w-full">
@@ -2625,6 +3016,50 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                           />
                           {repItem.cylinderAssetId > 0 && <span className="absolute right-2 top-2.5 text-[10px] text-zinc-400 font-bold">KG</span>}
                         </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        {(["SERIAL", "WEIGHT"] as const).map((photoType) => {
+                          const isSerialPhoto = photoType === "SERIAL";
+                          const photoUrl = isSerialPhoto ? repItem.serialPhotoUrl : repItem.weightPhotoUrl;
+                          const photoId = isSerialPhoto ? repItem.serialPhotoId : repItem.weightPhotoId;
+                          const uploading = isSerialPhoto ? repItem.isUploadingSerial : repItem.isUploadingWeight;
+                          return (
+                            <label
+                              key={photoType}
+                              className={`min-h-20 rounded-lg border border-dashed p-2 text-center text-[9px] font-bold cursor-pointer flex flex-col items-center justify-center ${
+                                photoId ? "border-emerald-400 text-emerald-700" : "border-zinc-300 text-zinc-500"
+                              }`}
+                            >
+                              {uploading ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : photoUrl ? (
+                                <>
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={photoUrl} alt={`New cylinder ${photoType.toLowerCase()}`} className="h-12 max-w-full object-contain rounded mb-1" />
+                                  {isSerialPhoto ? "Serial photo saved" : "Weight photo saved"}
+                                </>
+                              ) : (
+                                <>
+                                  <Plus className="h-4 w-4 mb-1" />
+                                  {isSerialPhoto ? "Capture new serial" : "Capture new weight"}
+                                </>
+                              )}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                className="hidden"
+                                disabled={!repItem.cylinderAssetId || uploading}
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) handleReplacementFileUpload(repIndex, file, photoType);
+                                }}
+                              />
+                            </label>
+                          );
+                        })}
+                      </div>
                       </div>
                     </div>
                   ) : (
