@@ -108,13 +108,10 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   const [currentReading, setCurrentReading] = useState(0);
   const [returnedWeights, setReturnedWeights] = useState<Record<number, number>>({});
 
-  const clearWeighingCache = () => {
+  const clearWeighingCache = (txIdToClear?: string) => {
     try {
-      for (let i = localStorage.length - 1; i >= 0; i--) {
-        const key = localStorage.key(i);
-        if (key && (key.startsWith("wiwo_weigh_cache_") || key.startsWith("wiwo_draft_cache_"))) {
-          localStorage.removeItem(key);
-        }
+      if (txIdToClear) {
+        localStorage.removeItem(`wiwo_draft_cache_${txIdToClear}`);
       }
       localStorage.removeItem("wiwo_draft_transaction");
     } catch (e) {
@@ -385,7 +382,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
           setSwappedCylinders({});
           setSelectedReplacementCylinders([]);
           setAttachmentsState([]);
-          clearWeighingCache();
+          clearWeighingCache(selectedTxId);
         }
       } catch (err) {
         console.error("Failed to load active site cylinders", err);
@@ -670,13 +667,15 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   // Map and calculate returned cylinders
   const calculatedReturnedCylinders = activeSiteCylinders.map((sc) => {
     const isSwapped = swappedCylinders[sc.id] ?? false;
-    const returnedGross = returnedWeights[sc.id] ?? 0;
+    const rawReturned = returnedWeights[sc.id];
+    const hasReturnedWeight = rawReturned !== undefined && rawReturned !== null && (rawReturned as unknown) !== "" && !isNaN(Number(rawReturned));
+    const returnedGross = hasReturnedWeight ? Number(rawReturned) : 0;
     const tare = Number(sc.cylinder_asset?.tare_weight ?? 0);
     const opening = Number(sc.current_lpg_kg ?? 0); // Treats current_lpg_kg as Previous Gross
 
     const openingNet = Math.max(0, opening - tare);
-    const remaining = returnedGross > 0 ? Math.min(openingNet, Math.max(0, returnedGross - tare)) : openingNet;
-    const consumed = returnedGross > 0 ? Math.max(0, openingNet - remaining) : 0;
+    const remaining = hasReturnedWeight ? Math.min(openingNet, Math.max(0, returnedGross - tare)) : openingNet;
+    const consumed = hasReturnedWeight ? Math.max(0, openingNet - remaining) : 0;
 
     return {
       ...sc,
@@ -889,7 +888,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
       }
 
       alert("Transaction saved and posted successfully!");
-      clearWeighingCache();
+      clearWeighingCache(selectedTxId);
       onSuccess();
     } catch (err) {
       const error = err as Error;
@@ -924,7 +923,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
 
       alert("Transaction successfully rolled back and cancelled.");
       setIsCancelModalOpen(false);
-      clearWeighingCache();
+      clearWeighingCache(selectedTxId);
       onSuccess();
     } catch (err) {
       const error = err as Error;
