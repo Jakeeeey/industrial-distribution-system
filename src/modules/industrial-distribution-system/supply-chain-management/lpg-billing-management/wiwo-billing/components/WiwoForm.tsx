@@ -938,7 +938,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-violet-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -963,7 +963,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
           <span className="text-lg">⚠️</span>
           <div>
             <span className="font-bold">Transaction Locked: </span>
-            This physical validation & billing record is <span className="font-bold text-violet-600 dark:text-violet-400">{txDetail?.status}</span> and cannot be modified.
+            This physical validation & billing record is <span className="font-bold text-primary">{txDetail?.status}</span> and cannot be modified.
           </div>
         </div>
       )}
@@ -983,7 +983,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
       {/* Header Panel */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-lg sm:text-xl font-black bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent truncate">
+          <h2 className="text-lg sm:text-xl font-black text-primary truncate">
             {isViewMode
               ? `WIWO Validation Log: ${txDetail?.transaction_no}`
               : flowType === "ONBOARDING"
@@ -1005,15 +1005,15 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
         {/* Left 2 Columns */}
         <div className="lg:col-span-2 space-y-6">
           {/* Card A: Transaction Info */}
-          <div className="bg-white/70 dark:bg-zinc-900/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
+          <div className="bg-card/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
             <div className="flex items-center gap-2 mb-2">
-              <div className="h-8 w-8 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-violet-600">
+              <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
                 <Gauge className="h-4 w-4" />
               </div>
               <h2 className="font-semibold text-sm">Transaction Details</h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 border-b border-zinc-100 dark:border-zinc-800/50">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 border-b border-border">
               {flowType === "ROUTINE" && !isViewMode && (
                 <div className="space-y-1.5 md:col-span-2">
                   <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
@@ -1028,13 +1028,13 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                           ? `${draftTransactions.find(t => String(t.id) === selectedTxId)?.transaction_no || ""} - ${draftTransactions.find(t => String(t.id) === selectedTxId)?.customer?.customer_name || ""}`
                           : ""
                       }
-                      className="bg-zinc-50 dark:bg-zinc-800 font-medium text-xs flex-1"
+                      className="bg-accent font-medium text-xs flex-1"
                     />
                     <Button
                       type="button"
                       variant="outline"
                       onClick={() => setIsDraftModalOpen(true)}
-                      className="text-xs h-9 bg-zinc-100 hover:bg-zinc-250 border-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-bold px-4 rounded-xl shrink-0"
+                      className="text-xs h-9 bg-zinc-100 hover:bg-zinc-250 border-border dark:bg-zinc-800 dark:hover:bg-zinc-700 text-foreground font-bold px-4 rounded-xl shrink-0"
                     >
                       Find Transaction
                     </Button>
@@ -1050,7 +1050,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                       ? (txDetail.site?.site_name || `Site ID: ${txDetail.lpg_site_id}`)
                       : siteSearch || `Site #${siteId}`}
                     readOnly
-                    className="bg-zinc-50 dark:bg-zinc-800 font-medium"
+                    className="bg-accent font-medium"
                   />
                 ) : (
                   <Combobox
@@ -1090,7 +1090,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                 <Input
                   value={isViewMode ? txDetail.customer_code : customerCode || "—"}
                   readOnly
-                  className="bg-zinc-50 dark:bg-zinc-800 font-mono font-medium"
+                  className="bg-accent font-mono font-medium"
                 />
               </div>
             </div>
@@ -1099,7 +1099,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
               <div className="space-y-2">
                 <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Transaction Date</Label>
                 {isReadOnly || isViewMode || !!selectedTxId ? (
-                  <Input value={isViewMode ? txDetail.transaction_date : transactionDate} readOnly className="bg-zinc-50 dark:bg-zinc-800" />
+                  <Input value={isViewMode ? txDetail.transaction_date : transactionDate} readOnly className="bg-accent" />
                 ) : (
                   <Popover>
                     <PopoverTrigger asChild>
@@ -1150,7 +1150,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                     <Input
                       value={isViewMode ? (txDetail.billing_period_from ?? "—") : billingPeriodFrom || "—"}
                       readOnly
-                      className="bg-zinc-50 dark:bg-zinc-800 font-mono text-xs"
+                      className="bg-accent font-mono text-xs"
                     />
                   </div>
                   <div className="space-y-2">
@@ -1158,7 +1158,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                     <Input
                       value={isViewMode ? (txDetail.billing_period_to ?? "—") : billingPeriodTo || "—"}
                       readOnly
-                      className="bg-zinc-50 dark:bg-zinc-800 font-mono text-xs"
+                      className="bg-accent font-mono text-xs"
                     />
                   </div>
                 </>
@@ -1171,9 +1171,9 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
           {flowType === "ROUTINE" && (
             <>
               {/* Meter Sync panel */}
-              <div className="bg-white/70 dark:bg-zinc-900/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
+              <div className="bg-card/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <div className="h-8 w-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600">
+                  <div className="h-8 w-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-primary">
                     <Gauge className="h-4 w-4" />
                   </div>
                   <h2 className="font-semibold text-sm">Meter Reading Details</h2>
@@ -1186,7 +1186,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                       type="number"
                       value={isViewMode ? txDetail?.meter_reading_id ? (txDetail.meter_reading_id as unknown as MeterReading).previous_reading : 0 : previousReading}
                       readOnly
-                      className="bg-zinc-50 dark:bg-zinc-800 font-mono"
+                      className="bg-accent font-mono"
                     />
                   </div>
                   <div className="space-y-2">
@@ -1224,7 +1224,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                     <Input
                       value={isViewMode ? txDetail.wiwo_kg : totalWiwoKg.toFixed(3)}
                       readOnly
-                      className="font-mono bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 font-bold"
+                      className="font-mono bg-emerald-50 dark:bg-emerald-900/20 text-primary font-bold"
                     />
                   </div>
                 </div>
@@ -1232,10 +1232,10 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
 
               {/* Connected cylinders returns weights table */}
               {(isViewMode || flowType === "ROUTINE") && (
-                <div className="bg-white/70 dark:bg-zinc-900/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
+                <div className="bg-card/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
                   <div className="flex items-center justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2">
-                      <div className="h-8 w-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600">
+                      <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
                         <Scale className="h-4 w-4" />
                       </div>
                       <h2 className="font-semibold text-sm">Connected Cylinders & Weight Check</h2>
@@ -1250,18 +1250,18 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                           setScannerInput("");
                           setIsScannerModalOpen(true);
                         }}
-                        className="bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 hover:text-emerald-600 dark:hover:text-emerald-400 text-xs px-2 sm:px-3 h-8 shadow-sm border-zinc-200 dark:border-zinc-800"
+                        className="bg-white dark:bg-zinc-900 text-muted-foreground dark:text-zinc-300 hover:text-primary dark:hover:text-emerald-400 text-xs px-2 sm:px-3 h-8 shadow-sm border-border"
                       >
-                        <ScanBarcode className="h-4 w-4 sm:mr-1.5 text-emerald-500" />
+                        <ScanBarcode className="h-4 w-4 sm:mr-1.5 text-primary" />
                         <span className="hidden sm:inline">Scan Cylinder</span>
                       </Button>
                     )}
                   </div>
 
-                  <div className="border border-zinc-200 dark:border-zinc-800/80 rounded-xl overflow-hidden text-xs bg-white dark:bg-zinc-955/10">
+                  <div className="border border-border/80 rounded-xl overflow-hidden text-xs bg-white dark:bg-zinc-955/10">
                     <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse min-w-full">
-                      <thead className="bg-zinc-50 dark:bg-zinc-900 font-bold text-zinc-500 border-b border-zinc-200 dark:border-zinc-800">
+                      <thead className="bg-zinc-50 dark:bg-zinc-900 font-bold text-muted-foreground border-b border-border">
                         <tr>
                           <th className="p-2 sm:p-3 sticky left-0 bg-zinc-50 dark:bg-zinc-900 z-10 text-[10px] sm:text-xs">Serial</th>
                           <th className="p-2 sm:p-3 text-[10px] sm:text-xs">Product Name</th>
@@ -1281,7 +1281,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                               return (
                                 <Fragment key={idx}>
                                   <tr className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20">
-                                    <td className="p-2 sm:p-3 font-mono font-bold sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r border-zinc-100 dark:border-zinc-800 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] text-[10px] sm:text-xs">{line.serial_number}</td>
+                                    <td className="p-2 sm:p-3 font-mono font-bold sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r border-border shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] text-[10px] sm:text-xs">{line.serial_number}</td>
                                     <td className="p-2 sm:p-3 font-semibold text-zinc-700 dark:text-zinc-300 text-[10px] sm:text-xs">
                                       {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                                       {(line as any).cylinder_asset?.product?.product_name || (line as any).product_name || "LPG Cylinder"}
@@ -1292,41 +1292,41 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                           Swapped
                                         </Badge>
                                       ) : (
-                                        <Badge variant="outline" className="border-zinc-200 text-zinc-500 bg-zinc-50 dark:bg-zinc-800/20 dark:text-zinc-400 text-[9px] sm:text-xs px-1.5 py-0 sm:px-2 sm:py-0.5">
+                                        <Badge variant="outline" className="border-border text-muted-foreground bg-accent/20 dark:text-muted-foreground text-[9px] sm:text-xs px-1.5 py-0 sm:px-2 sm:py-0.5">
                                           In-Place
                                         </Badge>
                                       )}
                                     </td>
                                   </tr>
                                   <tr className="bg-zinc-50/20 dark:bg-zinc-900/5">
-                                    <td colSpan={3} className="p-4 border-l-2 border-zinc-300 dark:border-zinc-700">
+                                    <td colSpan={3} className="p-4 border-l-2 border-border dark:border-zinc-700">
                                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-2">
                                         <div>
-                                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Tare Weight</span>
+                                          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Tare Weight</span>
                                           <span className="font-mono text-xs">{line.tare_weight_kg} KG</span>
                                         </div>
                                         <div>
-                                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Previous Gross KG</span>
+                                          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Previous Gross KG</span>
                                           <span className="font-mono text-xs">{line.previous_lpg_kg} KG</span>
                                         </div>
                                         <div>
-                                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Remaining KG</span>
-                                          <span className="font-mono text-xs text-zinc-600 dark:text-zinc-400">{line.remaining_lpg_kg} KG</span>
+                                          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Remaining KG</span>
+                                          <span className="font-mono text-xs text-muted-foreground">{line.remaining_lpg_kg} KG</span>
                                         </div>
                                         <div>
-                                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Consumed KG</span>
-                                          <span className="font-mono text-xs font-bold text-zinc-800 dark:text-zinc-200">{line.consumed_lpg_kg} KG</span>
+                                          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Consumed KG</span>
+                                          <span className="font-mono text-xs font-bold text-foreground">{line.consumed_lpg_kg} KG</span>
                                         </div>
                                       </div>
                                     </td>
                                   </tr>
                                   {isSwapped && (
                                     <tr className="bg-zinc-50/40 dark:bg-zinc-900/10">
-                                      <td colSpan={3} className="p-4 border-l-2 border-emerald-500 bg-zinc-50/30 dark:bg-zinc-900/10">
+                                      <td colSpan={3} className="p-4 border-l-2 border-primary bg-zinc-50/30 dark:bg-zinc-900/10">
                                         <div className="flex flex-col sm:flex-row gap-6 text-xs">
                                           <div>
                                             <span className="font-semibold text-muted-foreground uppercase tracking-wider block text-[10px] mb-0.5">Replacement Cylinder Serial</span>
-                                            <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200">{matchedDeployment.serial_number}</span>
+                                            <span className="font-mono font-bold text-foreground">{matchedDeployment.serial_number}</span>
                                           </div>
                                           <div>
                                             <span className="font-semibold text-muted-foreground uppercase tracking-wider block text-[10px] mb-0.5">Tare Weight</span>
@@ -1334,7 +1334,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                           </div>
                                           <div>
                                             <span className="font-semibold text-muted-foreground uppercase tracking-wider block text-[10px] mb-0.5">Deployed Gross Weight</span>
-                                            <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{matchedDeployment.previous_lpg_kg} KG</span>
+                                            <span className="font-mono font-bold text-primary dark:text-emerald-400">{matchedDeployment.previous_lpg_kg} KG</span>
                                           </div>
                                         </div>
                                       </td>
@@ -1371,9 +1371,9 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                     }}
                                     className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20 cursor-pointer transition-colors"
                                   >
-                                    <td className="p-2 sm:p-3 font-mono font-bold sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r border-zinc-100 dark:border-zinc-800 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] text-[10px] sm:text-xs">
+                                    <td className="p-2 sm:p-3 font-mono font-bold sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r border-border shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] text-[10px] sm:text-xs">
                                       <div className="flex items-center gap-1.5">
-                                        <span className="text-[10px] text-zinc-400">
+                                        <span className="text-[10px] text-muted-foreground">
                                           {isExpanded ? "▼" : "▶"}
                                         </span>
                                         {row.cylinder_asset?.serial_number}
@@ -1392,7 +1392,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                           Weighed In-Place
                                         </Badge>
                                       ) : (
-                                        <Badge variant="outline" className="border-zinc-200 text-zinc-400 bg-zinc-50 dark:bg-zinc-800/10 text-[9px] sm:text-xs px-1.5 py-0 sm:px-2 sm:py-0.5">
+                                        <Badge variant="outline" className="border-border text-muted-foreground bg-accent/10 text-[9px] sm:text-xs px-1.5 py-0 sm:px-2 sm:py-0.5">
                                           Active In-Place
                                         </Badge>
                                       )}
@@ -1400,32 +1400,32 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                   </tr>
                                   {isExpanded && (
                                     <tr className="bg-zinc-50/40 dark:bg-zinc-900/10">
-                                      <td colSpan={3} className="p-0 border-l-2 border-violet-500 bg-zinc-50/20 dark:bg-zinc-900/5">
+                                      <td colSpan={3} className="p-0 border-l-2 border-primary bg-zinc-50/20 dark:bg-zinc-900/5">
                                         <div className="p-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300 ease-out" onClick={(e) => e.stopPropagation()}>
                                           
-                                          <div className="grid grid-cols-4 gap-4 bg-white/50 dark:bg-zinc-950/50 p-3 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                                          <div className="grid grid-cols-4 gap-4 bg-white/50 dark:bg-zinc-950/50 p-3 rounded-xl border border-border">
                                             <div>
-                                              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Tare Weight</span>
+                                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Tare Weight</span>
                                               <span className="font-mono text-xs">{row.tare} KG</span>
                                             </div>
                                             <div>
-                                              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Previous Gross KG</span>
+                                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Previous Gross KG</span>
                                               <span className="font-mono text-xs">{row.opening} KG</span>
                                             </div>
                                             <div>
-                                              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Remaining KG</span>
-                                              <span className="font-mono text-xs text-zinc-600 dark:text-zinc-400">{row.remaining} KG</span>
+                                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Remaining KG</span>
+                                              <span className="font-mono text-xs text-muted-foreground">{row.remaining} KG</span>
                                             </div>
                                             <div>
-                                              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Consumed KG</span>
-                                              <span className="font-mono text-xs font-bold text-zinc-800 dark:text-zinc-200">{row.consumed} KG</span>
+                                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Consumed KG</span>
+                                              <span className="font-mono text-xs font-bold text-foreground">{row.consumed} KG</span>
                                             </div>
                                           </div>
 
                                           {/* Action Segmented Toggle */}
                                           <div className="space-y-1">
-                                            <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Cylinder Action</Label>
-                                            <div className="flex bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-xl max-w-xs border border-zinc-200 dark:border-zinc-850">
+                                            <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Cylinder Action</Label>
+                                            <div className="flex bg-accent/80 p-1 rounded-xl max-w-xs border border-border dark:border-zinc-850">
                                               <button
                                                 type="button"
                                                 disabled={isReadOnly}
@@ -1437,8 +1437,8 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                                 }}
                                                 className={`flex-1 py-1 px-2.5 text-xs font-bold rounded-lg transition-all ${
                                                   !row.isSwapped
-                                                    ? "bg-white dark:bg-zinc-900 text-violet-600 dark:text-violet-400 shadow-sm"
-                                                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                                                    ? "bg-white dark:bg-zinc-900 text-primary shadow-sm"
+                                                    : "text-muted-foreground hover:text-zinc-700 dark:text-muted-foreground dark:hover:text-zinc-200"
                                                 }`}
                                               >
                                                 Keep In-Place
@@ -1466,8 +1466,8 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                                 }}
                                                 className={`flex-1 py-1 px-2.5 text-xs font-bold rounded-lg transition-all ${
                                                   row.isSwapped
-                                                    ? "bg-white dark:bg-zinc-900 text-violet-600 dark:text-violet-400 shadow-sm"
-                                                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                                                    ? "bg-white dark:bg-zinc-900 text-primary shadow-sm"
+                                                    : "text-muted-foreground hover:text-zinc-700 dark:text-muted-foreground dark:hover:text-zinc-200"
                                                 }`}
                                               >
                                                 Swap Cylinder
@@ -1478,7 +1478,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
                                             {/* Column 1: Gross Weight details of Returned Cylinder */}
                                             <div className="space-y-2">
-                                              <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                                              <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
                                                 {row.isSwapped ? "Returned Gross Weight (Weigh-Out)" : "Current Gross Weight"}
                                               </Label>
                                               <div className="flex items-center gap-2">
@@ -1513,7 +1513,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                                     }}
                                                     className={`pr-8 h-9 text-xs cursor-pointer ${weightError ? "border-rose-500" : ""}`}
                                                   />
-                                                  <span className="absolute right-2 top-2.5 text-[10px] text-zinc-400 font-bold">KG</span>
+                                                  <span className="absolute right-2 top-2.5 text-[10px] text-muted-foreground font-bold">KG</span>
                                                 </div>
                                                 {!isReadOnly && !isViewMode && (
                                                   <Button
@@ -1540,7 +1540,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                                       
                                                       setIsWeighModalOpen(true);
                                                     }}
-                                                    className={`h-9 w-9 rounded-lg shrink-0 ${hasSerial && hasWeight ? "border-emerald-250 text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20" : ""}`}
+                                                    className={`h-9 w-9 rounded-lg shrink-0 ${hasSerial && hasWeight ? "border-emerald-250 text-primary bg-emerald-50 dark:bg-emerald-950/20" : ""}`}
                                                     title="Upload Photos"
                                                   >
                                                     <Scale className="h-3.5 w-3.5" />
@@ -1549,12 +1549,12 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                               </div>
                                               <div className="flex gap-1.5">
                                                 {hasSerial && (
-                                                  <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400">
+                                                  <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-primary/10 text-emerald-800 dark:text-emerald-400">
                                                     Serial: ✓
                                                   </Badge>
                                                 )}
                                                 {hasWeight && (
-                                                  <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400">
+                                                  <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-primary/10 text-emerald-800 dark:text-emerald-400">
                                                     Weight: ✓
                                                   </Badge>
                                                 )}
@@ -1569,12 +1569,12 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                               <div className="space-y-3 p-3.5 border border-zinc-150 dark:border-zinc-800/80 rounded-xl bg-zinc-50/40 dark:bg-zinc-950/20 animate-in fade-in duration-300">
                                                 <div className="flex items-center justify-between gap-3">
                                                   <div className="min-w-0">
-                                                    <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Cylinder In</p>
+                                                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Cylinder In</p>
                                                     <p className="text-xs font-semibold truncate">
                                                       {repItem.cylinderAssetId ? repItem.serialNumber : "New cylinder not captured"}
                                                     </p>
                                                     {repItem.cylinderAssetId > 0 && (
-                                                      <p className="text-[9px] text-emerald-600">
+                                                      <p className="text-[9px] text-primary">
                                                         {repItem.targetKg} KG gross
                                                         {repItem.serialPhotoId && repItem.weightPhotoId ? " | Evidence complete" : " | Evidence required"}
                                                       </p>
@@ -1594,7 +1594,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                                 <div className="hidden">
                                                 {/* Scan/Input Serial */}
                                                 <div className="space-y-1.5">
-                                                  <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Scan / Input New Serial</Label>
+                                                  <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Scan / Input New Serial</Label>
                                                   <div className="flex gap-1.5 items-center w-full">
                                                     <Input
                                                       type="text"
@@ -1628,7 +1628,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                                           }
                                                         }
                                                       }}
-                                                      className={`text-xs h-8 w-full ${repItem.error ? "border-rose-500" : repItem.cylinderAssetId ? "border-emerald-500 bg-emerald-50/10" : ""}`}
+                                                      className={`text-xs h-8 w-full ${repItem.error ? "border-rose-500" : repItem.cylinderAssetId ? "border-primary bg-emerald-50/10" : ""}`}
                                                     />
                                                     <Button
                                                       type="button"
@@ -1646,7 +1646,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                                       {repItem.isValidating ? (
                                                         <Loader2 className="h-3 w-3 animate-spin" />
                                                       ) : repItem.cylinderAssetId ? (
-                                                        <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                                                        <CheckCircle2 className="h-3 w-3 text-primary" />
                                                       ) : (
                                                         "Verify"
                                                       )}
@@ -1656,7 +1656,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                                     <span className="text-[9px] text-rose-500 block mt-0.5 font-semibold">{repItem.error}</span>
                                                   )}
                                                   {repItem.cylinderAssetId > 0 && (
-                                                    <span className="text-[9px] text-emerald-600 block mt-0.5 font-semibold">
+                                                    <span className="text-[9px] text-primary block mt-0.5 font-semibold">
                                                       Verified: {repItem.productName} (Tare: {repItem.tareWeight} KG)
                                                     </span>
                                                   )}
@@ -1664,7 +1664,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
 
                                                 {/* Starting Gross KG */}
                                                 <div className="space-y-1.5">
-                                                  <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">New Cylinder Gross Weight</Label>
+                                                  <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">New Cylinder Gross Weight</Label>
                                                   <div className="relative">
                                                     <Input
                                                       type="number"
@@ -1686,7 +1686,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                                       placeholder={repItem.cylinderAssetId ? String(repItem.tareWeight + repItem.capacity) : "N/A"}
                                                       className="text-xs h-8 pr-8"
                                                     />
-                                                    {repItem.cylinderAssetId > 0 && <span className="absolute right-2 top-2.5 text-[10px] text-zinc-400 font-bold">KG</span>}
+                                                    {repItem.cylinderAssetId > 0 && <span className="absolute right-2 top-2.5 text-[10px] text-muted-foreground font-bold">KG</span>}
                                                   </div>
                                                 </div>
 
@@ -1700,7 +1700,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                                       <label
                                                         key={photoType}
                                                         className={`min-h-20 rounded-lg border border-dashed p-2 text-center text-[9px] font-bold cursor-pointer flex flex-col items-center justify-center ${
-                                                          photoId ? "border-emerald-400 text-emerald-700" : "border-zinc-300 text-zinc-500"
+                                                          photoId ? "border-emerald-400 text-emerald-700" : "border-border text-muted-foreground"
                                                         }`}
                                                       >
                                                         {uploading ? (
@@ -1735,7 +1735,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                                 </div>
                                               </div>
                                             ) : (
-                                              <div className="flex items-center justify-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl p-4 text-center text-muted-foreground bg-zinc-50/10 text-[10px]">
+                                              <div className="flex items-center justify-center border border-dashed border-border rounded-xl p-4 text-center text-muted-foreground bg-zinc-50/10 text-[10px]">
                                                 Cylinder stays in service. No replacement needed.
                                               </div>
                                             )}
@@ -1760,7 +1760,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
 
           {/* Card C: Cylinder Allocations/Deployments for Onboarding setup only */}
           {flowType === "ONBOARDING" && (
-            <div className="bg-white/70 dark:bg-zinc-900/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
+            <div className="bg-card/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <div className="h-8 w-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600">
@@ -1773,7 +1773,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
               </div>
 
                 <div className="space-y-3">
-                  <div className="border border-zinc-200 dark:border-zinc-800/80 rounded-xl p-4 bg-white dark:bg-zinc-955/10 text-xs">
+                  <div className="border border-border/80 rounded-xl p-4 bg-white dark:bg-zinc-955/10 text-xs">
                     <form onSubmit={handleAddSerial} className="flex items-center gap-2">
                       <Input
                         type="text"
@@ -1787,7 +1787,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                       <Button 
                         type="submit" 
                         disabled={isValidatingSerial || !serialInput.trim()}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 shrink-0"
+                        className="bg-primary hover:bg-primary/90 text-white font-bold px-6 shrink-0"
                       >
                         {isValidatingSerial ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
                         {isValidatingSerial ? "Checking..." : "Add"}
@@ -1796,10 +1796,10 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                   </div>
 
                   {selectedOnboardCylinders.length > 0 && (
-                    <div className="border border-zinc-200 dark:border-zinc-800/80 rounded-xl overflow-hidden text-xs bg-white dark:bg-zinc-955/10 mt-3 shadow-sm">
+                    <div className="border border-border/80 rounded-xl overflow-hidden text-xs bg-white dark:bg-zinc-955/10 mt-3 shadow-sm">
                       <div className="overflow-x-auto">
                       <table className="w-full text-left border-collapse min-w-full">
-                        <thead className="bg-zinc-50 dark:bg-zinc-900 font-bold text-zinc-500 border-b border-zinc-200 dark:border-zinc-800">
+                        <thead className="bg-zinc-50 dark:bg-zinc-900 font-bold text-muted-foreground border-b border-border">
                           <tr>
                             <th className="p-3 sticky left-0 bg-zinc-50 dark:bg-zinc-900 z-10">Serial</th>
                             <th className="p-3">Product Name</th>
@@ -1811,9 +1811,9 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                         <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/50">
                           {selectedOnboardCylinders.map((cyl, idx) => (
                             <tr key={cyl.cylinderAssetId} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20">
-                              <td className="p-3 font-mono font-bold text-zinc-700 dark:text-zinc-300 sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r border-zinc-100 dark:border-zinc-800 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">{cyl.serialNumber}</td>
-                              <td className="p-3 text-zinc-600">{cyl.productName}</td>
-                              <td className="p-3 text-right font-mono text-zinc-600">{cyl.tareWeight} KG</td>
+                              <td className="p-3 font-mono font-bold text-zinc-700 dark:text-zinc-300 sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r border-border shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">{cyl.serialNumber}</td>
+                              <td className="p-3 text-muted-foreground">{cyl.productName}</td>
+                              <td className="p-3 text-right font-mono text-muted-foreground">{cyl.tareWeight} KG</td>
                               <td className="p-3">
                                 <Input
                                   type="number"
@@ -1965,7 +1965,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
           </div>
 
           {/* Card E: Remarks notes (Status removed per user request) */}
-          <div className="bg-white/70 dark:bg-zinc-900/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
+          <div className="bg-card/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
 
             {flowType === "ROUTINE" && mismatchExists && (
               <div className="space-y-2">
@@ -1976,7 +1976,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                   value={isViewMode ? txDetail?.variance_reason_code || "NONE" : varianceReasonCode}
                   onChange={(e) => setVarianceReasonCode(e.target.value)}
                   disabled={isReadOnly || isViewMode}
-                  className="w-full text-xs bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-2 h-9 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  className="w-full text-xs bg-white dark:bg-zinc-950 border border-border rounded-xl p-2 h-9 focus:outline-none focus:ring-1 focus:ring-violet-500"
                 >
                   <option value="NONE">Select Reason...</option>
                   <option value="METER_DRIFT">Meter Calibration Drift</option>
@@ -2011,7 +2011,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
       </div>
       </div>
       {/* Form Action Buttons (Moved to bottom) */}
-      <div className="flex flex-wrap gap-4 items-center justify-end border-t border-zinc-200 dark:border-zinc-800 pt-6 mt-6">
+      <div className="flex flex-wrap gap-4 items-center justify-end border-t border-border pt-6 mt-6">
         <Button
           variant="ghost"
           size="default"
@@ -2037,7 +2037,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
           <Button
             onClick={handleSubmit}
             disabled={loading || (flowType === "ROUTINE" && mismatchExists && !remarks.trim()) || hasNegativeWeightErrors}
-            className="h-11 px-8 bg-violet-600 hover:bg-violet-700 shadow-lg shadow-violet-500/20 transition-all active:scale-95 text-white font-bold text-sm"
+            className="h-11 px-8 bg-primary hover:bg-primary/90 shadow-lg shadow-violet-500/20 transition-all active:scale-95 text-white font-bold text-sm"
           >
             {loading ? (
               <Loader2 className="h-5 w-5 mr-2 animate-spin" />
@@ -2053,7 +2053,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
       {/* Cancel/Rollback Confirmation Modal */}
       {isCancelModalOpen && mounted && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-zinc-955 border border-zinc-200 dark:border-zinc-800 max-w-md w-full rounded-2xl p-6 space-y-4 shadow-2xl animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-955 border border-border max-w-md w-full rounded-2xl p-6 space-y-4 shadow-2xl animate-in fade-in duration-200">
             <div className="space-y-1">
               <h3 className="text-md font-extrabold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
                 <AlertCircle className="h-5 w-5 text-rose-500" />
@@ -2065,7 +2065,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-zinc-500">Reason for Cancellation</Label>
+              <Label className="text-xs font-bold text-muted-foreground">Reason for Cancellation</Label>
               <Textarea
                 placeholder="Provide explicit reasons for rolling back this transaction..."
                 value={cancelledReason}
@@ -2098,18 +2098,18 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
       {/* Draft Transaction Selector Modal */}
       {isDraftModalOpen && mounted && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-6">
-          <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 w-full sm:max-w-4xl rounded-t-2xl sm:rounded-2xl shadow-2xl animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-200 flex flex-col max-h-[88vh] sm:max-h-[90vh]">
+          <div className="bg-white dark:bg-zinc-950 border border-border w-full sm:max-w-4xl rounded-t-2xl sm:rounded-2xl shadow-2xl animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-200 flex flex-col max-h-[88vh] sm:max-h-[90vh]">
 
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 shrink-0">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
               <h3 className="text-sm font-extrabold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
-                <Scale className="h-4 w-4 text-violet-500 shrink-0" />
+                <Scale className="h-4 w-4 text-primary shrink-0" />
                 Select Metered Transaction
               </h3>
               <button
                 type="button"
                 onClick={() => setIsDraftModalOpen(false)}
-                className="rounded-full p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                className="rounded-full p-1.5 text-muted-foreground hover:text-zinc-700 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                 aria-label="Close"
               >
                 <X className="h-4 w-4" />
@@ -2117,10 +2117,10 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
             </div>
 
             {/* Filters */}
-            <div className="px-4 py-3 bg-zinc-50 dark:bg-zinc-900/60 border-b border-zinc-100 dark:border-zinc-800 shrink-0">
+            <div className="px-4 py-3 bg-zinc-50 dark:bg-zinc-900/60 border-b border-border shrink-0">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                 <div className="space-y-1">
-                  <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wide">From Date</Label>
+                  <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">From Date</Label>
                   <Input
                     type="date"
                     value={startDateFilter}
@@ -2129,7 +2129,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wide">To Date</Label>
+                  <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">To Date</Label>
                   <Input
                     type="date"
                     value={endDateFilter}
@@ -2138,7 +2138,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                   />
                 </div>
                 <div className="space-y-1 col-span-2 sm:col-span-1">
-                  <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wide">Search by Site</Label>
+                  <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Search by Site</Label>
                   <Input
                     type="text"
                     placeholder="Type site name..."
@@ -2165,19 +2165,19 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="font-mono font-bold text-[12px] text-zinc-800 dark:text-zinc-100 truncate">{tx.transaction_no}</p>
-                          <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate">{tx.customer?.customer_name || tx.customer_code}</p>
-                          <p className="text-[10px] text-violet-500 dark:text-violet-400 font-semibold truncate mt-0.5">
+                          <p className="text-[11px] text-muted-foreground truncate">{tx.customer?.customer_name || tx.customer_code}</p>
+                          <p className="text-[10px] text-primary dark:text-violet-400 font-semibold truncate mt-0.5">
                             {(() => { const s = sites.find(st => st.id === tx.lpg_site_id); return s?.site_name || `Site #${tx.lpg_site_id}`; })()}
                           </p>
                         </div>
-                        <span className="shrink-0 font-mono text-xs font-bold text-violet-600 dark:text-violet-400">{tx.metered_kg} KG</span>
+                        <span className="shrink-0 font-mono text-xs font-bold text-primary">{tx.metered_kg} KG</span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-mono text-zinc-400">{tx.transaction_date}</span>
+                        <span className="text-[10px] font-mono text-muted-foreground">{tx.transaction_date}</span>
                         <Button
                           type="button"
                           onClick={() => handleDraftSelect(tx)}
-                          className="h-8 text-[11px] font-bold bg-violet-600 hover:bg-violet-700 text-white px-4 rounded-xl cursor-pointer"
+                          className="h-8 text-[11px] font-bold bg-primary hover:bg-primary/90 text-white px-4 rounded-xl cursor-pointer"
                         >
                           Select
                         </Button>
@@ -2189,7 +2189,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
 
               {/* Desktop table */}
               <table className="hidden sm:table w-full text-left text-xs border-collapse">
-                <thead className="bg-zinc-50 dark:bg-zinc-900 font-bold text-zinc-500 border-b border-zinc-200 dark:border-zinc-800 sticky top-0">
+                <thead className="bg-zinc-50 dark:bg-zinc-900 font-bold text-muted-foreground border-b border-border sticky top-0">
                   <tr>
                     <th className="p-3 sticky left-0 bg-zinc-50 dark:bg-zinc-900 z-10">Tx No</th>
                     <th className="p-3">Site</th>
@@ -2209,11 +2209,11 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                   ) : (
                     filteredDrafts.map((tx) => (
                       <tr key={tx.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20 transition-colors">
-                        <td className="p-3 font-mono font-bold text-zinc-700 dark:text-zinc-300 sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r border-zinc-100 dark:border-zinc-800 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">{tx.transaction_no}</td>
-                        <td className="p-3 text-violet-600 dark:text-violet-400 font-semibold truncate max-w-[130px]">
+                        <td className="p-3 font-mono font-bold text-zinc-700 dark:text-zinc-300 sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r border-border shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">{tx.transaction_no}</td>
+                        <td className="p-3 text-primary font-semibold truncate max-w-[130px]">
                           {(() => { const s = sites.find(st => st.id === tx.lpg_site_id); return s?.site_name || `Site #${tx.lpg_site_id}`; })()}
                         </td>
-                        <td className="p-3 text-zinc-600 dark:text-zinc-400 truncate max-w-[130px]">{tx.customer?.customer_name || tx.customer_code}</td>
+                        <td className="p-3 text-muted-foreground truncate max-w-[130px]">{tx.customer?.customer_name || tx.customer_code}</td>
                         <td className="p-3 font-mono">{tx.transaction_date}</td>
                         <td className="p-3 text-right font-mono font-bold text-zinc-700 dark:text-zinc-300">{tx.metered_kg} KG</td>
                         <td className="p-3 text-center">
@@ -2221,7 +2221,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                             type="button"
                             size="xs"
                             onClick={() => handleDraftSelect(tx)}
-                            className="bg-violet-600 hover:bg-violet-700 dark:bg-violet-500 dark:hover:bg-violet-600 text-white font-bold px-3.5 py-1 rounded-xl text-[10px] cursor-pointer shadow-sm"
+                            className="bg-primary hover:bg-primary/90 dark:bg-violet-500 dark:hover:bg-violet-600 text-white font-bold px-3.5 py-1 rounded-xl text-[10px] cursor-pointer shadow-sm"
                           >
                             Select
                           </Button>
@@ -2234,7 +2234,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
             </div>
 
             {/* Footer */}
-            <div className="flex justify-between items-center px-4 py-3 border-t border-zinc-100 dark:border-zinc-800 shrink-0">
+            <div className="flex justify-between items-center px-4 py-3 border-t border-border shrink-0">
               <Button
                 type="button"
                 variant="ghost"
@@ -2269,9 +2269,9 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
         }}
       >
         <DialogContent className="max-w-xl p-0 overflow-hidden bg-white dark:bg-zinc-950">
-          <div className="p-5 border-b border-zinc-100 dark:border-zinc-800">
+          <div className="p-5 border-b border-border">
             <DialogTitle className="text-base font-bold flex items-center gap-2">
-              <Truck className="h-5 w-5 text-violet-600" />
+              <Truck className="h-5 w-5 text-primary" />
               Cylinder In Weighing
             </DialogTitle>
             <p className="text-xs text-muted-foreground mt-1">
@@ -2328,7 +2328,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                     {replacementModalItem.isValidating ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : replacementModalItem.cylinderAssetId ? (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      <CheckCircle2 className="h-4 w-4 text-primary" />
                     ) : (
                       "Verify"
                     )}
@@ -2338,7 +2338,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                   <p className="text-xs font-semibold text-rose-500">{replacementModalItem.error}</p>
                 )}
                 {replacementModalItem.cylinderAssetId > 0 && (
-                  <p className="text-xs font-semibold text-emerald-600">
+                  <p className="text-xs font-semibold text-primary">
                     {replacementModalItem.productName} | Tare {replacementModalItem.tareWeight} KG
                   </p>
                 )}
@@ -2364,7 +2364,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                     }}
                     className="pr-10"
                   />
-                  <span className="absolute right-3 top-3 text-xs font-bold text-zinc-400">KG</span>
+                  <span className="absolute right-3 top-3 text-xs font-bold text-muted-foreground">KG</span>
                 </div>
               </div>
 
@@ -2385,11 +2385,11 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                     <label
                       key={photoType}
                       className={`min-h-36 rounded-xl border border-dashed p-3 cursor-pointer flex flex-col items-center justify-center text-center ${
-                        photoId ? "border-emerald-400 bg-emerald-50/30" : "border-zinc-300 dark:border-zinc-700"
+                        photoId ? "border-emerald-400 bg-emerald-50/30" : "border-border dark:border-zinc-700"
                       }`}
                     >
                       {uploading ? (
-                        <Loader2 className="h-6 w-6 animate-spin text-violet-600" />
+                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
                       ) : photoUrl ? (
                         <>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -2400,7 +2400,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                         </>
                       ) : (
                         <>
-                          <Plus className="h-6 w-6 text-zinc-400 mb-2" />
+                          <Plus className="h-6 w-6 text-muted-foreground mb-2" />
                           <span className="text-xs font-bold">
                             {serialPhoto ? "Capture Serial Photo" : "Capture Scale Photo"}
                           </span>
@@ -2424,7 +2424,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
             </div>
           )}
 
-          <div className="flex justify-end gap-3 px-5 py-4 border-t border-zinc-100 dark:border-zinc-800">
+          <div className="flex justify-end gap-3 px-5 py-4 border-t border-border">
             <Button type="button" variant="secondary" onClick={() => setReplacementModalIndex(null)}>
               Cancel
             </Button>
@@ -2440,7 +2440,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                 replacementModalItem.isUploadingSerial ||
                 replacementModalItem.isUploadingWeight
               }
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+              className="bg-primary hover:bg-primary/90 text-white font-bold"
             >
               Save Cylinder In
             </Button>
@@ -2453,12 +2453,12 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
         <DialogContent 
           onPointerDownOutside={(e) => e.preventDefault()}
           onInteractOutside={(e) => e.preventDefault()}
-          className="max-w-lg p-0 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden shadow-2xl bg-white dark:bg-zinc-955 gap-0"
+          className="max-w-lg p-0 border border-border rounded-2xl overflow-hidden shadow-2xl bg-white dark:bg-zinc-955 gap-0"
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100 dark:border-zinc-800 shrink-0">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
             <DialogTitle className="text-base font-extrabold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
-              <Scale className="h-5 w-5 text-emerald-500" />
+              <Scale className="h-5 w-5 text-primary" />
               Cylinder In-Place Weighing
             </DialogTitle>
           </div>
@@ -2474,7 +2474,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                   const cyl = activeSiteCylinders.find(c => c.id === weighingCylinderId);
                   return cyl ? `${cyl.cylinder_asset?.serial_number} (Tare: ${cyl.cylinder_asset?.tare_weight} KG)` : "";
                 })()}
-                className="bg-zinc-50 dark:bg-zinc-800 font-mono font-bold"
+                className="bg-accent font-mono font-bold"
               />
             </div>
 
@@ -2498,9 +2498,9 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                         <Input
                           readOnly
                           value={currentLpgKg}
-                          className="pr-8 h-10 text-sm bg-zinc-50 dark:bg-zinc-800 font-mono"
+                          className="pr-8 h-10 text-sm bg-accent font-mono"
                         />
-                        <span className="absolute right-3 top-3 text-xs text-zinc-400 font-bold">KG</span>
+                        <span className="absolute right-3 top-3 text-xs text-muted-foreground font-bold">KG</span>
                       </div>
                     </div>
 
@@ -2523,7 +2523,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                           }}
                           className={`pr-8 h-10 text-sm ${isWeightInvalid ? "border-rose-500" : ""}`}
                         />
-                        <span className="absolute right-3 top-3 text-xs text-zinc-400 font-bold">KG</span>
+                        <span className="absolute right-3 top-3 text-xs text-muted-foreground font-bold">KG</span>
                       </div>
                       {isWeightInvalid && (
                         <span className="text-[11px] text-rose-500 block mt-0.5">Below tare weight of {tare} KG!</span>
@@ -2536,9 +2536,9 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                     {/* Cylinder Serial Photo */}
                     <div className="space-y-2">
                       <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Cylinder Serial Photo</Label>
-                      <div className="border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col items-center justify-center min-h-[120px] relative bg-zinc-50 dark:bg-zinc-900/40">
+                      <div className="border border-dashed border-border rounded-xl p-3 flex flex-col items-center justify-center min-h-[120px] relative bg-zinc-50 dark:bg-zinc-900/40">
                         {isUploadingSerial ? (
-                          <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
+                          <Loader2 className="h-6 w-6 animate-spin text-primary" />
                         ) : serialFileUrl ? (
                           <div className="relative w-full h-full flex flex-col items-center">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -2560,8 +2560,8 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                             onClick={() => serialPhotoInputRef.current?.click()}
                             className="cursor-pointer flex flex-col items-center text-center p-2 w-full h-full justify-center"
                           >
-                            <Plus className="h-5 w-5 text-zinc-400 mb-1" />
-                            <span className="text-[10px] text-zinc-500 font-bold">Capture Serial</span>
+                            <Plus className="h-5 w-5 text-muted-foreground mb-1" />
+                            <span className="text-[10px] text-muted-foreground font-bold">Capture Serial</span>
                             <input
                               ref={serialPhotoInputRef}
                               type="file"
@@ -2581,9 +2581,9 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                     {/* Scale Weight Photo */}
                     <div className="space-y-2">
                       <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Scale Weight Photo</Label>
-                      <div className="border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col items-center justify-center min-h-[120px] relative bg-zinc-50 dark:bg-zinc-900/40">
+                      <div className="border border-dashed border-border rounded-xl p-3 flex flex-col items-center justify-center min-h-[120px] relative bg-zinc-50 dark:bg-zinc-900/40">
                         {isUploadingWeight ? (
-                          <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
+                          <Loader2 className="h-6 w-6 animate-spin text-primary" />
                         ) : weightFileUrl ? (
                           <div className="relative w-full h-full flex flex-col items-center">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -2605,8 +2605,8 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                             onClick={() => weightPhotoInputRef.current?.click()}
                             className="cursor-pointer flex flex-col items-center text-center p-2 w-full h-full justify-center"
                           >
-                            <Plus className="h-5 w-5 text-zinc-400 mb-1" />
-                            <span className="text-[10px] text-zinc-500 font-bold">Capture Weight</span>
+                            <Plus className="h-5 w-5 text-muted-foreground mb-1" />
+                            <span className="text-[10px] text-muted-foreground font-bold">Capture Weight</span>
                             <input
                               ref={weightPhotoInputRef}
                               type="file"
@@ -2629,7 +2629,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
           </div>
 
           {/* Footer */}
-          <div className="flex justify-end gap-3 px-5 py-4 border-t border-zinc-100 dark:border-zinc-800 shrink-0">
+          <div className="flex justify-end gap-3 px-5 py-4 border-t border-border shrink-0">
             <Button
               type="button"
               variant="secondary"
@@ -2700,7 +2700,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                 setScannerInput("");
                 setIsScannerModalOpen(true);
               }}
-              className="text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-5 h-9"
+              className="text-xs font-bold bg-primary hover:bg-primary/90 text-white px-5 h-9"
             >
               Save Weighing
             </Button>
@@ -2723,38 +2723,38 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
             <DialogContent 
               onPointerDownOutside={(e) => e.preventDefault()}
               onInteractOutside={(e) => e.preventDefault()}
-              className="max-w-md w-[92vw] sm:w-full p-5 rounded-2xl bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 shadow-2xl gap-0"
+              className="max-w-md w-[92vw] sm:w-full p-5 rounded-2xl bg-white dark:bg-zinc-950 border border-border shadow-2xl gap-0"
             >
-              <DialogTitle className="text-sm font-extrabold text-zinc-800 dark:text-zinc-100 flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-3">
-                <Scale className="h-4 w-4 text-violet-500" />
+              <DialogTitle className="text-sm font-extrabold text-zinc-800 dark:text-zinc-100 flex items-center gap-2 border-b border-border pb-3">
+                <Scale className="h-4 w-4 text-primary" />
                 Cylinder Actions: {row.cylinder_asset?.serial_number}
               </DialogTitle>
 
               <div className="space-y-5 pt-4 max-h-[70vh] overflow-y-auto pr-1">
                 
-                <div className="grid grid-cols-2 gap-4 bg-zinc-50 dark:bg-zinc-900/40 p-3 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                <div className="grid grid-cols-2 gap-4 bg-zinc-50 dark:bg-zinc-900/40 p-3 rounded-xl border border-border">
                   <div>
-                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Tare Weight</span>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Tare Weight</span>
                     <span className="font-mono text-sm">{row.tare} KG</span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Previous KG</span>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Previous KG</span>
                     <span className="font-mono text-sm">{row.opening} KG</span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Remaining KG</span>
-                    <span className="font-mono text-sm text-zinc-600 dark:text-zinc-400">{row.remaining} KG</span>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Remaining KG</span>
+                    <span className="font-mono text-sm text-muted-foreground">{row.remaining} KG</span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Consumed KG</span>
-                    <span className="font-mono text-sm font-bold text-zinc-800 dark:text-zinc-200">{row.consumed} KG</span>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Consumed KG</span>
+                    <span className="font-mono text-sm font-bold text-foreground">{row.consumed} KG</span>
                   </div>
                 </div>
 
                 {/* Action Segmented Toggle */}
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Cylinder Action</Label>
-                  <div className="flex bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-xl w-full border border-zinc-200 dark:border-zinc-850">
+                  <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Cylinder Action</Label>
+                  <div className="flex bg-accent/80 p-1 rounded-xl w-full border border-border dark:border-zinc-850">
                     <button
                       type="button"
                       disabled={isReadOnly}
@@ -2766,8 +2766,8 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                       }}
                       className={`flex-1 py-1.5 px-3 text-xs font-bold rounded-lg transition-all ${
                         !row.isSwapped
-                          ? "bg-white dark:bg-zinc-900 text-violet-600 dark:text-violet-400 shadow-sm"
-                          : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                          ? "bg-white dark:bg-zinc-900 text-primary shadow-sm"
+                          : "text-muted-foreground hover:text-zinc-700 dark:text-muted-foreground dark:hover:text-zinc-200"
                       }`}
                     >
                       Keep In-Place
@@ -2795,8 +2795,8 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                       }}
                       className={`flex-1 py-1.5 px-3 text-xs font-bold rounded-lg transition-all ${
                         row.isSwapped
-                          ? "bg-white dark:bg-zinc-900 text-violet-600 dark:text-violet-400 shadow-sm"
-                          : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                          ? "bg-white dark:bg-zinc-900 text-primary shadow-sm"
+                          : "text-muted-foreground hover:text-zinc-700 dark:text-muted-foreground dark:hover:text-zinc-200"
                       }`}
                     >
                       Swap Cylinder
@@ -2807,7 +2807,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                 <div className="space-y-4">
                   {/* Gross Weight details */}
                   <div className="space-y-2">
-                    <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                    <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
                       {row.isSwapped ? "Returned Gross Weight (Weigh-Out)" : "Current Gross Weight"}
                     </Label>
                     <div className="flex items-center gap-2">
@@ -2842,7 +2842,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                           }}
                           className={`pr-8 h-9 text-xs cursor-pointer ${weightError ? "border-rose-500" : ""}`}
                         />
-                        <span className="absolute right-2 top-2.5 text-[10px] text-zinc-400 font-bold">KG</span>
+                        <span className="absolute right-2 top-2.5 text-[10px] text-muted-foreground font-bold">KG</span>
                       </div>
                       {!isReadOnly && !isViewMode && (
                         <Button
@@ -2869,7 +2869,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                             
                             setIsWeighModalOpen(true);
                           }}
-                          className={`h-9 w-9 rounded-lg shrink-0 ${hasSerial && hasWeight ? "border-emerald-250 text-emerald-600 bg-emerald-50 dark:bg-emerald-955/20" : ""}`}
+                          className={`h-9 w-9 rounded-lg shrink-0 ${hasSerial && hasWeight ? "border-emerald-250 text-primary bg-emerald-50 dark:bg-emerald-955/20" : ""}`}
                           title="Upload Photos"
                         >
                           <Scale className="h-3.5 w-3.5" />
@@ -2878,12 +2878,12 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                     </div>
                     <div className="flex gap-1.5">
                       {hasSerial && (
-                        <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400">
+                        <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-primary/10 text-emerald-800 dark:text-emerald-400">
                           Serial: ✓
                         </Badge>
                       )}
                       {hasWeight && (
-                        <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400">
+                        <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-primary/10 text-emerald-800 dark:text-emerald-400">
                           Weight: ✓
                         </Badge>
                       )}
@@ -2898,12 +2898,12 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                     <div className="space-y-3 p-3.5 border border-zinc-150 dark:border-zinc-800/80 rounded-xl bg-zinc-50/40 dark:bg-zinc-950/20 animate-in fade-in duration-300">
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Cylinder In</p>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Cylinder In</p>
                           <p className="text-xs font-semibold truncate">
                             {repItem.cylinderAssetId ? repItem.serialNumber : "New cylinder not captured"}
                           </p>
                           {repItem.cylinderAssetId > 0 && (
-                            <p className="text-[9px] text-emerald-600">
+                            <p className="text-[9px] text-primary">
                               {repItem.targetKg} KG gross
                               {repItem.serialPhotoId && repItem.weightPhotoId ? " | Evidence complete" : " | Evidence required"}
                             </p>
@@ -2922,7 +2922,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                       </div>
                       <div className="hidden">
                       <div className="space-y-1.5">
-                        <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Scan / Input New Serial</Label>
+                        <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Scan / Input New Serial</Label>
                         <div className="flex gap-1.5 items-center w-full">
                           <Input
                             type="text"
@@ -2956,7 +2956,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                 }
                               }
                             }}
-                            className={`text-xs h-8 w-full ${repItem.error ? "border-rose-500" : repItem.cylinderAssetId ? "border-emerald-500 bg-emerald-50/10" : ""}`}
+                            className={`text-xs h-8 w-full ${repItem.error ? "border-rose-500" : repItem.cylinderAssetId ? "border-primary bg-emerald-50/10" : ""}`}
                           />
                           <Button
                             type="button"
@@ -2974,7 +2974,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                             {repItem.isValidating ? (
                               <Loader2 className="h-3 w-3 animate-spin" />
                             ) : repItem.cylinderAssetId ? (
-                              <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                              <CheckCircle2 className="h-3 w-3 text-primary" />
                             ) : (
                               "Verify"
                             )}
@@ -2984,14 +2984,14 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                           <span className="text-[9px] text-rose-500 block mt-0.5 font-semibold">{repItem.error}</span>
                         )}
                         {repItem.cylinderAssetId > 0 && (
-                          <span className="text-[9px] text-emerald-600 block mt-0.5 font-semibold">
+                          <span className="text-[9px] text-primary block mt-0.5 font-semibold">
                             Verified: {repItem.productName} (Tare: {repItem.tareWeight} KG)
                           </span>
                         )}
                       </div>
 
                       <div className="space-y-1.5">
-                        <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">New Cylinder Gross Weight</Label>
+                        <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">New Cylinder Gross Weight</Label>
                         <div className="relative">
                           <Input
                             type="number"
@@ -3013,7 +3013,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                             placeholder={repItem.cylinderAssetId ? String(repItem.tareWeight + repItem.capacity) : "N/A"}
                             className="text-xs h-8 pr-8"
                           />
-                          {repItem.cylinderAssetId > 0 && <span className="absolute right-2 top-2.5 text-[10px] text-zinc-400 font-bold">KG</span>}
+                          {repItem.cylinderAssetId > 0 && <span className="absolute right-2 top-2.5 text-[10px] text-muted-foreground font-bold">KG</span>}
                         </div>
                       </div>
 
@@ -3027,7 +3027,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                             <label
                               key={photoType}
                               className={`min-h-20 rounded-lg border border-dashed p-2 text-center text-[9px] font-bold cursor-pointer flex flex-col items-center justify-center ${
-                                photoId ? "border-emerald-400 text-emerald-700" : "border-zinc-300 text-zinc-500"
+                                photoId ? "border-emerald-400 text-emerald-700" : "border-border text-muted-foreground"
                               }`}
                             >
                               {uploading ? (
@@ -3062,18 +3062,18 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                       </div>
                     </div>
                   ) : (
-                    <div className="flex items-center justify-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl p-4 text-center text-muted-foreground bg-zinc-50/10 text-[10px]">
+                    <div className="flex items-center justify-center border border-dashed border-border rounded-xl p-4 text-center text-muted-foreground bg-zinc-50/10 text-[10px]">
                       Cylinder stays in service. No replacement needed.
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="flex justify-end pt-4 border-t border-zinc-100 dark:border-zinc-800 mt-5">
+              <div className="flex justify-end pt-4 border-t border-border mt-5">
                 <Button
                   type="button"
                   onClick={() => setMobileEditingCylinderId(null)}
-                  className="bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs px-5 h-9"
+                  className="bg-primary hover:bg-primary/90 text-white font-bold text-xs px-5 h-9"
                 >
                   Done
                 </Button>
@@ -3084,10 +3084,10 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
       </Dialog>
 
       <Dialog open={isScannerModalOpen} onOpenChange={setIsScannerModalOpen}>
-        <DialogContent className="max-w-md sm:rounded-2xl p-0 overflow-hidden bg-white/95 dark:bg-zinc-950/95 backdrop-blur-xl border border-zinc-200 dark:border-zinc-800">
-          <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+        <DialogContent className="max-w-md sm:rounded-2xl p-0 overflow-hidden bg-white/95 dark:bg-zinc-950/95 backdrop-blur-xl border border-border">
+          <div className="p-4 border-b border-border bg-zinc-50/50 dark:bg-zinc-900/50">
             <DialogTitle className="text-sm font-bold flex items-center gap-2">
-              <ScanBarcode className="h-4 w-4 text-emerald-600" />
+              <ScanBarcode className="h-4 w-4 text-primary" />
               Scan Cylinder Serial
             </DialogTitle>
           </div>
@@ -3117,7 +3117,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
               className="space-y-4"
             >
               <div className="space-y-2">
-                <Label className="text-xs font-bold text-zinc-600 dark:text-zinc-400">Scanner Input</Label>
+                <Label className="text-xs font-bold text-muted-foreground">Scanner Input</Label>
                 <Input
                   type="text"
                   autoFocus
@@ -3145,7 +3145,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                 <Button
                   type="submit"
                   disabled={scannerInput.trim() === ""}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5"
+                  className="bg-primary hover:bg-primary/90 text-white font-bold text-xs px-5"
                 >
                   Search
                 </Button>

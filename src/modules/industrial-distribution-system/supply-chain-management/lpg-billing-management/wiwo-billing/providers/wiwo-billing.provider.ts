@@ -134,9 +134,11 @@ export async function fetchWiwoBillingTransactions(params: WiwoListParams): Prom
   const limit = params.limit ?? 10;
   const offset = (page - 1) * limit;
 
-  type FilterVal = { _eq?: string } | { _icontains?: string } | Array<Record<string, { _icontains: string }>>;
+  type FilterVal = { _eq?: string | number } | { _icontains?: string } | Array<Record<string, { _icontains: string }>>;
   const filters: Record<string, FilterVal> = {};
   if (params.status) filters.status = { _eq: params.status };
+  // AG-CHANGE: Filter by transaction_header_id when viewing a POSTED header's linked transactions
+  if (params.transactionHeaderId) filters.transaction_header_id = { _eq: params.transactionHeaderId };
   if (params.search) {
     filters._or = [
       { transaction_no: { _icontains: params.search } },
@@ -188,11 +190,26 @@ export async function fetchSites(customerCode?: string): Promise<CustomerSite[]>
   return res.data ?? [];
 }
 
+export async function checkSiteOnboarded(siteId: number): Promise<boolean> {
+  const query = {
+    lpg_site_id: { _eq: siteId },
+    transaction_type: { _eq: "ONBOARDING_BASELINE" },
+    status: { _neq: "CANCELLED" },
+  };
+  const res = await directusFetch<{ data: unknown[] }>(
+    `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions?filter=${encodeURIComponent(JSON.stringify(query))}&limit=1&fields=id`
+  );
+  return (res.data ?? []).length > 0;
+}
+
 export async function fetchInvoicesForCustomer(customerCode?: string): Promise<{ invoice_id: number; invoice_no: string; total_amount: number; invoice_date: string; transaction_status: string }[]> {
-  let url = "/items/sales_invoice?limit=-1&fields=invoice_id,invoice_no,invoice_date,total_amount,transaction_status,customer_code,order_id,salesman_id";
+  const filters: Record<string, any> = {
+    transaction_status: { _eq: "En Route" }
+  };
   if (customerCode) {
-    url += `&filter[customer_code][_eq]=${encodeURIComponent(customerCode)}`;
+    filters.customer_code = { _eq: customerCode };
   }
+  const url = `/items/sales_invoice?limit=-1&fields=invoice_id,invoice_no,invoice_date,total_amount,transaction_status,customer_code,order_id,salesman_id&filter=${encodeURIComponent(JSON.stringify(filters))}`;
   const res = await directusFetch<{ data: { invoice_id: number; invoice_no: string; total_amount: number; invoice_date: string; transaction_status: string }[] }>(`${DIRECTUS_URL}${url}`);
   return res.data ?? [];
 }

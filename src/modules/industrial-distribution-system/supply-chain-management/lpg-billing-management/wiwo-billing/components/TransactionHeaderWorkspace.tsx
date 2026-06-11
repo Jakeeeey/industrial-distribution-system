@@ -97,21 +97,21 @@ export function TransactionHeaderWorkspace({ selectedHeader, onSelect }: Props) 
 
   return (
     <>
-      <div className="w-full max-w-4xl mx-auto flex flex-col min-h-[500px] max-h-[800px] bg-white/80 dark:bg-zinc-900/40 backdrop-blur-md rounded-3xl shadow-md border border-zinc-200 dark:border-zinc-800/60 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <div className="p-5 sm:p-6 border-b border-zinc-200 dark:border-zinc-800 space-y-4 shrink-0">
+      <div className="w-full max-w-4xl mx-auto flex flex-col min-h-[500px] max-h-[800px] bg-card/80 backdrop-blur-md rounded-3xl shadow-md border border-border overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="p-5 sm:p-6 border-b border-border space-y-4 shrink-0">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <h2 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-              <CalendarRange className="h-6 w-6 text-emerald-500" />
+            <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
+              <CalendarRange className="h-6 w-6 text-primary" />
               1. Select Transaction Header
             </h2>
-            <Button onClick={() => setOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto">
+            <Button onClick={() => setOpen(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground w-full sm:w-auto">
               <Plus className="h-4 w-4 mr-2" />
               New Transaction Header
             </Button>
           </div>
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search headers by site, customer, period..." className="pl-9" />
             </div>
             <Button variant="outline" size="icon" onClick={() => void load()} disabled={loading}>
@@ -127,21 +127,28 @@ export function TransactionHeaderWorkspace({ selectedHeader, onSelect }: Props) 
               onClick={() => onSelect(header)}
               className={`w-full text-left rounded-2xl border p-4 transition-all duration-200 group flex flex-col ${
                 selectedHeader?.header_id === header.header_id
-                  ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 ring-1 ring-emerald-500"
-                  : "border-zinc-200 dark:border-zinc-800 hover:border-emerald-300 dark:hover:border-emerald-700 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                  ? "border-primary bg-primary/10 ring-1 ring-primary"
+                  : "border-border hover:border-primary/50 hover:bg-accent"
               }`}
             >
               <div className="flex justify-between gap-2 w-full mb-2">
-                <span className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">{header.header_no || `Header #${header.header_id}`}</span>
-                <span className="rounded-full bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 text-[10px] font-bold text-amber-800 dark:text-amber-300">
+                <span className="font-mono text-sm font-bold text-foreground">{header.header_no || `Header #${header.header_id}`}</span>
+                <span className="rounded-full badge-warning px-2 py-0.5 text-[10px] font-bold">
                   {header.status}
                 </span>
               </div>
-              <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 line-clamp-1">{header.site?.site_name || `Site #${header.customer_site_id}`}</p>
+              <p className="text-sm font-semibold text-foreground line-clamp-1">{header.site?.site_name || `Site #${header.customer_site_id}`}</p>
               <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{customers.find(c => c.customer_code === header.customer_id)?.customer_name || header.customer_name || header.customer_id}</p>
-              <div className="mt-auto pt-3 flex items-center justify-between text-xs text-muted-foreground border-t border-zinc-100 dark:border-zinc-800 mt-3">
-                <span className="flex items-center gap-1"><CalendarRange className="h-3 w-3" /> {header.period_from}</span>
-                <span>to {header.period_to}</span>
+              {/* AG-UPDATE: Date highlighting for better visibility. Changed to semantic primary pill layout */}
+              <div className="mt-auto pt-3 flex items-center justify-between text-xs font-bold text-primary border-t border-border mt-3">
+                <span className="flex items-center gap-1.5 bg-primary/10 px-2 py-1 rounded-md">
+                  <CalendarRange className="h-3.5 w-3.5" /> 
+                  {header.period_from}
+                </span>
+                <span className="text-muted-foreground font-medium mx-2">to</span>
+                <span className="bg-primary/10 px-2 py-1 rounded-md">
+                  {header.period_to}
+                </span>
               </div>
             </button>
           ))}
@@ -157,7 +164,7 @@ export function TransactionHeaderWorkspace({ selectedHeader, onSelect }: Props) 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg">
           <DialogTitle className="flex items-center gap-2">
-            <CalendarRange className="h-5 w-5 text-emerald-600" />
+            <CalendarRange className="h-5 w-5 text-primary" />
             Create Transaction Header
           </DialogTitle>
           <div className="space-y-4">
@@ -195,7 +202,7 @@ export function TransactionHeaderWorkspace({ selectedHeader, onSelect }: Props) 
               <Button
                 onClick={() => void createHeader()}
                 disabled={loading || !siteId || !periodFrom || !periodTo || periodFrom > periodTo}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
               >
                 {loading && <Loader2 className="h-4 w-4 animate-spin" />}
                 Create Header

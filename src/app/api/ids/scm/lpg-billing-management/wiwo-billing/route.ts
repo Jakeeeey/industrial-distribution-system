@@ -11,6 +11,7 @@ import {
   fetchTransactionHeaders,
   createTransactionHeader,
   fetchInvoicesForCustomer,
+  checkSiteOnboarded,
 } from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/wiwo-billing/providers/wiwo-billing.provider";
 import { handleApiError } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/error-handler";
 import { getUserIdFromToken } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/auth-utils";
@@ -29,6 +30,26 @@ export async function GET(request: NextRequest) {
         search: searchParams.get("search") || undefined,
       });
       return NextResponse.json({ data });
+    }
+
+    // AG-CHANGE: Check if a site has an existing onboarding transaction
+    if (type === "check-onboarding") {
+      const siteId = Number(searchParams.get("siteId"));
+      if (!siteId) return NextResponse.json({ error: "siteId is required" }, { status: 400 });
+      const hasOnboarding = await checkSiteOnboarded(siteId);
+      return NextResponse.json({ data: { hasOnboarding } });
+    }
+
+    // AG-CHANGE: Returns all lpg_metered_wiwo_transactions for a specific transaction header (POSTED view)
+    if (type === "header-transactions") {
+      const headerId = searchParams.get("headerId");
+      if (!headerId) return NextResponse.json({ error: "headerId is required" }, { status: 400 });
+      const result = await fetchWiwoBillingTransactions({
+        transactionHeaderId: Number(headerId),
+        limit: 100,
+        page: 1,
+      });
+      return NextResponse.json({ data: result.data });
     }
 
     if (type === "customers") {
