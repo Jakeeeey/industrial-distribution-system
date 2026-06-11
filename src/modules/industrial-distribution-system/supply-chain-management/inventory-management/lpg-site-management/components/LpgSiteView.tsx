@@ -3,12 +3,12 @@
 import { useEffect, useState } from "react";
 import { lpgSiteService } from "../services/lpgSiteService";
 import { LpgSite, BillingMode, MeterUnit } from "../types";
-// import { SiteCylinderManager } from "./SiteCylinderManager";
+import { SiteCylinderManager } from "./SiteCylinderManager";
 import {
   Save,
   MapPin,
   CreditCard,
-  // Cylinder,
+  Cylinder,
   Loader2,
   ChevronLeft,
   Gauge
@@ -27,7 +27,6 @@ import { Textarea } from "@/components/ui/textarea";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
-// import { SiteCylinderManager } from "./SiteCylinderManager";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -44,17 +43,14 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
-interface LpgSiteFormProps {
+interface LpgSiteViewProps {
   id?: number | null;
-  onSuccess: () => void;
-  onCancel: () => void;
+  onBack: () => void;
 }
 
-export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
-  const [loading, setLoading] = useState(false);
+export function LpgSiteView({ id, onBack }: LpgSiteViewProps) {
   const [fetching, setFetching] = useState(false);
   const [customers, setCustomers] = useState<{ customer_code: string; customer_name: string; brgy?: string; city?: string; province?: string }[]>([]);
-  const [customerOpen, setCustomerOpen] = useState(false);
 
   const [formData, setFormData] = useState<Partial<LpgSite>>({
     site_name: "",
@@ -64,7 +60,7 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
     default_price_per_kg: 0,
     default_target_lpg_kg: 50.00,
     is_active: true,
-    cylinders: [], // Local staging for new sites
+    cylinders: [], 
     meter_no: "",
     meter_unit: "KG",
     meter_direction: "INCREASING",
@@ -86,23 +82,9 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
         if (id) {
           const site = await lpgSiteService.fetchSiteById(id);
           if (site) {
-            let lpgVapor = site.default_pressure_line ?? 2.0183;
-            let psi = site.default_psi ?? 10.0;
-            let cf = site.default_atmospheric_pressure ?? 14.7;
-
-            if (typeof window !== "undefined") {
-              const cached = localStorage.getItem(`lpg_site_config_${id}`);
-              if (cached) {
-                try {
-                  const parsed = JSON.parse(cached);
-                  lpgVapor = Number(parsed.configLpgVapor ?? lpgVapor);
-                  psi = Number(parsed.configPsi ?? psi);
-                  cf = Number(parsed.configCorrectionFactor ?? cf);
-                } catch (e) {
-                  console.error(e);
-                }
-              }
-            }
+            const lpgVapor = site.default_pressure_line ?? 2.0183;
+            const psi = site.default_psi ?? 10.0;
+            const cf = site.default_atmospheric_pressure ?? 14.7;
 
             setFormData({
               ...site,
@@ -123,62 +105,6 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
     loadData();
   }, [id]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.customer_code) return toast.error("Please select a customer");
-
-    try {
-      setLoading(true);
-      let siteId: number | null | undefined = id;
-
-      if (id) {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { cylinders: _c, default_pressure_line: _pl, default_psi: _psi, default_atmospheric_pressure: _ap, ...updatePayload } = formData;
-        await lpgSiteService.updateSite(id, updatePayload);
-        toast.success("Site updated successfully");
-      } else {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { cylinders: _c2, default_pressure_line: _pl2, default_psi: _psi2, default_atmospheric_pressure: _ap2, ...createPayload } = formData;
-        const newSite = await lpgSiteService.createSite(createPayload);
-        siteId = newSite.id;
-
-        // If there are staged cylinders, install them now
-        if (formData?.cylinders && formData.cylinders.length > 0) {
-          for (const cylinder of formData.cylinders) {
-            await lpgSiteService.installCylinder({
-              lpg_site_id: siteId!,
-              customer_code: formData.customer_code,
-              cylinder_asset_id: cylinder.cylinder_asset_id,
-              site_cylinder_status: cylinder.site_cylinder_status || 'CONNECTED',
-              previous_lpg_kg: cylinder.previous_lpg_kg,
-              current_lpg_kg: cylinder.previous_lpg_kg,
-              installed_date: cylinder.installed_date
-            });
-          }
-        }
-        toast.success("Site and cylinders registered successfully");
-      }
-
-      // Persist pressure configuration locally
-      if (typeof window !== "undefined" && siteId) {
-        localStorage.setItem(
-          `lpg_site_config_${siteId}`,
-          JSON.stringify({
-            configLpgVapor: formData.default_pressure_line ?? 2.0183,
-            configPsi: formData.default_psi ?? 10.0,
-            configCorrectionFactor: formData.default_atmospheric_pressure ?? 14.7,
-          })
-        );
-      }
-
-      onSuccess();
-    } catch {
-      toast.error("Failed to save site");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   if (fetching) {
     return (
       <div className="flex h-96 items-center justify-center">
@@ -190,29 +116,24 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-32 animate-in fade-in slide-in-from-bottom-4 duration-700 px-4 sm:px-0">
       
-      {/* ── RESPONSIVE HEADER ── */}
+      {/* Responsive Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between sticky top-0 z-20 bg-zinc-50/80 dark:bg-zinc-950/80 backdrop-blur-md py-4 border-b border-zinc-200/50 dark:border-zinc-800/50 -mx-4 sm:mx-0 px-4 sm:px-0 mb-4 gap-4">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={onCancel} className="rounded-xl h-10 w-10 shrink-0">
+          <Button variant="ghost" size="icon" onClick={onBack} className="rounded-xl h-10 w-10 shrink-0">
             <ChevronLeft className="h-5 w-5" />
           </Button>
           <h2 className="text-xl sm:text-2xl font-black tracking-tight truncate">
-            {id ? "Edit LPG Site" : "Register New LPG Site"}
+            View LPG Site Details
           </h2>
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
-          <Button variant="outline" onClick={onCancel} className="rounded-xl px-6 border-zinc-200 dark:border-zinc-800 flex-1 sm:flex-none">
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} disabled={loading} className="rounded-xl px-6 bg-orange-600 hover:bg-orange-700 text-white gap-2 shadow-lg shadow-orange-600/20 flex-1 sm:flex-none">
-            {loading ? <Loader2 className="h-4 w-4 animate-spin shrink-0" /> : <Save className="h-4 w-4 shrink-0" />}
-            <span className="truncate">Save Site</span>
+          <Button variant="outline" onClick={onBack} className="rounded-xl px-6 border-zinc-200 dark:border-zinc-800 flex-1 sm:flex-none">
+            Back
           </Button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6">
-        {/* Basic & Billing Information */}
         <div className="space-y-6">
           <Card className="border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm rounded-2xl shadow-sm overflow-hidden">
             <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center gap-2">
@@ -222,79 +143,36 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
             <CardContent className="p-4 sm:p-6 space-y-4">
               <div className="space-y-2">
                 <Label>Customer</Label>
-                <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={customerOpen}
-                      className="w-full justify-between rounded-xl border-zinc-200 dark:border-zinc-800 font-normal h-10 px-3 sm:px-4 text-left"
-                    >
-                      <span className="truncate">
-                        {formData?.customer_code
-                          ? customers.find((c) => c.customer_code === formData.customer_code)?.customer_name || "Select customer..."
-                          : "Select industrial customer..."}
-                      </span>
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[calc(100vw-2rem)] sm:w-[400px] p-0 rounded-xl border-zinc-200 dark:border-zinc-800 shadow-2xl" align="start">
-                    <Command className="rounded-xl max-w-full">
-                      <CommandInput placeholder="Search customer name or code..." className="h-10" />
-                      <CommandList>
-                        <CommandEmpty>No customer found.</CommandEmpty>
-                        <CommandGroup>
-                          {customers.map((c) => (
-                            <CommandItem
-                              key={c.customer_code}
-                              value={`${c.customer_name} ${c.customer_code}`}
-                              onSelect={() => {
-                                const fullAddress = [c.brgy, c.city, c.province].filter(Boolean).join(", ");
-                                setFormData({
-                                  ...formData,
-                                  customer_code: c.customer_code,
-                                  site_address: formData?.site_address || fullAddress
-                                });
-                                setCustomerOpen(false);
-                              }}
-                              className="cursor-pointer"
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4 shrink-0",
-                                  formData.customer_code === c.customer_code ? "opacity-100" : "opacity-0"
-                                )}
-                              />
-                              <div className="flex flex-col truncate pr-2">
-                                <span className="font-medium truncate">{c.customer_name}</span>
-                                <span className="text-[10px] text-muted-foreground uppercase truncate">{c.customer_code}</span>
-                              </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  disabled
+                  className="w-full justify-start rounded-xl border-zinc-200 dark:border-zinc-800 font-normal h-10 bg-zinc-50 dark:bg-zinc-900/50 cursor-default opacity-100 text-left px-3 sm:px-4"
+                >
+                  <span className="truncate">
+                    {formData?.customer_code
+                      ? customers.find((c) => c.customer_code === formData.customer_code)?.customer_name || formData.customer_code
+                      : "No customer selected"}
+                  </span>
+                </Button>
               </div>
 
               <div className="space-y-2">
                 <Label>Site Name / Branch</Label>
                 <Input
-                  placeholder="e.g. Warehouse A, Main Kitchen"
+                  
                   value={formData?.site_name || ""}
-                  onChange={(e) => setFormData({ ...formData, site_name: e.target.value })}
-                  className="rounded-xl border-zinc-200 dark:border-zinc-800"
+                  readOnly
+                  className="rounded-xl border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50"
                 />
               </div>
 
               <div className="space-y-2">
                 <Label>Site Address</Label>
                 <Textarea
-                  placeholder="Full physical address for delivery and billing"
                   value={formData?.site_address || ""}
-                  onChange={(e) => setFormData({ ...formData, site_address: e.target.value })}
-                  className="rounded-xl border-zinc-200 dark:border-zinc-800 min-h-[80px]"
+                  readOnly
+                  className="rounded-xl border-zinc-200 dark:border-zinc-800 min-h-[80px] bg-zinc-50 dark:bg-zinc-900/50"
                 />
               </div>
             </CardContent>
@@ -306,50 +184,32 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
               <h3 className="font-bold">Billing & Pricing</h3>
             </div>
             <CardContent className="p-4 sm:p-6 space-y-4">
-              
-              {/* ── Responsive Grid: grid-cols-1 sm:grid-cols-2 ── */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Billing Mode</Label>
-                  <Select
-                    value={formData?.billing_mode}
-                    onValueChange={(val: BillingMode) => {
-                      let updatedUnit = formData.meter_unit;
-                      if (val === "METERED" || val === "BOTH") updatedUnit = "M3";
-                      if (val === "KILO") updatedUnit = "KG";
-                      setFormData({
-                        ...formData,
-                        billing_mode: val,
-                        meter_unit: updatedUnit,
-                        meter_direction: "INCREASING"
-                      });
-                    }}
-                  >
-                    <SelectTrigger className="rounded-xl border-zinc-200 dark:border-zinc-800">
+                  <Select value={formData?.billing_mode} disabled>
+                    <SelectTrigger className="rounded-xl border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="rounded-xl border-zinc-200 dark:border-zinc-800">
+                    <SelectContent>
                       <SelectItem value="BOTH">BOTH (KILO & METERED)</SelectItem>
                       <SelectItem value="KILO">KILO (By Weight)</SelectItem>
                       <SelectItem value="METERED">METERED (By Volume)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                
-                {/* Repositioned spacing for mobile so it doesn't look awkwardly padded */}
-                <div className="flex items-center gap-2 sm:pt-8 pt-2">
+                <div className="flex items-center gap-2 pt-2 sm:pt-8">
                   <input
                     type="checkbox"
                     id="is_active"
                     checked={formData?.is_active}
-                    onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                    disabled
                     className="h-4 w-4 rounded border-zinc-300 text-orange-600 focus:ring-orange-600"
                   />
                   <Label htmlFor="is_active" className="cursor-pointer text-sm sm:text-xs">Active Registry</Label>
                 </div>
               </div>
 
-              {/* ── Responsive Grid: grid-cols-1 sm:grid-cols-2 ── */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Default Price / KG</Label>
@@ -357,10 +217,9 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">₱</span>
                     <Input
                       type="number"
-                      step="0.01"
                       value={formData?.default_price_per_kg}
-                      onChange={(e) => setFormData({ ...formData, default_price_per_kg: parseFloat(e.target.value) })}
-                      className="rounded-xl border-zinc-200 dark:border-zinc-800 pl-7"
+                      readOnly
+                      className="rounded-xl border-zinc-200 dark:border-zinc-800 pl-7 bg-zinc-50 dark:bg-zinc-900/50"
                     />
                   </div>
                 </div>
@@ -368,10 +227,9 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
                   <Label>Target Fill (KG)</Label>
                   <Input
                     type="number"
-                    step="0.1"
                     value={formData?.default_target_lpg_kg}
-                    onChange={(e) => setFormData({ ...formData, default_target_lpg_kg: parseFloat(e.target.value) })}
-                    className="rounded-xl border-zinc-200 dark:border-zinc-800"
+                    readOnly
+                    className="rounded-xl border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50"
                   />
                 </div>
               </div>
@@ -386,28 +244,22 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
                 <h3 className="font-bold">Meter Configuration</h3>
               </div>
               <CardContent className="p-4 sm:p-6 space-y-4">
-                
-                {/* ── Responsive Grid: grid-cols-1 sm:grid-cols-2 ── */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Meter Number</Label>
                     <Input
-                      placeholder="e.g. MET-12345"
                       value={formData?.meter_no || ""}
-                      onChange={(e) => setFormData({ ...formData, meter_no: e.target.value })}
-                      className="rounded-xl border-zinc-200 dark:border-zinc-800"
+                      readOnly
+                      className="rounded-xl border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50"
                     />
                   </div>
                   <div className="space-y-2">
                     <Label>Meter Unit</Label>
-                    <Select
-                      value={formData?.meter_unit || ""}
-                      onValueChange={(val: MeterUnit) => setFormData({ ...formData, meter_unit: val })}
-                    >
-                      <SelectTrigger className="rounded-xl border-zinc-200 dark:border-zinc-800">
-                        <SelectValue placeholder="Select unit..." />
+                    <Select value={formData?.meter_unit || ""} disabled>
+                      <SelectTrigger className="rounded-xl border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50">
+                        <SelectValue />
                       </SelectTrigger>
-                      <SelectContent className="rounded-xl border-zinc-200 dark:border-zinc-800">
+                      <SelectContent>
                         <SelectItem value="M3">M3 (Cubic Meters)</SelectItem>
                         <SelectItem value="KG">KG (Kilograms)</SelectItem>
                         <SelectItem value="LITER">LITER (Liters)</SelectItem>
@@ -424,67 +276,54 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
                       <div className="h-6 w-6 rounded bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center shrink-0">
                         <Gauge className="h-3.5 w-3.5 text-orange-600" />
                       </div>
-                      <p className="text-sm font-semibold">PSI Constants</p>
+                      <p className="text-sm font-semibold">PSI Conversion Constants</p>
                     </div>
                     <span className="text-[10px] text-muted-foreground sm:ml-1 mt-1 sm:mt-0">
                       Kilo = Usage × LPG Vapor × Pressure Line
                     </span>
                   </div>
 
-                  {/* ── Responsive Grid: grid-cols-1 sm:grid-cols-3 ── */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     {/* LPG VAPOR */}
                     <div className="space-y-2">
                       <Label className="text-xs font-bold uppercase tracking-wider text-violet-700 dark:text-violet-400 block truncate">
                         LPG Vapor
-                        <span className="text-muted-foreground font-normal normal-case ml-1 hidden lg:inline">(Constant)</span>
                       </Label>
                       <Input
                         type="number"
-                        step="0.000001"
-                        placeholder="1.000000"
                         value={formData?.default_pressure_line ?? ""}
-                        onChange={(e) => setFormData({ ...formData, default_pressure_line: e.target.value === "" ? null : parseFloat(e.target.value) })}
-                        className="rounded-xl border-violet-200 dark:border-violet-800/40 font-mono focus:ring-violet-500"
+                        readOnly
+                        className="rounded-xl border-violet-200 dark:border-violet-800/40 font-mono bg-zinc-50 dark:bg-zinc-900/50"
                       />
-                      <p className="text-[10px] text-muted-foreground truncate">e.g. 2.0183 — from tables</p>
                     </div>
                     {/* PSI */}
                     <div className="space-y-2">
                       <Label className="text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-400 block truncate">
                         PSI
-                        <span className="text-muted-foreground font-normal normal-case ml-1 hidden lg:inline">(Constant)</span>
                       </Label>
                       <Input
                         type="number"
-                        step="0.0001"
-                        placeholder="0.0000"
                         value={formData?.default_psi ?? ""}
-                        onChange={(e) => setFormData({ ...formData, default_psi: e.target.value === "" ? null : parseFloat(e.target.value) })}
-                        className="rounded-xl border-zinc-200 dark:border-zinc-800 font-mono"
+                        readOnly
+                        className="rounded-xl border-zinc-200 dark:border-zinc-800 font-mono bg-zinc-50 dark:bg-zinc-900/50"
                       />
-                      <p className="text-[10px] text-muted-foreground truncate">e.g. 10.0000 — 0 to disable</p>
                     </div>
                     {/* CORRECTION FACTOR */}
                     <div className="space-y-2">
                       <Label className="text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-400 block truncate">
                         Correction Factor
-                        <span className="text-muted-foreground font-normal normal-case ml-1 hidden lg:inline">(Constant)</span>
                       </Label>
                       <Input
                         type="number"
-                        step="0.0001"
-                        placeholder="14.7000"
                         value={formData?.default_atmospheric_pressure ?? ""}
-                        onChange={(e) => setFormData({ ...formData, default_atmospheric_pressure: e.target.value === "" ? null : parseFloat(e.target.value) })}
-                        className="rounded-xl border-zinc-200 dark:border-zinc-800 font-mono"
+                        readOnly
+                        className="rounded-xl border-zinc-200 dark:border-zinc-800 font-mono bg-zinc-50 dark:bg-zinc-900/50"
                       />
-                      <p className="text-[10px] text-muted-foreground truncate">Default: 14.7 (atm pressure)</p>
                     </div>
                   </div>
 
-                  {/* FOR YOUR REFERENCE preview table (Wrapped with overflow-x-auto for mobile) */}
-                  <div className="rounded-xl border border-zinc-200 dark:border-zinc-700/50 mt-2 w-full overflow-hidden">
+                  {/* FOR YOUR REFERENCE preview table */}
+                  <div className="rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700/50 mt-2 w-full">
                     <div className="px-3 py-1.5 bg-zinc-100/80 dark:bg-zinc-800/60 border-b border-zinc-200 dark:border-zinc-700/50">
                       <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">For Your Reference</p>
                     </div>
@@ -527,22 +366,26 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
                       </table>
                     </div>
                   </div>
-
-                  {/* Live formula */}
-                  {Number(formData?.default_psi ?? 0) > 0 && (
-                    <div className="bg-blue-50/30 dark:bg-blue-950/10 border border-blue-100 dark:border-blue-900/20 rounded-xl px-4 py-2.5 mt-2">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400 mb-0.5">KG Formula Preview</p>
-                      <p className="text-xs sm:text-sm font-mono text-zinc-700 dark:text-zinc-300 break-words">
-                        Kilo = Usage × {Number(formData?.default_pressure_line ?? 1).toFixed(4)} × {((Number(formData?.default_psi ?? 0) + Number(formData?.default_atmospheric_pressure ?? 14.7)) / Number(formData?.default_atmospheric_pressure ?? 14.7)).toFixed(4)}
-                      </p>
-                    </div>
-                  )}
                 </div>
 
               </CardContent>
             </Card>
           )}
         </div>
+
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 px-1">
+          <Cylinder className="h-5 w-5 text-zinc-900 dark:text-zinc-100 shrink-0" />
+          <h3 className="text-xl font-bold tracking-tight truncate">Installed Site Cylinders</h3>
+        </div>
+        <SiteCylinderManager
+          siteId={id}
+          customerCode={formData?.customer_code || ""}
+          stagedCylinders={formData?.cylinders}
+          readOnly={true}
+        />
       </div>
     </div>
   );

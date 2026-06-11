@@ -50,8 +50,8 @@ export function mapMeteredTransaction(tx: unknown): MeteredWiwoTransaction {
 
   return {
     ...raw,
-    transaction_no: txNo || readingNo,
-    reading_no: readingNo || txNo,
+    transaction_no: txNo,
+    reading_no: readingNo,
     transaction_type:
       (raw["transaction_type"] as TransactionType) ?? "REGULAR_BILLING",
     lpg_site_id: siteId,
@@ -200,7 +200,7 @@ function defaultFormState(
     pricePerKg: 0,
     vatRate: 0,
     remarks: "",
-    status: "DRAFT",
+    status: type === "ONBOARDING_BASELINE" ? "DRAFT" : "POSTED",
     configLpgVapor: 2.0183,
     configPsi: 10.0,
     configCorrectionFactor: 14.7,
@@ -323,7 +323,7 @@ export function useMeteredWiwoBillingForm(txId?: number | null) {
 
         setForm({
           transactionNo: tx.transaction_no ?? "",
-          readingNo: tx.meter_reading?.reading_no ?? "",
+          readingNo: tx.reading_no ?? "",
           transactionType: tx.transaction_type ?? "REGULAR_BILLING",
           transactionDate: tx.transaction_date,
           customerCode: tx.customer_code,

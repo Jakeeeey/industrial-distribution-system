@@ -12,7 +12,8 @@ import {
   MapPin,
   ChevronLeft,
   ChevronRight,
-  Filter
+  Filter,
+  Eye
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,9 +39,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 interface LpgSiteListProps {
   onEdit: (id: number) => void;
   onCreate: () => void;
+  onView: (id: number) => void;
 }
 
-export function LpgSiteList({ onEdit, onCreate }: LpgSiteListProps) {
+export function LpgSiteList({ onEdit, onCreate, onView }: LpgSiteListProps) {
   const [sites, setSites] = useState<LpgSite[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -168,6 +170,10 @@ export function LpgSiteList({ onEdit, onCreate }: LpgSiteListProps) {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-40 rounded-xl border-zinc-200 dark:border-zinc-800">
+                          <DropdownMenuItem onClick={() => onView(site.id)} className="gap-2 cursor-pointer">
+                            <Eye className="h-3.5 w-3.5" />
+                            View Details
+                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => onEdit(site.id)} className="gap-2 cursor-pointer">
                             <Edit2 className="h-3.5 w-3.5" />
                             Edit Details
