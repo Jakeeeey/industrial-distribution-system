@@ -230,6 +230,7 @@ export async function fetchInvoices(
         customerCode: item.customer_code || "",
         salesman_id: item.salesman_id || 0,
         amount: item.total_amount ? parseFloat(item.total_amount) : 0,
+        isPosted: Number(item.isPosted) === 1 || item.isPosted === true,
       });
     }
   });

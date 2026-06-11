@@ -193,13 +193,17 @@ export async function fetchStatusCard(
     const data = result.data as any;
 
     let appliedToText = "-";
+    let invoiceId: number | null = null;
+    let invoicePosted = false;
     try {
       const linkRes = await lookupRepo.getRawLinkedInvoice(returnId);
       const linkData = (linkRes.data || []) as any[];
       if (linkData.length > 0) {
         const linkedRec = linkData[0];
-        if (linkedRec.invoice_no && linkedRec.invoice_no.invoice_no) {
-          appliedToText = linkedRec.invoice_no.invoice_no;
+        if (linkedRec.invoice_no) {
+          appliedToText = (linkedRec.invoice_no as any).invoice_no || "-";
+          invoiceId = (linkedRec.invoice_no as any).invoice_id || null;
+          invoicePosted = Number((linkedRec.invoice_no as any).isPosted) === 1 || (linkedRec.invoice_no as any).isPosted === true;
         }
       }
     } catch {
@@ -216,6 +220,8 @@ export async function fetchStatusCard(
       isPosted: parseBoolean(data.isPosted),
       isReceived: parseBoolean(data.isReceived),
       appliedTo: appliedToText,
+      invoiceId,
+      invoicePosted,
     };
   } catch {
     return null;

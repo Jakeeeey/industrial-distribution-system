@@ -207,6 +207,8 @@ export interface SalesReturnStatusCard {
   isPosted: boolean;
   isReceived: boolean;
   appliedTo: string;
+  invoiceId?: number | null;
+  invoicePosted?: boolean;
 }
 
 // Invoice Dropdown option (from sales_invoice table)
@@ -217,6 +219,7 @@ export interface InvoiceOption {
   customerCode: string;
   salesman_id: number;
   amount?: number;
+  isPosted?: boolean;
 }
 
 // Serial record (sales_return_serial table)

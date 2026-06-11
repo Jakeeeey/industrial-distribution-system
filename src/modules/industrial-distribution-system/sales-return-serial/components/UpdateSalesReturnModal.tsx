@@ -895,7 +895,7 @@ export function UpdateSalesReturnModal({
                 <div className="space-y-1.5" ref={orderWrapperRef}>
                   <Label className="text-xs font-bold uppercase tracking-wide">Order No.</Label>
                   <div className="relative group">
-                    <Input disabled={!canEditAll} className="h-9 w-full bg-background border-border shadow-sm text-sm" placeholder="Search Order No..." value={orderSearch} onChange={e => { setOrderSearch(e.target.value); setHeaderData({ ...headerData, orderNo: e.target.value }); setIsOrderOpen(true); }} onFocus={() => setIsOrderOpen(true)} />
+                    <Input disabled={!canEditAll || statusCardData?.invoicePosted} className="h-9 w-full bg-background border-border shadow-sm text-sm" placeholder="Search Order No..." value={orderSearch} onChange={e => { setOrderSearch(e.target.value); setHeaderData({ ...headerData, orderNo: e.target.value }); setIsOrderOpen(true); }} onFocus={() => setIsOrderOpen(true)} />
                     <ChevronDown className="h-3 w-3 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                     {isOrderOpen && (
                       <div className="absolute bottom-[calc(100%+4px)] left-0 w-full z-50 bg-background border border-border rounded-md shadow-xl max-h-48 overflow-y-auto divide-y">
@@ -912,7 +912,7 @@ export function UpdateSalesReturnModal({
                 <div className="space-y-1.5" ref={invoiceWrapperRef}>
                   <Label className="text-xs font-bold uppercase tracking-wide">Invoice No.</Label>
                   <div className="relative group">
-                    <Input disabled={!canEditAll} className="h-9 w-full bg-background border-border shadow-sm text-sm" placeholder="Search Invoice No..." value={invoiceSearch} onChange={e => { setInvoiceSearch(e.target.value); setHeaderData({ ...headerData, invoiceNo: e.target.value }); setIsInvoiceOpen(true); }} onFocus={() => setIsInvoiceOpen(true)} />
+                    <Input disabled={!canEditAll || statusCardData?.invoicePosted} className="h-9 w-full bg-background border-border shadow-sm text-sm" placeholder="Search Invoice No..." value={invoiceSearch} onChange={e => { setInvoiceSearch(e.target.value); setHeaderData({ ...headerData, invoiceNo: e.target.value }); setIsInvoiceOpen(true); }} onFocus={() => setIsInvoiceOpen(true)} />
                     <ChevronDown className="h-3 w-3 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                     {isInvoiceOpen && (
                       <div className="absolute bottom-[calc(100%+4px)] left-0 w-full z-50 bg-background border border-border rounded-md shadow-xl max-h-48 overflow-y-auto divide-y">
@@ -938,12 +938,17 @@ export function UpdateSalesReturnModal({
               <div className="h-px bg-border my-2"></div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-muted-foreground font-medium">Applied to</span>
-                {canEditLimited ? (
+                {canEditLimited && !statusCardData?.invoicePosted ? (
                   <Button variant="ghost" size="sm" className="h-6 text-xs border-primary/20 text-primary hover:bg-primary/10 px-2" onClick={() => setIsInvoiceLookupOpen(true)}>
                     {statusCardData?.appliedTo || invoiceOptions.find(i => Number(i.id) === appliedInvoiceId)?.invoice_no || "Select Invoice"} <LinkIcon className="ml-1 h-3 w-3" />
                   </Button>
                 ) : (
-                  <span className="font-bold">{statusCardData?.appliedTo || "-"}</span>
+                  <span className="font-bold flex items-center gap-1.5">
+                    {statusCardData?.appliedTo || invoiceOptions.find(i => Number(i.id) === appliedInvoiceId)?.invoice_no || "-"}
+                    {statusCardData?.invoicePosted && (
+                      <Badge variant="outline" className="text-[9px] font-bold px-1 py-0 border-amber-500/30 bg-amber-500/10 text-amber-600 rounded">Posted</Badge>
+                    )}
+                  </span>
                 )}
               </div>
             </div>
@@ -1011,10 +1016,12 @@ export function UpdateSalesReturnModal({
               <Input placeholder="Search Invoice No..." className="pl-10" value={invoiceSearch} onChange={e => setInvoiceSearch(e.target.value)} />
             </div>
             <div className="max-h-[300px] overflow-y-auto border rounded-md divide-y shadow-inner">
-              <div className="p-3 hover:bg-destructive/10 cursor-pointer flex items-center gap-3 transition-colors text-destructive font-medium" onClick={() => { setAppliedInvoiceId(null); setStatusCardData(prev => prev ? { ...prev, appliedTo: "" } : null); setIsInvoiceLookupOpen(false); }}>
-                <div className="h-8 w-8 rounded-full bg-destructive/10 flex items-center justify-center"><X className="h-4 w-4" /></div>
-                <div className="text-sm">Clear Selection (Unlink)</div>
-              </div>
+              {!statusCardData?.invoicePosted && (
+                <div className="p-3 hover:bg-destructive/10 cursor-pointer flex items-center gap-3 transition-colors text-destructive font-medium" onClick={() => { setAppliedInvoiceId(null); setStatusCardData(prev => prev ? { ...prev, appliedTo: "" } : null); setIsInvoiceLookupOpen(false); }}>
+                  <div className="h-8 w-8 rounded-full bg-destructive/10 flex items-center justify-center"><X className="h-4 w-4" /></div>
+                  <div className="text-sm">Clear Selection (Unlink)</div>
+                </div>
+              )}
               {invoiceOptions.filter(inv => inv.invoice_no.toLowerCase().includes(invoiceSearch.toLowerCase())).map(inv => (
                 <div key={inv.id} className="p-3 hover:bg-primary/5 cursor-pointer flex items-center justify-between transition-all" onClick={() => { 
                   setAppliedInvoiceId(Number(inv.id)); 

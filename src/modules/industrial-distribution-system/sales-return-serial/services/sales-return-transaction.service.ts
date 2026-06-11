@@ -104,6 +104,12 @@ export async function submitReturn(rawPayload: any, userId: number): Promise<any
 
   if (rawPayload.appliedInvoiceId && returnId) {
     try {
+      const invoiceRes = await lookupRepo.getInvoiceById(Number(rawPayload.appliedInvoiceId));
+      const invoiceData = invoiceRes?.data;
+      if (invoiceData && (Number(invoiceData.isPosted) === 1 || invoiceData.isPosted === true)) {
+        throw new Error(`Cannot link to a posted invoice: ${invoiceData.invoice_no || rawPayload.appliedInvoiceId}`);
+      }
+
       await transactionRepo.createJunctionLink({
         return_no: returnId,
         invoice_no: rawPayload.appliedInvoiceId,
@@ -114,6 +120,7 @@ export async function submitReturn(rawPayload: any, userId: number): Promise<any
       });
     } catch (e) {
       console.error("Failed to create junction link during submission", e);
+      throw e;
     }
   }
 
@@ -235,6 +242,29 @@ export async function updateReturn(
     try {
       const linkResult = await lookupRepo.getJunctionLink(payload.id as number);
       const existingLinks = (linkResult.data || []) as any[];
+      const currentInvoiceId = existingLinks.length > 0 ? Number(existingLinks[0].invoice_no) : null;
+      const newInvoiceId = rawPayload.appliedInvoiceId ? Number(rawPayload.appliedInvoiceId) : null;
+
+      // Only validate if there is a change in the linked invoice
+      if (currentInvoiceId !== newInvoiceId) {
+        // 1. Check if unlinking or changing from a posted invoice
+        if (currentInvoiceId) {
+          const oldInvoiceRes = await lookupRepo.getInvoiceById(currentInvoiceId);
+          const oldInvoiceData = oldInvoiceRes?.data;
+          if (oldInvoiceData && (Number(oldInvoiceData.isPosted) === 1 || oldInvoiceData.isPosted === true)) {
+            throw new Error(`Cannot unlink from a posted invoice: ${oldInvoiceData.invoice_no || currentInvoiceId}`);
+          }
+        }
+
+        // 2. Check if linking to a posted invoice
+        if (newInvoiceId) {
+          const newInvoiceRes = await lookupRepo.getInvoiceById(newInvoiceId);
+          const newInvoiceData = newInvoiceRes?.data;
+          if (newInvoiceData && (Number(newInvoiceData.isPosted) === 1 || newInvoiceData.isPosted === true)) {
+            throw new Error(`Cannot link to a posted invoice: ${newInvoiceData.invoice_no || newInvoiceId}`);
+          }
+        }
+      }
 
       if (rawPayload.appliedInvoiceId) {
         if (existingLinks.length > 0) {
@@ -262,6 +292,7 @@ export async function updateReturn(
       }
     } catch (e) {
       console.error("Failed to update junction link during update", e);
+      throw e;
     }
   }
 
