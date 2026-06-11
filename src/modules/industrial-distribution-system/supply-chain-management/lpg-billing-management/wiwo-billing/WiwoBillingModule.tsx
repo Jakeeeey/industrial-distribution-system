@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Scale } from "lucide-react";
+import { CalendarRange, Scale } from "lucide-react";
 import { WiwoForm } from "./components/WiwoForm";
 import { TransactionHeaderWorkspace } from "./components/TransactionHeaderWorkspace";
 import { CreateBillingWorkspace } from "./components/CreateBillingWorkspace";
