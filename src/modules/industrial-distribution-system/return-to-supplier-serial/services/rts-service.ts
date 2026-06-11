@@ -372,21 +372,20 @@ export async function validateSerialNumber(
     throw new Error(`Serial Number "${serialNumber}" has already been scanned or returned in another transaction.`);
   }
 
-  // 2. Cross-Product Duplicate Check (Inventory View)
-  // We check if the serial exists in the warehouse. 
-  // If it does, we MUST ensure it belongs to the selected product.
+  // 1. If Serial is on-hand, reject because it is in inventory
   const onhandInfo = await repo.getSpringSerialLookup(serialNumber, branchId, token);
-
   if (onhandInfo) {
-    const identifiedProductId = Number(onhandInfo.productId);
-    if (identifiedProductId !== Number(productId)) {
-      throw new Error(`This serial number is already been used and is onhand in the warehouse.`);
-    }
+    throw new Error(`Serial Number "${serialNumber}" is currently on-hand in the warehouse.`);
   }
 
-  // If the serial is not found in the warehouse view, we ALLOW it as a manual entry.
-  // This allows the user to return items that may not yet be in the system's on-hand records.
-  return { success: true };
+  // 2. If Serial is on cylinder_assets, accepts and proceeds.
+  const cylinderAssetRes = await repo.getCylinderAssetBySerial(serialNumber);
+  if (cylinderAssetRes?.data && cylinderAssetRes.data.length > 0) {
+    return { success: true };
+  }
+
+  // 3. If Serial is not found on cylinder_assets AND not in on-hand, accepts and proceeds as unregistered.
+  return { success: true, isUnregistered: true };
 }
 
 /**
@@ -451,6 +450,22 @@ export async function updateTransaction(id: string, dto: CreateReturnDTO) {
 
   // 2. Cleanup old associations
   const { itemIds, rfidIds, serialIds } = await repo.getExistingRelatedIds(id);
+
+  if (itemIds.length > 0) {
+    const existingSerialsRes = await repo.getRawSerialsByItemIds(itemIds);
+    const existingSerials = (existingSerialsRes.data || []) as unknown as { rts_item_id: number; serial_number: string }[];
+    const incomingSerials = rts_items.flatMap(item => item.serials || []);
+    const serialsToDelete = existingSerials.filter(es => es.serial_number && !incomingSerials.includes(es.serial_number));
+    for (const s of serialsToDelete) {
+      try {
+        if (s.serial_number) {
+          await repo.deleteCylinderAssetBySerial(s.serial_number);
+        }
+      } catch (err) {
+        console.warn(`Failed to delete cylinder asset ${s.serial_number}:`, err);
+      }
+    }
+  }
 
   if (rfidIds.length > 0) {
     await repo.deleteRecords("rts_item_rfid", rfidIds);
