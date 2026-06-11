@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarRange, Scale } from "lucide-react";
+import { Scale } from "lucide-react";
 import { WiwoForm } from "./components/WiwoForm";
 import { TransactionHeaderWorkspace } from "./components/TransactionHeaderWorkspace";
 import { CreateBillingWorkspace } from "./components/CreateBillingWorkspace";
@@ -48,31 +48,43 @@ export default function WiwoBillingModule() {
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
-        <TransactionHeaderWorkspace selectedHeader={selectedHeader} onSelect={setSelectedHeader} />
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-zinc-50/10 dark:bg-zinc-900/5">
-          {selectedHeader ? (
-            <div className="space-y-4">
-              <div className="rounded-2xl border bg-white dark:bg-zinc-900 p-4 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Selected Header</p>
-                  <h2 className="font-bold">{selectedHeader.header_no || `Header #${selectedHeader.header_id}`}</h2>
-                  <p className="text-xs text-muted-foreground">
-                    {selectedHeader.site?.site_name || `Site #${selectedHeader.customer_site_id}`} | {selectedHeader.period_from} to {selectedHeader.period_to}
-                  </p>
-                </div>
-                <span className="rounded-full bg-amber-100 px-3 py-1 text-[10px] font-bold text-amber-800">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 bg-zinc-50/10 dark:bg-zinc-900/5 custom-scrollbar">
+        {!selectedHeader ? (
+          <TransactionHeaderWorkspace selectedHeader={selectedHeader} onSelect={setSelectedHeader} />
+        ) : (
+          <div className="space-y-4 w-full max-w-6xl mx-auto">
+            <div className="rounded-3xl border border-zinc-200 dark:border-zinc-800/60 bg-white/80 dark:bg-zinc-900/40 backdrop-blur-md p-4 sm:p-6 flex flex-wrap items-center justify-between gap-3 shadow-md animate-in fade-in slide-in-from-top-4">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Step 1: Selected Header</p>
+                <h2 className="font-bold text-lg text-zinc-900 dark:text-zinc-100">{selectedHeader.header_no || `Header #${selectedHeader.header_id}`}</h2>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  {selectedHeader.site?.site_name || `Site #${selectedHeader.customer_site_id}`} | {selectedHeader.period_from} to {selectedHeader.period_to}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="rounded-full bg-amber-100 dark:bg-amber-900/30 px-3 py-1 text-xs font-bold text-amber-800 dark:text-amber-300">
                   {selectedHeader.status}
                 </span>
+                {!billingContext && (
+                  <button
+                    onClick={() => setSelectedHeader(null)}
+                    className="text-xs px-3 py-1.5 rounded-lg font-medium text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  >
+                    Change Header
+                  </button>
+                )}
               </div>
-              <div className="bg-white/80 dark:bg-zinc-900/40 backdrop-blur-md border border-zinc-200 dark:border-zinc-800/60 p-4 sm:p-6 rounded-3xl shadow-md w-full max-w-6xl mx-auto">
-                {!billingContext ? (
-                  <CreateBillingWorkspace
-                    header={selectedHeader}
-                    onProceed={(type, invoice) => setBillingContext({ type, invoice })}
-                    onCancel={() => setSelectedHeader(null)}
-                  />
-                ) : (
+            </div>
+
+            <div className="w-full">
+              {!billingContext ? (
+                <CreateBillingWorkspace
+                  header={selectedHeader}
+                  onProceed={(type, invoice) => setBillingContext({ type, invoice })}
+                  onCancel={() => setSelectedHeader(null)}
+                />
+              ) : (
+                <div className="bg-white/80 dark:bg-zinc-900/40 backdrop-blur-md border border-zinc-200 dark:border-zinc-800/60 p-4 sm:p-6 rounded-3xl shadow-md w-full animate-in fade-in slide-in-from-bottom-4">
                   <WiwoForm
                     key={`${selectedHeader.header_id}-${billingContext.type}-${formKey}`}
                     txId={null}
@@ -82,17 +94,11 @@ export default function WiwoBillingModule() {
                     onSuccess={handleSuccess}
                     onCancel={handleCancel}
                   />
-                )}
-              </div>
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="h-full min-h-80 flex flex-col items-center justify-center text-center text-muted-foreground">
-              <CalendarRange className="h-10 w-10 mb-3" />
-              <h2 className="font-bold text-foreground">Select a transaction header</h2>
-              <p className="text-xs mt-1">Choose an existing site-period header or create a new one.</p>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
