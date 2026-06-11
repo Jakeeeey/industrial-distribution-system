@@ -97,50 +97,62 @@ export function TransactionHeaderWorkspace({ selectedHeader, onSelect }: Props) 
 
   return (
     <>
-      <aside className="w-full lg:w-96 shrink-0 border-r border-zinc-200 dark:border-zinc-800 flex flex-col min-h-0">
-        <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 space-y-3">
-          <Button onClick={() => setOpen(true)} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white">
-            <Plus className="h-4 w-4" />
-            New Transaction Header
-          </Button>
+      <div className="w-full max-w-4xl mx-auto flex flex-col min-h-[500px] max-h-[800px] bg-white/80 dark:bg-zinc-900/40 backdrop-blur-md rounded-3xl shadow-md border border-zinc-200 dark:border-zinc-800/60 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="p-5 sm:p-6 border-b border-zinc-200 dark:border-zinc-800 space-y-4 shrink-0">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <h2 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+              <CalendarRange className="h-6 w-6 text-emerald-500" />
+              1. Select Transaction Header
+            </h2>
+            <Button onClick={() => setOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto">
+              <Plus className="h-4 w-4 mr-2" />
+              New Transaction Header
+            </Button>
+          </div>
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
-              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search headers..." className="pl-9" />
+              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search headers by site, customer, period..." className="pl-9" />
             </div>
             <Button variant="outline" size="icon" onClick={() => void load()} disabled={loading}>
               <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             </Button>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 content-start custom-scrollbar">
           {filtered.map((header) => (
             <button
               type="button"
               key={header.header_id}
               onClick={() => onSelect(header)}
-              className={`w-full text-left rounded-xl border p-3 transition-colors ${
+              className={`w-full text-left rounded-2xl border p-4 transition-all duration-200 group flex flex-col ${
                 selectedHeader?.header_id === header.header_id
-                  ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20"
-                  : "border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                  ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 ring-1 ring-emerald-500"
+                  : "border-zinc-200 dark:border-zinc-800 hover:border-emerald-300 dark:hover:border-emerald-700 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
               }`}
             >
-              <div className="flex justify-between gap-2">
-                <span className="font-mono text-xs font-bold">{header.header_no || `Header #${header.header_id}`}</span>
-                <span className="text-[9px] font-bold">{header.status}</span>
+              <div className="flex justify-between gap-2 w-full mb-2">
+                <span className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">{header.header_no || `Header #${header.header_id}`}</span>
+                <span className="rounded-full bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 text-[10px] font-bold text-amber-800 dark:text-amber-300">
+                  {header.status}
+                </span>
               </div>
-              <p className="text-xs mt-1">{header.site?.site_name || `Site #${header.customer_site_id}`}</p>
-              <p className="text-[10px] text-muted-foreground">{customers.find(c => c.customer_code === header.customer_id)?.customer_name || header.customer_name || header.customer_id}</p>
-              <p className="text-[10px] text-muted-foreground mt-2">
-                {header.period_from} to {header.period_to}
-              </p>
+              <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 line-clamp-1">{header.site?.site_name || `Site #${header.customer_site_id}`}</p>
+              <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{customers.find(c => c.customer_code === header.customer_id)?.customer_name || header.customer_name || header.customer_id}</p>
+              <div className="mt-auto pt-3 flex items-center justify-between text-xs text-muted-foreground border-t border-zinc-100 dark:border-zinc-800 mt-3">
+                <span className="flex items-center gap-1"><CalendarRange className="h-3 w-3" /> {header.period_from}</span>
+                <span>to {header.period_to}</span>
+              </div>
             </button>
           ))}
           {!loading && filtered.length === 0 && (
-            <p className="text-xs text-center text-muted-foreground py-10">No transaction headers found.</p>
+            <div className="col-span-full py-12 flex flex-col items-center justify-center text-muted-foreground">
+               <CalendarRange className="h-10 w-10 mb-3 opacity-20" />
+               <p className="text-sm">No transaction headers found.</p>
+            </div>
           )}
         </div>
-      </aside>
+      </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg">
