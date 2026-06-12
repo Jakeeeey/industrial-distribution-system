@@ -189,10 +189,15 @@ export async function fetchSites(customerCode?: string): Promise<CustomerSite[]>
 }
 
 export async function fetchInvoicesForCustomer(customerCode?: string): Promise<{ invoice_id: number; invoice_no: string; total_amount: number; invoice_date: string; transaction_status: string }[]> {
-  let url = "/items/sales_invoice?limit=-1&fields=invoice_id,invoice_no,invoice_date,total_amount,transaction_status,customer_code,order_id,salesman_id";
+  // Base URL with the strict filter for En Route status already applied
+  let url = "/items/sales_invoice?limit=-1&fields=invoice_id,invoice_no,invoice_date,total_amount,transaction_status,customer_code,order_id,salesman_id&filter[transaction_status][_eq]=En Route";
+  
   if (customerCode) {
+    // Note: When adding multiple filters in Directus v9+, you use logical operators if they are complex, 
+    // but simple repeated `&filter[field]` implicitly acts as an AND clause.
     url += `&filter[customer_code][_eq]=${encodeURIComponent(customerCode)}`;
   }
+  
   const res = await directusFetch<{ data: { invoice_id: number; invoice_no: string; total_amount: number; invoice_date: string; transaction_status: string }[] }>(`${DIRECTUS_URL}${url}`);
   return res.data ?? [];
 }

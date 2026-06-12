@@ -32,6 +32,16 @@ function mapTxRecord(raw: Record<string, unknown>): MeteredWiwoTransaction {
     raw["wiwo_header_id"] && typeof raw["wiwo_header_id"] === "object"
       ? (raw["wiwo_header_id"] as Record<string, unknown>)
       : null;
+  const headerObj =
+    raw["transaction_header_id"] && typeof raw["transaction_header_id"] === "object"
+      ? (raw["transaction_header_id"] as Record<string, unknown>)
+      : null;
+
+  const headerId = headerObj
+    ? Number(headerObj.header_id)
+    : raw["transaction_header_id"]
+      ? Number(raw["transaction_header_id"])
+      : null;
 
   const txNo = String(raw["transaction_no"] ?? "");
   const readingNo =
@@ -41,6 +51,7 @@ function mapTxRecord(raw: Record<string, unknown>): MeteredWiwoTransaction {
 
   return {
     id: Number(raw["id"]),
+    transaction_header_id: headerId,
     transaction_no: txNo,
     reading_no: readingNo,
     transaction_type:
@@ -76,6 +87,12 @@ function mapTxRecord(raw: Record<string, unknown>): MeteredWiwoTransaction {
       : null,
     sales_invoice_no: raw["sales_invoice_no"]
       ? String(raw["sales_invoice_no"])
+      : null,
+    sales_order_id: raw["sales_order_id"]
+      ? Number(raw["sales_order_id"])
+      : null,
+    sales_order_no: raw["sales_order_no"]
+      ? String(raw["sales_order_no"])
       : null,
     status: (raw["status"] as TransactionStatus) ?? "DRAFT",
     remarks: raw["remarks"] ? String(raw["remarks"]) : null,
@@ -116,6 +133,19 @@ function mapTxRecord(raw: Record<string, unknown>): MeteredWiwoTransaction {
     created_date: raw["created_date"] ? String(raw["created_date"]) : null,
     modified_by: raw["modified_by"] ? Number(raw["modified_by"]) : null,
     modified_date: raw["modified_date"] ? String(raw["modified_date"]) : null,
+    header: headerObj
+      ? {
+          header_id: Number(headerObj.header_id),
+          header_no: headerObj.header_no ? String(headerObj.header_no) : null,
+          customer_id: String(headerObj.customer_id ?? ""),
+          customer_site_id: Number(headerObj.customer_site_id ?? 0),
+          period_from: String(headerObj.period_from ?? ""),
+          period_to: String(headerObj.period_to ?? ""),
+          status: (headerObj.status as TransactionStatus) ?? "DRAFT",
+          is_billed: Number(headerObj.is_billed ?? 0),
+          remarks: headerObj.remarks ? String(headerObj.remarks) : null,
+        }
+      : undefined,
     site: siteObj
       ? {
           id: Number(siteObj.id),
@@ -197,6 +227,15 @@ const TX_FIELDS = [
   "wiwo_header_id.customer_code",
   "wiwo_header_id.lpg_site_id",
   "wiwo_header_id.wiwo_status",
+  "transaction_header_id.header_id",
+  "transaction_header_id.header_no",
+  "transaction_header_id.customer_id",
+  "transaction_header_id.customer_site_id",
+  "transaction_header_id.period_from",
+  "transaction_header_id.period_to",
+  "transaction_header_id.status",
+  "transaction_header_id.is_billed",
+  "transaction_header_id.remarks",
 ].join(",");
 
 // ─── Sequence Number ──────────────────────────────────────────────────────────
@@ -272,6 +311,11 @@ export async function fetchMeteredTransactions(
     filterList.push({ status: { _eq: params.status } });
   }
 
+  // Site filter
+  if (params.siteId) {
+    filterList.push({ lpg_site_id: { _eq: params.siteId } });
+  }
+
   // 3. Search filter
   if (params.search) {
     filterList.push({
@@ -320,6 +364,63 @@ export async function fetchLastMeteredTransaction(
 
   const tx = res.data?.[0];
   return tx ? mapTxRecord(tx) : null;
+}
+
+/**
+ * Returns the current_reading and billing_period_to from the most recent
+ * posted/draft transaction that matches the given site + customer, optionally
+ * filtered by sales invoice.
+ *   - When salesInvoiceNo is provided: per-invoice chaining
+ *   - When salesInvoiceNo is omitted:  per-site chaining (any invoice)
+ */
+export async function fetchLastReadingByInvoice(
+  siteId: number,
+  customerCode: string,
+  salesInvoiceNo?: string,
+): Promise<{
+  last_current_reading: number;
+  transaction_date: string;
+  billing_period_to: string | null;
+} | null> {
+  if (!siteId || !customerCode) return null;
+
+  const andConditions: Record<string, unknown>[] = [
+    { lpg_site_id: { _eq: siteId } },
+    { customer_code: { _eq: customerCode } },
+  ];
+
+  if (salesInvoiceNo) {
+    andConditions.push({ sales_invoice_no: { _eq: salesInvoiceNo } });
+  }
+
+  const filter = encodeURIComponent(JSON.stringify({ _and: andConditions }));
+
+  const res = await directusFetch<{ data: Record<string, unknown>[] }>(
+    `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions` +
+      `?fields=id,transaction_date,billing_period_to,meter_reading_id.*` +
+      `&filter=${filter}` +
+      `&sort=-transaction_date,-id` +
+      `&limit=1`,
+  );
+
+  const raw = res.data?.[0];
+  if (!raw) return null;
+
+  const mrObj =
+    raw["meter_reading_id"] && typeof raw["meter_reading_id"] === "object"
+      ? (raw["meter_reading_id"] as Record<string, unknown>)
+      : null;
+
+  const currentReading = mrObj ? Number(mrObj["current_reading"] ?? 0) : 0;
+  const billingPeriodTo = raw["billing_period_to"]
+    ? String(raw["billing_period_to"])
+    : null;
+
+  return {
+    last_current_reading: currentReading,
+    transaction_date: String(raw["transaction_date"] ?? ""),
+    billing_period_to: billingPeriodTo,
+  };
 }
 
 export async function fetchMeteredTransactionById(
@@ -475,6 +576,9 @@ async function buildBridgePayload(
     net_amount: payload.net_amount ?? 0,
     discount_amount: payload.discount_amount ?? 0,
     sales_invoice_id: payload.sales_invoice_id || null,
+    sales_invoice_no: payload.sales_invoice_no || null,
+    sales_order_id: payload.sales_order_id || null,
+    sales_order_no: payload.sales_order_no || null,
     status: payload.status || "DRAFT",
     remarks: payload.remarks || null,
     pressure_line: payload.pressure_line ?? null,
@@ -511,6 +615,7 @@ async function buildBridgePayload(
   return data;
 }
 
+
 // ─── Public: Create ───────────────────────────────────────────────────────────
 
 export async function createMeteredTransaction(
@@ -521,7 +626,11 @@ export async function createMeteredTransaction(
 
   console.log("[createMeteredTransaction] payload:", JSON.stringify(payload));
 
-  // 1. Create meter reading row
+  // 1. Link transaction header (do not edit or create on lpg_transaction_headers table)
+  const headerId = payload.transaction_header_id ?? null;
+  console.log("[createMeteredTransaction] header id:", headerId);
+
+  // 2. Create meter reading row
   let readingId: number | null | undefined = payload.meter_reading_id;
   if (
     payload.lpg_site_id &&
@@ -536,21 +645,22 @@ export async function createMeteredTransaction(
     console.log("[createMeteredTransaction] meter reading id:", readingId);
   }
 
-  // 2. Build bridge payload (transaction_no already computed by hook/API)
+  // 3. Build bridge payload and link transaction_header_id
   const bridgeData = await buildBridgePayload(
     payload,
     readingId!,
     userId as number | undefined,
     false,
   );
+  bridgeData.transaction_header_id = headerId;
 
-  // 3. Create bridge transaction row
+  // 4. Create bridge transaction row
   const res = await directusFetch<{ data: { id: number } }>(
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions`,
     { method: "POST", body: JSON.stringify(bridgeData) },
   );
 
-  // 4. Save attachments
+  // 5. Save attachments
   if (payload.attachments && payload.attachments.length > 0) {
     for (const att of payload.attachments) {
       await directusFetch(
@@ -571,6 +681,7 @@ export async function createMeteredTransaction(
   return {
     ...payload,
     id: res.data.id,
+    transaction_header_id: headerId,
     reading_no: payload.reading_no ?? "",
     transaction_no: payload.reading_no,
     meter_reading_id: readingId ?? null,
@@ -588,11 +699,15 @@ export async function updateMeteredTransaction(
 
   console.log("[updateMeteredTransaction] payload:", JSON.stringify(payload));
 
-  // 1. Fetch existing transaction to reuse its meter_reading_id if not in payload
+  // 1. Fetch existing transaction to reuse its meter_reading_id and transaction_header_id if not in payload
   const existing = await fetchMeteredTransactionById(id);
   const existingReadingId = existing?.meter_reading_id;
+  const existingHeaderId = existing?.transaction_header_id;
 
-  // 2. Update / create meter reading
+  // 2. Link transaction header (do not edit or create on lpg_transaction_headers table)
+  const headerId = payload.transaction_header_id || existingHeaderId || null;
+
+  // 3. Update / create meter reading
   let readingId: number | null | undefined =
     payload.meter_reading_id || existingReadingId;
   if (
@@ -608,15 +723,16 @@ export async function updateMeteredTransaction(
     console.log("[updateMeteredTransaction] meter reading id:", readingId);
   }
 
-  // 3. Build bridge patch payload
+  // 4. Build bridge patch payload and link header
   const bridgeData = await buildBridgePayload(
     payload,
     readingId!,
     userId,
     true,
   );
+  bridgeData.transaction_header_id = headerId;
 
-  // 4. Update bridge transaction row
+  // 5. Update bridge transaction row
   await directusFetch(
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions/${id}`,
     { method: "PATCH", body: JSON.stringify(bridgeData) },
@@ -811,3 +927,87 @@ export async function fetchNextMeterReadingSeq(
     return 1;
   }
 }
+
+
+export async function deleteMeteredTransaction(id: number): Promise<void> {
+  const tx = await fetchMeteredTransactionById(id);
+  if (!tx) return;
+
+  try {
+    const existingAttsRes = await directusFetch<{ data: { id: number }[] }>(
+      `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments?filter[transaction_id][_eq]=${id}&fields=id`,
+    );
+    const existingAttIds = (existingAttsRes.data || []).map((a) => a.id);
+    if (existingAttIds.length > 0) {
+      await directusFetch(
+        `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments`,
+        {
+          method: "DELETE",
+          body: JSON.stringify(existingAttIds),
+        },
+      );
+    }
+  } catch (err) {
+    console.error("deleteMeteredTransaction: attachments delete failed:", err);
+  }
+
+  await directusFetch(
+    `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions/${id}`,
+    { method: "DELETE" }
+  );
+
+  if (tx.meter_reading_id) {
+    await directusFetch(
+      `${DIRECTUS_URL}/items/lpg_meter_readings/${tx.meter_reading_id}`,
+      { method: "DELETE" }
+    ).catch((err) => console.error("deleteMeteredTransaction: meter reading delete failed:", err));
+  }
+
+  if (tx.transaction_header_id) {
+    await directusFetch(
+      `${DIRECTUS_URL}/items/lpg_transaction_headers/${tx.transaction_header_id}`,
+      { method: "DELETE" }
+    ).catch((err) => console.error("deleteMeteredTransaction: header delete failed:", err));
+  }
+}
+
+export async function checkOnboardingExists(siteId: number): Promise<boolean> {
+  if (!siteId) return false;
+  const filter = {
+    transaction_type: { _eq: "ONBOARDING_BASELINE" },
+    lpg_site_id: { _eq: siteId },
+    status: { _neq: "CANCELLED" },
+    meter_reading_id: { _nnull: true },
+  };
+  const qs = `filter=${encodeURIComponent(JSON.stringify(filter))}&limit=1&fields=id`;
+  try {
+    const res = await directusFetch<{ data: unknown[] }>(
+      `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions?${qs}`
+    );
+    return (res.data?.length ?? 0) > 0;
+  } catch (err) {
+    console.error("checkOnboardingExists failed:", err);
+    return false;
+  }
+}
+
+export async function fetchDraftOnboarding(siteId: number): Promise<Record<string, unknown> | null> {
+  if (!siteId) return null;
+  const filter = {
+    transaction_type: { _eq: "ONBOARDING_BASELINE" },
+    lpg_site_id: { _eq: siteId },
+    status: { _eq: "DRAFT" },
+    meter_reading_id: { _null: true },
+  };
+  const qs = `filter=${encodeURIComponent(JSON.stringify(filter))}&limit=1&fields=*`;
+  try {
+    const res = await directusFetch<{ data: Record<string, unknown>[] }>(
+      `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions?${qs}`
+    );
+    return res.data?.[0] ?? null;
+  } catch (err) {
+    console.error("fetchDraftOnboarding failed:", err);
+    return null;
+  }
+}
+

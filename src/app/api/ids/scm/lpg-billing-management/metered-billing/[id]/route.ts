@@ -1,8 +1,11 @@
+//src\app\api\ids\scm\lpg-billing-management\metered-billing\[id]\route.ts
+
 import { NextRequest, NextResponse } from "next/server";
 import {
   fetchMeteredTransactionById,
   updateMeteredTransaction,
   updateSiteReading,
+  deleteMeteredTransaction,
 } from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/metered-wiwo-billing/providers/metered-wiwo.provider";
 import { handleApiError } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/error-handler";
 import { getUserIdFromToken } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/auth-utils";
@@ -63,4 +66,23 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return handleApiError(error);
   }
 }
+
+/**
+ * DELETE /api/ids/scm/lpg-billing-management/metered-billing/[id]
+ */
+export async function DELETE(_request: NextRequest, { params }: RouteParams) {
+  try {
+    const { id: rawId } = await params;
+    const id = Number(rawId);
+    if (isNaN(id)) {
+      return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
+    }
+
+    await deleteMeteredTransaction(id);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
 

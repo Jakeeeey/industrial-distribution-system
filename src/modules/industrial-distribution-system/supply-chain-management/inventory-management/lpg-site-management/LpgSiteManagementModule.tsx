@@ -3,13 +3,19 @@
 import { useState } from "react";
 import { LpgSiteList } from "./components/LpgSiteList";
 import { LpgSiteForm } from "./components/LpgSiteForm";
+import { LpgSiteView } from "./components/LpgSiteView";
 import { MapPin, Info } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function LpgSiteManagementModule() {
-  const [view, setView] = useState<"list" | "form">("list");
+  const [view, setView] = useState<"list" | "form" | "view">("list");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+
+  const handleView = (id: number) => {
+    setSelectedId(id);
+    setView("view");
+  };
 
   const handleEdit = (id: number) => {
     setSelectedId(id);
@@ -33,7 +39,7 @@ export default function LpgSiteManagementModule() {
 
   return (
     <div className="container mx-auto py-6 space-y-6">
-      {view === "list" ? (
+      {view === "list" && (
         <>
           <div className="flex flex-col gap-1 mb-2">
             <h1 className="text-4xl font-black tracking-tight flex items-center gap-3">
@@ -57,14 +63,23 @@ export default function LpgSiteManagementModule() {
           </Alert>
 
           <div className="mt-4">
-            <LpgSiteList onEdit={handleEdit} onCreate={handleCreate} />
+            <LpgSiteList onEdit={handleEdit} onCreate={handleCreate} onView={handleView} />
           </div>
         </>
-      ) : (
+      )}
+
+      {view === "form" && (
         <LpgSiteForm 
           id={selectedId} 
           onSuccess={handleSuccess} 
           onCancel={handleCancel} 
+        />
+      )}
+
+      {view === "view" && selectedId && (
+        <LpgSiteView
+          id={selectedId}
+          onBack={handleCancel}
         />
       )}
     </div>

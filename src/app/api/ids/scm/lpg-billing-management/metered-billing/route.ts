@@ -1,7 +1,11 @@
+//src\app\api\ids\scm\lpg-billing-management\metered-billing\route.ts
+
+
 import { NextRequest, NextResponse } from "next/server";
 import {
   fetchMeteredTransactions,
   createMeteredTransaction,
+
   fetchMeteredSites,
   fetchMeterReadings,
   fetchLastMeteredTransaction,
@@ -9,7 +13,15 @@ import {
   updateSiteReading,
   fetchNextTxSeq,
   fetchNextMeterReadingSeq,
+  checkOnboardingExists,
+  fetchDraftOnboarding,
 } from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/metered-wiwo-billing/providers/metered-wiwo.provider";
+import {
+  fetchTransactionHeaders,
+  fetchCustomers,
+  fetchInvoicesForCustomer,
+  createTransactionHeader,
+} from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/wiwo-billing/providers/wiwo-billing.provider";
 import { handleApiError } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/error-handler";
 import { getUserIdFromToken } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/auth-utils";
 import type { TransactionType } from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/metered-wiwo-billing/types";
@@ -46,6 +58,32 @@ export async function GET(request: NextRequest) {
         : undefined;
       const headers = await fetchUnbilledWiwoHeaders(customerCode, siteId);
       return NextResponse.json({ data: headers });
+    }
+
+    if (type === "headers") {
+      const data = await fetchTransactionHeaders({
+        status: searchParams.get("status") || undefined,
+        search: searchParams.get("search") || undefined,
+      });
+      return NextResponse.json({ data });
+    }
+
+    if (type === "customers") {
+      const data = await fetchCustomers();
+      return NextResponse.json({ data });
+    }
+
+    if (type === "invoices") {
+      const customerCode = searchParams.get("customerCode") || undefined;
+      const data = await fetchInvoicesForCustomer(customerCode);
+      return NextResponse.json({ data });
+    }
+
+    if (type === "check-onboarding") {
+      const siteId = Number(searchParams.get("siteId") ?? 0);
+      const hasCompleted = await checkOnboardingExists(siteId);
+      const draft = await fetchDraftOnboarding(siteId);
+      return NextResponse.json({ hasCompleted, draft });
     }
 
     /**
@@ -98,6 +136,7 @@ export async function GET(request: NextRequest) {
       transactionType: (txTypeParam || "ALL") as TransactionType | "ALL",
       page: searchParams.get("page") ? Number(searchParams.get("page")) : 1,
       limit: searchParams.get("limit") ? Number(searchParams.get("limit")) : 10,
+      siteId: searchParams.get("siteId") ? Number(searchParams.get("siteId")) : undefined,
     };
 
     const result = await fetchMeteredTransactions(params);
@@ -116,6 +155,43 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const token = request.cookies.get("vos_access_token")?.value;
     const userId = getUserIdFromToken(token);
+
+    if (body.action === "CREATE_HEADER") {
+      const authorization = request.headers.get("authorization");
+      const bearerToken = authorization?.startsWith("Bearer ")
+        ? authorization.slice(7).trim()
+        : undefined;
+      const finalToken = token ?? bearerToken;
+      const finalUserId = getUserIdFromToken(finalToken);
+      
+      const developmentUserId =
+        process.env.NEXT_PUBLIC_AUTH_DISABLED === "true"
+          ? Number(process.env.WIWO_DEV_USER_ID ?? 24)
+          : null;
+      const resolvedUserId =
+        finalUserId ??
+        (developmentUserId !== null &&
+        Number.isInteger(developmentUserId) &&
+        developmentUserId > 0
+          ? developmentUserId
+          : null);
+
+      if (!resolvedUserId) {
+        return NextResponse.json(
+          { error: "Authenticated user is required to create a transaction header." },
+          { status: 401 }
+        );
+      }
+
+      const data = await createTransactionHeader({
+        siteId: Number(body.lpg_site_id),
+        periodFrom: String(body.period_from || ""),
+        periodTo: String(body.period_to || ""),
+        remarks: typeof body.remarks === "string" ? body.remarks : "",
+        userId: resolvedUserId,
+      });
+      return NextResponse.json({ data });
+    }
 
     const data = await createMeteredTransaction({
       ...body,
