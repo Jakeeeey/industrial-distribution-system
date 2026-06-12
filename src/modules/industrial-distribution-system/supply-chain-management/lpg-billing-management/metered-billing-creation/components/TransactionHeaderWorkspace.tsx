@@ -4,29 +4,59 @@ import { useEffect, useMemo, useState } from "react";
 import { CalendarRange, RefreshCw, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { toast } from "sonner";
 import type { LpgTransactionHeader } from "../../metered-billing-common/types";
 
 interface Props {
   selectedHeader: LpgTransactionHeader | null;
   onSelect: (header: LpgTransactionHeader) => void;
+  autoOpenCreate?: boolean;
+  onCloseCreate?: () => void;
 }
 
-export function TransactionHeaderWorkspace({ selectedHeader, onSelect }: Props) {
+export function TransactionHeaderWorkspace({ selectedHeader, onSelect, autoOpenCreate, onCloseCreate }: Props) {
   const [headers, setHeaders] = useState<LpgTransactionHeader[]>([]);
   const [customers, setCustomers] = useState<{ customer_code: string; customer_name: string }[]>([]);
+  const [sites, setSites] = useState<{ id: number; site_name: string | null; customer_code: string }[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Header Creation State
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [selectedSiteId, setSelectedSiteId] = useState("");
+  const [periodFrom, setPeriodFrom] = useState("");
+  const [periodTo, setPeriodTo] = useState("");
+  const [remarks, setRemarks] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    if (autoOpenCreate) {
+      setIsCreateOpen(true);
+      onCloseCreate?.();
+    }
+  }, [autoOpenCreate, onCloseCreate]);
 
   const load = async () => {
     setLoading(true);
     try {
-      const [headersRes, customersRes] = await Promise.all([
+      const [headersRes, customersRes, sitesRes] = await Promise.all([
         fetch("/api/ids/scm/lpg-billing-management/metered-billing?type=headers"),
         fetch("/api/ids/scm/lpg-billing-management/metered-billing?type=customers"),
+        fetch("/api/ids/scm/lpg-billing-management/metered-billing?type=sites"),
       ]);
-      const [headersJson, customersJson] = await Promise.all([headersRes.json(), customersRes.json()]);
+      const [headersJson, customersJson, sitesJson] = await Promise.all([
+        headersRes.json(),
+        customersRes.json(),
+        sitesRes.json(),
+      ]);
       setHeaders(headersJson.data ?? []);
       setCustomers(customersJson.data ?? []);
+      setSites(sitesJson.data ?? []);
+    } catch (err) {
+      console.error("Failed to load header workspace resources:", err);
     } finally {
       setLoading(false);
     }
@@ -50,6 +80,57 @@ export function TransactionHeaderWorkspace({ selectedHeader, onSelect }: Props) 
     );
   }, [headers, search]);
 
+  const handleCreateHeader = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSiteId || !periodFrom || !periodTo) {
+      toast.error("Please fill in all required fields.");
+      return;
+    }
+    if (periodFrom > periodTo) {
+      toast.error("Period From must be before or equal to Period To.");
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const res = await fetch("/api/ids/scm/lpg-billing-management/metered-billing", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "CREATE_HEADER",
+          lpg_site_id: Number(selectedSiteId),
+          period_from: periodFrom,
+          period_to: periodTo,
+          remarks: remarks.trim(),
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error || "Failed to create transaction header.");
+      }
+
+      toast.success("Transaction header created successfully!");
+      setIsCreateOpen(false);
+      setSelectedSiteId("");
+      setPeriodFrom("");
+      setPeriodTo("");
+      setRemarks("");
+
+      await load();
+
+      if (json.data) {
+        onSelect(json.data);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "An error occurred while creating the header.";
+      toast.error(msg);
+    } finally {
+      setCreating(false);
+    }
+  };
 
   return (
     <>
@@ -60,6 +141,13 @@ export function TransactionHeaderWorkspace({ selectedHeader, onSelect }: Props) 
               <CalendarRange className="h-6 w-6 text-violet-500" />
               1. Select Transaction Header
             </h2>
+            <Button
+              type="button"
+              onClick={() => setIsCreateOpen(true)}
+              className="bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all duration-200 shrink-0"
+            >
+              + New Transaction Header
+            </Button>
           </div>
           <div className="flex gap-2">
             <div className="relative flex-1">
@@ -106,6 +194,105 @@ export function TransactionHeaderWorkspace({ selectedHeader, onSelect }: Props) 
         </div>
       </div>
 
+      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+        <DialogContent className="max-w-md rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 shadow-xl">
+          <div className="space-y-4">
+            <div>
+              <DialogTitle className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                <CalendarRange className="h-5 w-5 text-violet-500" />
+                New Transaction Header
+              </DialogTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Create an active transaction header for a customer site to begin billing.
+              </p>
+            </div>
+
+            <form onSubmit={handleCreateHeader} className="space-y-4 pt-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="site" className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+                  Select LPG Customer Site
+                </Label>
+                <select
+                  id="site"
+                  value={selectedSiteId}
+                  onChange={(e) => setSelectedSiteId(e.target.value)}
+                  className="w-full h-10 px-3 py-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  required
+                >
+                  <option value="" disabled>Select a site...</option>
+                  {sites.map((site) => {
+                    const custName = customers.find(c => c.customer_code === site.customer_code)?.customer_name || site.customer_code;
+                    return (
+                      <option key={site.id} value={site.id}>
+                        {site.site_name} — {custName}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="periodFrom" className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+                    Period From
+                  </Label>
+                  <Input
+                    id="periodFrom"
+                    type="date"
+                    value={periodFrom}
+                    onChange={(e) => setPeriodFrom(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="periodTo" className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+                    Period To
+                  </Label>
+                  <Input
+                    id="periodTo"
+                    type="date"
+                    value={periodTo}
+                    onChange={(e) => setPeriodTo(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="remarks" className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+                  Remarks
+                </Label>
+                <Textarea
+                  id="remarks"
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                  placeholder="Billing period details or customer notes..."
+                  className="min-h-[80px] rounded-xl"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setIsCreateOpen(false)}
+                  disabled={creating}
+                  className="rounded-xl text-xs font-semibold"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={creating}
+                  className="bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-xs font-bold"
+                >
+                  {creating ? "Creating..." : "Create Header"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
