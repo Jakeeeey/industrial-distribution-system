@@ -660,7 +660,37 @@ export async function createMeteredTransaction(
     { method: "POST", body: JSON.stringify(bridgeData) },
   );
 
-  // 5. Save attachments
+  // 5. Link invoice to transaction header
+  const raw2 = payload as unknown as Record<string, unknown>;
+  const invoiceId =
+    typeof raw2.sales_invoice_id === "number" && raw2.sales_invoice_id > 0
+      ? raw2.sales_invoice_id
+      : null;
+
+  if (headerId && invoiceId) {
+    try {
+      // Status: POSTED for onboarding baseline (it's a setup record, already finalised),
+      //         DRAFT for regular billing (invoice still being processed).
+      const headerInvoiceStatus =
+        payload.transaction_type === "ONBOARDING_BASELINE" ? "POSTED" : "DRAFT";
+
+      await directusFetch(`${DIRECTUS_URL}/items/lpg_transaction_header_invoices`, {
+        method: "POST",
+        body: JSON.stringify({
+          header_id: headerId,
+          sales_invoice_id: invoiceId,
+          linked_by: userId ?? null,
+          linked_at: new Date().toISOString(),
+          status: headerInvoiceStatus,
+        }),
+      });
+    } catch (linkErr) {
+      // Non-fatal: transaction already saved; log but don't block.
+      console.warn("[createMeteredTransaction] Failed to link invoice to header:", linkErr);
+    }
+  }
+
+  // 6. Save attachments
   if (payload.attachments && payload.attachments.length > 0) {
     for (const att of payload.attachments) {
       await directusFetch(

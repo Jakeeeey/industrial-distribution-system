@@ -76,6 +76,8 @@ interface Props {
     sales_order_id?: number | null;
     sales_order_no?: string | null;
   } | null;
+  /** Authenticated user id decoded server-side — used as linked_by on header-invoice link */
+  currentUserId?: number | null;
 }
 
 const TX_TYPE_LABELS: Record<
@@ -105,7 +107,7 @@ const TX_TYPE_LABELS: Record<
 
 type MobileTab = "details" | "readings" | "review";
 
-export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFlowType, salesInvoice, perInvoice = true, autoPeriodFrom = true }: Props) {
+export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFlowType, salesInvoice, perInvoice = true, autoPeriodFrom = true, currentUserId = null }: Props) {
   const [activeTab, setActiveTab] = useState<MobileTab>("details");
 
   const {
@@ -135,7 +137,7 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
     isValidReading,
     meterDirection,
     pressureLine,
-  } = useMeteredBillingCreation(transactionHeader, initialFlowType, salesInvoice);
+  } = useMeteredBillingCreation(transactionHeader, initialFlowType, salesInvoice, currentUserId);
 
 
 

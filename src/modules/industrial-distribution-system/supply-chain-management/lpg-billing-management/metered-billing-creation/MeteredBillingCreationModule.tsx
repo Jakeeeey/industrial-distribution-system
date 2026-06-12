@@ -8,7 +8,11 @@ import { TransactionHeaderWorkspace } from "./components/TransactionHeaderWorksp
 import { CreateBillingWorkspace } from "./components/CreateBillingWorkspace";
 import type { LpgTransactionHeader } from "../metered-billing-common/types";
 
-export default function MeteredBillingCreationModule() {
+interface MeteredBillingCreationModuleProps {
+  currentUser?: { id: number; name: string } | null;
+}
+
+export default function MeteredBillingCreationModule({ currentUser }: MeteredBillingCreationModuleProps = {}) {
 
   const [formKey, setFormKey] = useState(0);
 
@@ -19,7 +23,7 @@ export default function MeteredBillingCreationModule() {
    *   false — previous reading is resolved using site + customer only
    *           (last transaction regardless of which invoice it belongs to)
    */
-  const [perInvoice] = useState(true);
+  const [perInvoice] = useState(false);
   /**
    * AUTO_PERIOD_FROM mode (hidden — not shown in UI):
    *   true  — billingPeriodFrom of the new transaction is auto-set from
@@ -28,7 +32,10 @@ export default function MeteredBillingCreationModule() {
    */
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [autoPeriodFrom, _setAutoPeriodFrom] = useState(false);
+
+
   const [selectedHeader, setSelectedHeader] = useState<LpgTransactionHeader | null>(null);
+  const [createHeaderOnOpen, setCreateHeaderOnOpen] = useState(false);
   const [billingContext, setBillingContext] = useState<{
     type: "ROUTINE" | "ONBOARDING";
     invoice: {
@@ -46,6 +53,7 @@ export default function MeteredBillingCreationModule() {
   const handleSuccess = () => {
     setBillingContext(null);
     setSelectedHeader(null);
+    setCreateHeaderOnOpen(false);
     setFormKey((k) => k + 1);
    
   };
@@ -110,7 +118,12 @@ export default function MeteredBillingCreationModule() {
 
       <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 bg-zinc-50/10 dark:bg-zinc-900/5 custom-scrollbar">
         {!selectedHeader ? (
-          <TransactionHeaderWorkspace selectedHeader={selectedHeader} onSelect={setSelectedHeader} />
+          <TransactionHeaderWorkspace
+            selectedHeader={selectedHeader}
+            onSelect={setSelectedHeader}
+            autoOpenCreate={createHeaderOnOpen}
+            onCloseCreate={() => setCreateHeaderOnOpen(false)}
+          />
         ) : (
           <div className="space-y-4 w-full max-w-6xl mx-auto">
             {/* Step Header Card */}
@@ -153,6 +166,7 @@ export default function MeteredBillingCreationModule() {
                     salesInvoice={billingContext.invoice}
                     perInvoice={perInvoice}
                     autoPeriodFrom={autoPeriodFrom}
+                    currentUserId={currentUser?.id ?? null}
                     onSuccess={handleSuccess}
                     onCancel={handleCancel}
                   />

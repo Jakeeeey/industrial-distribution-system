@@ -119,7 +119,8 @@ export interface CreationCustomerSite extends CustomerSite {
 export function useMeteredBillingCreation(
   transactionHeader?: LpgTransactionHeader | null,
   initialFlowType?: "ROUTINE" | "ONBOARDING" | null,
-  salesInvoice?: InvoiceInfo | null
+  salesInvoice?: InvoiceInfo | null,
+  currentUserId?: number | null
 ) {
   const initialType = initialFlowType === "ONBOARDING" ? "ONBOARDING_BASELINE" : "REGULAR_BILLING";
   const [form, setForm] = useState<MeteredBillingFormState>(() => defaultFormState(initialType));
@@ -675,6 +676,7 @@ export function useMeteredBillingCreation(
           billing_period_from: form.billingPeriodFrom || null,
           billing_period_to: form.billingPeriodTo || null,
           transaction_header_id: form.transaction_header_id,
+          created_by: currentUserId ?? undefined,
           attachments: [
             ...(form.meteredReadingImageId
               ? [
@@ -759,6 +761,7 @@ export function useMeteredBillingCreation(
       meterDirection,
       conversionFactor,
       txId,
+      currentUserId,
     ]
   );
 

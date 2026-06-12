@@ -99,31 +99,47 @@ export function CreateBillingWorkspace({ header, onProceed, onCancel }: CreateBi
       if (isMounted) setLoading(true);
     }, 0);
     
-    const url = `/api/ids/scm/inventory-management/inventory-control?directusCollection=sales_invoice&limit=-1&fields=invoice_id,invoice_no,invoice_date,total_amount,transaction_status,customer_code,order_id.order_id,order_id.order_no&filter[transaction_status][_eq]=En Route&filter[customer_code][_eq]=${encodeURIComponent(header.customer_id)}`;
-    fetch(url)
-      .then((res) => res.json())
-      .then((json) => {
+    const invoicesUrl = `/api/ids/scm/inventory-management/inventory-control?directusCollection=sales_invoice&limit=-1&fields=invoice_id,invoice_no,invoice_date,total_amount,transaction_status,customer_code,order_id.order_id,order_id.order_no&filter[transaction_status][_eq]=En Route&filter[customer_code][_eq]=${encodeURIComponent(header.customer_id)}`;
+    const postedUrl = `/api/ids/scm/inventory-management/inventory-control?directusCollection=lpg_transaction_header_invoices&limit=-1&fields=sales_invoice_id&filter[status][_eq]=POSTED`;
+    
+    Promise.all([
+      fetch(invoicesUrl).then((res) => res.json()),
+      fetch(postedUrl)
+        .then((res) => res.json())
+        .catch((err) => {
+          console.error("Failed to fetch posted invoices", err);
+          return { data: [] };
+        })
+    ])
+      .then(([invoicesJson, postedJson]) => {
         if (isMounted) {
+          const postedInvoiceIds = new Set<number>(
+            (postedJson.data || []).map((item: { sales_invoice_id: number | string }) => Number(item.sales_invoice_id))
+          );
+
           // Auto-map sales_invoice_no securely into the array so it's ready to POST
-          const mappedInvoices = (json.data || []).map((inv: {
-            invoice_id: number;
-            invoice_no?: string | null;
-            sales_invoice_no?: string | null;
-            invoice_date: string;
-            total_amount: number;
-            transaction_status: string;
-            customer_code?: string;
-            order_id?: {
-              order_id?: number | null;
-              order_no?: string | null;
-            } | null;
-          }) => ({
-            ...inv,
-            invoice_no: inv.invoice_no || inv.sales_invoice_no || "",
-            sales_invoice_no: inv.sales_invoice_no || inv.invoice_no || "",
-            sales_order_id: inv.order_id?.order_id || null,
-            sales_order_no: inv.order_id?.order_no || null
-          }));
+          const mappedInvoices = (invoicesJson.data || [])
+            .map((inv: {
+              invoice_id: number;
+              invoice_no?: string | null;
+              sales_invoice_no?: string | null;
+              invoice_date: string;
+              total_amount: number;
+              transaction_status: string;
+              customer_code?: string;
+              order_id?: {
+                order_id?: number | null;
+                order_no?: string | null;
+              } | null;
+            }) => ({
+              ...inv,
+              invoice_no: inv.invoice_no || inv.sales_invoice_no || "",
+              sales_invoice_no: inv.sales_invoice_no || inv.invoice_no || "",
+              sales_order_id: inv.order_id?.order_id || null,
+              sales_order_no: inv.order_id?.order_no || null
+            }))
+            .filter((inv: { invoice_id: number }) => !postedInvoiceIds.has(inv.invoice_id));
+
           setInvoices(mappedInvoices);
         }
       })
