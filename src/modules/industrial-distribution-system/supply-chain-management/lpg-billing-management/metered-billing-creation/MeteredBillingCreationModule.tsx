@@ -2,15 +2,32 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Gauge } from "lucide-react";
+import { Gauge, FileText, Hash } from "lucide-react";
 import { CreationForm } from "./components/CreationForm";
 import { TransactionHeaderWorkspace } from "./components/TransactionHeaderWorkspace";
 import { CreateBillingWorkspace } from "./components/CreateBillingWorkspace";
 import type { LpgTransactionHeader } from "../metered-billing-common/types";
 
 export default function MeteredBillingCreationModule() {
-  const router = useRouter();
+
   const [formKey, setFormKey] = useState(0);
+
+  /**
+   * PER_INVOICE mode:
+   *   true  — previous reading is resolved using site + customer + sales invoice
+   *           (only looks at transactions tied to the same invoice)
+   *   false — previous reading is resolved using site + customer only
+   *           (last transaction regardless of which invoice it belongs to)
+   */
+  const [perInvoice, setPerInvoice] = useState(true);
+  /**
+   * AUTO_PERIOD_FROM mode (hidden — not shown in UI):
+   *   true  — billingPeriodFrom of the new transaction is auto-set from
+   *            the billing_period_to of the last matching transaction
+   *   false — billingPeriodFrom is left as initialised (from transaction header)
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [autoPeriodFrom, _setAutoPeriodFrom] = useState(false);
   const [selectedHeader, setSelectedHeader] = useState<LpgTransactionHeader | null>(null);
   const [billingContext, setBillingContext] = useState<{
     type: "ROUTINE" | "ONBOARDING";
@@ -30,7 +47,7 @@ export default function MeteredBillingCreationModule() {
     setBillingContext(null);
     setSelectedHeader(null);
     setFormKey((k) => k + 1);
-    router.push("/ids/scm/lpg-billing-management/metered-billing-draft");
+   
   };
 
   const handleCancel = () => {
@@ -56,6 +73,38 @@ export default function MeteredBillingCreationModule() {
               </p>
             </div>
           </div>
+
+          {/* ── PER_INVOICE Toggle ── dont show this*/}
+          {/* <button
+            onClick={() => setPerInvoice((v) => !v)}
+            title={perInvoice
+              ? "Per Invoice: previous reading resolved by site + invoice"
+              : "Per Site: previous reading resolved by site only (any invoice)"}
+            className={[
+              "flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs font-semibold transition-all duration-200 shadow-sm",
+              perInvoice
+                ? "bg-violet-50 dark:bg-violet-900/20 border-violet-200 dark:border-violet-700/40 text-violet-700 dark:text-violet-300"
+                : "bg-zinc-100 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700/40 text-zinc-500 dark:text-zinc-400",
+            ].join(" ")}
+          > */}
+            {/* {perInvoice
+              ? <FileText className="h-3.5 w-3.5 shrink-0" />
+              : <Hash className="h-3.5 w-3.5 shrink-0" />}
+            <span className="hidden sm:inline">
+              {perInvoice ? "Per Invoice" : "Per Site"}
+            </span>
+            {/* pill indicator */}
+            {/* <span className={[
+              "inline-block w-7 h-4 rounded-full relative transition-colors duration-200",
+              perInvoice ? "bg-violet-500" : "bg-zinc-300 dark:bg-zinc-600",
+            ].join(" ")}> */}
+              {/* <span className={[
+                "absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform duration-200",
+                perInvoice ? "translate-x-3.5" : "translate-x-0.5",
+              ].join(" ")} />
+            </span> */} 
+          {/* </button> */}
+          
         </div>
       </div>
 
@@ -102,6 +151,8 @@ export default function MeteredBillingCreationModule() {
                     transactionHeader={selectedHeader}
                     initialFlowType={billingContext.type}
                     salesInvoice={billingContext.invoice}
+                    perInvoice={perInvoice}
+                    autoPeriodFrom={autoPeriodFrom}
                     onSuccess={handleSuccess}
                     onCancel={handleCancel}
                   />

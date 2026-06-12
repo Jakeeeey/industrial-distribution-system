@@ -1,13 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarRange, Loader2, Plus, RefreshCw, Search } from "lucide-react";
+import { CalendarRange, RefreshCw, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import type { CustomerSite, LpgTransactionHeader } from "../../metered-billing-common/types";
+import type { LpgTransactionHeader } from "../../metered-billing-common/types";
 
 interface Props {
   selectedHeader: LpgTransactionHeader | null;
@@ -16,7 +13,6 @@ interface Props {
 
 export function TransactionHeaderWorkspace({ selectedHeader, onSelect }: Props) {
   const [headers, setHeaders] = useState<LpgTransactionHeader[]>([]);
-  const [sites, setSites] = useState<CustomerSite[]>([]);
   const [customers, setCustomers] = useState<{ customer_code: string; customer_name: string }[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
@@ -24,14 +20,12 @@ export function TransactionHeaderWorkspace({ selectedHeader, onSelect }: Props) 
   const load = async () => {
     setLoading(true);
     try {
-      const [headersRes, sitesRes, customersRes] = await Promise.all([
+      const [headersRes, customersRes] = await Promise.all([
         fetch("/api/ids/scm/lpg-billing-management/metered-billing?type=headers"),
-        fetch("/api/ids/scm/lpg-billing-management/metered-billing?type=sites"),
         fetch("/api/ids/scm/lpg-billing-management/metered-billing?type=customers"),
       ]);
-      const [headersJson, sitesJson, customersJson] = await Promise.all([headersRes.json(), sitesRes.json(), customersRes.json()]);
+      const [headersJson, customersJson] = await Promise.all([headersRes.json(), customersRes.json()]);
       setHeaders(headersJson.data ?? []);
-      setSites(sitesJson.data ?? []);
       setCustomers(customersJson.data ?? []);
     } finally {
       setLoading(false);
@@ -95,7 +89,7 @@ export function TransactionHeaderWorkspace({ selectedHeader, onSelect }: Props) 
                   {header.status}
                 </span>
               </div>
-              <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 line-clamp-1">{header.site?.site_name || `Site #${header.customer_site_id}`}</p>
+              <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 line-clamp-1">{header.site?.site_name || `Unknown Site`}</p>
               <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{customers.find(c => c.customer_code === header.customer_id)?.customer_name || header.customer_name || header.customer_id}</p>
               <div className="mt-auto pt-3 flex items-center justify-between text-xs text-muted-foreground border-t border-zinc-100 dark:border-zinc-800 mt-3">
                 <span className="flex items-center gap-1"><CalendarRange className="h-3 w-3" /> {header.period_from}</span>

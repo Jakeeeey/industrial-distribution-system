@@ -21,6 +21,8 @@ interface Props {
   psi?: number;
   /** Computed Pressure Line = (PSI + CF) / CF (e.g. 1.6803) */
   pressureLine?: number;
+  previousReading?: number;
+  currentReading?: number;
 }
 
 export function MeteredBillingSummaryCard(props: Props) {
@@ -36,9 +38,15 @@ export function MeteredBillingSummaryCard(props: Props) {
     lpgVapor,
     psi = 0,
     pressureLine,
+    previousReading,
+    currentReading,
   } = props;
 
-  const hasPsi = psi > 0;
+  const activeLpgVapor = lpgVapor ?? 2.0183;
+  const activePressureLine = pressureLine ?? 1.0000;
+  const activePsi = psi ?? 0;
+  const activePrevReading = previousReading ?? 0;
+  const activeCurrReading = currentReading ?? 0;
 
   return (
     <div className="bg-gradient-to-br from-violet-600 via-purple-700 to-indigo-800 rounded-2xl p-6 text-white shadow-2xl shadow-violet-500/30 space-y-4">
@@ -75,49 +83,55 @@ export function MeteredBillingSummaryCard(props: Props) {
             <span className="text-sm font-semibold">Billable Source</span>
           </div>
           <Badge
-            className={`font-bold text-xs tracking-wider border-none ${
-              billableSource === "METERED"
+            className={`font-bold text-xs tracking-wider border-none ${billableSource === "METERED"
                 ? "bg-blue-300/30 text-blue-100"
                 : "bg-orange-300/30 text-orange-100"
-            }`}
+              }`}
           >
             {billableSource}
           </Badge>
         </div>
       )}
 
-      {/* PSI Conversion — matching billing table columns */}
-      {hasPsi && lpgVapor !== undefined && pressureLine !== undefined && (
-        <div className="bg-white/10 rounded-xl overflow-hidden">
-          <div className="px-3 py-1.5 bg-white/10 border-b border-white/10">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-white/70">PSI Conversion</p>
-          </div>
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-white/10">
-                <th className="text-right px-3 py-1.5 text-[10px] font-bold text-violet-200 uppercase tracking-wider">
-                  Pressure Line
-                </th>
-                <th className="text-right px-3 py-1.5 text-[10px] font-bold text-orange-200 uppercase tracking-wider">
-                  LPG Vapor
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                {/* Pressure Line column = LPG Vapor constant (matching physical bill table) */}
-                <td className="text-right px-3 py-2 font-mono font-bold text-violet-200">
-                  {lpgVapor.toFixed(4)}
-                </td>
-                {/* LPG Vapor column = computed pressure line (matching physical bill table) */}
-                <td className="text-right px-3 py-2 font-mono font-bold text-orange-200">
-                  {pressureLine.toFixed(4)}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+      {/* Comprehensive Calculation Details */}
+      <div className="bg-white/10 rounded-xl p-3.5 space-y-2 text-xs">
+        <div className="border-b border-white/10 pb-1.5 flex justify-between items-center">
+          <span className="font-bold text-[10px] uppercase tracking-widest text-violet-200">Calculation Details</span>
+          <span className="text-[9px] bg-white/20 px-2 py-0.5 rounded font-mono">
+            {activePsi > 0 ? "Usage × Vapor × Factor" : "Usage × Vapor"}
+          </span>
         </div>
-      )}
+        <div className="space-y-1 text-violet-100 font-mono">
+          <div className="flex justify-between">
+            <span>Present Reading</span>
+            <span>{activeCurrReading.toFixed(3)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Previous Reading</span>
+            <span>{activePrevReading.toFixed(3)}</span>
+          </div>
+          <div className="flex justify-between border-t border-white/10 pt-1 text-white font-bold">
+            <span>Consumption (Usage)</span>
+            <span>{Math.abs(activeCurrReading - activePrevReading).toFixed(3)}</span>
+          </div>
+        </div>
+        <div className="space-y-1 text-violet-100 font-mono border-t border-white/10 pt-1.5">
+          <div className="flex justify-between">
+            <span>LPG Vapor Constant</span>
+            <span>{activeLpgVapor.toFixed(4)}</span>
+          </div>
+          {activePsi > 0 && (
+            <div className="flex justify-between">
+              <span>Vapor Factor (PSI: {activePsi.toFixed(1)})</span>
+              <span>{activePressureLine.toFixed(4)}</span>
+            </div>
+          )}
+        </div>
+        <div className="flex justify-between text-white font-bold border-t border-dashed border-white/20 pt-1.5">
+          <span className="text-violet-200">Computed Metered KG</span>
+          <span className="font-mono">{Number(meteredKg).toFixed(4)} kg</span>
+        </div>
+      </div>
 
       {/* Billing breakdown */}
       <div className="space-y-2.5 text-sm">

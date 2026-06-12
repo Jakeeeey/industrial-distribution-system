@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, {useEffect, useState, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -51,6 +51,22 @@ interface Props {
   onCancel: () => void;
   transactionHeader?: LpgTransactionHeader | null;
   initialFlowType?: "ROUTINE" | "ONBOARDING" | null;
+  /**
+   * PER_INVOICE mode (default: true)
+   *   true  — resolve previous reading by site + customer + sales invoice
+   *   false — resolve previous reading by site + customer only (any invoice)
+   */
+  perInvoice?: boolean;
+  /**
+   * AUTO_PERIOD_FROM mode (default: true, hidden from UI)
+   *   true  — set billingPeriodFrom from the last reading's billing_period_to
+   *   false — leave billingPeriodFrom as initialised (from transaction header)
+   */
+  autoPeriodFrom?: boolean;
+
+  
+
+
   salesInvoice?: {
     invoice_id: number;
     invoice_no: string;
@@ -89,7 +105,7 @@ const TX_TYPE_LABELS: Record<
 
 type MobileTab = "details" | "readings" | "review";
 
-export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFlowType, salesInvoice }: Props) {
+export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFlowType, salesInvoice, perInvoice = true, autoPeriodFrom = true }: Props) {
   const [activeTab, setActiveTab] = useState<MobileTab>("details");
 
   const {
@@ -121,6 +137,87 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
     pressureLine,
   } = useMeteredBillingCreation(transactionHeader, initialFlowType, salesInvoice);
 
+
+
+
+  // ─── AUTO-FETCH PREVIOUS READING ──────────────────────────────────────────
+  // Fetches the current_reading from the most recent matching transaction
+  // and uses it as the new previousReading.
+  //   perInvoice=true  → filter by site + customer + invoice (per-invoice chaining)
+  //   perInvoice=false → filter by site + customer only (last reading for site)
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchLastReading = async () => {
+      // Always require siteId + customerCode; skip for onboarding baselines
+      if (!form.siteId || !form.customerCode || isOnboarding) return;
+      // In per-invoice mode, salesInvoiceNo must also be available
+      if (perInvoice && !form.salesInvoiceNo) return;
+
+      try {
+        const params = new URLSearchParams({
+          siteId: form.siteId.toString(),
+          customerCode: form.customerCode,
+        });
+        // Attach invoice filter only when perInvoice is enabled
+        if (perInvoice && form.salesInvoiceNo) {
+          params.set("salesInvoiceNo", form.salesInvoiceNo);
+        }
+
+        const res = await fetch(
+          `/api/ids/scm/lpg-billing-management/metered-billing/last-reading?${params}`
+        );
+
+        if (!res.ok) {
+          throw new Error(`Failed to fetch previous reading context (${res.status}).`);
+        }
+
+        const data = await res.json();
+
+        // Only update if the API actually found a prior transaction (not null)
+        if (isMounted && data !== null && data?.last_current_reading !== undefined) {
+          setForm((f) => ({
+            ...f,
+            previousReading: Number(data.last_current_reading),
+            // AUTO_PERIOD_FROM: use billing_period_to of last reading as new period start
+            // When false: lock period from/to to the transaction header values
+            ...(autoPeriodFrom && data.billing_period_to
+              ? { billingPeriodFrom: String(data.billing_period_to) }
+              : transactionHeader
+                ? {
+                    billingPeriodFrom: transactionHeader.period_from,
+                    billingPeriodTo: transactionHeader.period_to,
+                  }
+                : {}),
+          }));
+
+          toast.info(
+            perInvoice
+              ? "Previous reading auto-resolved from the last invoice transaction."
+              : "Previous reading auto-resolved from the last site transaction.",
+            { icon: <Gauge className="h-4 w-4 text-blue-500" /> }
+          );
+        }
+      } catch (error) {
+        console.error("[fetchLastReading]", error);
+      }
+    };
+
+    fetchLastReading();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    form.siteId,
+    form.customerCode,
+    form.salesInvoiceNo,
+    isOnboarding,
+    perInvoice,
+    autoPeriodFrom,
+    setForm,
+  ]);
+  // ──────────────────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
     const ok = await submit("DRAFT");
     if (ok) {
@@ -136,6 +233,48 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
   };
 
   const txTypeMeta = TX_TYPE_LABELS[form.transactionType] || TX_TYPE_LABELS.REGULAR_BILLING;
+
+  const getValidationErrors = () => {
+    const errors: string[] = [];
+    if (!form.siteId) {
+      errors.push("LPG Site must be selected.");
+    }
+    if (!isValidReading) {
+      errors.push(
+        `Meter reading sequence is invalid (Current reading must be ${
+          meterDirection === "DECREASING"
+            ? "less than or equal to"
+            : "greater than or equal to"
+        } the previous reading ${form.previousReading}).`
+      );
+    }
+    if (!form.meteredReadingImageId) {
+      errors.push("Meter Visual Evidence image upload is required.");
+    }
+    if (!form.psiReadingImageId) {
+      errors.push("PSI Evidence image upload is required.");
+    }
+    if (!isOnboarding) {
+      if (!form.customerCode) {
+        errors.push("Customer Code must be resolved.");
+      }
+      if (arbitration.billable_kg <= 0) {
+        errors.push("Billable consumption (KG) must be greater than 0.");
+      }
+      if (netAmount <= 0) {
+        errors.push("Net amount must be greater than 0.");
+      }
+      const hasVariance = Number(arbitration.variance_kg) > 0;
+      if (hasVariance && !form.remarks.trim()) {
+        errors.push(
+          "Internal Remarks are required due to variance between metered and WIWO weight."
+        );
+      }
+    }
+    return errors;
+  };
+
+  const validationErrors = getValidationErrors();
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12">
@@ -186,6 +325,11 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
         </div>
 
         <div className="flex items-center gap-3 w-full sm:w-auto">
+          {!canPost && (
+            <span className="hidden md:inline-flex items-center text-xs font-semibold text-rose-500 bg-rose-50 dark:bg-rose-500/10 px-2.5 py-1.5 rounded-lg border border-rose-200 dark:border-rose-900/30">
+              Required inputs incomplete
+            </span>
+          )}
           <Button
             variant="outline"
             onClick={onCancel}
@@ -299,7 +443,7 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
                         <SelectItem key={String(site.id)} value={String(site.id)}>
                           {site.site_name
                             ? `${site.site_name} (${site.customer_code})`
-                            : `Site #${site.id} (${site.customer_code})`}
+                            : `No Custome Site Name`}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -464,6 +608,7 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
                             previousReading: Number(e.target.value),
                           }))
                         }
+                        disabled
                         className="font-mono bg-white dark:bg-zinc-900"
                       />
                     </div>
@@ -503,6 +648,7 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
                         setForm((f) => ({ ...f, meteredReadingImageId: id }))
                       }
                       isReadOnly={false}
+                      required={true}
                       uploadEndpoint="/api/ids/scm/lpg-billing-management/metered-billing/upload"
                       previewClassName="aspect-square w-[220px] rounded-xl shadow-sm"
                     />
@@ -558,8 +704,8 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
                             configLpgVapor: Number(e.target.value),
                           }))
                         }
-                        className="font-mono bg-white dark:bg-zinc-900"
-                        placeholder="2.0183"
+                        className="font-mono bg-white dark:bg-zinc-900 text-muted-foreground"
+                        readOnly
                       />
                     </div>
                     <div className="space-y-2.5">
@@ -576,7 +722,7 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
                           }))
                         }
                         className="font-mono bg-white dark:bg-zinc-900"
-                        placeholder="10.0"
+                   
                       />
                     </div>
                     <div className="space-y-2.5 pt-2">
@@ -592,8 +738,8 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
                             configCorrectionFactor: Number(e.target.value),
                           }))
                         }
-                        className="font-mono bg-white dark:bg-zinc-900"
-                        placeholder="14.7"
+                        className="font-mono bg-white dark:bg-zinc-900 text-muted-foreground"
+                        readOnly
                       />
                     </div>
                   </div>
@@ -606,6 +752,7 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
                         setForm((f) => ({ ...f, psiReadingImageId: id }))
                       }
                       isReadOnly={false}
+                      required={true}
                       uploadEndpoint="/api/ids/scm/lpg-billing-management/metered-billing/upload"
                       previewClassName="aspect-square w-[220px] rounded-xl shadow-sm"
                       compact
@@ -753,6 +900,11 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
                 netAmount={netAmount}
                 pricePerKg={form.pricePerKg}
                 isMeteredOnly={!form.wiwoHeaderId}
+                lpgVapor={form.configLpgVapor}
+                psi={form.configPsi}
+                pressureLine={pressureLine}
+                previousReading={form.previousReading}
+                currentReading={form.currentReading}
               />
             )}
 
@@ -780,6 +932,20 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
                 />
               </div>
             </div>
+
+            {!canPost && (
+              <div className="bg-rose-50/80 dark:bg-rose-950/10 border border-rose-200 dark:border-rose-900/30 rounded-2xl p-5 space-y-3 shadow-sm animate-in fade-in">
+                <div className="flex items-center gap-2 text-rose-800 dark:text-rose-400">
+                  <AlertTriangle className="h-4.5 w-4.5 shrink-0" />
+                  <span className="font-bold text-sm">Posting Requirements</span>
+                </div>
+                <ul className="list-disc pl-5 space-y-1 text-xs text-rose-700/95 dark:text-rose-400/90">
+                  {validationErrors.map((err, idx) => (
+                    <li key={idx}>{err}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -833,6 +999,7 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
   );
 }
 
+
 // ─── Image Upload Field Component ───────────────────────────────────────────
 
 interface ImageUploadFieldProps {
@@ -840,6 +1007,7 @@ interface ImageUploadFieldProps {
   imageId: string;
   onChange: (id: string) => void;
   isReadOnly: boolean;
+  required?: boolean;
   folderName?: string;
   uploadEndpoint: string;
   previewClassName?: string;
@@ -851,6 +1019,7 @@ export function ImageUploadField({
   imageId,
   onChange,
   isReadOnly,
+  required = false,
   folderName = "metered_billing_attachments",
   uploadEndpoint,
   previewClassName,
@@ -861,7 +1030,11 @@ export function ImageUploadField({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const hasError = required && !imageId;
+
+  const handleFileChange = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -873,6 +1046,7 @@ export function ImageUploadField({
     }
 
     setUploading(true);
+
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -882,17 +1056,26 @@ export function ImageUploadField({
         method: "POST",
         body: formData,
       });
+
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error || "Upload failed");
       }
 
       const result = await res.json();
+
       onChange(result.data.id);
+
       toast.success(`${label} attached successfully`);
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : "Could not process image";
-      toast.error("Upload error", { description: msg });
+      const msg =
+        error instanceof Error
+          ? error.message
+          : "Could not process image";
+
+      toast.error("Upload error", {
+        description: msg,
+      });
     } finally {
       setUploading(false);
     }
@@ -900,21 +1083,27 @@ export function ImageUploadField({
 
   const previewUrl = imageId
     ? `/api/ids/scm/lpg-billing-management/metered-billing/asset?id=${encodeURIComponent(
-      imageId
-    )}`
+        imageId
+      )}`
     : null;
 
   return (
     <div className="space-y-2.5 w-full">
       <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider block">
         {label}
+        {required && <span className="text-red-500 ml-1">*</span>}
       </Label>
 
       {previewUrl ? (
         <>
           <div
-            className={`relative group overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center rounded-xl shadow-sm transition-all hover:ring-2 hover:ring-violet-500/50 ${previewClassName ?? "h-32 w-full"
-              }`}
+            className={`relative group overflow-hidden border ${
+              hasError
+                ? "border-red-400"
+                : "border-zinc-200 dark:border-zinc-800"
+            } bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center rounded-xl shadow-sm transition-all hover:ring-2 hover:ring-violet-500/50 ${
+              previewClassName ?? "h-32 w-full"
+            }`}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -923,6 +1112,7 @@ export function ImageUploadField({
               onClick={() => setIsPreviewOpen(true)}
               className="object-cover h-full w-full cursor-zoom-in"
             />
+
             {!isReadOnly && (
               <div className="absolute inset-0 bg-zinc-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[1px] pointer-events-none">
                 <Button
@@ -942,7 +1132,10 @@ export function ImageUploadField({
             )}
           </div>
 
-          <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+          <Dialog
+            open={isPreviewOpen}
+            onOpenChange={setIsPreviewOpen}
+          >
             <DialogContent
               showCloseButton={false}
               aria-describedby={undefined}
@@ -952,6 +1145,7 @@ export function ImageUploadField({
                 <DialogTitle className="font-semibold text-zinc-900 dark:text-zinc-100 text-sm">
                   {label}
                 </DialogTitle>
+
                 <DialogClose asChild>
                   <Button
                     size="icon"
@@ -962,6 +1156,7 @@ export function ImageUploadField({
                   </Button>
                 </DialogClose>
               </div>
+
               <div className="p-6 bg-zinc-100/50 dark:bg-black/20 flex justify-center items-center min-h-[50vh]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
@@ -995,11 +1190,20 @@ export function ImageUploadField({
           />
 
           <div
-            onClick={() => !isReadOnly && !uploading && fileInputRef.current?.click()}
-            className={`relative group transition-all duration-200 rounded-xl overflow-hidden border-2 border-dashed ${isReadOnly
-              ? "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 cursor-not-allowed"
-              : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 hover:border-violet-400 dark:hover:border-violet-600 hover:bg-violet-50/50 dark:hover:bg-violet-500/5 cursor-pointer"
-              } flex items-center justify-center ${previewClassName ?? "h-32 w-full"}`}
+            onClick={() =>
+              !isReadOnly &&
+              !uploading &&
+              fileInputRef.current?.click()
+            }
+            className={`relative group transition-all duration-200 rounded-xl overflow-hidden border-2 border-dashed ${
+              hasError
+                ? "border-red-400 bg-red-50/30 dark:bg-red-950/10"
+                : isReadOnly
+                ? "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 cursor-not-allowed"
+                : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 hover:border-violet-400 dark:hover:border-violet-600 hover:bg-violet-50/50 dark:hover:bg-violet-500/5 cursor-pointer"
+            } flex items-center justify-center ${
+              previewClassName ?? "h-32 w-full"
+            }`}
           >
             <div className="flex flex-col items-center justify-center gap-2 p-4 text-center">
               {uploading ? (
@@ -1007,22 +1211,32 @@ export function ImageUploadField({
               ) : (
                 <>
                   <ImagePlus
-                    className={`h-6 w-6 mb-1 ${isReadOnly
-                      ? "text-zinc-300 dark:text-zinc-700"
-                      : "text-zinc-400 group-hover:text-violet-500 transition-colors"
-                      }`}
+                    className={`h-6 w-6 mb-1 ${
+                      hasError
+                        ? "text-red-500"
+                        : isReadOnly
+                        ? "text-zinc-300 dark:text-zinc-700"
+                        : "text-zinc-400 group-hover:text-violet-500 transition-colors"
+                    }`}
                   />
+
                   {!compact && (
                     <div className="space-y-1">
                       <span
-                        className={`text-sm font-medium ${isReadOnly
-                          ? "text-zinc-400"
-                          : "text-zinc-600 dark:text-zinc-300 group-hover:text-violet-700 dark:group-hover:text-violet-400"
-                          }`}
+                        className={`text-sm font-medium ${
+                          hasError
+                            ? "text-red-600"
+                            : isReadOnly
+                            ? "text-zinc-400"
+                            : "text-zinc-600 dark:text-zinc-300 group-hover:text-violet-700 dark:group-hover:text-violet-400"
+                        }`}
                       >
                         Click to upload
                       </span>
-                      <p className="text-[10px] text-zinc-400">PNG, JPG up to 10MB</p>
+
+                      <p className="text-[10px] text-zinc-400">
+                        PNG, JPG up to 10MB
+                      </p>
                     </div>
                   )}
                 </>
@@ -1047,6 +1261,12 @@ export function ImageUploadField({
               </div>
             )}
           </div>
+
+          {hasError && (
+            <p className="mt-2 text-xs text-red-500">
+              {label} is required.
+            </p>
+          )}
         </div>
       )}
     </div>

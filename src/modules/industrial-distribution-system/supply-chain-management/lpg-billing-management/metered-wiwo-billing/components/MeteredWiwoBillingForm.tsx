@@ -359,7 +359,7 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                           >
                             {site.site_name
                               ? `${site.site_name} (${site.customer_code})`
-                              : `Site #${site.id} (${site.customer_code})`}
+                              : `No Customer Site Name (${site.customer_code})`}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -887,6 +887,11 @@ export function MeteredWiwoBillingForm({ txId, onSuccess, onCancel }: Props) {
                 netAmount={netAmount}
                 pricePerKg={form.pricePerKg}
                 isMeteredOnly={!form.wiwoHeaderId}
+                lpgVapor={form.configLpgVapor}
+                psi={form.configPsi}
+                pressureLine={pressureLine}
+                previousReading={form.previousReading}
+                currentReading={form.currentReading}
               />
             )}
 

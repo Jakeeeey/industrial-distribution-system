@@ -366,6 +366,63 @@ export async function fetchLastMeteredTransaction(
   return tx ? mapTxRecord(tx) : null;
 }
 
+/**
+ * Returns the current_reading and billing_period_to from the most recent
+ * posted/draft transaction that matches the given site + customer, optionally
+ * filtered by sales invoice.
+ *   - When salesInvoiceNo is provided: per-invoice chaining
+ *   - When salesInvoiceNo is omitted:  per-site chaining (any invoice)
+ */
+export async function fetchLastReadingByInvoice(
+  siteId: number,
+  customerCode: string,
+  salesInvoiceNo?: string,
+): Promise<{
+  last_current_reading: number;
+  transaction_date: string;
+  billing_period_to: string | null;
+} | null> {
+  if (!siteId || !customerCode) return null;
+
+  const andConditions: Record<string, unknown>[] = [
+    { lpg_site_id: { _eq: siteId } },
+    { customer_code: { _eq: customerCode } },
+  ];
+
+  if (salesInvoiceNo) {
+    andConditions.push({ sales_invoice_no: { _eq: salesInvoiceNo } });
+  }
+
+  const filter = encodeURIComponent(JSON.stringify({ _and: andConditions }));
+
+  const res = await directusFetch<{ data: Record<string, unknown>[] }>(
+    `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions` +
+      `?fields=id,transaction_date,billing_period_to,meter_reading_id.*` +
+      `&filter=${filter}` +
+      `&sort=-transaction_date,-id` +
+      `&limit=1`,
+  );
+
+  const raw = res.data?.[0];
+  if (!raw) return null;
+
+  const mrObj =
+    raw["meter_reading_id"] && typeof raw["meter_reading_id"] === "object"
+      ? (raw["meter_reading_id"] as Record<string, unknown>)
+      : null;
+
+  const currentReading = mrObj ? Number(mrObj["current_reading"] ?? 0) : 0;
+  const billingPeriodTo = raw["billing_period_to"]
+    ? String(raw["billing_period_to"])
+    : null;
+
+  return {
+    last_current_reading: currentReading,
+    transaction_date: String(raw["transaction_date"] ?? ""),
+    billing_period_to: billingPeriodTo,
+  };
+}
+
 export async function fetchMeteredTransactionById(
   id: number,
 ): Promise<MeteredWiwoTransaction | null> {
@@ -558,61 +615,6 @@ async function buildBridgePayload(
   return data;
 }
 
-async function createTransactionHeader(
-  payload: Partial<MeteredWiwoTransaction>,
-  userId?: number,
-): Promise<number> {
-  const data = {
-    header_no: payload.transaction_no || payload.reading_no,
-    customer_id: payload.customer_code,
-    customer_site_id: payload.lpg_site_id,
-    period_from: payload.billing_period_from || payload.transaction_date || new Date().toISOString().split("T")[0],
-    period_to: payload.billing_period_to || payload.transaction_date || new Date().toISOString().split("T")[0],
-    status: payload.status || "DRAFT",
-    is_billed: payload.sales_invoice_id ? 1 : 0,
-    remarks: payload.remarks || null,
-    created_by: userId || null,
-    ...(payload.status === "POSTED" ? { posted_by: userId, posted_at: new Date().toISOString() } : {}),
-    ...(payload.status === "CANCELLED" ? { cancelled_by: userId, cancelled_at: new Date().toISOString(), cancelled_reason: payload.cancelled_reason } : {}),
-  };
-
-  const res = await directusFetch<{ data: { header_id: number } }>(
-    `${DIRECTUS_URL}/items/lpg_transaction_headers`,
-    { method: "POST", body: JSON.stringify(data) }
-  );
-  return res.data.header_id;
-}
-
-async function updateTransactionHeader(
-  headerId: number,
-  payload: Partial<MeteredWiwoTransaction>,
-  userId?: number,
-): Promise<void> {
-  const data: Record<string, unknown> = {};
-  if (payload.customer_code !== undefined) data.customer_id = payload.customer_code;
-  if (payload.lpg_site_id !== undefined) data.customer_site_id = payload.lpg_site_id;
-  if (payload.billing_period_from !== undefined) data.period_from = payload.billing_period_from;
-  if (payload.billing_period_to !== undefined) data.period_to = payload.billing_period_to;
-  if (payload.status !== undefined) data.status = payload.status;
-  if (payload.sales_invoice_id !== undefined) data.is_billed = payload.sales_invoice_id ? 1 : 0;
-  if (payload.remarks !== undefined) data.remarks = payload.remarks;
-
-  if (userId) {
-    if (payload.status === "POSTED") {
-      data.posted_by = userId;
-      data.posted_at = new Date().toISOString();
-    } else if (payload.status === "CANCELLED") {
-      data.cancelled_by = userId;
-      data.cancelled_at = new Date().toISOString();
-      data.cancelled_reason = payload.cancelled_reason || null;
-    }
-  }
-
-  await directusFetch(
-    `${DIRECTUS_URL}/items/lpg_transaction_headers/${headerId}`,
-    { method: "PATCH", body: JSON.stringify(data) }
-  );
-}
 
 // ─── Public: Create ───────────────────────────────────────────────────────────
 

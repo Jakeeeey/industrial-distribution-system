@@ -21,6 +21,7 @@ import {
 } from "../../metered-billing-common/utils/calc";
 import { createMeteredTransaction } from "../providers/create.provider";
 import { mapMeteredTransaction } from "../../metered-wiwo-billing/hooks/useMeteredWiwoBilling";
+import { lpgSiteService } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/lpg-site-management/services/lpgSiteService";
 
 export interface MeteredBillingFormState {
   transactionNo: string;
@@ -135,7 +136,6 @@ export function useMeteredBillingCreation(
   const [meterReadings, setMeterReadings] = useState<MeterReading[]>([]);
   const [wiwoHeaders, setWiwoHeaders] = useState<WiwoHeaderRef[]>([]);
   const [sitesLoading, setSitesLoading] = useState(false);
-  const [customersLoading, setCustomersLoading] = useState(false);
   const [readingsLoading, setReadingsLoading] = useState(false);
   const [wiwoLoading, setWiwoLoading] = useState(false);
 
@@ -152,13 +152,11 @@ export function useMeteredBillingCreation(
 
   // Load customers on mount
   useEffect(() => {
-    setCustomersLoading(true);
     window
       .fetch("/api/ids/scm/lpg-billing-management/metered-billing?type=customers")
       .then((r) => r.json())
       .then((d) => setCustomers(d.data ?? []))
-      .catch(console.error)
-      .finally(() => setCustomersLoading(false));
+      .catch(console.error);
   }, []);
 
   // Map header and invoice inputs to form state
@@ -204,9 +202,11 @@ export function useMeteredBillingCreation(
       configLpgVapor: lpgVapor,
       configPsi: psi,
       configCorrectionFactor: cf,
-      billingPeriodFrom: transactionHeader.period_from,
-      billingPeriodTo: transactionHeader.period_to,
-      previousReading: site ? Number(site.last_meter_reading ?? 0) : Number(transactionHeader.site?.last_meter_reading ?? 0),
+
+      // billingPeriodFrom: transactionHeader.period_from,
+      // billingPeriodTo: transactionHeader.period_to,
+      // previousReading: site ? Number(site.last_meter_reading ?? 0) : Number(transactionHeader.site?.last_meter_reading ?? 0), uncomment because  this one is taking the last transaction previous not current 
+
       currentReading: 0,
       transaction_header_id: transactionHeader.header_id ?? null,
       transactionType: txType,
@@ -611,13 +611,15 @@ export function useMeteredBillingCreation(
   const hasVariance = !isOnboarding && Number(arbitration.variance_kg) > 0;
 
   const canPost = isOnboarding
-    ? !!form.siteId && isValidReading
+    ? !!form.siteId && isValidReading && !!form.meteredReadingImageId && !!form.psiReadingImageId
     : arbitration.billable_kg > 0 &&
     netAmount > 0 &&
     !!form.customerCode &&
     !!form.siteId &&
     isValidReading &&
-    (!hasVariance || !!form.remarks.trim());
+    (!hasVariance || !!form.remarks.trim()) &&
+    !!form.meteredReadingImageId &&
+    !!form.psiReadingImageId;
 
   const meterUnit = (selectedSite?.meter_unit ?? "KG") as "M3" | "LITER" | "KG" | "UNIT";
 
@@ -720,6 +722,21 @@ export function useMeteredBillingCreation(
               configCorrectionFactor: form.configCorrectionFactor,
             })
           );
+        }
+
+        // Persist PSI constants back to lpg_customer_lpg_sites so the site
+        // record always reflects the values used in the most recent billing.
+        if (form.siteId) {
+          try {
+            await lpgSiteService.updateSite(form.siteId, {
+              default_pressure_line: form.configLpgVapor,
+              default_psi: form.configPsi,
+              default_atmospheric_pressure: form.configCorrectionFactor,
+            });
+          } catch (siteErr) {
+            // Non-fatal: transaction already saved; log but don't block.
+            console.warn("[useMeteredBillingCreation] Failed to sync PSI constants back to site:", siteErr);
+          }
         }
 
         return true;
