@@ -8,7 +8,11 @@ import { TransactionHeaderWorkspace } from "./components/TransactionHeaderWorksp
 import { CreateBillingWorkspace } from "./components/CreateBillingWorkspace";
 import type { LpgTransactionHeader } from "../metered-billing-common/types";
 
-export default function MeteredBillingCreationModule() {
+interface MeteredBillingCreationModuleProps {
+  currentUser?: { id: number; name: string } | null;
+}
+
+export default function MeteredBillingCreationModule({ currentUser }: MeteredBillingCreationModuleProps = {}) {
 
   const [formKey, setFormKey] = useState(0);
 
@@ -162,6 +166,7 @@ export default function MeteredBillingCreationModule() {
                     salesInvoice={billingContext.invoice}
                     perInvoice={perInvoice}
                     autoPeriodFrom={autoPeriodFrom}
+                    currentUserId={currentUser?.id ?? null}
                     onSuccess={handleSuccess}
                     onCancel={handleCancel}
                   />

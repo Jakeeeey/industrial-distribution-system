@@ -79,6 +79,9 @@ export default async function Page() {
   const token = cookieStore.get(COOKIE_NAME)?.value ?? null;
   const headerUser = buildHeaderUserFromToken(token);
 
+  const payload = token ? decodeJwtPayload(token) : null;
+  const userId = payload?.sub ? Number(payload.sub) : null;
+  const currentUser = userId ? { id: userId, name: headerUser.name } : null;
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <header className="relative z-10 flex h-14 shrink-0 items-center justify-between border-b shadow-sm bg-background sm:h-16 overflow-hidden">
@@ -118,7 +121,7 @@ export default async function Page() {
       </header>
 
       <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4 bg-zinc-50/20 dark:bg-zinc-950/10">
-        <MeteredBillingCreationModule />
+        <MeteredBillingCreationModule currentUser={currentUser} />
       </main>
     </div>
   );

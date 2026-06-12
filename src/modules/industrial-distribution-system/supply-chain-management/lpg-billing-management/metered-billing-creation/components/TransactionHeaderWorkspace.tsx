@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarRange, RefreshCw, Search } from "lucide-react";
+import { CalendarRange, Plus, RefreshCw, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -144,9 +144,10 @@ export function TransactionHeaderWorkspace({ selectedHeader, onSelect, autoOpenC
             <Button
               type="button"
               onClick={() => setIsCreateOpen(true)}
-              className="bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all duration-200 shrink-0"
-            >
-              + New Transaction Header
+              className="bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto">
+
+              <Plus className="h-4 w-4 mr-2" />
+              New Transaction Header
             </Button>
           </div>
           <div className="flex gap-2">
@@ -165,11 +166,10 @@ export function TransactionHeaderWorkspace({ selectedHeader, onSelect, autoOpenC
               type="button"
               key={header.header_id}
               onClick={() => onSelect(header)}
-              className={`w-full text-left rounded-2xl border p-4 transition-all duration-200 group flex flex-col ${
-                selectedHeader?.header_id === header.header_id
+              className={`w-full text-left rounded-2xl border p-4 transition-all duration-200 group flex flex-col ${selectedHeader?.header_id === header.header_id
                   ? "border-violet-500 bg-violet-50 dark:bg-violet-500/10 ring-1 ring-violet-500"
                   : "border-zinc-200 dark:border-zinc-800 hover:border-violet-300 dark:hover:border-violet-700 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
-              }`}
+                }`}
             >
               <div className="flex justify-between gap-2 w-full mb-2">
                 <span className="font-mono text-sm font-bold text-zinc-900 dark:text-zinc-100">{header.header_no || `Header #${header.header_id}`}</span>
@@ -187,8 +187,8 @@ export function TransactionHeaderWorkspace({ selectedHeader, onSelect, autoOpenC
           ))}
           {!loading && filtered.length === 0 && (
             <div className="col-span-full py-12 flex flex-col items-center justify-center text-muted-foreground">
-               <CalendarRange className="h-10 w-10 mb-3 opacity-20" />
-               <p className="text-sm">No transaction headers found.</p>
+              <CalendarRange className="h-10 w-10 mb-3 opacity-20" />
+              <p className="text-sm">No transaction headers found.</p>
             </div>
           )}
         </div>
