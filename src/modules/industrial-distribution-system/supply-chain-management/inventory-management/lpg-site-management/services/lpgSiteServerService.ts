@@ -81,9 +81,6 @@ export const lpgSiteServerService = {
 
     const mappedData = sites.map(site => ({
       ...site,
-      default_pressure_line: site.default_pressure_line ?? 2.0183,
-      default_psi: site.default_psi ?? 10.0,
-      default_atmospheric_pressure: site.default_atmospheric_pressure ?? 14.7,
       customer: customerMap[site.customer_code] || undefined
     }));
 
@@ -99,10 +96,6 @@ export const lpgSiteServerService = {
     const res = await directusFetch<{ data: LpgSite }>(`${DIRECTUS_URL}/items/lpg_customer_lpg_sites/${id}?${query}`);
     const site = res.data;
     if (site) {
-      site.default_pressure_line = site.default_pressure_line ?? 2.0183;
-      site.default_psi = site.default_psi ?? 10.0;
-      site.default_atmospheric_pressure = site.default_atmospheric_pressure ?? 14.7;
-
       if (site.customer_code) {
         try {
           const custRes = await directusFetch<{ data: { customer_code: string; customer_name: string }[] }>(

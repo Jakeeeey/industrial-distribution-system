@@ -51,7 +51,7 @@ export function LpgSiteView({ id, onBack }: LpgSiteViewProps) {
     last_meter_reading: 0,
     conversion_factor: 1.0,
     default_pressure_line: 1.000000,
-    default_psi: 0.0,
+    default_psi: 10.0000,
     default_atmospheric_pressure: 14.7,
     last_reading_date: new Date().toISOString().split("T")[0],
   });
@@ -324,7 +324,7 @@ export function LpgSiteView({ id, onBack }: LpgSiteViewProps) {
                           <tr className="bg-zinc-50/50 dark:bg-zinc-900/20">
                             <td className="px-3 py-2 font-semibold text-zinc-700 dark:text-zinc-300">PSI</td>
                             <td className="px-3 py-2 text-right font-mono font-bold text-zinc-700 dark:text-zinc-300">
-                              {Number(formData?.default_psi ?? 0).toFixed(4)}
+                              {Number(formData?.default_psi).toFixed(4)}
                             </td>
                             <td className="px-3 py-2 text-right text-[10px] text-muted-foreground font-semibold uppercase">CONSTANT</td>
                           </tr>
@@ -338,12 +338,12 @@ export function LpgSiteView({ id, onBack }: LpgSiteViewProps) {
                           <tr className="bg-orange-50/40 dark:bg-orange-950/10">
                             <td className="px-3 py-2 font-semibold text-orange-700 dark:text-orange-400 whitespace-nowrap">PRESSURE LINE</td>
                             <td className="px-3 py-2 text-right font-mono font-bold text-orange-700 dark:text-orange-400">
-                              {Number(formData?.default_psi ?? 0) > 0
-                                ? ((Number(formData?.default_psi ?? 0) + Number(formData?.default_atmospheric_pressure ?? 14.7)) / Number(formData?.default_atmospheric_pressure ?? 14.7)).toFixed(4)
+                              {Number(formData?.default_psi) > 0
+                                ? ((Number(formData?.default_psi) + Number(formData?.default_atmospheric_pressure ?? 14.7)) / Number(formData?.default_atmospheric_pressure ?? 14.7)).toFixed(4)
                                 : "—"}
                             </td>
                             <td className="px-3 py-2 text-right text-[10px] text-orange-600 dark:text-orange-500 font-semibold uppercase whitespace-nowrap">
-                              {Number(formData?.default_psi ?? 0) > 0 ? "PSI + CF / CF" : "N/A"}
+                              {Number(formData?.default_psi) > 0 ? "PSI + CF / CF" : "N/A"}
                             </td>
                           </tr>
                         </tbody>

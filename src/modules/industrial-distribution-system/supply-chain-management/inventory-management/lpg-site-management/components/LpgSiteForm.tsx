@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AlertCircle, RefreshCw } from "lucide-react";
 import { lpgSiteService } from "../services/lpgSiteService";
 import { LpgSite, BillingMode, MeterUnit } from "../types";
 // import { SiteCylinderManager } from "./SiteCylinderManager";
@@ -11,7 +12,7 @@ import {
   // Cylinder,
   Loader2,
   ChevronLeft,
-  Gauge
+  Gauge,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +54,7 @@ interface LpgSiteFormProps {
 export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [customers, setCustomers] = useState<{ customer_code: string; customer_name: string; brgy?: string; city?: string; province?: string }[]>([]);
   const [customerOpen, setCustomerOpen] = useState(false);
 
@@ -80,42 +82,60 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
     const loadData = async () => {
       try {
         setFetching(true);
+        setFetchError(null);
+
         const customerList = await lpgSiteService.fetchCustomers();
+        if (!customerList) {
+          throw new Error("Failed to load customer list — the server returned no data.");
+        }
         setCustomers(customerList);
 
         if (id) {
           const site = await lpgSiteService.fetchSiteById(id);
-          if (site) {
-            let lpgVapor = site.default_pressure_line ?? 2.0183;
-            let psi = site.default_psi ?? 10.0;
-            let cf = site.default_atmospheric_pressure ?? 14.7;
+          if (!site) {
+            throw new Error(`Site #${id} could not be loaded — it may not exist or the server is unavailable.`);
+          }
 
-            if (typeof window !== "undefined") {
-              const cached = localStorage.getItem(`lpg_site_config_${id}`);
-              if (cached) {
-                try {
-                  const parsed = JSON.parse(cached);
-                  lpgVapor = Number(parsed.configLpgVapor ?? lpgVapor);
-                  psi = Number(parsed.configPsi ?? psi);
-                  cf = Number(parsed.configCorrectionFactor ?? cf);
-                } catch (e) {
-                  console.error(e);
+          let lpgVapor = site.default_pressure_line;
+          let psi = site.default_psi;
+          let cf = site.default_atmospheric_pressure;
+
+          if (typeof window !== "undefined") {
+            const cached = localStorage.getItem(`lpg_site_config_${id}`);
+            if (cached) {
+              try {
+                const parsed = JSON.parse(cached);
+                // Only override from cache if the cached key is present and a valid number
+                if (parsed.configLpgVapor !== undefined && !isNaN(Number(parsed.configLpgVapor))) {
+                  lpgVapor = Number(parsed.configLpgVapor);
                 }
+                if (parsed.configPsi !== undefined && !isNaN(Number(parsed.configPsi))) {
+                  psi = Number(parsed.configPsi);
+                }
+                if (parsed.configCorrectionFactor !== undefined && !isNaN(Number(parsed.configCorrectionFactor))) {
+                  cf = Number(parsed.configCorrectionFactor);
+                }
+              } catch {
+                // Cached data is corrupt — clear it and warn the user
+                localStorage.removeItem(`lpg_site_config_${id}`);
+                toast.error("Cached PSI configuration was corrupted and has been cleared. Showing server values.");
               }
             }
-
-            setFormData({
-              ...site,
-              meter_direction: site.meter_direction || "INCREASING",
-              default_pressure_line: lpgVapor,
-              default_psi: psi,
-              default_atmospheric_pressure: cf,
-              cylinders: site.cylinders || []
-            });
           }
+
+          setFormData({
+            ...site,
+            meter_direction: site.meter_direction || "INCREASING",
+            default_pressure_line: lpgVapor,
+            default_psi: psi,
+            default_atmospheric_pressure: cf,
+            cylinders: site.cylinders || []
+          });
         }
-      } catch {
-        toast.error("Failed to load site data");
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to load site data.";
+        setFetchError(msg);
+        toast.error(msg);
       } finally {
         setFetching(false);
       }
@@ -132,8 +152,11 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
       let siteId: number | null | undefined = id;
 
       if (id) {
+        // Strip only the cylinders array (managed via its own endpoint).
+        // default_pressure_line / default_psi / default_atmospheric_pressure ARE
+        // persisted to lpg_customer_lpg_sites so they must stay in the payload.
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { cylinders: _c, default_pressure_line: _pl, default_psi: _psi, default_atmospheric_pressure: _ap, ...updatePayload } = formData;
+        const { cylinders: _c, ...updatePayload } = formData;
         await lpgSiteService.updateSite(id, updatePayload);
         toast.success("Site updated successfully");
       } else {
@@ -159,14 +182,14 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
         toast.success("Site and cylinders registered successfully");
       }
 
-      // Persist pressure configuration locally
+      // Persist pressure configuration locally (only when values are present)
       if (typeof window !== "undefined" && siteId) {
         localStorage.setItem(
           `lpg_site_config_${siteId}`,
           JSON.stringify({
-            configLpgVapor: formData.default_pressure_line ?? 2.0183,
-            configPsi: formData.default_psi ?? 10.0,
-            configCorrectionFactor: formData.default_atmospheric_pressure ?? 14.7,
+            configLpgVapor: formData.default_pressure_line,
+            configPsi: formData.default_psi,
+            configCorrectionFactor: formData.default_atmospheric_pressure,
           })
         );
       }
@@ -183,6 +206,35 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
     return (
       <div className="flex h-96 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-orange-600" />
+      </div>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-96 gap-4 text-center px-6">
+        <div className="rounded-full bg-red-100 dark:bg-red-900/30 p-4">
+          <AlertCircle className="h-8 w-8 text-red-600 dark:text-red-400" />
+        </div>
+        <div className="space-y-1">
+          <p className="font-bold text-red-700 dark:text-red-400">Failed to Load</p>
+          <p className="text-sm text-muted-foreground max-w-sm">{fetchError}</p>
+        </div>
+        <div className="flex gap-3">
+          <button
+            onClick={onCancel}
+            className="text-sm px-4 py-2 rounded-xl border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+          >
+            Go Back
+          </button>
+          <button
+            onClick={() => { setFetchError(null); setFetching(true); }}
+            className="text-sm px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white flex items-center gap-2 transition-colors"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
