@@ -58,6 +58,7 @@ export function LpgSiteList({ onEdit, onCreate, onView }: LpgSiteListProps) {
         page,
         limit
       });
+      console.log("Fetched sites data in LpgSiteList:", data);
       setSites(data);
       setTotal(total);
     } catch (error) {
@@ -153,8 +154,8 @@ export function LpgSiteList({ onEdit, onCreate, onView }: LpgSiteListProps) {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
-                        <span className="text-sm font-medium">{site.customer?.customer_name}</span>
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{site.customer_code}</span>
+                        <span className="text-sm font-medium">{site.customer_code}</span>
+                        <span className="text-xs text-muted-foreground">{site.customer?.customer_name}</span>
                       </div>
                     </TableCell>
                     <TableCell>

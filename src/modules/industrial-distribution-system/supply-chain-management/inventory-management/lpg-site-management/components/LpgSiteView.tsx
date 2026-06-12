@@ -2,10 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { lpgSiteService } from "../services/lpgSiteService";
-import { LpgSite, BillingMode, MeterUnit } from "../types";
+import { LpgSite } from "../types";
 import { SiteCylinderManager } from "./SiteCylinderManager";
 import {
-  Save,
   MapPin,
   CreditCard,
   Cylinder,
@@ -27,21 +26,6 @@ import { Textarea } from "@/components/ui/textarea";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Check, ChevronsUpDown } from "lucide-react";
-import { cn } from "@/lib/utils";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 
 interface LpgSiteViewProps {
   id?: number | null;
