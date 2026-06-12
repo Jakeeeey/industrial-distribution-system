@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { Gauge, FileText, Hash } from "lucide-react";
+
+import { Gauge } from "lucide-react";
 import { CreationForm } from "./components/CreationForm";
 import { TransactionHeaderWorkspace } from "./components/TransactionHeaderWorkspace";
 import { CreateBillingWorkspace } from "./components/CreateBillingWorkspace";
@@ -19,7 +19,7 @@ export default function MeteredBillingCreationModule() {
    *   false — previous reading is resolved using site + customer only
    *           (last transaction regardless of which invoice it belongs to)
    */
-  const [perInvoice, setPerInvoice] = useState(true);
+  const [perInvoice] = useState(true);
   /**
    * AUTO_PERIOD_FROM mode (hidden — not shown in UI):
    *   true  — billingPeriodFrom of the new transaction is auto-set from

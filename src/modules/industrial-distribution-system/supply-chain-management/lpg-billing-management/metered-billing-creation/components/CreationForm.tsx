@@ -215,6 +215,7 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
     isOnboarding,
     perInvoice,
     autoPeriodFrom,
+    transactionHeader,
     setForm,
   ]);
   // ──────────────────────────────────────────────────────────────────────────
