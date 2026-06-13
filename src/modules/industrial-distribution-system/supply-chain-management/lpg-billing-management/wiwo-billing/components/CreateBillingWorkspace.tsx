@@ -58,41 +58,7 @@ interface CreateBillingWorkspaceProps {
   onCancel: () => void;
 }
 
-// Step indicator pill component
-function StepPill({
-  number,
-  label,
-  active,
-  done,
-}: {
-  number: number;
-  label: string;
-  active: boolean;
-  done: boolean;
-}) {
-  return (
-    <div className="flex items-center gap-2 select-none">
-      <div
-        className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-black transition-all duration-300 ${
-          done
-            ? "bg-emerald-500 text-white shadow-emerald-200 dark:shadow-emerald-900/50 shadow-md"
-            : active
-            ? "bg-primary text-primary-foreground shadow-primary/30 shadow-md"
-            : "bg-muted text-muted-foreground"
-        }`}
-      >
-        {done ? <CheckCircle2 className="h-4 w-4" /> : number}
-      </div>
-      <span
-        className={`text-xs font-bold transition-colors duration-200 ${
-          active ? "text-primary" : done ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"
-        }`}
-      >
-        {label}
-      </span>
-    </div>
-  );
-}
+// AG-CHANGE: Removed unused StepPill component to resolve ESLint typescript-eslint/no-unused-vars warning.
 
 export function CreateBillingWorkspace({
   header,

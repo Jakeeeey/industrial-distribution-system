@@ -30,16 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import type { CustomerSite, LpgTransactionHeader } from "../types";
 
-// AG-CHANGE: Format ISO date string (YYYY-MM-DD) to readable "Jun 13, 2026"
-const formatDate = (iso?: string | null) => {
-  if (!iso) return "—";
-  const [year, month, day] = iso.split("-").map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString("en-PH", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-};
+// AG-CHANGE: Removed unused formatDate to resolve ESLint typescript-eslint/no-unused-vars warning.
 
 // AG-CHANGE: Short format for compact display "Jun 13"
 const formatDateShort = (iso?: string | null) => {
@@ -406,13 +397,13 @@ export function TransactionHeaderWorkspace({ selectedHeader, onSelect }: Props) 
                           <CheckCircle2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
                         )}
                       </div>
-                      {/* Date range — single inline row */}
-                      <div className="flex items-center flex-wrap gap-x-1.5 gap-y-0.5 mt-1">
-                        <span className="text-xs sm:text-sm font-black leading-tight whitespace-nowrap">
+                      {/* Date range — single inline row (AG-CHANGE: prevent stacking on mobile) */}
+                      <div className="flex items-center flex-nowrap gap-x-1 mt-1">
+                        <span className="text-[11px] xs:text-xs sm:text-sm font-black leading-tight whitespace-nowrap">
                           {formatDateShort(header.period_from)}
                         </span>
-                        <span className="text-[10px] font-bold opacity-40">→</span>
-                        <span className="text-xs sm:text-sm font-black leading-tight whitespace-nowrap">
+                        <span className="text-[10px] font-bold opacity-45 shrink-0">→</span>
+                        <span className="text-[11px] xs:text-xs sm:text-sm font-black leading-tight whitespace-nowrap">
                           {formatDateShort(header.period_to)}
                         </span>
                       </div>
