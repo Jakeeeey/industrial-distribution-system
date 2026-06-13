@@ -299,7 +299,7 @@ export async function checkSiteOnboarded(siteId: number): Promise<boolean> {
   return (res.data ?? []).length > 0;
 }
 
-export async function fetchInvoicesForCustomer(customerCode?: string): Promise<{ invoice_id: number; invoice_no: string; total_amount: number; invoice_date: string; transaction_status: string; isOnboardingBaseline?: boolean }[]> {
+export async function fetchInvoicesForCustomer(customerCode?: string): Promise<{ invoice_id: number; invoice_no: string; total_amount: number; invoice_date: string; transaction_status: string; isOnboardingBaseline?: boolean; hasMeteredTransaction?: boolean }[]> {
   const filters: Record<string, unknown> = {
     transaction_status: { _eq: "En Route" }
   };
@@ -337,15 +337,46 @@ export async function fetchInvoicesForCustomer(customerCode?: string): Promise<{
     console.warn("Failed to fetch onboarding baseline transaction invoice IDs", e);
   }
 
+  // Fetch invoices that have any transaction in lpg_metered_wiwo_transactions (to support routine check)
+  const meteredTransactionInvoiceIds = new Set<number>();
+  try {
+    const txRes = await directusFetch<{ data: { sales_invoice_id: number }[] }>(
+      `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions?fields=sales_invoice_id&filter[status][_neq]=CANCELLED&limit=-1`
+    );
+    (txRes.data ?? []).forEach(tx => {
+      if (tx.sales_invoice_id) {
+        meteredTransactionInvoiceIds.add(tx.sales_invoice_id);
+      }
+    });
+  } catch (e) {
+    console.warn("Failed to fetch metered transaction invoice IDs", e);
+  }
+
+  // Fetch invoices with POSTED transaction status in lpg_metered_wiwo_transactions to exclude them
+  const postedTxInvoiceIds = new Set<number>();
+  try {
+    const txPostedRes = await directusFetch<{ data: { sales_invoice_id: number }[] }>(
+      `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions?fields=sales_invoice_id&filter[status][_eq]=POSTED&limit=-1`
+    );
+    (txPostedRes.data ?? []).forEach(tx => {
+      if (tx.sales_invoice_id) {
+        postedTxInvoiceIds.add(tx.sales_invoice_id);
+      }
+    });
+  } catch (e) {
+    console.warn("Failed to fetch posted transaction invoice IDs", e);
+  }
+
   const url = `/items/sales_invoice?limit=-1&fields=invoice_id,invoice_no,invoice_date,total_amount,transaction_status,customer_code,order_id,salesman_id&filter=${encodeURIComponent(JSON.stringify(filters))}`;
   const res = await directusFetch<{ data: { invoice_id: number; invoice_no: string; total_amount: number; invoice_date: string; transaction_status: string }[] }>(`${DIRECTUS_URL}${url}`);
   
   const invoices = res.data ?? [];
   return invoices
-    .filter(inv => !postedInvoiceIds.has(inv.invoice_id))
+    .filter(inv => !postedInvoiceIds.has(inv.invoice_id) && !postedTxInvoiceIds.has(inv.invoice_id))
     .map(inv => ({
       ...inv,
-      isOnboardingBaseline: onboardingInvoiceIds.has(inv.invoice_id)
+      isOnboardingBaseline: onboardingInvoiceIds.has(inv.invoice_id),
+      hasMeteredTransaction: meteredTransactionInvoiceIds.has(inv.invoice_id)
     }));
 }
 

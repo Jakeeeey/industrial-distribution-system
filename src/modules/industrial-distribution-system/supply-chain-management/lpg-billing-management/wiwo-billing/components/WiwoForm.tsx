@@ -14,7 +14,8 @@ import {
   Calendar as CalendarIcon,
   CheckCircle2,
   Loader2,
-  ScanBarcode
+  ScanBarcode,
+  ChevronRight
 } from "lucide-react";
 import type { CylinderAsset, CustomerSiteCylinder, MeteredWiwoTransaction, CustomerSite, MeterReading, WiwoHeader, LpgTransactionHeader } from "../types";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,13 @@ import {
 } from "@/components/ui/combobox";
 import { format } from "date-fns";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface WiwoFormProps {
   txId: number | null;
@@ -1378,27 +1386,18 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                               const weightError = row.isSwapped && row.returnedGross > 0 && row.returnedGross < row.tare;
                               const hasSerial = attachmentsState.some(a => a.siteCylinderId === row.id && a.attachmentType === "SERIAL_IMAGE");
                               const hasWeight = attachmentsState.some(a => a.siteCylinderId === row.id && a.attachmentType === "WEIGHT_IMAGE");
-                              const repIndex = selectedReplacementCylinders.findIndex(c => c.swappedOutCylinderId === row.id);
-                              const repItem = repIndex !== -1 ? selectedReplacementCylinders[repIndex] : null;
-                              const isExpanded = expandedRowId === row.id;
-
+                              
                               return (
                                 <Fragment key={row.id}>
                                   <tr 
                                     onClick={() => {
-                                      if (typeof window !== "undefined" && window.innerWidth < 768) {
-                                        setMobileEditingCylinderId(row.id);
-                                      } else {
-                                        setExpandedRowId(isExpanded ? null : row.id);
-                                      }
+                                      setMobileEditingCylinderId(row.id);
                                     }}
-                                    className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20 cursor-pointer transition-colors"
+                                    className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20 cursor-pointer transition-colors group"
                                   >
                                     <td className="p-2 sm:p-3 font-mono font-bold sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r border-border shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] text-[10px] sm:text-xs">
                                       <div className="flex items-center gap-1.5">
-                                        <span className="text-[10px] text-muted-foreground">
-                                          {isExpanded ? "▼" : "▶"}
-                                        </span>
+                                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60 transition-transform duration-200 group-hover:translate-x-0.5 shrink-0" />
                                         {row.cylinder_asset?.serial_number}
                                       </div>
                                     </td>
@@ -1407,7 +1406,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                     </td>
                                     <td className="p-2 sm:p-3 text-center">
                                       {row.isSwapped ? (
-                                        <Badge variant="outline" className="border-violet-250 text-violet-700 bg-violet-50 dark:bg-violet-950/20 dark:text-violet-400 text-[9px] sm:text-xs px-1.5 py-0 sm:px-2 sm:py-0.5">
+                                        <Badge variant="outline" className="border-violet-250 text-violet-700 bg-violet-55/20 dark:bg-violet-955/20 dark:text-violet-400 text-[9px] sm:text-xs px-1.5 py-0 sm:px-2 sm:py-0.5">
                                           Swapping Out
                                         </Badge>
                                       ) : returnedWeights[row.id] > 0 ? (
@@ -1421,352 +1420,6 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                       )}
                                     </td>
                                   </tr>
-                                  {isExpanded && (
-                                    <tr className="bg-zinc-50/40 dark:bg-zinc-900/10">
-                                      <td colSpan={3} className="p-0 border-l-2 border-primary bg-zinc-50/20 dark:bg-zinc-900/5">
-                                        <div className="p-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300 ease-out" onClick={(e) => e.stopPropagation()}>
-                                          
-                                          <div className="grid grid-cols-4 gap-4 bg-white/50 dark:bg-zinc-950/50 p-3 rounded-xl border border-border">
-                                            <div>
-                                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Tare Weight</span>
-                                              <span className="font-mono text-xs">{row.tare} KG</span>
-                                            </div>
-                                            <div>
-                                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Previous Gross KG</span>
-                                              <span className="font-mono text-xs">{row.opening} KG</span>
-                                            </div>
-                                            <div>
-                                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Remaining KG</span>
-                                              <span className="font-mono text-xs text-muted-foreground">{row.remaining} KG</span>
-                                            </div>
-                                            <div>
-                                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Consumed KG</span>
-                                              <span className="font-mono text-xs font-bold text-foreground">{row.consumed} KG</span>
-                                            </div>
-                                          </div>
-
-                                          {/* Action Segmented Toggle */}
-                                          <div className="space-y-1">
-                                            <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Cylinder Action</Label>
-                                            <div className="flex bg-accent/80 p-1 rounded-xl max-w-xs border border-border dark:border-zinc-850">
-                                              <button
-                                                type="button"
-                                                disabled={isReadOnly}
-                                                onClick={() => {
-                                                  setSwappedCylinders((prev) => ({ ...prev, [row.id]: false }));
-                                                  setSelectedReplacementCylinders((prev) =>
-                                                    prev.filter(c => c.swappedOutCylinderId !== row.id)
-                                                  );
-                                                }}
-                                                className={`flex-1 py-1 px-2.5 text-xs font-bold rounded-lg transition-all ${
-                                                  !row.isSwapped
-                                                    ? "bg-white dark:bg-zinc-900 text-primary shadow-sm"
-                                                    : "text-muted-foreground hover:text-zinc-700 dark:text-muted-foreground dark:hover:text-zinc-200"
-                                                }`}
-                                              >
-                                                Keep In-Place
-                                              </button>
-                                              <button
-                                                type="button"
-                                                disabled={isReadOnly}
-                                                onClick={() => {
-                                                  setSwappedCylinders((prev) => ({ ...prev, [row.id]: true }));
-                                                  setSelectedReplacementCylinders((prev) => {
-                                                    if (prev.some(c => c.swappedOutCylinderId === row.id)) return prev;
-                                                    return [
-                                                      ...prev,
-                                                      {
-                                                        cylinderAssetId: 0,
-                                                        serialNumber: "",
-                                                        productName: "",
-                                                        tareWeight: 0,
-                                                        capacity: 0,
-                                                        targetKg: "",
-                                                        swappedOutCylinderId: row.id,
-                                                      }
-                                                    ];
-                                                  });
-                                                }}
-                                                className={`flex-1 py-1 px-2.5 text-xs font-bold rounded-lg transition-all ${
-                                                  row.isSwapped
-                                                    ? "bg-white dark:bg-zinc-900 text-primary shadow-sm"
-                                                    : "text-muted-foreground hover:text-zinc-700 dark:text-muted-foreground dark:hover:text-zinc-200"
-                                                }`}
-                                              >
-                                                Swap Cylinder
-                                              </button>
-                                            </div>
-                                          </div>
-
-                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-                                            {/* Column 1: Gross Weight details of Returned Cylinder */}
-                                            <div className="space-y-2">
-                                              <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
-                                                {row.isSwapped ? "Returned Gross Weight (Weigh-Out)" : "Current Gross Weight"}
-                                              </Label>
-                                              <div className="flex items-center gap-2">
-                                                <div className="relative flex-1">
-                                                  <Input
-                                                    type="number"
-                                                    step="0.001"
-                                                    value={returnedWeights[row.id] !== undefined ? (returnedWeights[row.id] ?? "") : ""}
-                                                    placeholder={row.isSwapped ? `Max ${row.opening} KG` : "Current Weight"}
-                                                    readOnly={true}
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      if (isReadOnly || isViewMode) return;
-                                                      setWeighingCylinderId(row.id);
-                                                      const savedGross = returnedWeights[row.id] !== undefined ? String(returnedWeights[row.id]) : "";
-                                                      setWeighingGross(savedGross);
-                                                      
-                                                      const serialAtt = attachmentsState.find(a => a.siteCylinderId === row.id && a.attachmentType === "SERIAL_IMAGE");
-                                                      const weightAtt = attachmentsState.find(a => a.siteCylinderId === row.id && a.attachmentType === "WEIGHT_IMAGE");
-                                                      const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8055";
-                                                      const sId = serialAtt?.directusFileId || null;
-                                                      const wId = weightAtt?.directusFileId || null;
-                                                      
-                                                      setSerialFile(null);
-                                                      setSerialFileUrl(sId ? `${apiBaseUrl}/assets/${sId}` : null);
-                                                      setSerialDirectusId(sId);
-                                                      setWeightFile(null);
-                                                      setWeightFileUrl(wId ? `${apiBaseUrl}/assets/${wId}` : null);
-                                                      setWeightDirectusId(wId);
-                                                      
-                                                      setIsWeighModalOpen(true);
-                                                    }}
-                                                    className={`pr-8 h-9 text-xs cursor-pointer ${weightError ? "border-rose-500" : ""}`}
-                                                  />
-                                                  <span className="absolute right-2 top-2.5 text-[10px] text-muted-foreground font-bold">KG</span>
-                                                </div>
-                                                {!isReadOnly && !isViewMode && (
-                                                  <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => {
-                                                      setWeighingCylinderId(row.id);
-                                                      const savedGross = returnedWeights[row.id] !== undefined ? String(returnedWeights[row.id]) : "";
-                                                      setWeighingGross(savedGross);
-                                                      
-                                                      const serialAtt = attachmentsState.find(a => a.siteCylinderId === row.id && a.attachmentType === "SERIAL_IMAGE");
-                                                      const weightAtt = attachmentsState.find(a => a.siteCylinderId === row.id && a.attachmentType === "WEIGHT_IMAGE");
-                                                      const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8055";
-                                                      const sId = serialAtt?.directusFileId || null;
-                                                      const wId = weightAtt?.directusFileId || null;
-                                                      
-                                                      setSerialFile(null);
-                                                      setSerialFileUrl(sId ? `${apiBaseUrl}/assets/${sId}` : null);
-                                                      setSerialDirectusId(sId);
-                                                      setWeightFile(null);
-                                                      setWeightFileUrl(wId ? `${apiBaseUrl}/assets/${wId}` : null);
-                                                      setWeightDirectusId(wId);
-                                                      
-                                                      setIsWeighModalOpen(true);
-                                                    }}
-                                                    className={`h-9 w-9 rounded-lg shrink-0 ${hasSerial && hasWeight ? "border-emerald-250 text-primary bg-emerald-50 dark:bg-emerald-950/20" : ""}`}
-                                                    title="Upload Photos"
-                                                  >
-                                                    <Scale className="h-3.5 w-3.5" />
-                                                  </Button>
-                                                )}
-                                              </div>
-                                              <div className="flex gap-1.5">
-                                                {hasSerial && (
-                                                  <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-primary/10 text-emerald-800 dark:text-emerald-400">
-                                                    Serial: ✓
-                                                  </Badge>
-                                                )}
-                                                {hasWeight && (
-                                                  <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-primary/10 text-emerald-800 dark:text-emerald-400">
-                                                    Weight: ✓
-                                                  </Badge>
-                                                )}
-                                              </div>
-                                              {weightError && (
-                                                <span className="text-[9px] text-rose-500 block mt-0.5 font-semibold">Below Tare weight!</span>
-                                              )}
-                                            </div>
-
-                                            {/* Column 2: Replacement cylinder sub-form */}
-                                            {row.isSwapped && repItem ? (
-                                              <div className="space-y-3 p-3.5 border border-zinc-150 dark:border-zinc-800/80 rounded-xl bg-zinc-50/40 dark:bg-zinc-950/20 animate-in fade-in duration-300">
-                                                <div className="flex items-center justify-between gap-3">
-                                                  <div className="min-w-0">
-                                                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Cylinder In</p>
-                                                    <p className="text-xs font-semibold truncate">
-                                                      {repItem.cylinderAssetId ? repItem.serialNumber : "New cylinder not captured"}
-                                                    </p>
-                                                    {repItem.cylinderAssetId > 0 && (
-                                                      <p className="text-[9px] text-primary">
-                                                        {repItem.targetKg} KG gross
-                                                        {repItem.serialPhotoId && repItem.weightPhotoId ? " | Evidence complete" : " | Evidence required"}
-                                                      </p>
-                                                    )}
-                                                  </div>
-                                                  <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => setReplacementModalIndex(repIndex)}
-                                                    className="h-9 shrink-0 text-xs font-bold"
-                                                  >
-                                                    <Scale className="h-3.5 w-3.5" />
-                                                    {repItem.cylinderAssetId ? "Edit Cylinder In" : "Capture Cylinder In"}
-                                                  </Button>
-                                                </div>
-                                                <div className="hidden">
-                                                {/* Scan/Input Serial */}
-                                                <div className="space-y-1.5">
-                                                  <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Scan / Input New Serial</Label>
-                                                  <div className="flex gap-1.5 items-center w-full">
-                                                    <Input
-                                                      type="text"
-                                                      placeholder="Serial number..."
-                                                      value={repItem.serialNumber}
-                                                      onChange={(e) => {
-                                                        const val = e.target.value;
-                                                        setSelectedReplacementCylinders((prev) => {
-                                                          const copy = [...prev];
-                                                          const idx = copy.findIndex(c => c.swappedOutCylinderId === row.id);
-                                                          if (idx !== -1) {
-                                                            copy[idx] = {
-                                                              ...copy[idx],
-                                                              serialNumber: val,
-                                                              cylinderAssetId: 0,
-                                                              productName: "",
-                                                              tareWeight: 0,
-                                                              capacity: 0,
-                                                              error: undefined,
-                                                            };
-                                                          }
-                                                          return copy;
-                                                        });
-                                                      }}
-                                                      onKeyDown={(e) => {
-                                                        if (e.key === "Enter") {
-                                                          e.preventDefault();
-                                                          const idx = selectedReplacementCylinders.findIndex(c => c.swappedOutCylinderId === row.id);
-                                                          if (idx !== -1) {
-                                                            handleValidateReplacementSerial(idx, repItem.serialNumber);
-                                                          }
-                                                        }
-                                                      }}
-                                                      className={`text-xs h-8 w-full ${repItem.error ? "border-rose-500" : repItem.cylinderAssetId ? "border-primary bg-emerald-50/10" : ""}`}
-                                                    />
-                                                    <Button
-                                                      type="button"
-                                                      variant="outline"
-                                                      size="xs"
-                                                      onClick={() => {
-                                                        const idx = selectedReplacementCylinders.findIndex(c => c.swappedOutCylinderId === row.id);
-                                                        if (idx !== -1) {
-                                                          handleValidateReplacementSerial(idx, repItem.serialNumber);
-                                                        }
-                                                      }}
-                                                      disabled={repItem.isValidating || !repItem.serialNumber.trim()}
-                                                      className="h-8 font-bold text-xs shrink-0"
-                                                    >
-                                                      {repItem.isValidating ? (
-                                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                                      ) : repItem.cylinderAssetId ? (
-                                                        <CheckCircle2 className="h-3 w-3 text-primary" />
-                                                      ) : (
-                                                        "Verify"
-                                                      )}
-                                                    </Button>
-                                                  </div>
-                                                  {repItem.error && (
-                                                    <span className="text-[9px] text-rose-500 block mt-0.5 font-semibold">{repItem.error}</span>
-                                                  )}
-                                                  {repItem.cylinderAssetId > 0 && (
-                                                    <span className="text-[9px] text-primary block mt-0.5 font-semibold">
-                                                      Verified: {repItem.productName} (Tare: {repItem.tareWeight} KG)
-                                                    </span>
-                                                  )}
-                                                </div>
-
-                                                {/* Starting Gross KG */}
-                                                <div className="space-y-1.5">
-                                                  <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">New Cylinder Gross Weight</Label>
-                                                  <div className="relative">
-                                                    <Input
-                                                      type="number"
-                                                      step="0.01"
-                                                      value={repItem.targetKg}
-                                                      disabled={!repItem.cylinderAssetId}
-                                                      onChange={(e) => {
-                                                        const raw = e.target.value;
-                                                        const val = raw === "" ? "" : parseFloat(raw);
-                                                        setSelectedReplacementCylinders((prev) => {
-                                                          const copy = [...prev];
-                                                          const idx = copy.findIndex(c => c.swappedOutCylinderId === row.id);
-                                                          if (idx !== -1) {
-                                                            copy[idx].targetKg = val;
-                                                          }
-                                                          return copy;
-                                                        });
-                                                      }}
-                                                      placeholder={repItem.cylinderAssetId ? String(repItem.tareWeight + repItem.capacity) : "N/A"}
-                                                      className="text-xs h-8 pr-8"
-                                                    />
-                                                    {repItem.cylinderAssetId > 0 && <span className="absolute right-2 top-2.5 text-[10px] text-muted-foreground font-bold">KG</span>}
-                                                  </div>
-                                                </div>
-
-                                                <div className="grid grid-cols-2 gap-2">
-                                                  {(["SERIAL", "WEIGHT"] as const).map((photoType) => {
-                                                    const isSerialPhoto = photoType === "SERIAL";
-                                                    const photoUrl = isSerialPhoto ? repItem.serialPhotoUrl : repItem.weightPhotoUrl;
-                                                    const photoId = isSerialPhoto ? repItem.serialPhotoId : repItem.weightPhotoId;
-                                                    const uploading = isSerialPhoto ? repItem.isUploadingSerial : repItem.isUploadingWeight;
-                                                    return (
-                                                      <label
-                                                        key={photoType}
-                                                        className={`min-h-20 rounded-lg border border-dashed p-2 text-center text-[9px] font-bold cursor-pointer flex flex-col items-center justify-center ${
-                                                          photoId ? "border-emerald-400 text-emerald-700" : "border-border text-muted-foreground"
-                                                        }`}
-                                                      >
-                                                        {uploading ? (
-                                                          <Loader2 className="h-4 w-4 animate-spin" />
-                                                        ) : photoUrl ? (
-                                                          <>
-                                                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                                                            <img src={photoUrl} alt={`New cylinder ${photoType.toLowerCase()}`} className="h-12 max-w-full object-contain rounded mb-1" />
-                                                            {isSerialPhoto ? "Serial photo saved" : "Weight photo saved"}
-                                                          </>
-                                                        ) : (
-                                                          <>
-                                                            <Plus className="h-4 w-4 mb-1" />
-                                                            {isSerialPhoto ? "Capture new serial" : "Capture new weight"}
-                                                          </>
-                                                        )}
-                                                        <input
-                                                          type="file"
-                                                          accept="image/*"
-                                                          capture="environment"
-                                                          className="hidden"
-                                                          disabled={!repItem.cylinderAssetId || uploading}
-                                                          onChange={(e) => {
-                                                            const file = e.target.files?.[0];
-                                                            if (file) handleReplacementFileUpload(repIndex, file, photoType);
-                                                          }}
-                                                        />
-                                                      </label>
-                                                    );
-                                                  })}
-                                                </div>
-                                                </div>
-                                              </div>
-                                            ) : (
-                                              <div className="flex items-center justify-center border border-dashed border-border rounded-xl p-4 text-center text-muted-foreground bg-zinc-50/10 text-[10px]">
-                                                Cylinder stays in service. No replacement needed.
-                                              </div>
-                                            )}
-                                          </div>
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  )}
                                 </Fragment>
                               );
                             })
@@ -1820,24 +1473,33 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
 
                   {selectedOnboardCylinders.length > 0 && (
                     <div className="border border-border/80 rounded-xl overflow-hidden text-xs bg-white dark:bg-zinc-955/10 mt-3 shadow-sm">
-                      <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse min-w-full">
-                        <thead className="bg-zinc-50 dark:bg-zinc-900 font-bold text-muted-foreground border-b border-border">
-                          <tr>
-                            <th className="p-3 sticky left-0 bg-zinc-50 dark:bg-zinc-900 z-10">Serial</th>
-                            <th className="p-3">Product Name</th>
-                            <th className="p-3 text-right">Tare Weight</th>
-                            <th className="p-3 text-right w-44">Starting Gross Weight (KG)</th>
-                            <th className="p-3 w-10"></th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/50">
-                          {selectedOnboardCylinders.map((cyl, idx) => (
-                            <tr key={cyl.cylinderAssetId} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20">
-                              <td className="p-3 font-mono font-bold text-zinc-700 dark:text-zinc-300 sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r border-border shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">{cyl.serialNumber}</td>
-                              <td className="p-3 text-muted-foreground">{cyl.productName}</td>
-                              <td className="p-3 text-right font-mono text-muted-foreground">{cyl.tareWeight} KG</td>
-                              <td className="p-3">
+                      {/* Mobile View (sm:hidden) — AG-CHANGE: custom responsive list layout to eliminate horizontal scrolls */}
+                      <div className="block sm:hidden divide-y divide-border/60">
+                        {selectedOnboardCylinders.map((cyl, idx) => (
+                          <div key={cyl.cylinderAssetId} className="p-3 flex flex-col gap-2 bg-card">
+                            <div className="flex justify-between items-start gap-2">
+                              <div className="min-w-0">
+                                <p className="font-mono font-bold text-xs text-foreground truncate">{cyl.serialNumber}</p>
+                                <p className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">{cyl.productName}</p>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setSelectedOnboardCylinders((prev) => prev.filter((c) => c.cylinderAssetId !== cyl.cylinderAssetId))}
+                                className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50/20 shrink-0"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3 items-center pt-2 border-t border-dashed border-border/50">
+                              <div>
+                                <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block mb-0.5">Tare Weight</span>
+                                <span className="font-mono font-bold text-xs text-foreground">{cyl.tareWeight} KG</span>
+                              </div>
+                              <div>
+                                <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">Starting Gross (KG)</span>
                                 <Input
                                   type="number"
                                   step="0.1"
@@ -1851,26 +1513,68 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                       return copy;
                                     });
                                   }}
-                                  className={`text-xs h-8 text-right font-mono ${
+                                  className={`text-xs h-8 text-right font-mono w-full ${
                                     (Number(cyl.targetKg) - cyl.tareWeight > cyl.capacity || (cyl.targetKg !== "" && Number(cyl.targetKg) < cyl.tareWeight)) ? "border-red-500 text-red-500 bg-red-50/10 focus-visible:ring-red-500" : ""
                                   }`}
                                 />
-                              </td>
-                              <td className="p-3 text-right">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setSelectedOnboardCylinders((prev) => prev.filter((c) => c.cylinderAssetId !== cyl.cylinderAssetId))}
-                                  className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50/50"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </td>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Desktop View (hidden sm:block) */}
+                      <div className="hidden sm:block overflow-x-auto">
+                        <table className="w-full text-left border-collapse min-w-full">
+                          <thead className="bg-zinc-50 dark:bg-zinc-900 font-bold text-muted-foreground border-b border-border">
+                            <tr>
+                              <th className="p-3 sticky left-0 bg-zinc-50 dark:bg-zinc-900 z-10">Serial</th>
+                              <th className="p-3">Product Name</th>
+                              <th className="p-3 text-right">Tare Weight</th>
+                              <th className="p-3 text-right w-44">Starting Gross Weight (KG)</th>
+                              <th className="p-3 w-10"></th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/50">
+                            {selectedOnboardCylinders.map((cyl, idx) => (
+                              <tr key={cyl.cylinderAssetId} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20">
+                                <td className="p-3 font-mono font-bold text-zinc-700 dark:text-zinc-300 sticky left-0 bg-white dark:bg-zinc-955 z-10 border-r border-border shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">{cyl.serialNumber}</td>
+                                <td className="p-3 text-muted-foreground">{cyl.productName}</td>
+                                <td className="p-3 text-right font-mono text-muted-foreground">{cyl.tareWeight} KG</td>
+                                <td className="p-3">
+                                  <Input
+                                    type="number"
+                                    step="0.1"
+                                    value={cyl.targetKg}
+                                    onChange={(e) => {
+                                      const raw = e.target.value;
+                                      const val = raw === "" ? "" : parseFloat(raw);
+                                      setSelectedOnboardCylinders((prev) => {
+                                        const copy = [...prev];
+                                        copy[idx] = { ...copy[idx], targetKg: val };
+                                        return copy;
+                                      });
+                                    }}
+                                    className={`text-xs h-8 text-right font-mono ${
+                                      (Number(cyl.targetKg) - cyl.tareWeight > cyl.capacity || (cyl.targetKg !== "" && Number(cyl.targetKg) < cyl.tareWeight)) ? "border-red-500 text-red-500 bg-red-50/10 focus-visible:ring-red-500" : ""
+                                    }`}
+                                  />
+                                </td>
+                                <td className="p-3 text-right">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setSelectedOnboardCylinders((prev) => prev.filter((c) => c.cylinderAssetId !== cyl.cylinderAssetId))}
+                                    className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50/50"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
                   )}
@@ -1995,18 +1699,22 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                 <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Variance Reason (Optional)
                 </Label>
-                <select
+                <Select
                   value={isViewMode ? txDetail?.variance_reason_code || "NONE" : varianceReasonCode}
-                  onChange={(e) => setVarianceReasonCode(e.target.value)}
+                  onValueChange={(val) => setVarianceReasonCode(val)}
                   disabled={isReadOnly || isViewMode}
-                  className="w-full text-xs bg-white dark:bg-zinc-950 border border-border rounded-xl p-2 h-9 focus:outline-none focus:ring-1 focus:ring-violet-500"
                 >
-                  <option value="NONE">Select Reason...</option>
-                  <option value="METER_DRIFT">Meter Calibration Drift</option>
-                  <option value="PHYSICAL_LEAK">Physical Leak Detected</option>
-                  <option value="METER_MALFUNCTION">Meter Malfunction / Frozen</option>
-                  <option value="TEMPERATURE_VARIATION">Temperature / Expansion Difference</option>
-                </select>
+                  <SelectTrigger className="w-full text-xs h-9 rounded-xl border border-border bg-white dark:bg-zinc-950 text-left">
+                    <SelectValue placeholder="Select Reason..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NONE" className="text-xs">Select Reason...</SelectItem>
+                    <SelectItem value="METER_DRIFT" className="text-xs">Meter Calibration Drift</SelectItem>
+                    <SelectItem value="PHYSICAL_LEAK" className="text-xs">Physical Leak Detected</SelectItem>
+                    <SelectItem value="METER_MALFUNCTION" className="text-xs">Meter Malfunction / Frozen</SelectItem>
+                    <SelectItem value="TEMPERATURE_VARIATION" className="text-xs">Temperature / Expansion Difference</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             )}
 
@@ -2488,17 +2196,15 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
 
           {/* Body */}
           <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
-            {/* Selected Cylinder */}
+            {/* Selected Cylinder (AG-CHANGE: Render as styled div instead of input to prevent browser autofocus highlight) */}
             <div className="space-y-1.5">
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Cylinder</Label>
-              <Input
-                readOnly
-                value={(() => {
+              <div className="flex items-center h-10 w-full rounded-md border border-input bg-accent px-3 py-2 text-sm font-mono font-bold text-foreground select-none pointer-events-none">
+                {(() => {
                   const cyl = activeSiteCylinders.find(c => c.id === weighingCylinderId);
                   return cyl ? `${cyl.cylinder_asset?.serial_number} (Tare: ${cyl.cylinder_asset?.tare_weight} KG)` : "";
                 })()}
-                className="bg-accent font-mono font-bold"
-              />
+              </div>
             </div>
 
             {weighingCylinderId && (() => {
@@ -2514,16 +2220,12 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                 <>
                   {/* Weight Inputs (Inline) */}
                   <div className="grid grid-cols-2 gap-4">
-                    {/* Previous Reading */}
+                    {/* Previous Reading (AG-CHANGE: Render as styled div to ensure focus lands on Gross Weight input) */}
                     <div className="space-y-1.5">
                       <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Previous Reading</Label>
-                      <div className="relative">
-                        <Input
-                          readOnly
-                          value={currentLpgKg}
-                          className="pr-8 h-10 text-sm bg-accent font-mono"
-                        />
-                        <span className="absolute right-3 top-3 text-xs text-muted-foreground font-bold">KG</span>
+                      <div className="relative flex items-center h-10 w-full rounded-md border border-input bg-accent px-3 py-2 text-sm font-mono text-muted-foreground select-none pointer-events-none">
+                        <span>{currentLpgKg}</span>
+                        <span className="absolute right-3 text-xs text-muted-foreground font-bold">KG</span>
                       </div>
                     </div>
 
@@ -2536,6 +2238,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                           step="0.001"
                           placeholder="Scale gross weight"
                           value={weighingGross}
+                          autoFocus
                           onChange={(e) => {
                             const val = parseFloat(e.target.value);
                             if (!isNaN(val) && val > maxGross) {
@@ -2719,6 +2422,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                 }
 
                 setIsWeighModalOpen(false);
+                setMobileEditingCylinderId(null); // AG-CHANGE: Autoclose the actions modal so that the scanner modal will be next to open
                 setScannerError("");
                 setScannerInput("");
                 setIsScannerModalOpen(true);
@@ -2746,7 +2450,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
             <DialogContent 
               onPointerDownOutside={(e) => e.preventDefault()}
               onInteractOutside={(e) => e.preventDefault()}
-              className="max-w-md w-[92vw] sm:w-full p-5 rounded-2xl bg-white dark:bg-zinc-950 border border-border shadow-2xl gap-0"
+              className="max-w-lg w-[92vw] sm:w-full p-6 rounded-2xl bg-white dark:bg-zinc-950 border border-border shadow-2xl gap-0"
             >
               <DialogTitle className="text-sm font-extrabold text-zinc-800 dark:text-zinc-100 flex items-center gap-2 border-b border-border pb-3">
                 <Scale className="h-4 w-4 text-primary" />

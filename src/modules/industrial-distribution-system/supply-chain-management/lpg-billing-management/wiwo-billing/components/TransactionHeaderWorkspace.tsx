@@ -29,6 +29,14 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import type { CustomerSite, LpgTransactionHeader } from "../types";
+import {
+  Combobox,
+  ComboboxInput,
+  ComboboxContent,
+  ComboboxList,
+  ComboboxItem,
+  ComboboxEmpty,
+} from "@/components/ui/combobox";
 
 // AG-CHANGE: Removed unused formatDate to resolve ESLint typescript-eslint/no-unused-vars warning.
 
@@ -94,10 +102,17 @@ export function TransactionHeaderWorkspace({ selectedHeader, onSelect }: Props) 
 
   // Create form
   const [siteId, setSiteId] = useState("");
+  const [siteSearch, setSiteSearch] = useState("");
   const [periodFrom, setPeriodFrom] = useState("");
   const [periodTo, setPeriodTo] = useState("");
   const [remarks, setRemarks] = useState("");
   const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setSiteSearch("");
+    }
+  }, [open]);
 
   // ─── Load data ────────────────────────────────────────────────────────────
   const load = async () => {
@@ -182,6 +197,7 @@ export function TransactionHeaderWorkspace({ selectedHeader, onSelect }: Props) 
       onSelect(json.data);
       setOpen(false);
       setSiteId("");
+      setSiteSearch("");
       setPeriodFrom("");
       setPeriodTo("");
       setRemarks("");
@@ -474,23 +490,44 @@ export function TransactionHeaderWorkspace({ selectedHeader, onSelect }: Props) 
           </div>
 
           <div className="p-6 space-y-5">
-            {/* Site select */}
+            {/* Site select — AG-CHANGE: converted to a searchable Combobox */}
             <div className="space-y-2">
               <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                 Customer Site *
               </label>
-              <select
-                value={siteId}
-                onChange={(e) => setSiteId(e.target.value)}
-                className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+              <Combobox
+                value={sites.find(s => s.id === Number(siteId)) || null}
+                onValueChange={(val: CustomerSite | null) => {
+                  setSiteId(val ? String(val.id) : "");
+                  if (val) {
+                    setSiteSearch(val.site_name ? `${val.site_name} (${val.customer_code})` : `Site #${val.id} (${val.customer_code})`);
+                  } else {
+                    setSiteSearch("");
+                  }
+                }}
               >
-                <option value="">Select a site...</option>
-                {sites.map((site) => (
-                  <option key={site.id} value={site.id}>
-                    {site.site_name || `Site #${site.id}`} — {site.customer_code}
-                  </option>
-                ))}
-              </select>
+                <ComboboxInput
+                  placeholder={sites.length === 0 ? "Loading sites..." : "Select LPG Site..."}
+                  value={siteSearch}
+                  onChange={(e) => setSiteSearch(e.target.value)}
+                  showTrigger
+                />
+                <ComboboxContent>
+                  <ComboboxList>
+                    {sites.length === 0 && <ComboboxEmpty>No sites.</ComboboxEmpty>}
+                    {sites
+                      .filter((s) =>
+                        (s.site_name || "").toLowerCase().includes(siteSearch.toLowerCase()) ||
+                        s.customer_code.toLowerCase().includes(siteSearch.toLowerCase())
+                      )
+                      .map((s) => (
+                        <ComboboxItem key={String(s.id)} value={s}>
+                          {s.site_name ? `${s.site_name} (${s.customer_code})` : `Site #${s.id} (${s.customer_code})`}
+                        </ComboboxItem>
+                      ))}
+                  </ComboboxList>
+                </ComboboxContent>
+              </Combobox>
             </div>
 
             {/* Period from/to */}
