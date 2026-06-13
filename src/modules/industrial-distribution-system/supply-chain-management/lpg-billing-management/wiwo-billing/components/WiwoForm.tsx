@@ -189,7 +189,6 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   const [selectedTxId, setSelectedTxId] = useState<string>("");
   const [isDraftModalOpen, setIsDraftModalOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [expandedRowId, setExpandedRowId] = useState<number | null>(null);
   const [mobileEditingCylinderId, setMobileEditingCylinderId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -1383,10 +1382,6 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                             </tr>
                           ) : (
                             calculatedReturnedCylinders.map((row) => {
-                              const weightError = row.isSwapped && row.returnedGross > 0 && row.returnedGross < row.tare;
-                              const hasSerial = attachmentsState.some(a => a.siteCylinderId === row.id && a.attachmentType === "SERIAL_IMAGE");
-                              const hasWeight = attachmentsState.some(a => a.siteCylinderId === row.id && a.attachmentType === "WEIGHT_IMAGE");
-                              
                               return (
                                 <Fragment key={row.id}>
                                   <tr 
@@ -2832,8 +2827,6 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                 if (foundRow) {
                   if (typeof window !== "undefined" && window.innerWidth < 768) {
                     setMobileEditingCylinderId(foundRow.id);
-                  } else {
-                    setExpandedRowId(foundRow.id);
                   }
                   setIsScannerModalOpen(false);
                   setScannerInput("");

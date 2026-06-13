@@ -23,7 +23,6 @@ import {
   Zap,
   RefreshCw,
   Package,
-  FileText,
   AlertCircle,
 } from "lucide-react";
 import type { LpgTransactionHeader } from "../types";
