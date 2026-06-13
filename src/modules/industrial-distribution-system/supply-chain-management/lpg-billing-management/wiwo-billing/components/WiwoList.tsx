@@ -45,12 +45,12 @@ export function WiwoList({ selectedId, onSelect, onNew }: WiwoListProps) {
   }, [search, status, page]);
 
   return (
-    <div className="w-full lg:w-[380px] shrink-0 border-r border-zinc-200 dark:border-zinc-800/80 flex flex-col h-full bg-zinc-50/50 dark:bg-zinc-950/20">
+    <div className="w-full lg:w-[380px] shrink-0 border-r border-border/80 flex flex-col h-full bg-zinc-50/50 dark:bg-zinc-950/20">
       {/* List Header Actions */}
-      <div className="p-4 border-b border-zinc-200 dark:border-zinc-800/85 space-y-3 shrink-0">
+      <div className="p-4 border-b border-border/85 space-y-3 shrink-0">
         <Button
           onClick={onNew}
-          className="w-full bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-700 text-white font-medium text-sm py-2 px-4 rounded-xl shadow-md"
+          className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-sm py-2 px-4 rounded-xl shadow-md"
         >
           <Plus className="h-4 w-4" />
           New Transaction
@@ -97,7 +97,7 @@ export function WiwoList({ selectedId, onSelect, onNew }: WiwoListProps) {
       {/* Transactions List container */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-12 text-zinc-400 gap-2">
+          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-2">
             <RefreshCw className="h-5 w-5 animate-spin" />
             <span className="text-xs">Loading logs...</span>
           </div>
@@ -114,8 +114,8 @@ export function WiwoList({ selectedId, onSelect, onNew }: WiwoListProps) {
                 onClick={() => onSelect(tx.id)}
                 className={`p-3.5 rounded-xl border transition-all duration-150 cursor-pointer flex flex-col gap-2 ${
                   isSelected
-                    ? "bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-500/80 shadow-md"
-                    : "bg-white dark:bg-zinc-900/50 hover:bg-zinc-50 dark:hover:bg-zinc-900 border-zinc-200 dark:border-zinc-800/80"
+                    ? "bg-primary/5 border-primary/80 shadow-md"
+                    : "bg-white dark:bg-zinc-900/50 hover:bg-zinc-50 dark:hover:bg-zinc-900 border-border/80"
                 }`}
               >
                 <div className="flex justify-between items-start">
@@ -131,23 +131,23 @@ export function WiwoList({ selectedId, onSelect, onNew }: WiwoListProps) {
                         : "secondary"
                     }
                     className={`text-[9px] font-extrabold px-2 py-0.5 uppercase tracking-wider ${
-                      tx.status === "POSTED" ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400" : ""
+                      tx.status === "POSTED" ? "bg-primary/10 text-primary" : ""
                     }`}
                   >
                     {tx.status}
                   </Badge>
                 </div>
 
-                <div className="text-[11px] text-zinc-500 dark:text-zinc-400 font-medium">
+                <div className="text-[11px] text-muted-foreground dark:text-muted-foreground font-medium">
                   {tx.customer?.customer_name || tx.customer_code}
                   {tx.site?.site_name && (
-                    <span className="text-[10px] text-zinc-400 dark:text-zinc-500 block">
+                    <span className="text-[10px] text-muted-foreground dark:text-muted-foreground block">
                       Site: {tx.site.site_name}
                     </span>
                   )}
                 </div>
 
-                <div className="flex items-center justify-between text-[10px] text-zinc-400 dark:text-zinc-500 border-t border-zinc-100 dark:border-zinc-800/60 pt-2 mt-1">
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground dark:text-muted-foreground border-t border-zinc-100 dark:border-zinc-800/60 pt-2 mt-1">
                   <div className="flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
                     {tx.transaction_date}
@@ -158,11 +158,11 @@ export function WiwoList({ selectedId, onSelect, onNew }: WiwoListProps) {
                 </div>
 
                 <div className="flex items-center justify-between text-[9px] mt-0.5">
-                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 rounded font-semibold text-zinc-500">
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 rounded font-semibold text-muted-foreground">
                     {tx.transaction_type?.replace("_", " ")}
                   </Badge>
                   {tx.billable_source !== "NONE" && (
-                    <span className="text-zinc-400">
+                    <span className="text-muted-foreground">
                       Source: <strong className="text-zinc-600 dark:text-zinc-300">{tx.billable_source}</strong>
                     </span>
                   )}
@@ -175,7 +175,7 @@ export function WiwoList({ selectedId, onSelect, onNew }: WiwoListProps) {
 
       {/* Pagination */}
       {total > 10 && (
-        <div className="p-3 border-t border-zinc-200 dark:border-zinc-800/80 flex items-center justify-between text-xs shrink-0">
+        <div className="p-3 border-t border-border/80 flex items-center justify-between text-xs shrink-0">
           <Button
             variant="outline"
             size="xs"
