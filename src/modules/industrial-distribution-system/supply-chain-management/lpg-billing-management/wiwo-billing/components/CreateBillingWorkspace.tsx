@@ -23,20 +23,41 @@ import {
   Zap,
   RefreshCw,
   Package,
-  FileText,
   AlertCircle,
 } from "lucide-react";
 import type { LpgTransactionHeader } from "../types";
 
-// AG-CHANGE: Format ISO date (YYYY-MM-DD) to readable "Jun 13, 2026"
+// AG-CHANGE: Format ISO date/datetime to readable "Jun 13, 2026" robustly
 const formatDate = (iso?: string | null) => {
   if (!iso) return "—";
-  const [year, month, day] = iso.split("-").map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString("en-PH", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  
+  // Try standard parsing first
+  const parsed = new Date(iso);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toLocaleDateString("en-PH", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  }
+
+  // Fallback to splitting if standard parsing fails (e.g. YYYY-MM-DD custom formats)
+  try {
+    const parts = iso.split(/[-T/ :]/).map(Number);
+    if (parts.length >= 3) {
+      const [year, month, day] = parts;
+      const d = new Date(year, month - 1, day);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString("en-PH", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        });
+      }
+    }
+  } catch {}
+
+  return iso; // fallback to raw string if completely unparseable
 };
 
 interface Invoice {
@@ -46,6 +67,7 @@ interface Invoice {
   total_amount: number;
   transaction_status: string;
   isOnboardingBaseline?: boolean;
+  hasMeteredTransaction?: boolean;
 }
 
 interface CreateBillingWorkspaceProps {
@@ -107,6 +129,8 @@ export function CreateBillingWorkspace({
   const filteredInvoices = invoices.filter((inv) => {
     // ROUTINE should NOT show invoices flagged as onboarding baselines
     if (transactionType === "ROUTINE" && inv.isOnboardingBaseline) return false;
+    // ROUTINE should NOT show invoices that do not have a transaction on lpg_metered_wiwo_transactions
+    if (transactionType === "ROUTINE" && !inv.hasMeteredTransaction) return false;
     return true;
   });
 
@@ -458,65 +482,67 @@ export function CreateBillingWorkspace({
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-2.5 max-h-60 sm:max-h-72 overflow-y-auto pr-1 custom-scrollbar">
-              {filteredInvoices.map((inv) => (
-                <button
-                  key={inv.invoice_id}
-                  type="button"
-                  onClick={() => setSelectedInvoiceId(inv.invoice_id)}
-                  className={`group relative flex flex-col p-4 border-2 rounded-2xl text-left transition-all duration-200 ${
-                    selectedInvoiceId === inv.invoice_id
-                      ? "border-primary bg-primary/10 ring-2 ring-primary/20 shadow-md"
-                      : "border-border hover:border-primary/40 hover:bg-accent/60"
-                  }`}
-                >
-                  {/* Check badge */}
-                  {selectedInvoiceId === inv.invoice_id && (
-                    <div className="absolute top-3 right-3">
-                      <CheckCircle2 className="h-4 w-4 text-primary" />
+            <div className="border border-border rounded-2xl overflow-hidden divide-y divide-border max-h-60 sm:max-h-72 overflow-y-auto custom-scrollbar">
+              {filteredInvoices.map((inv) => {
+                const isSelected = selectedInvoiceId === inv.invoice_id;
+                return (
+                  <button
+                    key={inv.invoice_id}
+                    type="button"
+                    onClick={() => setSelectedInvoiceId(inv.invoice_id)}
+                    className={`w-full flex items-center justify-between p-3 sm:p-4 text-left transition-all duration-150 ${
+                      isSelected
+                        ? "bg-primary/5 hover:bg-primary/10"
+                        : "hover:bg-accent/50 bg-card"
+                    }`}
+                  >
+                    {/* Left side: selection radio + Invoice No + formatted Date */}
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className={`h-4.5 w-4.5 rounded-full border flex items-center justify-center shrink-0 transition-all duration-200 ${
+                          isSelected
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-muted-foreground/35"
+                        }`}
+                      >
+                        {isSelected && (
+                          <div className="h-1.5 w-1.5 rounded-full bg-white" />
+                        )}
+                      </div>
+                      
+                      <div className="min-w-0">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2">
+                          <span className={`text-xs sm:text-sm font-bold truncate ${isSelected ? "text-primary" : "text-foreground"}`}>
+                            {inv.invoice_no}
+                          </span>
+                          <span className="text-muted-foreground hidden sm:inline">·</span>
+                          <span className="text-[10px] sm:text-xs text-muted-foreground whitespace-nowrap">
+                            {formatDate(inv.invoice_date)}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                  )}
 
-                  <div className="flex items-center gap-2 mb-2">
-                    <div
-                      className={`h-7 w-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                        selectedInvoiceId === inv.invoice_id
-                          ? "bg-primary/20 text-primary"
-                          : "bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      <FileText className="h-3.5 w-3.5" />
+                    {/* Right side: Amount + Status badge */}
+                    <div className="flex items-center gap-2 sm:gap-3 shrink-0 ml-2">
+                      <span className="text-xs sm:text-sm font-semibold text-foreground">
+                        ₱{inv.total_amount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </span>
+                      <span
+                        className={`text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          inv.transaction_status === "POSTED"
+                            ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
+                            : inv.transaction_status === "CANCELLED"
+                            ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
+                            : "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400"
+                        }`}
+                      >
+                        {inv.transaction_status}
+                      </span>
                     </div>
-                    <span
-                      className={`text-sm font-bold ${
-                        selectedInvoiceId === inv.invoice_id ? "text-primary" : "text-foreground"
-                      }`}
-                    >
-                      {inv.invoice_no}
-                    </span>
-                  </div>
-
-                  <div className="space-y-0.5 pl-9">
-                    <p className="text-[11px] text-muted-foreground">
-                      📅 {inv.invoice_date}
-                    </p>
-                    <p className="text-[11px] font-semibold text-foreground">
-                      ₱{inv.total_amount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </p>
-                    <span
-                      className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
-                        inv.transaction_status === "POSTED"
-                          ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
-                          : inv.transaction_status === "CANCELLED"
-                          ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
-                          : "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400"
-                      }`}
-                    >
-                      {inv.transaction_status}
-                    </span>
-                  </div>
-                </button>
-              ))}
+                  </button>
+                );
+              })}
             </div>
           )}
 
