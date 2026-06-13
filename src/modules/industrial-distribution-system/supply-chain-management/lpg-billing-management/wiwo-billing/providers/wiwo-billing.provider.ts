@@ -55,20 +55,52 @@ export async function fetchTransactionHeaders(params: {
   const res = await directusFetch<{
     data: (Omit<LpgTransactionHeader, "customer_site_id" | "customer_id"> & {
       customer_site_id: number | CustomerSite;
-      customer_id?: string | { id?: string; customer_code?: string; customer_name?: string };
+      customer_id?: string;
     })[];
   }>(
     `${DIRECTUS_URL}/items/lpg_transaction_headers?${qs}`
   );
-  return (res.data ?? []).map((header) => {
-    const site = typeof header.customer_site_id === "object" ? header.customer_site_id : undefined;
-    const customer_name = typeof header.customer_id === "object" ? header.customer_id?.customer_name : undefined;
-    const customer_id = typeof header.customer_id === "object" ? header.customer_id?.customer_code || header.customer_id?.id : header.customer_id;
+
+  const headers = res.data ?? [];
+  const customerCodes = Array.from(new Set(headers.map(h => h.customer_id).filter(Boolean)));
+  const siteIds = Array.from(new Set(headers.map(h => typeof h.customer_site_id === "object" ? h.customer_site_id?.id : h.customer_site_id).filter(Boolean)));
+  
+  let customerMap: Record<string, string> = {};
+  if (customerCodes.length > 0) {
+    try {
+      const filterObj = { customer_code: { _in: customerCodes } };
+      const custRes = await directusFetch<{ data: { customer_code: string; customer_name: string }[] }>(
+        `${DIRECTUS_URL}/items/customer?fields=customer_code,customer_name&filter=${encodeURIComponent(JSON.stringify(filterObj))}`
+      );
+      customerMap = Object.fromEntries((custRes.data ?? []).map(c => [c.customer_code, c.customer_name]));
+    } catch (e) {
+      console.warn("Failed to fetch customer names", e);
+    }
+  }
+
+  let siteMap: Record<number, CustomerSite> = {};
+  if (siteIds.length > 0) {
+    try {
+      const filterObj = { id: { _in: siteIds } };
+      const siteRes = await directusFetch<{ data: CustomerSite[] }>(
+        `${DIRECTUS_URL}/items/lpg_customer_lpg_sites?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg&filter=${encodeURIComponent(JSON.stringify(filterObj))}`
+      );
+      siteMap = Object.fromEntries((siteRes.data ?? []).map(s => [s.id, s]));
+    } catch (e) {
+      console.warn("Failed to fetch site names", e);
+    }
+  }
+
+  return headers.map((header) => {
+    const rawSiteId = typeof header.customer_site_id === "object" ? header.customer_site_id?.id : header.customer_site_id;
+    const site = rawSiteId ? siteMap[rawSiteId as number] : undefined;
+    const customer_id = header.customer_id;
+    const customer_name = customer_id ? customerMap[customer_id] : undefined;
     return {
       ...header,
       customer_id,
       customer_name,
-      customer_site_id: site?.id ?? header.customer_site_id,
+      customer_site_id: rawSiteId,
       site,
     } as LpgTransactionHeader;
   });
@@ -125,6 +157,64 @@ export async function createTransactionHeader(payload: {
   return { ...res.data, site };
 }
 
+// Helper to manually hydrate site/customer name data securely
+async function hydrateTransactions(txs: MeteredWiwoTransaction[]): Promise<MeteredWiwoTransaction[]> {
+  if (txs.length === 0) return txs;
+
+  const customerCodes = Array.from(new Set(txs.map(t => t.customer_code).filter(Boolean)));
+  const siteIds = Array.from(new Set(txs.map(t => {
+    const rawSite = t.lpg_site_id;
+    return typeof rawSite === "object" ? (rawSite as any)?.id : rawSite;
+  }).filter(Boolean)));
+
+  let customerMap: Record<string, string> = {};
+  if (customerCodes.length > 0) {
+    try {
+      const filterObj = { customer_code: { _in: customerCodes } };
+      const custRes = await directusFetch<{ data: { customer_code: string; customer_name: string }[] }>(
+        `${DIRECTUS_URL}/items/customer?fields=customer_code,customer_name&filter=${encodeURIComponent(JSON.stringify(filterObj))}`
+      );
+      customerMap = Object.fromEntries((custRes.data ?? []).map(c => [c.customer_code, c.customer_name]));
+    } catch (e) {
+      console.warn("Failed to fetch customer names in hydrateTransactions", e);
+    }
+  }
+
+  let siteMap: Record<number, CustomerSite> = {};
+  if (siteIds.length > 0) {
+    try {
+      const filterObj = { id: { _in: siteIds } };
+      const siteRes = await directusFetch<{ data: CustomerSite[] }>(
+        `${DIRECTUS_URL}/items/lpg_customer_lpg_sites?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg&filter=${encodeURIComponent(JSON.stringify(filterObj))}`
+      );
+      siteMap = Object.fromEntries((siteRes.data ?? []).map(s => [s.id, s]));
+    } catch (e) {
+      console.warn("Failed to fetch site names in hydrateTransactions", e);
+    }
+  }
+
+  return txs.map(t => {
+    const rawSite = t.lpg_site_id;
+    const siteId = typeof rawSite === "object" ? (rawSite as any)?.id : rawSite;
+    const siteObj = siteId ? siteMap[siteId] : undefined;
+    const customerName = t.customer_code ? customerMap[t.customer_code] : undefined;
+
+    return {
+      ...t,
+      lpg_site_id: siteId,
+      customer: t.customer_code ? {
+        customer_code: t.customer_code,
+        customer_name: customerName || "",
+      } : undefined,
+      site: siteObj ? {
+        id: siteObj.id,
+        site_name: siteObj.site_name,
+        default_price_per_kg: siteObj.default_price_per_kg,
+      } : undefined,
+    } as MeteredWiwoTransaction;
+  });
+}
+
 // ─── Transactions List ────────────────────────────────────────────────────────
 export async function fetchWiwoBillingTransactions(params: WiwoListParams): Promise<{
   data: MeteredWiwoTransaction[];
@@ -139,6 +229,7 @@ export async function fetchWiwoBillingTransactions(params: WiwoListParams): Prom
   if (params.status) filters.status = { _eq: params.status };
   // AG-CHANGE: Filter by transaction_header_id when viewing a POSTED header's linked transactions
   if (params.transactionHeaderId) filters.transaction_header_id = { _eq: params.transactionHeaderId };
+  if (params.salesInvoiceId) filters.sales_invoice_id = { _eq: params.salesInvoiceId };
   if (params.search) {
     filters._or = [
       { transaction_no: { _icontains: params.search } },
@@ -154,7 +245,9 @@ export async function fetchWiwoBillingTransactions(params: WiwoListParams): Prom
   const res = await directusFetch<{ data: MeteredWiwoTransaction[]; meta?: { total_count: number } }>(
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions?${qs}`
   );
-  return { data: res.data ?? [], total: res.meta?.total_count ?? 0 };
+  const txs = res.data ?? [];
+  const hydrated = await hydrateTransactions(txs);
+  return { data: hydrated, total: res.meta?.total_count ?? 0 };
 }
 
 export async function fetchWiwoBillingTransactionById(id: number): Promise<MeteredWiwoTransaction | null> {
@@ -162,17 +255,21 @@ export async function fetchWiwoBillingTransactionById(id: number): Promise<Meter
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions/${id}?fields=${FIELDS_TX}`
   );
   const tx = res.data ?? null;
-  if (tx && tx.wiwo_header_id) {
-    // Enrich with wiwo details
-    const headerId = typeof tx.wiwo_header_id === "object" ? (tx.wiwo_header_id as unknown as WiwoHeader).id : tx.wiwo_header_id;
-    const detailRes = await directusFetch<{ data: WiwoDetail[] }>(
-      `${DIRECTUS_URL}/items/lpg_wiwo_details?filter[wiwo_header_id][_eq]=${headerId}&limit=-1`
-    );
-    if (tx.wiwo_header_id && typeof tx.wiwo_header_id === "object") {
-      (tx.wiwo_header_id as unknown as WiwoHeader).details = detailRes.data ?? [];
+  if (tx) {
+    const [hydrated] = await hydrateTransactions([tx]);
+    if (hydrated.wiwo_header_id) {
+      // Enrich with wiwo details
+      const headerId = typeof hydrated.wiwo_header_id === "object" ? (hydrated.wiwo_header_id as unknown as WiwoHeader).id : hydrated.wiwo_header_id;
+      const detailRes = await directusFetch<{ data: WiwoDetail[] }>(
+        `${DIRECTUS_URL}/items/lpg_wiwo_details?filter[wiwo_header_id][_eq]=${headerId}&limit=-1`
+      );
+      if (hydrated.wiwo_header_id && typeof hydrated.wiwo_header_id === "object") {
+        (hydrated.wiwo_header_id as unknown as WiwoHeader).details = detailRes.data ?? [];
+      }
     }
+    return hydrated;
   }
-  return tx;
+  return null;
 }
 
 // ─── Reference Lookups ────────────────────────────────────────────────────────
@@ -202,16 +299,54 @@ export async function checkSiteOnboarded(siteId: number): Promise<boolean> {
   return (res.data ?? []).length > 0;
 }
 
-export async function fetchInvoicesForCustomer(customerCode?: string): Promise<{ invoice_id: number; invoice_no: string; total_amount: number; invoice_date: string; transaction_status: string }[]> {
+export async function fetchInvoicesForCustomer(customerCode?: string): Promise<{ invoice_id: number; invoice_no: string; total_amount: number; invoice_date: string; transaction_status: string; isOnboardingBaseline?: boolean }[]> {
   const filters: Record<string, any> = {
     transaction_status: { _eq: "En Route" }
   };
   if (customerCode) {
     filters.customer_code = { _eq: customerCode };
   }
+
+  // Fetch header-invoice linkings to exclude POSTED ones
+  const postedInvoiceIds = new Set<number>();
+  try {
+    const linkRes = await directusFetch<{ data: { sales_invoice_id: number; status: string }[] }>(
+      `${DIRECTUS_URL}/items/lpg_transaction_header_invoices?fields=sales_invoice_id,status&limit=-1`
+    );
+    (linkRes.data ?? []).forEach(item => {
+      if (item.status === "POSTED") {
+        postedInvoiceIds.add(item.sales_invoice_id);
+      }
+    });
+  } catch (e) {
+    console.warn("Failed to fetch lpg_transaction_header_invoices", e);
+  }
+
+  // Fetch invoices linked to ONBOARDING_BASELINE transactions
+  const onboardingInvoiceIds = new Set<number>();
+  try {
+    const obRes = await directusFetch<{ data: { sales_invoice_id: number }[] }>(
+      `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions?fields=sales_invoice_id&filter[transaction_type][_eq]=ONBOARDING_BASELINE&filter[status][_neq]=CANCELLED&limit=-1`
+    );
+    (obRes.data ?? []).forEach(tx => {
+      if (tx.sales_invoice_id) {
+        onboardingInvoiceIds.add(tx.sales_invoice_id);
+      }
+    });
+  } catch (e) {
+    console.warn("Failed to fetch onboarding baseline transaction invoice IDs", e);
+  }
+
   const url = `/items/sales_invoice?limit=-1&fields=invoice_id,invoice_no,invoice_date,total_amount,transaction_status,customer_code,order_id,salesman_id&filter=${encodeURIComponent(JSON.stringify(filters))}`;
   const res = await directusFetch<{ data: { invoice_id: number; invoice_no: string; total_amount: number; invoice_date: string; transaction_status: string }[] }>(`${DIRECTUS_URL}${url}`);
-  return res.data ?? [];
+  
+  const invoices = res.data ?? [];
+  return invoices
+    .filter(inv => !postedInvoiceIds.has(inv.invoice_id))
+    .map(inv => ({
+      ...inv,
+      isOnboardingBaseline: onboardingInvoiceIds.has(inv.invoice_id)
+    }));
 }
 
 export async function fetchAvailableCylinders(): Promise<CylinderAsset[]> {
@@ -686,6 +821,7 @@ export async function processRegularSwap(payload: {
   meteredKg?: number;
   salesInvoiceId?: number | null;
   salesInvoiceNo?: string | null;
+  idempotencyKey?: string;
   attachments?: {
     siteCylinderId: number | null;
     cylinderAssetId: number;
@@ -693,6 +829,32 @@ export async function processRegularSwap(payload: {
     directusFileId: string;
   }[];
 }): Promise<MeteredWiwoTransaction> {
+  // Idempotency Check
+  if (payload.idempotencyKey) {
+    try {
+      const existingRes = await directusFetch<{ data: MeteredWiwoTransaction[] }>(
+        `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions?filter[idempotency_key][_eq]=${payload.idempotencyKey}`
+      );
+      if (existingRes.data && existingRes.data.length > 0) {
+        return existingRes.data[0]; // Return the already processed transaction
+      }
+    } catch (err) {
+      // Ignore if idempotency_key field doesn't exist yet, or query fails
+      console.warn("Idempotency check failed (possibly missing field):", err);
+    }
+  }
+
+  // Evidence validation for returned cylinders
+  const attachments = payload.attachments || [];
+  for (const ret of payload.returnedCylinders) {
+    if (ret.returnedGrossWeight != null) {
+      const hasSerial = attachments.some(a => a.siteCylinderId === ret.siteCylinderId && a.attachmentType === "SERIAL_IMAGE");
+      const hasWeight = attachments.some(a => a.siteCylinderId === ret.siteCylinderId && a.attachmentType === "WEIGHT_IMAGE");
+      if (!hasSerial || !hasWeight) {
+        throw new Error(`Missing required evidence (Serial/Weight photos) for returned cylinder assignment ${ret.siteCylinderId}.`);
+      }
+    }
+  }
   // Input validations:
   // Completeness Checks & Negative Boundaries
   const meteredKg = payload.meteredKg !== undefined ? payload.meteredKg : Math.max(0, payload.currentMeterReading - payload.previousMeterReading);
@@ -792,10 +954,12 @@ export async function processRegularSwap(payload: {
   const varianceKg = Math.abs(meteredKg - totalWiwoKg);
   const billableSource = meteredKg >= totalWiwoKg ? "METERED" : "WIWO";
 
-  // Mismatch remarks requirement
-  if (meteredKg !== totalWiwoKg && !payload.remarks?.trim()) {
+  // Mismatch remarks requirement (2% Tolerance)
+  const referenceKg = Math.max(meteredKg, totalWiwoKg, 0.0001);
+  const diffPercentage = varianceKg / referenceKg;
+  if (diffPercentage > 0.02 && !payload.remarks?.trim()) {
     throw new Error(
-      `Metered KG (${meteredKg}) differs from WIWO KG (${totalWiwoKg}). An explanation is required in the remarks field.`
+      `Metered KG (${meteredKg}) differs from WIWO KG (${totalWiwoKg}) by more than 2%. An explanation is required in the remarks field.`
     );
   }
 
@@ -1101,6 +1265,7 @@ export async function processRegularSwap(payload: {
           sales_invoice_no: invoiceNo,
           status: "POSTED",
           remarks: payload.remarks || "",
+          idempotency_key: payload.idempotencyKey,
           ...withUser(payload.userId, ["created_by", "posted_by"]),
           posted_date: new Date().toISOString(),
         }),
@@ -1108,38 +1273,56 @@ export async function processRegularSwap(payload: {
     );
     parentTxData = parentRes.data;
 
-    // Link invoice to header
+    // Link / Update invoice status to POSTED on the header linking table
     if (invoiceId) {
-      await directusFetch(`${DIRECTUS_URL}/items/lpg_transaction_header_invoices`, {
-        method: "POST",
-        body: JSON.stringify({
-          header_id: payload.transactionHeaderId,
-          sales_invoice_id: invoiceId,
-          invoice_role: "SOURCE_DELIVERY",
-          linked_by: payload.userId,
-        }),
-      });
+      try {
+        const checkRes = await directusFetch<{ data: { id: number }[] }>(
+          `${DIRECTUS_URL}/items/lpg_transaction_header_invoices?filter[header_id][_eq]=${payload.transactionHeaderId}&filter[sales_invoice_id][_eq]=${invoiceId}&limit=1`
+        );
+        const existingLink = checkRes.data?.[0];
+        if (existingLink) {
+          await directusFetch(
+            `${DIRECTUS_URL}/items/lpg_transaction_header_invoices/${existingLink.id}`,
+            {
+              method: "PATCH",
+              body: JSON.stringify({
+                status: "POSTED",
+                linked_by: payload.userId,
+              }),
+            }
+          );
+        } else {
+          await directusFetch(`${DIRECTUS_URL}/items/lpg_transaction_header_invoices`, {
+            method: "POST",
+            body: JSON.stringify({
+              header_id: payload.transactionHeaderId,
+              sales_invoice_id: invoiceId,
+              invoice_role: "SOURCE_DELIVERY",
+              linked_by: payload.userId,
+              status: "POSTED",
+            }),
+          });
+        }
+      } catch (e) {
+        console.warn("Failed to update lpg_transaction_header_invoices status to POSTED", e);
+      }
     }
   }
 
-  // Save attachments
+  // Save attachments (Blocking Evidence Capture)
   if (payload.attachments && payload.attachments.length > 0) {
     for (const att of payload.attachments) {
-      try {
-        await directusFetch(`${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments`, {
-          method: "POST",
-          body: JSON.stringify({
-            transaction_id: parentTxData.id,
-            site_cylinder_id: att.siteCylinderId || null,
-            cylinder_asset_id: att.cylinderAssetId || null,
-            attachment_type: att.attachmentType,
-            directus_file_id: att.directusFileId,
-            ...withUser(payload.userId, ["created_by"]),
-          }),
-        });
-      } catch (err) {
-        console.error("Failed to insert transaction attachment:", err);
-      }
+      await directusFetch(`${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments`, {
+        method: "POST",
+        body: JSON.stringify({
+          transaction_id: parentTxData.id,
+          site_cylinder_id: att.siteCylinderId || null,
+          cylinder_asset_id: att.cylinderAssetId || null,
+          attachment_type: att.attachmentType,
+          directus_file_id: att.directusFileId,
+          ...withUser(payload.userId, ["created_by"]),
+        }),
+      });
     }
   }
 

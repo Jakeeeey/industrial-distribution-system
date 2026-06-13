@@ -171,7 +171,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
 
   // Existing View State
   const [txDetail, setTxDetail] = useState<MeteredWiwoTransaction | null>(null);
-  const isViewMode = !!txId && !!txDetail;
+  const isViewMode = !!txId && !!txDetail && txDetail.status !== "DRAFT";
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [cancelledReason, setCancelledReason] = useState("");
 
@@ -402,9 +402,26 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
       try {
         const res = await fetch(`/api/ids/scm/lpg-billing-management/wiwo-billing/${txId}`);
         const data = await res.json();
-        setTxDetail(data.data || null);
-        if (data.data) {
-          setVarianceReasonCode(data.data.variance_reason_code || "NONE");
+        const tx = data.data || null;
+        setTxDetail(tx);
+        if (tx) {
+          setVarianceReasonCode(tx.variance_reason_code || "NONE");
+          if (tx.status === "DRAFT") {
+            setSelectedTxId(String(tx.id));
+            setSiteId(String(tx.lpg_site_id));
+            setCustomerCode(tx.customer_code);
+            setTransactionDate(tx.transaction_date);
+            setBillingPeriodFrom(tx.billing_period_from ?? "");
+            setBillingPeriodTo(tx.billing_period_to ?? "");
+            setDraftMeteredKg(Number(tx.metered_kg));
+
+            if (tx.meter_reading_id) {
+              const mr = tx.meter_reading_id as unknown as MeterReading;
+              setPreviousReading(Number(mr.previous_reading ?? 0));
+              setCurrentReading(Number(mr.current_reading ?? 0));
+            }
+            setPricePerKg(Number(tx.price_per_kg) || 0);
+          }
         }
       } catch (err) {
         console.error("Failed to load transaction details", err);
@@ -755,6 +772,8 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
           customer_code: customerCode,
           lpg_site_id: Number(siteId),
           transaction_date: transactionDate,
+          sales_invoice_id: salesInvoice?.invoice_id,
+          sales_invoice_no: salesInvoice?.invoice_no,
           cylinders: selectedOnboardCylinders.map(c => ({
             cylinderAssetId: c.cylinderAssetId,
             targetKg: c.targetKg,
@@ -1047,8 +1066,8 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                 {isViewMode || !!selectedTxId ? (
                   <Input
                     value={isViewMode
-                      ? (txDetail.site?.site_name || `Site ID: ${txDetail.lpg_site_id}`)
-                      : siteSearch || `Site #${siteId}`}
+                      ? (txDetail.site?.site_name || `Site #${txDetail.lpg_site_id}`)
+                      : (siteSearch && !siteSearch.startsWith("Site #") ? siteSearch : (transactionHeader.site?.site_name || siteSearch || `Site #${siteId}`))}
                     readOnly
                     className="bg-accent font-medium"
                   />
@@ -1085,12 +1104,16 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                 )}
               </div>
 
+              {/* AG-CHANGE: Show customer code as prefix + customer name for readability */}
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Customer Code</Label>
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Customer</Label>
                 <Input
-                  value={isViewMode ? txDetail.customer_code : customerCode || "—"}
+                  value={isViewMode
+                    ? `${txDetail.customer_code}${txDetail.customer?.customer_name ? ` · ${txDetail.customer.customer_name}` : ""}`
+                    : `${customerCode}${transactionHeader.customer_name ? ` · ${transactionHeader.customer_name}` : ""}`
+                  }
                   readOnly
-                  className="bg-accent font-mono font-medium"
+                  className="bg-accent font-medium"
                 />
               </div>
             </div>

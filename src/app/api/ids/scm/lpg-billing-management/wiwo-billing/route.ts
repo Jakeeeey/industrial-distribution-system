@@ -91,6 +91,7 @@ export async function GET(request: NextRequest) {
     const params = {
       search: searchParams.get("search") || undefined,
       status: searchParams.get("status") || undefined,
+      salesInvoiceId: searchParams.get("salesInvoiceId") ? Number(searchParams.get("salesInvoiceId")) : undefined,
       page: searchParams.get("page") ? Number(searchParams.get("page")) : 1,
       limit: searchParams.get("limit") ? Number(searchParams.get("limit")) : 10,
     };
@@ -197,6 +198,7 @@ export async function POST(request: NextRequest) {
         transactionId: body.transaction_id ? Number(body.transaction_id) : undefined,
         salesInvoiceId: body.sales_invoice_id ? Number(body.sales_invoice_id) : null,
         salesInvoiceNo: typeof body.sales_invoice_no === "string" ? body.sales_invoice_no : null,
+        idempotencyKey: typeof body.idempotency_key === "string" ? body.idempotency_key : undefined,
         isNoSwap: !!body.is_no_swap,
         attachments: body.attachments || [],
       });

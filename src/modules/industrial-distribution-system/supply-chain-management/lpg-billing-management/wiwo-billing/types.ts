@@ -160,6 +160,9 @@ export interface WiwoListParams {
   status?: string;
   page?: number;
   limit?: number;
+  // AG-CHANGE: Optional filter to scope transactions to a specific transaction header
+  transactionHeaderId?: number;
+  salesInvoiceId?: number;
 }
 
 export interface OnboardCylinderInput {
