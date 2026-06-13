@@ -1,6 +1,6 @@
 // ─── Enums / Literals ────────────────────────────────────────────────────────
 
-export type TransactionType = "ONBOARDING_BASELINE" | "REGULAR_BILLING";
+export type TransactionType = "ONBOARDING_BASELINE" | "REGULAR_BILLING" | "ADJUSTMENT";
 export type BillableSource = "METERED" | "WIWO" | "NONE";
 export type TransactionStatus = "DRAFT" | "POSTED" | "CANCELLED";
 
@@ -54,6 +54,17 @@ export interface WiwoDetailRef {
   consumed_lpg_kg?: number;
 }
 
+export interface CustomerSite {
+  id: number;
+  site_name: string | null;
+  customer_code: string;
+  default_price_per_kg: number;
+  last_meter_reading?: number | null;
+  default_target_lpg_kg?: number | null;
+}
+
+// ─── LPG Transaction Header ───────────────────────────────────────────────────
+
 export interface LpgTransactionHeader {
   header_id?: number;
   header_no?: string | null;
@@ -62,7 +73,7 @@ export interface LpgTransactionHeader {
   period_from: string;
   period_to: string;
   status: TransactionStatus;
-  is_billed: number;
+  is_billed: number; // 0 or 1
   remarks?: string | null;
   created_by?: number | null;
   posted_by?: number | null;
@@ -72,6 +83,10 @@ export interface LpgTransactionHeader {
   cancelled_reason?: string | null;
   created_at?: string;
   updated_at?: string;
+  site?: CustomerSite;
+  customer_name?: string;
+  sales_order_id?: number | null;
+  sales_order_no?: string | null;
 }
 
 // ─── Metered-WIWO Transaction ─────────────────────────────────────────────────
@@ -79,8 +94,6 @@ export interface LpgTransactionHeader {
 export interface MeteredWiwoTransaction {
   id?: number;
   transaction_header_id: number | null;
-
-  /** Primary transaction identifier (TXORB-... or TXREG-... prefix) */
   transaction_no?: string;
   /** Legacy alias kept for backward compat — maps to transaction_no or reading_no */
   reading_no: string;
@@ -96,6 +109,7 @@ export interface MeteredWiwoTransaction {
   metered_kg: number;
   wiwo_kg: number;
   variance_kg: number;
+  variance_reason_code?: "NONE" | "METER_DRIFT" | "PHYSICAL_LEAK" | "METER_MALFUNCTION" | "TEMPERATURE_VARIATION";
   billable_source: BillableSource;
   billable_kg: number;
 

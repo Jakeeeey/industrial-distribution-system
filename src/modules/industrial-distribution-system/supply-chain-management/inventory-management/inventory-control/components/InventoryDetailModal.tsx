@@ -666,13 +666,14 @@ export function InventoryDetailModal({
                       <th className="py-2.5 px-4">#</th>
                       <th className="py-2.5 px-4">Serial Number</th>
                       <th className="py-2.5 px-4">Status</th>
+                      <th className="py-2.5 px-4">Condition</th>
                     </tr>
                   </thead>
                   <tbody>
                     {displayedSerials.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={4}
+                          colSpan={5}
                           className="text-center py-10 text-xs text-muted-foreground"
                         >
                           No serial numbers found for this product.
@@ -705,6 +706,19 @@ export function InventoryDetailModal({
                               }`}
                             >
                               {s.status}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-4">
+                            <span
+                              className={`inline-block text-[9px] font-extrabold px-2 py-0.5 rounded-full border ${
+                                s.cylinderCondition?.toLowerCase() === "good"
+                                  ? "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20"
+                                  : s.cylinderCondition?.toLowerCase() === "damaged"
+                                    ? "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20"
+                                    : "bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 border-zinc-500/20"
+                              }`}
+                            >
+                              {s.cylinderCondition || "—"}
                             </span>
                           </td>
                         </tr>

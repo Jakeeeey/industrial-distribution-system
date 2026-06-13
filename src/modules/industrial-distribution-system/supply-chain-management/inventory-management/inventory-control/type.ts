@@ -9,6 +9,11 @@ export interface SerialOnhandRecord {
   branchId: number;
   serialNumber: string;
   status: string; // raw from API, e.g. "Full", "Empty"
+  cylinderStatus?: string;
+  cylinderCondition?: string;
+  currentBranchId?: number;
+  currentCustomerCode?: string | null;
+  acquisitionDate?: string | null;
 }
 
 export interface ProductInfo {

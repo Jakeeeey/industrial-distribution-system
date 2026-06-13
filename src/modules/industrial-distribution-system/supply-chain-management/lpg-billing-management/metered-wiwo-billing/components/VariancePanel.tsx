@@ -30,11 +30,10 @@ export function VariancePanel({ result }: Props) {
       {/* Comparison table */}
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div
-          className={`rounded-xl p-4 border ${
-            billable_source === "METERED"
+          className={`rounded-xl p-4 border ${billable_source === "METERED"
               ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800/40"
               : "bg-zinc-50 dark:bg-zinc-800/40 border-zinc-200 dark:border-zinc-700/40"
-          }`}
+            }`}
         >
           <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Metered KG</p>
           <p className={`text-xl font-black font-mono ${billable_source === "METERED" ? "text-blue-700 dark:text-blue-400" : ""}`}>
@@ -45,11 +44,10 @@ export function VariancePanel({ result }: Props) {
           )}
         </div>
         <div
-          className={`rounded-xl p-4 border ${
-            billable_source === "WIWO"
+          className={`rounded-xl p-4 border ${billable_source === "WIWO"
               ? "bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800/40"
               : "bg-zinc-50 dark:bg-zinc-800/40 border-zinc-200 dark:border-zinc-700/40"
-          }`}
+            }`}
         >
           {/* <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">WIWO KG</p> */}
           <p className={`text-xl font-black font-mono ${billable_source === "WIWO" ? "text-orange-700 dark:text-orange-400" : ""}`}>
@@ -63,11 +61,10 @@ export function VariancePanel({ result }: Props) {
 
       {/* Variance row */}
       <div
-        className={`rounded-xl p-3 flex items-center justify-between ${
-          isHighVariance
+        className={`rounded-xl p-3 flex items-center justify-between ${isHighVariance
             ? "bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30"
             : "bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-700/30"
-        }`}
+          }`}
       >
         <div className="flex items-center gap-2">
           {isHighVariance ? (
@@ -89,9 +86,11 @@ export function VariancePanel({ result }: Props) {
       </div>
 
       {/* Billable KG result */}
-      <div className="mt-3 bg-violet-50 dark:bg-violet-900/20 border border-violet-200/50 dark:border-violet-800/30 rounded-xl p-4 flex items-center justify-between">
+      <div className="mt-3 bg-violet-50 dark:bg-violet-900/20 border border-violet-200/50 dark:border-violet-800/30 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0">
         <div>
-          <p className="text-[10px] text-violet-600 font-bold uppercase tracking-wider">Billable KG</p>
+          <p className="text-[10px] text-violet-600 font-bold uppercase tracking-wider">
+            Billable KG
+          </p>
           <p className="text-xs text-violet-500 mt-0.5">
             MAX(Metered, WIWO) → {billable_source as BillableSource}
           </p>
