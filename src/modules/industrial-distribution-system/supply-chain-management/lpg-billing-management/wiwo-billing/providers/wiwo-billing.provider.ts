@@ -164,7 +164,7 @@ async function hydrateTransactions(txs: MeteredWiwoTransaction[]): Promise<Meter
   const customerCodes = Array.from(new Set(txs.map(t => t.customer_code).filter(Boolean)));
   const siteIds = Array.from(new Set(txs.map(t => {
     const rawSite = t.lpg_site_id;
-    return typeof rawSite === "object" ? (rawSite as any)?.id : rawSite;
+    return typeof rawSite === "object" && rawSite !== null ? (rawSite as { id: number }).id : rawSite;
   }).filter(Boolean)));
 
   let customerMap: Record<string, string> = {};
@@ -195,7 +195,7 @@ async function hydrateTransactions(txs: MeteredWiwoTransaction[]): Promise<Meter
 
   return txs.map(t => {
     const rawSite = t.lpg_site_id;
-    const siteId = typeof rawSite === "object" ? (rawSite as any)?.id : rawSite;
+    const siteId = typeof rawSite === "object" && rawSite !== null ? (rawSite as { id: number }).id : rawSite;
     const siteObj = siteId ? siteMap[siteId] : undefined;
     const customerName = t.customer_code ? customerMap[t.customer_code] : undefined;
 
@@ -300,7 +300,7 @@ export async function checkSiteOnboarded(siteId: number): Promise<boolean> {
 }
 
 export async function fetchInvoicesForCustomer(customerCode?: string): Promise<{ invoice_id: number; invoice_no: string; total_amount: number; invoice_date: string; transaction_status: string; isOnboardingBaseline?: boolean }[]> {
-  const filters: Record<string, any> = {
+  const filters: Record<string, unknown> = {
     transaction_status: { _eq: "En Route" }
   };
   if (customerCode) {

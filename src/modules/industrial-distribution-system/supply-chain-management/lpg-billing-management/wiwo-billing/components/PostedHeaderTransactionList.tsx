@@ -3,7 +3,7 @@
 // Renders as a read-only table list — no actions allowed once a header is POSTED.
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Calendar, CheckCircle2, RefreshCw, Scale, Receipt } from "lucide-react";
 import type { MeteredWiwoTransaction, LpgTransactionHeader } from "../types";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +17,7 @@ export function PostedHeaderTransactionList({ header }: PostedHeaderTransactionL
   const [transactions, setTransactions] = useState<MeteredWiwoTransaction[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const fetchTransactions = async () => {
+  const fetchTransactions = useCallback(async () => {
     setLoading(true);
     try {
       // Fetch all transactions for this specific header using the transaction_header_id filter
@@ -31,11 +31,11 @@ export function PostedHeaderTransactionList({ header }: PostedHeaderTransactionL
     } finally {
       setLoading(false);
     }
-  };
+  }, [header.header_id]);
 
   useEffect(() => {
     void fetchTransactions();
-  }, [header.header_id]);
+  }, [fetchTransactions]);
 
   const statusColor = (status: string) => {
     if (status === "POSTED") return "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300";
