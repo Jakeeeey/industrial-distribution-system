@@ -582,8 +582,9 @@ export async function createSalesInvoice(
   const ts = Date.now().toString().slice(-6);
   const invoiceNo = `SI-${ts.slice(0, 3)}-${ts.slice(3, 6)}`;
 
-  const vat = parseFloat((amount * 0.12).toFixed(2));
-  const net = parseFloat((amount + vat).toFixed(2));
+  // AG-CHANGE: Updated VAT calculation to use VAT-inclusive formulas (amount / 1.12)
+  const vat = parseFloat((amount - (amount / 1.12)).toFixed(2));
+  const net = amount;
 
   let salesmanId: number | null = null;
   if (userId) {
@@ -1120,9 +1121,10 @@ export async function processRegularSwap(payload: {
 
   // Create WIWO Header
   const wiwoNo = `WIWO-${Date.now().toString().slice(-6)}`;
-  const grossAmount = Number((totalWiwoKg * payload.pricePerKg).toFixed(2));
-  const netAmount = Number((grossAmount / 1.12).toFixed(2));
-  const vatAmount = Number((grossAmount - netAmount).toFixed(2));
+  // AG-CHANGE: Updated calculation to VAT-inclusive formula where net = total and gross = net
+  const netAmount = Number((totalWiwoKg * payload.pricePerKg).toFixed(2));
+  const grossAmount = netAmount;
+  const vatAmount = Number((netAmount - (netAmount / 1.12)).toFixed(2));
 
   const headerRes = await directusFetch<{ data: { id: number } }>(
     `${DIRECTUS_URL}/items/lpg_wiwo_headers`,
@@ -1175,9 +1177,10 @@ export async function processRegularSwap(payload: {
         consumed_lpg_kg: retItem.consumed,
         billable_kg: retItem.consumed,
         price_per_kg: payload.pricePerKg,
+        // AG-CHANGE: Detail line items updated to VAT-inclusive pricing formula
         gross_amount: parseFloat((retItem.consumed * payload.pricePerKg).toFixed(2)),
-        vat_amount: parseFloat((retItem.consumed * payload.pricePerKg * 0.12).toFixed(2)),
-        net_amount: parseFloat((retItem.consumed * payload.pricePerKg * 1.12).toFixed(2)),
+        vat_amount: parseFloat(((retItem.consumed * payload.pricePerKg) - (retItem.consumed * payload.pricePerKg) / 1.12).toFixed(2)),
+        net_amount: parseFloat((retItem.consumed * payload.pricePerKg).toFixed(2)),
         is_billable: 1,
         result_site_cylinder_status: retItem.isSwapped ? "REMOVED" : "CONNECTED",
         result_asset_status: retItem.isSwapped ? "EMPTY" : "WITH_CUSTOMER",
