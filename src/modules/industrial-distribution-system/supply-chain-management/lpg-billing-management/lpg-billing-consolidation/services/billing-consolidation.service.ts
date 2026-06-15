@@ -183,9 +183,14 @@ export async function fetchAttachments(transactionId: number): Promise<Consolida
  *   2. kg_consumed = raw_consumption × conversion_factor
  *   3. gross_amount = kg_consumed × price_per_kg
  *   4. Update lpg_meter_readings
- *   5. Update lpg_metered_wiwo_transactions.metered_kg + recalculate billable_kg
- *   6. Update lpg_transaction_headers totals
- *   7. Write audit row
+ *   5. Re-evaluate arbitration with wiwo_kg:
+ *      - billable_kg = MAX(metered_kg, wiwo_kg)
+ *      - billable_source = metered_kg >= wiwo_kg ? METERED : WIWO
+ *      - variance_kg = |metered_kg - wiwo_kg|
+ *   6. Recompute gross_amount, vat_amount, and net_amount on transaction
+ *   7. Update lpg_metered_wiwo_transactions
+ *   8. Update lpg_transaction_headers totals
+ *   9. Write audit row
  */
 export async function adjustMeterReading(payload: MeterReadingAdjustPayload): Promise<{
   updated_meter_reading: Partial<ConsolidationMeterReading>;
@@ -220,22 +225,35 @@ export async function adjustMeterReading(payload: MeterReadingAdjustPayload): Pr
   };
   await repoPatchMeterReading(meterReadingId, meterPatch);
 
-  // 4. Fetch the parent transaction to get billable_source and price_per_kg for transaction-level recompute
+  // 4. Fetch the parent transaction to get base values for transaction-level recompute
   const txBefore = await fetchTransactionRaw(transactionId);
   if (!txBefore) throw new Error(`Transaction ${transactionId} not found.`);
 
-  // 5. Recompute transaction: metered_kg updates; if source=METERED, billable_kg updates too
+  // 5. Re-arbitrate based on which billing source has the higher calculated gross amount
   const newMeteredKg = kgConsumed;
-  const newBillableKg =
-    txBefore.billable_source === "METERED" ? newMeteredKg : txBefore.billable_kg;
   const txPricePerKg = txBefore.price_per_kg;
+
+  // Calculate gross amount for both sources to determine the winner
+  const meteredGrossTemp = parseFloat((newMeteredKg * txPricePerKg).toFixed(2));
+  const wiwoGrossTemp = parseFloat((txBefore.wiwo_kg * txPricePerKg).toFixed(2));
+
+  const newBillableSource = meteredGrossTemp >= wiwoGrossTemp ? "METERED" : "WIWO";
+  const newBillableKg = newBillableSource === "METERED" ? newMeteredKg : txBefore.wiwo_kg;
+  const newVarianceKg = parseFloat(Math.abs(newMeteredKg - txBefore.wiwo_kg).toFixed(4));
+
+  // Recompute transaction amounts: gross, VAT (12%), and Net
   const newGrossAmount = parseFloat((newBillableKg * txPricePerKg).toFixed(2));
-  // Note: VAT and discount are not recomputed here (depends on customer terms,
-  // handled downstream at invoicing). Only gross_amount updates for now.
+  const newVatAmount = txBefore.transaction_type === "ONBOARDING_BASELINE" ? 0 : parseFloat((newGrossAmount * 0.12).toFixed(2));
+  const newNetAmount = txBefore.transaction_type === "ONBOARDING_BASELINE" ? 0 : parseFloat((newGrossAmount + newVatAmount).toFixed(2));
+
   const txPatch: Record<string, unknown> = {
     metered_kg: newMeteredKg,
+    variance_kg: newVarianceKg,
+    billable_source: newBillableSource,
     billable_kg: newBillableKg,
     gross_amount: newGrossAmount,
+    vat_amount: newVatAmount,
+    net_amount: newNetAmount,
     modified_by,
     modified_date: new Date().toISOString(),
   };
@@ -254,7 +272,12 @@ export async function adjustMeterReading(payload: MeterReadingAdjustPayload): Pr
       raw_consumption: { old: existing.raw_consumption, new: rawConsumption },
       kg_consumed: { old: existing.kg_consumed, new: kgConsumed },
       metered_kg: { old: txBefore.metered_kg, new: newMeteredKg },
+      variance_kg: { old: txBefore.variance_kg, new: newVarianceKg },
+      billable_source: { old: txBefore.billable_source, new: newBillableSource },
       billable_kg: { old: txBefore.billable_kg, new: newBillableKg },
+      gross_amount: { old: txBefore.gross_amount, new: newGrossAmount },
+      vat_amount: { old: txBefore.vat_amount, new: newVatAmount },
+      net_amount: { old: txBefore.net_amount, new: newNetAmount },
       adjustment_reason: { old: null, new: adjustment_reason },
     },
     modified_by,
@@ -262,7 +285,15 @@ export async function adjustMeterReading(payload: MeterReadingAdjustPayload): Pr
 
   return {
     updated_meter_reading: { ...existing, current_reading: new_current_reading, raw_consumption: rawConsumption, kg_consumed: kgConsumed, gross_amount: grossAmount },
-    updated_transaction: { metered_kg: newMeteredKg, billable_kg: newBillableKg, gross_amount: newGrossAmount },
+    updated_transaction: {
+      metered_kg: newMeteredKg,
+      variance_kg: newVarianceKg,
+      billable_source: newBillableSource,
+      billable_kg: newBillableKg,
+      gross_amount: newGrossAmount,
+      vat_amount: newVatAmount,
+      net_amount: newNetAmount,
+    },
   };
 }
 
@@ -277,10 +308,15 @@ export async function adjustMeterReading(payload: MeterReadingAdjustPayload): Pr
  *   3. billable_kg      = consumed_lpg_kg (if is_billable=1)
  *   4. gross_amount     = billable_kg × price_per_kg
  *   5. Update lpg_wiwo_details row
- *   6. Re-sum lpg_wiwo_headers.total_billable_kg
- *   7. Update lpg_metered_wiwo_transactions.wiwo_kg + billable_kg
- *   8. Update lpg_transaction_headers totals
- *   9. Write audit row
+ *   6. Re-sum lpg_wiwo_headers.total_billable_kg & update WIWO header amounts
+ *   7. Re-evaluate arbitration with metered_kg:
+ *      - billable_kg = MAX(metered_kg, wiwo_kg)
+ *      - billable_source = metered_kg >= wiwo_kg ? METERED : WIWO
+ *      - variance_kg = |metered_kg - wiwo_kg|
+ *   8. Recompute gross_amount, vat_amount, and net_amount on transaction
+ *   9. Update lpg_metered_wiwo_transactions
+ *   10. Update lpg_transaction_headers totals
+ *   11. Write audit row
  */
 export async function adjustWiwoDetail(payload: WiwoDetailAdjustPayload): Promise<{
   updated_detail: Record<string, number>;
@@ -303,12 +339,12 @@ export async function adjustWiwoDetail(payload: WiwoDetailAdjustPayload): Promis
 
   const oldGrossWeight = detail.returned_gross_weight_kg ?? 0;
 
-  // 2. Recompute line values
+  // 2. Recompute line values: Consumed net LPG = Previous Net (previous_lpg_kg - tare) - Remaining Net (remainingLpgKg)
   const remainingLpgKg = Math.max(0, parseFloat(
     (new_returned_gross_weight_kg - detail.tare_weight_kg).toFixed(3)
   ));
   const consumedLpgKg = Math.max(0, parseFloat(
-    (detail.previous_lpg_kg - remainingLpgKg).toFixed(3)
+    ((detail.previous_lpg_kg - detail.tare_weight_kg) - remainingLpgKg).toFixed(3)
   ));
   const billableKg = detail.is_billable === 1 ? consumedLpgKg : 0;
   const grossAmount = parseFloat((billableKg * detail.price_per_kg).toFixed(2));
@@ -325,32 +361,53 @@ export async function adjustWiwoDetail(payload: WiwoDetailAdjustPayload): Promis
   };
   await repoPatchWiwoDetail(wiwoDetailId, detailPatch);
 
-  // 4. Re-sum the WIWO header total_billable_kg using the updated detail values
+  // 4. Re-sum the WIWO header totals using the updated detail values
   const otherDetails = (wiwoHeader.details ?? []).filter((d) => d.id !== wiwoDetailId);
   const otherBillableKg = otherDetails.reduce((sum, d) => sum + d.billable_kg, 0);
   const newTotalBillableKg = parseFloat((otherBillableKg + billableKg).toFixed(3));
   const newHeaderGross = parseFloat((newTotalBillableKg * wiwoHeader.price_per_kg).toFixed(2));
 
+  // Fetch the parent transaction to get base values for transaction-level recompute & check onboarding
+  const txBefore = await fetchTransactionRaw(transactionId);
+  if (!txBefore) throw new Error(`Transaction ${transactionId} not found.`);
+
+  // Recalculate WIWO header VAT and Net
+  const newHeaderVat = txBefore.transaction_type === "ONBOARDING_BASELINE" ? 0 : parseFloat((newHeaderGross * 0.12).toFixed(2));
+  const newHeaderNet = txBefore.transaction_type === "ONBOARDING_BASELINE" ? 0 : parseFloat((newHeaderGross + newHeaderVat).toFixed(2));
+
   await repoPatchWiwoHeader(wiwoHeaderId, {
     total_billable_kg: newTotalBillableKg,
     gross_amount: newHeaderGross,
+    vat_amount: newHeaderVat,
+    net_amount: newHeaderNet,
     modified_by,
     modified_date: new Date().toISOString(),
   });
 
-  // 5. Update the parent transaction's wiwo_kg
-  const txBefore = await fetchTransactionRaw(transactionId);
-  if (!txBefore) throw new Error(`Transaction ${transactionId} not found.`);
-
+  // 5. Re-arbitrate based on which billing source has the higher calculated gross amount
   const newWiwoKg = newTotalBillableKg;
-  const newBillableKg =
-    txBefore.billable_source === "WIWO" ? newWiwoKg : txBefore.billable_kg;
-  const newTxGross = parseFloat((newBillableKg * txBefore.price_per_kg).toFixed(2));
+  const txPricePerKg = txBefore.price_per_kg;
+
+  // Calculate gross amount for both sources to determine the winner
+  const meteredGrossTemp = parseFloat((txBefore.metered_kg * txPricePerKg).toFixed(2));
+  const wiwoGrossTemp = parseFloat((newWiwoKg * txPricePerKg).toFixed(2));
+
+  const newBillableSource = meteredGrossTemp >= wiwoGrossTemp ? "METERED" : "WIWO";
+  const newBillableKg = newBillableSource === "METERED" ? txBefore.metered_kg : newWiwoKg;
+  const newVarianceKg = parseFloat(Math.abs(txBefore.metered_kg - newWiwoKg).toFixed(4));
+  const newTxGross = parseFloat((newBillableKg * txPricePerKg).toFixed(2));
+
+  const newTxVat = txBefore.transaction_type === "ONBOARDING_BASELINE" ? 0 : parseFloat((newTxGross * 0.12).toFixed(2));
+  const newTxNet = txBefore.transaction_type === "ONBOARDING_BASELINE" ? 0 : parseFloat((newTxGross + newTxVat).toFixed(2));
 
   await repoPatchTransaction(transactionId, {
     wiwo_kg: newWiwoKg,
+    variance_kg: newVarianceKg,
+    billable_source: newBillableSource,
     billable_kg: newBillableKg,
     gross_amount: newTxGross,
+    vat_amount: newTxVat,
+    net_amount: newTxNet,
     modified_by,
     modified_date: new Date().toISOString(),
   });
@@ -367,8 +424,15 @@ export async function adjustWiwoDetail(payload: WiwoDetailAdjustPayload): Promis
       returned_gross_weight_kg: { old: oldGrossWeight, new: new_returned_gross_weight_kg },
       remaining_lpg_kg: { old: detail.remaining_lpg_kg, new: remainingLpgKg },
       consumed_lpg_kg: { old: detail.consumed_lpg_kg, new: consumedLpgKg },
-      billable_kg: { old: detail.billable_kg, new: billableKg },
+      detail_billable_kg: { old: detail.billable_kg, new: billableKg },
       wiwo_total_billable_kg: { old: wiwoHeader.total_billable_kg, new: newTotalBillableKg },
+      wiwo_kg: { old: txBefore.wiwo_kg, new: newWiwoKg },
+      variance_kg: { old: txBefore.variance_kg, new: newVarianceKg },
+      billable_source: { old: txBefore.billable_source, new: newBillableSource },
+      billable_kg: { old: txBefore.billable_kg, new: newBillableKg },
+      gross_amount: { old: txBefore.gross_amount, new: newTxGross },
+      vat_amount: { old: txBefore.vat_amount, new: newTxVat },
+      net_amount: { old: txBefore.net_amount, new: newTxNet },
       adjustment_reason: { old: null, new: adjustment_reason },
     },
     modified_by,
@@ -507,7 +571,7 @@ async function fetchTransactionRaw(transactionId: number): Promise<Consolidation
   const DIRECTUS_URL = getDirectusBase();
 
   const res = await directusFetch<{ data: Record<string, unknown> }>(
-    `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions/${transactionId}?fields=id,transaction_header_id,transaction_no,metered_kg,wiwo_kg,variance_kg,billable_source,billable_kg,price_per_kg,gross_amount,discount_amount,vat_amount,net_amount,status`
+    `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions/${transactionId}?fields=id,transaction_header_id,transaction_no,transaction_type,metered_kg,wiwo_kg,variance_kg,billable_source,billable_kg,price_per_kg,gross_amount,discount_amount,vat_amount,net_amount,status`
   );
   if (!res.data) return null;
   const d = res.data;
@@ -516,7 +580,7 @@ async function fetchTransactionRaw(transactionId: number): Promise<Consolidation
     id: Number(d["id"]),
     transaction_header_id: Number(d["transaction_header_id"] ?? 0),
     transaction_no: String(d["transaction_no"] ?? ""),
-    transaction_type: "REGULAR_BILLING",
+    transaction_type: (d["transaction_type"] as ConsolidationTransaction["transaction_type"]) ?? "REGULAR_BILLING",
     transaction_date: "",
     customer_code: "",
     lpg_site_id: 0,

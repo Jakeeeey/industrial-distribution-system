@@ -446,15 +446,50 @@ export async function repoFetchAuditTrail(transactionId: number): Promise<Consol
   const res = await directusFetch<{ data: Record<string, unknown>[] }>(
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_audit?filter[transaction_id][_eq]=${transactionId}&sort=-modified_date&limit=100`
   );
-  return (res.data ?? []).map((a) => ({
-    audit_id: Number(a["audit_id"]),
-    transaction_id: Number(a["transaction_id"]),
-    transaction_no: String(a["transaction_no"] ?? ""),
-    action_type: String(a["action_type"] ?? "UPDATE"),
-    changes_payload: (a["changes_payload"] as ConsolidationAuditEntry["changes_payload"]) ?? {},
-    modified_by: a["modified_by"] ? Number(a["modified_by"]) : null,
-    modified_date: String(a["modified_date"] ?? ""),
-  }));
+  
+  const rawEntries = res.data ?? [];
+  const userIds = Array.from(
+    new Set(
+      rawEntries
+        .map((a) => (a["modified_by"] ? Number(a["modified_by"]) : null))
+        .filter((id): id is number => id !== null && !isNaN(id) && id > 0)
+    )
+  );
+
+  const userMap = new Map<number, string>();
+  if (userIds.length > 0) {
+    try {
+      const usersRes = await directusFetch<{ data: Record<string, unknown>[] }>(
+        `${DIRECTUS_URL}/items/user?filter[user_id][_in]=${userIds.join(",")}&fields=user_id,user_fname,user_mname,user_lname`
+      );
+      for (const u of usersRes.data ?? []) {
+        const id = Number(u.user_id);
+        const fname = String(u.user_fname ?? "").trim();
+        const mname = String(u.user_mname ?? "").trim();
+        const lname = String(u.user_lname ?? "").trim();
+        const fullName = [fname, mname, lname].filter(Boolean).join(" ");
+        if (fullName) {
+          userMap.set(id, fullName);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch users for audit trail", err);
+    }
+  }
+
+  return rawEntries.map((a) => {
+    const modifiedBy = a["modified_by"] ? Number(a["modified_by"]) : null;
+    return {
+      audit_id: Number(a["audit_id"]),
+      transaction_id: Number(a["transaction_id"]),
+      transaction_no: String(a["transaction_no"] ?? ""),
+      action_type: String(a["action_type"] ?? "UPDATE"),
+      changes_payload: (a["changes_payload"] as ConsolidationAuditEntry["changes_payload"]) ?? {},
+      modified_by: modifiedBy,
+      modified_by_name: modifiedBy ? userMap.get(modifiedBy) ?? null : null,
+      modified_date: String(a["modified_date"] ?? ""),
+    };
+  });
 }
 
 /**

@@ -211,6 +211,7 @@ export interface ConsolidationAuditEntry {
   /** JSON payload: { "column": { "old": x, "new": y } } */
   changes_payload: Record<string, { old: unknown; new: unknown }>;
   modified_by: number | null;
+  modified_by_name?: string | null;
   modified_date: string;
 }
 

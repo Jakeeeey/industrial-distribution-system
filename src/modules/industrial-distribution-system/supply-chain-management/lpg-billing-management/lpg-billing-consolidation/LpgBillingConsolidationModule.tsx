@@ -5,7 +5,7 @@
 // Overhauled as a premium sequential 3-step stepper UI.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Scale, ArrowLeft, CalendarRange } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useBillingConsolidation } from "./hooks/useBillingConsolidation";
@@ -30,18 +30,17 @@ export function LpgBillingConsolidationModule() {
   // Active step: 1 (Select Header), 2 (Process Invoices), 3 (Approve & Create SI)
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
-  // Sync step with selected header status
-  useEffect(() => {
+  // Sync step with selected header status during render-phase
+  const [prevSelectedHeaderId, setPrevSelectedHeaderId] = useState<number | null>(null);
+
+  if ((selectedHeader?.header_id ?? null) !== prevSelectedHeaderId) {
+    setPrevSelectedHeaderId(selectedHeader?.header_id ?? null);
     if (!selectedHeader) {
       setStep(1);
-    } else if (step === 1) {
-      if (selectedHeader.status === "DRAFT") {
-        setStep(2);
-      } else {
-        setStep(3);
-      }
+    } else {
+      setStep(selectedHeader.status === "DRAFT" ? 2 : 3);
     }
-  }, [selectedHeader, step]);
+  }
 
   const handleSelectHeader = (headerId: number) => {
     selectHeader(headerId);
@@ -76,7 +75,8 @@ export function LpgBillingConsolidationModule() {
         {step === 1 || !selectedHeader ? (
           <ConsolidationHeaderWorkspace hook={hook} onSelect={handleSelectHeader} />
         ) : (
-          <div className="space-y-4 w-full max-w-6xl mx-auto">
+          <div className="space-y-4 w-[90%] mx-auto">
+            {/* Workspace at 90% width for maximum usable space */}
             {/* ── Header Info & Stepper Bar ── */}
             <div className="rounded-2xl border border-border bg-card/80 backdrop-blur-md px-4 py-3 sm:px-6 sm:py-4 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4">
               <div className="min-w-0 flex-1">

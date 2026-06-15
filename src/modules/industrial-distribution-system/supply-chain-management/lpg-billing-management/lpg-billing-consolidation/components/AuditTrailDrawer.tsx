@@ -138,7 +138,7 @@ export function AuditTrailDrawer({
                   <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <User className="h-2.5 w-2.5" />
-                      User #{entry.modified_by ?? "—"}
+                      {entry.modified_by_name || `User #${entry.modified_by ?? "—"}`}
                     </span>
                     <span className="flex items-center gap-1">
                       <Clock className="h-2.5 w-2.5" />
