@@ -43,7 +43,7 @@ export function TransactionReviewCard({
       className={cn(
         "rounded-xl border bg-white dark:bg-zinc-900 overflow-hidden transition-shadow",
         isExpanded
-          ? "border-violet-300 dark:border-violet-700/50 shadow-md"
+          ? "border-primary/30 shadow-md"
           : "border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600"
       )}
     >
@@ -53,7 +53,7 @@ export function TransactionReviewCard({
         onClick={() => setIsExpanded((v) => !v)}
       >
         {/* Expand Icon */}
-        <span className="shrink-0 text-muted-foreground group-hover:text-violet-500 transition-colors">
+        <span className="shrink-0 text-muted-foreground group-hover:text-primary transition-colors">
           {isExpanded ? (
             <ChevronDown className="h-4 w-4" />
           ) : (
@@ -76,7 +76,7 @@ export function TransactionReviewCard({
               className={cn(
                 "text-[9px] px-1.5 py-0 border",
                 transaction.billable_source === "METERED"
-                  ? "bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900/20 dark:text-violet-400"
+                  ? "bg-primary/10 text-primary border-primary/20 dark:bg-primary/25 dark:text-primary-foreground/90"
                   : transaction.billable_source === "WIWO"
                   ? "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400"
                   : "bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-500"
@@ -103,7 +103,7 @@ export function TransactionReviewCard({
               <p className="text-[9px] text-muted-foreground flex items-center gap-1 justify-end">
                 <Gauge className="h-2.5 w-2.5" /> Metered
               </p>
-              <p className="text-xs font-black text-violet-700 dark:text-violet-300">
+              <p className="text-xs font-black text-primary">
                 {transaction.metered_kg.toFixed(3)} kg
               </p>
             </div>
@@ -111,7 +111,7 @@ export function TransactionReviewCard({
           {hasWiwo && (
             <div className="text-right hidden sm:block">
               <p className="text-[9px] text-muted-foreground flex items-center gap-1 justify-end">
-                <Scale className="h-2.5 w-2.5" /> WIWO
+                <Scale className="h-2.5 w-2.5" /> {transaction.transaction_type === "ONBOARDING_BASELINE" ? "Deployed Gross" : "WIWO"}
               </p>
               <p className="text-xs font-black text-blue-700 dark:text-blue-300">
                 {transaction.wiwo_kg.toFixed(3)} kg

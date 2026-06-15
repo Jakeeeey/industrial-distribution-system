@@ -246,3 +246,23 @@ export interface ApproveHeaderPayload {
   headerId: number;
   approved_by: number;
 }
+
+// ─── Active Cylinder Raw Response (lpg_customer_site_cylinders) ────────────────
+// Added to support typing for onboarding baseline cylinder syntheses in service layer
+export interface ActiveCylinderRaw {
+  id: number;
+  lpg_site_id: number;
+  customer_code: string;
+  previous_lpg_kg: number | null;
+  current_lpg_kg: number | null;
+  installed_date: string;
+  cylinder_asset_id: {
+    id: number;
+    serial_number: string;
+    tare_weight: number;
+    product_id?: {
+      product_name: string | null;
+    } | null;
+  } | null;
+}
+

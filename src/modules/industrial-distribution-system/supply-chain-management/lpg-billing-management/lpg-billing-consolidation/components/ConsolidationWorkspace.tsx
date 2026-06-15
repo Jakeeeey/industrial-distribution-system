@@ -1,9 +1,9 @@
 "use client";
 
 // ─── ConsolidationWorkspace.tsx ───────────────────────────────────────────────
-// Right-panel: selected header workspace.
-// Shows the header summary card, all child transaction review cards,
-// the billing totals footer bar, and the audit trail drawer.
+// Right-panel workspace for the selected LPG billing header.
+// Supports Step 2 (Process Invoices) and Step 3 (Approve & Create SI) views.
+// Shows child transaction cards, totals, and audit drawers.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useCallback } from "react";
@@ -15,6 +15,10 @@ import {
   AlertTriangle,
   Loader2,
   ClipboardList,
+  ArrowRight,
+  ArrowLeft,
+  Calculator,
+  Percent,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,9 +30,11 @@ import type { UseBillingConsolidationReturn } from "../hooks/useBillingConsolida
 
 interface ConsolidationWorkspaceProps {
   hook: UseBillingConsolidationReturn;
+  step: 1 | 2 | 3;
+  setStep: (step: 1 | 2 | 3) => void;
 }
 
-export function ConsolidationWorkspace({ hook }: ConsolidationWorkspaceProps) {
+export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWorkspaceProps) {
   const {
     selectedHeader,
     transactions,
@@ -54,22 +60,22 @@ export function ConsolidationWorkspace({ hook }: ConsolidationWorkspaceProps) {
     [loadAuditTrail]
   );
 
-  // ── Loading ───────────────────────────────────────────────────────────────
+  // ── Loading ──
   if (isLoadingWorkspace) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
-        <Loader2 className="h-8 w-8 animate-spin text-violet-500" />
-        <p className="text-sm font-semibold">Loading workspace...</p>
+      <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-3 text-muted-foreground">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-sm font-semibold animate-pulse">Loading workspace data...</p>
       </div>
     );
   }
 
-  // ── Error ─────────────────────────────────────────────────────────────────
+  // ── Error ──
   if (workspaceError) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-3 p-8 text-center">
-        <div className="h-12 w-12 rounded-2xl bg-rose-100 dark:bg-rose-900/20 flex items-center justify-center">
-          <AlertTriangle className="h-6 w-6 text-rose-500" />
+      <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-3 p-8 text-center">
+        <div className="h-12 w-12 rounded-2xl bg-rose-100 dark:bg-rose-900/20 flex items-center justify-center border border-rose-200 dark:border-rose-900/30">
+          <AlertTriangle className="h-6 w-6 text-rose-600" />
         </div>
         <p className="text-sm font-bold text-zinc-700 dark:text-zinc-200">Failed to load workspace</p>
         <p className="text-xs text-muted-foreground max-w-xs">{workspaceError}</p>
@@ -77,34 +83,50 @@ export function ConsolidationWorkspace({ hook }: ConsolidationWorkspaceProps) {
     );
   }
 
-  // ── No Selection ──────────────────────────────────────────────────────────
+  // ── No Selection ──
   if (!selectedHeader) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-3 p-8 text-center">
-        <div className="h-14 w-14 rounded-2xl bg-violet-100/50 dark:bg-violet-900/20 flex items-center justify-center border border-dashed border-violet-300 dark:border-violet-700/50">
-          <ClipboardList className="h-7 w-7 text-violet-400 dark:text-violet-500 animate-pulse" />
+      <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-3 p-8 text-center">
+        <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center border border-dashed border-primary/20 animate-pulse">
+          <ClipboardList className="h-7 w-7 text-primary" />
         </div>
         <p className="text-sm font-bold text-zinc-600 dark:text-zinc-300">
           No Billing Header Selected
         </p>
         <p className="text-xs text-muted-foreground max-w-[260px]">
-          Select a billing header from the list on the left to begin reviewing its transactions.
+          Select a billing header from Step 1 to begin reviewing its transactions.
         </p>
       </div>
     );
   }
 
-  const canApprove = selectedHeader.status === "DRAFT";
+  const isDraft = selectedHeader.status === "DRAFT";
+
+  // Compute overall totals from child transactions
+  const totalMeteredKg = transactions.reduce((s, tx) => s + tx.metered_kg, 0);
+  const totalWiwoKg = transactions.reduce((s, tx) => s + tx.wiwo_kg, 0);
+  const totalBillableKg = transactions.reduce((s, tx) => s + tx.billable_kg, 0);
+  const totalGross = transactions.reduce((s, tx) => s + tx.gross_amount, 0);
+  const totalDiscount = transactions.reduce((s, tx) => s + tx.discount_amount, 0);
+  const totalVat = transactions.reduce((s, tx) => s + tx.vat_amount, 0);
+  const totalNet = transactions.reduce((s, tx) => s + tx.net_amount, 0);
+  const totalAmountBilled = totalNet + totalVat;
+
+  const handleApprove = async () => {
+    const success = await approveHeader(selectedHeader.header_id);
+    if (success) {
+      setStep(3);
+    }
+  };
 
   return (
-    <div className="flex flex-col h-full min-h-0">
-      {/* ── Header Summary Card ────────────────────────────────────────────── */}
-      <div className="px-5 pt-4 pb-3 border-b border-zinc-100 dark:border-zinc-800 shrink-0">
-        <div className="flex items-start justify-between gap-4">
-          {/* Left: Identity */}
+    <div className="flex flex-col h-full min-h-0 bg-card rounded-2xl border border-border overflow-hidden shadow-sm animate-in fade-in duration-300">
+      {/* ── Header Summary Banner ── */}
+      <div className="px-5 py-4 border-b border-border bg-zinc-50/50 dark:bg-zinc-900/30 shrink-0">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-start gap-3 min-w-0">
-            <div className="h-10 w-10 rounded-xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center shrink-0">
-              <ReceiptText className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+            <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+              <ReceiptText className="h-5 w-5 text-primary" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
@@ -113,7 +135,7 @@ export function ConsolidationWorkspace({ hook }: ConsolidationWorkspaceProps) {
                 </h2>
                 <Badge
                   className={cn(
-                    "text-[10px] px-1.5 py-0 border",
+                    "text-[10px] px-2 py-0.5 border font-bold uppercase tracking-wider",
                     selectedHeader.status === "POSTED"
                       ? "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400"
                       : selectedHeader.status === "CANCELLED"
@@ -124,86 +146,265 @@ export function ConsolidationWorkspace({ hook }: ConsolidationWorkspaceProps) {
                   {selectedHeader.status}
                 </Badge>
                 {selectedHeader.is_billed === 1 && (
-                  <Badge className="text-[10px] px-1.5 py-0 bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400">
+                  <Badge className="text-[10px] px-2 py-0.5 bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 font-bold">
                     Billed
                   </Badge>
                 )}
               </div>
 
-              <div className="flex flex-wrap items-center gap-3 mt-1">
-                <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                  <Building2 className="h-2.5 w-2.5" />
+              <div className="flex flex-wrap items-center gap-3 mt-1.5">
+                <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-bold">
+                  <Building2 className="h-3 w-3" />
                   {selectedHeader.customer_id}
                   {selectedHeader.site?.site_name ? ` · ${selectedHeader.site.site_name}` : ""}
                 </span>
-                <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                  <Calendar className="h-2.5 w-2.5" />
+                <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-bold">
+                  <Calendar className="h-3 w-3" />
                   {selectedHeader.period_from} → {selectedHeader.period_to}
                 </span>
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-[10px] text-muted-foreground font-bold">
                   {transactions.length} transaction{transactions.length !== 1 ? "s" : ""}
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Right: Approve CTA */}
-          {canApprove && (
-            <Button
-              size="sm"
-              onClick={() => approveHeader(selectedHeader.header_id)}
-              disabled={isSubmitting}
-              className="h-9 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
-            >
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              {isSubmitting ? "Processing..." : "Approve & Generate Sales Invoice"}
-            </Button>
-          )}
-          {!canApprove && selectedHeader.status === "POSTED" && (
-            <Badge className="gap-1 bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 text-xs font-semibold px-3 py-1.5 shrink-0">
-              <CheckCircle2 className="h-3.5 w-3.5" /> Approved
-            </Badge>
-          )}
+          {/* Stepper Navigation Buttons */}
+          <div className="flex items-center gap-2 shrink-0">
+            {step === 2 && (
+              <Button
+                size="sm"
+                onClick={() => setStep(3)}
+                className="h-9 text-xs gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-bold px-4"
+              >
+                Next: Approve & Create SI
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            )}
+
+            {step === 3 && (
+              <>
+                {isDraft && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setStep(2)}
+                    className="h-9 text-xs gap-1.5 font-bold"
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    Back to Process
+                  </Button>
+                )}
+
+                {isDraft ? (
+                  <Button
+                    size="sm"
+                    onClick={handleApprove}
+                    disabled={isSubmitting || transactions.length === 0}
+                    className="h-9 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    {isSubmitting ? "Processing approval..." : "Approve & Generate Sales Invoice"}
+                  </Button>
+                ) : (
+                  selectedHeader.status === "POSTED" && (
+                    <Badge className="gap-1.5 bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 text-xs font-black px-3.5 py-1.5 shrink-0 border">
+                      <CheckCircle2 className="h-4 w-4" /> Approved & Invoiced
+                    </Badge>
+                  )
+                )}
+              </>
+            )}
+          </div>
         </div>
 
         {/* Remarks */}
         {selectedHeader.remarks && (
           <p className="mt-2 text-[10px] text-muted-foreground italic pl-13">
-            {selectedHeader.remarks}
+            Remarks: {selectedHeader.remarks}
           </p>
         )}
       </div>
 
-      {/* ── Transaction Cards ─────────────────────────────────────────────── */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-3">
-        {transactions.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <ClipboardList className="h-10 w-10 text-muted-foreground/20 mb-3" />
-            <p className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
-              No child transactions found
-            </p>
-            <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-              This billing header has no associated metered or WIWO transactions yet.
-            </p>
+      {/* ── STEP 2: Process Invoices View ── */}
+      {step === 2 && (
+        <>
+          <div className="flex-1 min-h-[300px] overflow-y-auto px-5 py-4 space-y-3 bg-background">
+            {transactions.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <ClipboardList className="h-10 w-10 text-muted-foreground/20 mb-3" />
+                <p className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+                  No child transactions found
+                </p>
+                <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+                  This billing header has no associated metered or WIWO transactions yet.
+                </p>
+              </div>
+            )}
+
+            {transactions.map((tx) => (
+              <TransactionReviewCard
+                key={tx.id}
+                transaction={tx}
+                hook={hook}
+                onOpenAudit={handleOpenAudit}
+              />
+            ))}
           </div>
-        )}
 
-        {transactions.map((tx) => (
-          <TransactionReviewCard
-            key={tx.id}
-            transaction={tx}
-            hook={hook}
-            onOpenAudit={handleOpenAudit}
-          />
-        ))}
-      </div>
-
-      {/* ── Totals Footer Bar ─────────────────────────────────────────────── */}
-      {transactions.length > 0 && (
-        <BillingTotalsBar transactions={transactions} />
+          {/* Totals Footer Bar */}
+          {transactions.length > 0 && <BillingTotalsBar transactions={transactions} />}
+        </>
       )}
 
-      {/* ── Audit Trail Drawer ────────────────────────────────────────────── */}
+      {/* ── STEP 3: Approve & Create SI View ── */}
+      {step === 3 && (
+        <div className="flex-1 overflow-y-auto p-5 space-y-5 bg-zinc-50/20 dark:bg-zinc-950/10">
+          {/* Status Message for Posted headers */}
+          {!isDraft && selectedHeader.status === "POSTED" && (
+            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-start gap-3 text-emerald-800 dark:text-emerald-400">
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 mt-0.5" />
+              <div className="text-xs">
+                <p className="font-bold">Billing Header Approved</p>
+                <p className="text-muted-foreground mt-0.5">
+                  The billing header status is posted, child transactions are locked, and the Sales Invoice has been successfully generated.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Billing Totals Overview Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Billable KG */}
+            <div className="bg-card border border-border p-4 rounded-2xl flex flex-col justify-between shadow-sm">
+              <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                Total Billable
+              </span>
+              <span className="text-lg font-black text-primary mt-1">
+                {totalBillableKg.toFixed(3)}{" "}
+                <span className="text-xs font-semibold text-muted-foreground">kg</span>
+              </span>
+              <p className="text-[9px] text-muted-foreground mt-1">
+                Metered: {totalMeteredKg.toFixed(2)} kg · WIWO: {totalWiwoKg.toFixed(2)} kg
+              </p>
+            </div>
+
+            {/* Gross Amount */}
+            <div className="bg-card border border-border p-4 rounded-2xl flex flex-col justify-between shadow-sm">
+              <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                Gross Amount
+              </span>
+              <span className="text-lg font-black text-zinc-800 dark:text-zinc-200 mt-1">
+                ₱ {totalGross.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+              <p className="text-[9px] text-muted-foreground mt-1 flex items-center gap-1">
+                <Calculator className="h-2.5 w-2.5" /> Consolidated gross total
+              </p>
+            </div>
+
+            {/* VAT Amount */}
+            <div className="bg-card border border-border p-4 rounded-2xl flex flex-col justify-between shadow-sm">
+              <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                Consolidated VAT
+              </span>
+              <span className="text-lg font-black text-amber-600 dark:text-amber-400 mt-1">
+                ₱ {totalVat.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+              <p className="text-[9px] text-muted-foreground mt-1 flex items-center gap-1">
+                <Percent className="h-2.5 w-2.5" /> 12% output taxation
+              </p>
+            </div>
+
+            {/* Total Billed Amount */}
+            <div className="bg-card border border-border p-4 rounded-2xl flex flex-col justify-between shadow-sm ring-1 ring-emerald-500/20 bg-emerald-500/5">
+              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                Total Billed (Net + VAT)
+              </span>
+              <span className="text-lg font-black text-emerald-600 dark:text-emerald-400 mt-1">
+                ₱ {totalAmountBilled.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+              <p className="text-[9px] text-muted-foreground mt-1">
+                Net Payables: ₱ {totalNet.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+            </div>
+          </div>
+
+          {/* Child Transactions Table Review */}
+          <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+            <div className="px-4 py-3 border-b border-border bg-zinc-50/50 dark:bg-zinc-900/30 flex items-center justify-between">
+              <span className="text-xs font-bold text-foreground">Transactions Breakdown</span>
+              <Badge variant="outline" className="text-[10px] font-bold">
+                {transactions.length} Item{transactions.length !== 1 ? "s" : ""}
+              </Badge>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-border text-muted-foreground bg-zinc-50/30 dark:bg-zinc-900/10 font-bold">
+                    <th className="p-3">Transaction No</th>
+                    <th className="p-3">Date</th>
+                    <th className="p-3">Type</th>
+                    <th className="p-3 text-right">Billable Qty</th>
+                    <th className="p-3 text-right">Price/Kg</th>
+                    <th className="p-3 text-right">Gross</th>
+                    <th className="p-3 text-right">Discount</th>
+                    <th className="p-3 text-right">VAT</th>
+                    <th className="p-3 text-right font-black">Net</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {transactions.map((tx) => (
+                    <tr
+                      key={tx.id}
+                      className={cn(
+                        "hover:bg-muted/40 transition-colors",
+                        tx.status === "CANCELLED" && "opacity-40 line-through bg-zinc-100/50 dark:bg-zinc-900/20"
+                      )}
+                    >
+                      <td className="p-3 font-mono font-bold text-foreground">{tx.transaction_no}</td>
+                      <td className="p-3 text-muted-foreground">{tx.transaction_date || "—"}</td>
+                      <td className="p-3">
+                        <Badge variant="outline" className="text-[9px] px-1 py-0 font-bold whitespace-nowrap">
+                          {tx.transaction_type}
+                        </Badge>
+                      </td>
+                      <td className="p-3 text-right font-bold">
+                        {tx.billable_kg.toFixed(3)} kg
+                        <span className="text-[9px] text-muted-foreground block font-normal">
+                          src: {tx.billable_source}
+                        </span>
+                      </td>
+                      <td className="p-3 text-right text-muted-foreground">₱ {tx.price_per_kg.toFixed(2)}</td>
+                      <td className="p-3 text-right text-muted-foreground">₱ {tx.gross_amount.toFixed(2)}</td>
+                      <td className="p-3 text-right text-rose-600 dark:text-rose-400">
+                        {tx.discount_amount > 0 ? `-₱ ${tx.discount_amount.toFixed(2)}` : "—"}
+                      </td>
+                      <td className="p-3 text-right text-muted-foreground">₱ {tx.vat_amount.toFixed(2)}</td>
+                      <td className="p-3 text-right font-black text-foreground">₱ {tx.net_amount.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                  <tr className="bg-zinc-50/50 dark:bg-zinc-900/20 font-black border-t border-border">
+                    <td colSpan={3} className="p-3 text-right">Summary Totals</td>
+                    <td className="p-3 text-right text-primary">
+                      {totalBillableKg.toFixed(3)} kg
+                    </td>
+                    <td className="p-3"></td>
+                    <td className="p-3 text-right">₱ {totalGross.toFixed(2)}</td>
+                    <td className="p-3 text-right text-rose-600 dark:text-rose-400">
+                      {totalDiscount > 0 ? `-₱ ${totalDiscount.toFixed(2)}` : "—"}
+                    </td>
+                    <td className="p-3 text-right text-amber-600 dark:text-amber-400">₱ {totalVat.toFixed(2)}</td>
+                    <td className="p-3 text-right text-emerald-600 dark:text-emerald-400">₱ {totalNet.toFixed(2)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Audit Trail Drawer ── */}
       <AuditTrailDrawer
         isOpen={auditOpen}
         transactionNo={auditTxNo}
@@ -214,3 +415,4 @@ export function ConsolidationWorkspace({ hook }: ConsolidationWorkspaceProps) {
     </div>
   );
 }
+

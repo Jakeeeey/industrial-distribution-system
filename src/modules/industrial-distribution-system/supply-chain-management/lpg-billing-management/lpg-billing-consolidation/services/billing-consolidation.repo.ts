@@ -17,6 +17,7 @@ import type {
   ConsolidationAttachment,
   ConsolidationAuditEntry,
   ConsolidationHeaderListParams,
+  ActiveCylinderRaw,
 } from "../types/billing-consolidation.types";
 
 const DIRECTUS_URL = getDirectusBase();
@@ -529,8 +530,8 @@ export async function repoResolveSalesmanId(userId: number): Promise<number | nu
 /**
  * Fetches active customer site cylinders for a given site ID (used for onboarding baseline).
  */
-// Refactored from any[] to Record<string, unknown>[] to resolve ESLint typescript-eslint/no-explicit-any
-export async function repoFetchActiveCylindersBySite(siteId: number): Promise<Record<string, unknown>[]> {
+// Refactored from any[] to ActiveCylinderRaw[] to resolve ESLint typescript-eslint/no-explicit-any and compile issues
+export async function repoFetchActiveCylindersBySite(siteId: number): Promise<ActiveCylinderRaw[]> {
   const filter = encodeURIComponent(
     JSON.stringify({
       lpg_site_id: { _eq: siteId },
@@ -550,8 +551,8 @@ export async function repoFetchActiveCylindersBySite(siteId: number): Promise<Re
     "cylinder_asset_id.product_id.product_name",
   ].join(",");
 
-  // Refactored response payload type from any[] to Record<string, unknown>[] to resolve ESLint warning
-  const res = await directusFetch<{ data: Record<string, unknown>[] }>(
+  // Refactored response payload type to ActiveCylinderRaw[] to resolve ESLint warning and compile issues
+  const res = await directusFetch<{ data: ActiveCylinderRaw[] }>(
     `${DIRECTUS_URL}/items/lpg_customer_site_cylinders?fields=${fields}&filter=${filter}&limit=-1`
   );
   return res.data ?? [];

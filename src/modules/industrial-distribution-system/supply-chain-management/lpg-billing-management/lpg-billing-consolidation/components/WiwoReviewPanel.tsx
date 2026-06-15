@@ -114,13 +114,14 @@ function CylinderDetailRow({
   onAdjust: WiwoReviewPanelProps["onAdjust"];
 }) {
   const [isEditing, setIsEditing] = useState(false);
+  const [showPhotos, setShowPhotos] = useState(false);
   const [newGross, setNewGross] = useState<string>(
     detail.returned_gross_weight_kg != null ? String(detail.returned_gross_weight_kg) : ""
   );
   const [adjustReason, setAdjustReason] = useState("");
   const [inputError, setInputError] = useState<string | null>(null);
 
-  // Filter attachments relevant to this cylinder (by cylinder_asset_id or site_cylinder_id)
+  // Filter attachments relevant to this cylinder
   const cylinderAttachments = attachments.filter(
     (a) =>
       (a.cylinder_asset_id === detail.cylinder_asset_id) ||
@@ -153,193 +154,196 @@ function CylinderDetailRow({
     }
   };
 
+  const initialLpg = Math.max(0, (detail.returned_gross_weight_kg ?? 0) - detail.tare_weight_kg);
+
   return (
-    <div className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 overflow-hidden">
-      {/* Cylinder Row Header */}
-      <div className="flex items-center justify-between px-3 py-2 bg-zinc-50/80 dark:bg-zinc-800/40 border-b border-zinc-100 dark:border-zinc-700/50">
-        <div className="flex items-center gap-2">
-          <Cylinder className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-          <div>
-            <p className="text-xs font-bold text-zinc-800 dark:text-zinc-100">
-              {detail.serial_number}
-            </p>
-            <p className="text-[10px] text-muted-foreground">
+    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden shadow-sm hover:shadow-md transition duration-200">
+      {/* ── Cylinder Row Main Line ── */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between p-3 gap-3">
+        {/* Left Side: Identity and Compact Weights */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Cylinder className="h-4 w-4 text-primary shrink-0" />
+            <span className="text-xs font-black text-foreground">{detail.serial_number}</span>
+            <span className="text-[10px] text-muted-foreground truncate max-w-[200px]">
               {detail.product?.product_name ?? `Product #${detail.product_id}`}
-              {" · "}
-              <span className="capitalize">{detail.line_type.toLowerCase().replace("_", " ")}</span>
-            </p>
+            </span>
+            <Badge variant="outline" className="text-[9px] px-1 py-0 capitalize bg-muted/40 font-semibold shrink-0">
+              {detail.line_type.toLowerCase().replace("_", " ")}
+            </Badge>
+          </div>
+
+          {/* Inline weights - clean & high contrast, no boxes! */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-[10px] font-bold text-muted-foreground/80">
+            <span>Tare: <span className="text-foreground">{detail.tare_weight_kg.toFixed(2)}kg</span></span>
+            <span className="text-muted-foreground/30">•</span>
+            {isOnboarding ? (
+              <>
+                <span>Gross: <span className="text-foreground">{detail.returned_gross_weight_kg?.toFixed(2) ?? "—"}kg</span></span>
+                <span className="text-muted-foreground/30">•</span>
+                <span>LPG Content: <span className="text-primary">{initialLpg.toFixed(2)}kg</span></span>
+              </>
+            ) : (
+              <>
+                <span>Prev LPG: <span className="text-foreground">{detail.previous_lpg_kg.toFixed(2)}kg</span></span>
+                <span className="text-muted-foreground/30">•</span>
+                <span>Gross: <span className="text-foreground">{detail.returned_gross_weight_kg?.toFixed(2) ?? "—"}kg</span></span>
+                <span className="text-muted-foreground/30">•</span>
+                <span>Remaining: <span className="text-foreground">{detail.remaining_lpg_kg.toFixed(2)}kg</span></span>
+                <span className="text-muted-foreground/30">•</span>
+                <span>Consumed: <span className="text-blue-600 dark:text-blue-400">{detail.consumed_lpg_kg.toFixed(2)}kg</span></span>
+              </>
+            )}
+            <span className="text-muted-foreground/30">•</span>
+            <span>Billable: <span className="text-emerald-600 dark:text-emerald-400">{detail.billable_kg.toFixed(2)}kg</span></span>
           </div>
         </div>
-        <Badge
-          className={cn(
-            "text-[9px] px-1.5 py-0 border",
-            detail.is_billable === 1
-              ? "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400"
-              : "bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400"
-          )}
-        >
-          {detail.is_billable === 1 ? "Billable" : "Non-Billable"}
-        </Badge>
-      </div>
 
-      <div className="p-3 space-y-3">
-        {/* Weight / KG Values */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {[
-            { label: "Tare Weight", value: detail.tare_weight_kg.toFixed(3), unit: "kg" },
-            ...(!isOnboarding ? [
-              { label: "Previous LPG", value: detail.previous_lpg_kg.toFixed(3), unit: "kg" }
-            ] : []),
-            { label: "Returned Gross", value: detail.returned_gross_weight_kg?.toFixed(3) ?? "—", unit: "kg", highlight: true },
-            ...(!isOnboarding ? [
-              { label: "Remaining LPG", value: detail.remaining_lpg_kg.toFixed(3), unit: "kg" },
-              { label: "Consumed LPG", value: detail.consumed_lpg_kg.toFixed(3), unit: "kg", highlight: true }
-            ] : []),
-            { label: "Billable KG", value: detail.billable_kg.toFixed(3), unit: "kg", highlight: true },
-          ].map((item) => (
-            <div
-              key={item.label}
+        {/* Right Side: Actions and Badges */}
+        <div className="flex items-center gap-2 shrink-0 self-end md:self-auto">
+          {/* Photo count toggler */}
+          {cylinderAttachments.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowPhotos(!showPhotos)}
               className={cn(
-                "rounded-md p-2 border",
-                item.highlight
-                  ? "bg-blue-50/60 border-blue-200 dark:bg-blue-900/10 dark:border-blue-800/30"
-                  : "bg-zinc-50 border-zinc-200 dark:bg-zinc-800/30 dark:border-zinc-700"
+                "h-7 px-2 rounded-lg border text-[10px] font-black flex items-center gap-1 transition-all",
+                showPhotos
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground"
               )}
             >
-              <p className="text-[9px] uppercase tracking-wide font-semibold text-muted-foreground mb-0.5">
-                {item.label}
-              </p>
-              <p className="text-xs font-black text-zinc-800 dark:text-zinc-100">
-                {item.value}
-                {item.unit && (
-                  <span className="text-[9px] font-medium text-muted-foreground ml-1">
-                    {item.unit}
-                  </span>
-                )}
-              </p>
-            </div>
-          ))}
-        </div>
+              <Camera className="h-3.5 w-3.5" />
+              <span>{cylinderAttachments.length}</span>
+            </button>
+          )}
 
-        {/* Cylinder Photos */}
-        {cylinderAttachments.length > 0 && (
-          <div>
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <Camera className="h-3 w-3 text-muted-foreground" />
-              <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">
-                Cylinder Photos
-              </p>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {cylinderAttachments.map((att) => (
-                <CylinderPhoto
-                  key={att.id}
-                  fileId={att.directus_file_id}
-                  label={att.attachment_type.replace("_", " ")}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Adjust Form */}
-        {!isEditing ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setNewGross(detail.returned_gross_weight_kg != null ? String(detail.returned_gross_weight_kg) : "");
-              setIsEditing(true);
-            }}
-            className="h-7 text-[10px] gap-1 border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-300"
+          <Badge
+            className={cn(
+              "text-[9px] font-black uppercase px-2 py-0.5 border",
+              detail.is_billable === 1
+                ? "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400"
+                : "bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400"
+            )}
           >
-            <Pencil className="h-3 w-3" />
-            Adjust Returned Gross Weight
-          </Button>
-        ) : (
-          <div className="space-y-2.5 pt-2 border-t border-zinc-200 dark:border-zinc-700">
-            <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
-              <AlertTriangle className="h-3 w-3" />
-              <p className="text-[10px] font-semibold">
-                Verify the weighing scale photo before correcting.
-              </p>
-            </div>
+            {detail.is_billable === 1 ? "Billable" : "Non-Billable"}
+          </Badge>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <Label className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">
-                  Original Gross (kg)
-                </Label>
-                <Input
-                  value={detail.returned_gross_weight_kg?.toFixed(3) ?? ""}
-                  disabled
-                  className="h-7 text-xs bg-zinc-100 dark:bg-zinc-800 text-muted-foreground"
-                />
+          {/* Adjust trigger */}
+          {!isEditing && (
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => {
+                setNewGross(detail.returned_gross_weight_kg != null ? String(detail.returned_gross_weight_kg) : "");
+                setIsEditing(true);
+              }}
+              className="h-7 w-7 border-border hover:bg-accent text-muted-foreground hover:text-foreground shrink-0 rounded-lg"
+              title="Adjust gross weight"
+            >
+              <Pencil className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Collapsible Content Areas (Photos & Editing) ── */}
+      {(showPhotos || isEditing) && (
+        <div className="p-3 border-t border-zinc-100 dark:border-zinc-800/80 bg-zinc-50/30 dark:bg-zinc-900/20 space-y-3">
+          {/* Photos Area */}
+          {showPhotos && cylinderAttachments.length > 0 && (
+            <div className="animate-in slide-in-from-top-2 duration-200">
+              <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Cylinder Photos</p>
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                {cylinderAttachments.map((att) => (
+                  <CylinderPhoto
+                    key={att.id}
+                    fileId={att.directus_file_id}
+                    label={att.attachment_type.replace("_", " ")}
+                  />
+                ))}
               </div>
+            </div>
+          )}
+
+          {/* Adjust Form Area */}
+          {isEditing && (
+            <div className="space-y-2.5 pt-1.5 border-t border-zinc-200/40 dark:border-zinc-700/40 animate-in slide-in-from-top-2 duration-200">
+              <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                <AlertTriangle className="h-3 w-3" />
+                <p className="text-[10px] font-bold">Verify the weighing scale photo before correcting.</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Original Gross (kg)</Label>
+                  <Input
+                    value={detail.returned_gross_weight_kg?.toFixed(3) ?? ""}
+                    disabled
+                    className="h-8 text-xs bg-zinc-100 dark:bg-zinc-800 text-muted-foreground"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Corrected Gross (kg) *</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.001}
+                    value={newGross}
+                    onChange={(e) => {
+                      setNewGross(e.target.value);
+                      setInputError(null);
+                    }}
+                    className="h-8 text-xs border-amber-300 focus-visible:ring-amber-400"
+                    placeholder="e.g. 30.500"
+                  />
+                </div>
+              </div>
+
               <div className="space-y-1">
-                <Label className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">
-                  Corrected Gross (kg) *
-                </Label>
-                <Input
-                  type="number"
-                  min={0}
-                  step={0.001}
-                  value={newGross}
+                <Label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Reason *</Label>
+                <Textarea
+                  value={adjustReason}
                   onChange={(e) => {
-                    setNewGross(e.target.value);
+                    setAdjustReason(e.target.value);
                     setInputError(null);
                   }}
-                  className="h-7 text-xs border-amber-300 focus-visible:ring-amber-400"
-                  placeholder="e.g. 30.500"
+                  placeholder="Reason for correction (e.g. scale photo shows 30.50 not 31.00)"
+                  className="text-xs resize-none h-14"
                 />
               </div>
-            </div>
 
-            <div className="space-y-1">
-              <Label className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">
-                Reason *
-              </Label>
-              <Textarea
-                value={adjustReason}
-                onChange={(e) => {
-                  setAdjustReason(e.target.value);
-                  setInputError(null);
-                }}
-                placeholder="Reason for correction (e.g. scale photo shows 30.50 not 31.00)"
-                className="text-xs resize-none h-14"
-              />
-            </div>
+              {inputError && (
+                <p className="text-[10px] text-rose-600 dark:text-rose-400 font-bold">{inputError}</p>
+              )}
 
-            {inputError && (
-              <p className="text-[10px] text-rose-600 dark:text-rose-400 font-medium">{inputError}</p>
-            )}
-
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                onClick={handleAdjust}
-                disabled={isSubmitting}
-                className="h-7 text-[10px] gap-1 bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                <Check className="h-3 w-3" />
-                {isSubmitting ? "Saving..." : "Save"}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setIsEditing(false);
-                  setInputError(null);
-                }}
-                className="h-7 text-[10px]"
-                disabled={isSubmitting}
-              >
-                Cancel
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={handleAdjust}
+                  disabled={isSubmitting}
+                  className="h-7 text-[10px] gap-1 bg-primary hover:bg-primary/90 text-white font-bold"
+                >
+                  <Check className="h-3 w-3" />
+                  {isSubmitting ? "Saving..." : "Save"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setIsEditing(false);
+                    setInputError(null);
+                  }}
+                  className="h-7 text-[10px]"
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -371,11 +375,15 @@ export function WiwoReviewPanel({
             {wiwoHeader.details?.length ?? 0} cylinder(s)
           </p>
         </div>
-        <Badge
-          className="ml-auto text-[10px] px-1.5 py-0 border bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400"
-        >
-          Total: {wiwoHeader.total_billable_kg.toFixed(3)} kg
-        </Badge>
+        {isOnboarding ? (
+          <Badge className="ml-auto text-[10px] px-2 py-0.5 border bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20 dark:text-blue-400 font-bold">
+            Total Deployed LPG: {(wiwoHeader.details ?? []).reduce((sum, d) => sum + Math.max(0, (d.returned_gross_weight_kg ?? 0) - d.tare_weight_kg), 0).toFixed(3)} kg
+          </Badge>
+        ) : (
+          <Badge className="ml-auto text-[10px] px-2 py-0.5 border bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 font-bold">
+            Total Billable: {wiwoHeader.total_billable_kg.toFixed(3)} kg
+          </Badge>
+        )}
       </div>
 
       {/* Cylinder Rows */}
