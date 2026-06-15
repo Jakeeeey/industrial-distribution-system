@@ -350,7 +350,7 @@ function CylinderDetailModal({
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Vatable Sales</span>
-                    <span className="font-bold">₱ {detail.gross_amount.toFixed(2)}</span>
+                    <span className="font-bold">₱ {(detail.gross_amount / 1.12).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">12% Output VAT</span>

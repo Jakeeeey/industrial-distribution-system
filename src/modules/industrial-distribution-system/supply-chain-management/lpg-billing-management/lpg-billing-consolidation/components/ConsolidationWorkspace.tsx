@@ -384,7 +384,7 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
 
                         {/* Card Amounts Row: Displays recalculated Vatable Sales, VAT, and Total Amount dynamically */}
                         <div className="flex items-center justify-between pt-1.5 border-t border-dashed border-zinc-200 dark:border-zinc-850 w-full text-[9px] text-muted-foreground">
-                          <span>Vatable Amount: <strong className="font-semibold text-zinc-700 dark:text-zinc-300">₱{tx.gross_amount.toFixed(2)}</strong></span>
+                          <span>Vatable Amount: <strong className="font-semibold text-zinc-700 dark:text-zinc-300">₱{(tx.gross_amount / 1.12).toFixed(2)}</strong></span>
                           <span>VAT: <strong className="font-semibold text-zinc-700 dark:text-zinc-300">₱{tx.vat_amount.toFixed(2)}</strong></span>
                           <span>Total: <strong className="font-black text-emerald-600 dark:text-emerald-450">₱{tx.net_amount.toFixed(2)}</strong></span>
                         </div>
@@ -483,15 +483,15 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
                                   </div>
                                   <div className="flex justify-between items-center text-violet-100">
                                     <span className="text-[11px]">Vatable Sales</span>
-                                    <span className="font-mono text-[11px]">₱ {(activeTx.metered_kg * activeTx.price_per_kg).toFixed(2)}</span>
+                                    <span className="font-mono text-[11px]">₱ {((activeTx.metered_kg * activeTx.price_per_kg) / 1.12).toFixed(2)}</span>
                                   </div>
                                   <div className="flex justify-between items-center text-violet-100">
                                     <span className="text-[11px]">Output VAT</span>
-                                    <span className="font-mono text-[11px]">₱ {(activeTx.metered_kg * activeTx.price_per_kg * 0.12).toFixed(2)}</span>
+                                    <span className="font-mono text-[11px]">₱ {((activeTx.metered_kg * activeTx.price_per_kg) - (activeTx.metered_kg * activeTx.price_per_kg) / 1.12).toFixed(2)}</span>
                                   </div>
                                   <div className="flex justify-between items-center text-white border-t border-white/10 pt-2 font-bold">
                                     <span className="text-xs">Amount Due</span>
-                                    <span className="font-mono text-xs">₱ {(activeTx.metered_kg * activeTx.price_per_kg * 1.12).toFixed(2)}</span>
+                                    <span className="font-mono text-xs">₱ {(activeTx.metered_kg * activeTx.price_per_kg).toFixed(2)}</span>
                                   </div>
                                 </div>
 
@@ -507,15 +507,15 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
                                   </div>
                                   <div className="flex justify-between items-center text-violet-100">
                                     <span className="text-[11px]">Vatable Sales</span>
-                                    <span className="font-mono text-[11px]">₱ {(activeTx.wiwo_kg * activeTx.price_per_kg).toFixed(2)}</span>
+                                    <span className="font-mono text-[11px]">₱ {((activeTx.wiwo_kg * activeTx.price_per_kg) / 1.12).toFixed(2)}</span>
                                   </div>
                                   <div className="flex justify-between items-center text-violet-100">
                                     <span className="text-[11px]">Output VAT</span>
-                                    <span className="font-mono text-[11px]">₱ {(activeTx.wiwo_kg * activeTx.price_per_kg * 0.12).toFixed(2)}</span>
+                                    <span className="font-mono text-[11px]">₱ {((activeTx.wiwo_kg * activeTx.price_per_kg) - (activeTx.wiwo_kg * activeTx.price_per_kg) / 1.12).toFixed(2)}</span>
                                   </div>
                                   <div className="flex justify-between items-center text-white border-t border-white/10 pt-2 font-bold">
                                     <span className="text-xs">Amount Due</span>
-                                    <span className="font-mono text-xs">₱ {(activeTx.wiwo_kg * activeTx.price_per_kg * 1.12).toFixed(2)}</span>
+                                    <span className="font-mono text-xs">₱ {(activeTx.wiwo_kg * activeTx.price_per_kg).toFixed(2)}</span>
                                   </div>
                                 </div>
                               </div>
@@ -548,7 +548,7 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
                             </div>
                             <div className="flex justify-between text-violet-100 border-t border-white/10 pt-2">
                               <span>Vatable Sales</span>
-                              <span className="font-bold font-mono">₱ {activeTx.gross_amount.toFixed(2)}</span>
+                              <span className="font-bold font-mono">₱ {(activeTx.gross_amount / 1.12).toFixed(2)}</span>
                             </div>
                             <div className="flex justify-between text-violet-100">
                               <span>12% Output VAT</span>
@@ -644,7 +644,7 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
                 ₱ {totalAmountBilled.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
               <p className="text-[9px] text-muted-foreground mt-1">
-                Vatable Sales: ₱ {totalGross.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                Vatable Sales: ₱ {(totalGross / 1.12).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
           </div>
@@ -696,7 +696,7 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
                         </span>
                       </td>
                       <td className="p-3 text-right text-muted-foreground">₱ {tx.price_per_kg.toFixed(2)}</td>
-                      <td className="p-3 text-right text-muted-foreground">₱ {tx.gross_amount.toFixed(2)}</td>
+                      <td className="p-3 text-right text-muted-foreground">₱ {(tx.gross_amount / 1.12).toFixed(2)}</td>
                       <td className="p-3 text-right text-rose-600 dark:text-rose-400">
                         {tx.discount_amount > 0 ? `-₱ ${tx.discount_amount.toFixed(2)}` : "—"}
                       </td>
@@ -710,12 +710,12 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
                       {totalBillableKg.toFixed(3)} kg
                     </td>
                     <td className="p-3"></td>
-                    <td className="p-3 text-right">₱ {totalGross.toFixed(2)}</td>
+                    <td className="p-3 text-right">₱ {(totalGross / 1.12).toFixed(2)}</td>
                     <td className="p-3 text-right text-rose-600 dark:text-rose-400">
                       {totalDiscount > 0 ? `-₱ ${totalDiscount.toFixed(2)}` : "—"}
                     </td>
                     <td className="p-3 text-right text-amber-600 dark:text-amber-400">₱ {totalVat.toFixed(2)}</td>
-                    <td className="p-3 text-right text-emerald-600 dark:text-emerald-400">₱ {totalNet.toFixed(2)}</td>
+                    <td className="p-3 text-right text-emerald-600 dark:text-emerald-455">₱ {totalNet.toFixed(2)}</td>
                   </tr>
                 </tbody>
               </table>
