@@ -241,10 +241,10 @@ export async function adjustMeterReading(payload: MeterReadingAdjustPayload): Pr
   const newBillableKg = newBillableSource === "METERED" ? newMeteredKg : txBefore.wiwo_kg;
   const newVarianceKg = parseFloat(Math.abs(newMeteredKg - txBefore.wiwo_kg).toFixed(4));
 
-  // Recompute transaction amounts: gross, VAT (12%), and Net
-  const newGrossAmount = parseFloat((newBillableKg * txPricePerKg).toFixed(2));
-  const newVatAmount = txBefore.transaction_type === "ONBOARDING_BASELINE" ? 0 : parseFloat((newGrossAmount * 0.12).toFixed(2));
-  const newNetAmount = txBefore.transaction_type === "ONBOARDING_BASELINE" ? 0 : parseFloat((newGrossAmount + newVatAmount).toFixed(2));
+  // AG-CHANGE: Updated calculation to VAT-inclusive formula where net = total and gross = net
+  const newNetAmount = txBefore.transaction_type === "ONBOARDING_BASELINE" ? 0 : parseFloat((newBillableKg * txPricePerKg).toFixed(2));
+  const newGrossAmount = newNetAmount;
+  const newVatAmount = txBefore.transaction_type === "ONBOARDING_BASELINE" ? 0 : parseFloat((newNetAmount - (newNetAmount / 1.12)).toFixed(2));
 
   const txPatch: Record<string, unknown> = {
     metered_kg: newMeteredKg,
@@ -347,7 +347,10 @@ export async function adjustWiwoDetail(payload: WiwoDetailAdjustPayload): Promis
     ((detail.previous_lpg_kg - detail.tare_weight_kg) - remainingLpgKg).toFixed(3)
   ));
   const billableKg = detail.is_billable === 1 ? consumedLpgKg : 0;
-  const grossAmount = parseFloat((billableKg * detail.price_per_kg).toFixed(2));
+  // AG-CHANGE: Calculate VAT-inclusive gross, net, and vat for the detail line
+  const netAmount = parseFloat((billableKg * detail.price_per_kg).toFixed(2));
+  const grossAmount = netAmount;
+  const vatAmount = parseFloat((netAmount - (netAmount / 1.12)).toFixed(2));
 
   // 3. Patch the WIWO detail row
   const detailPatch: Record<string, unknown> = {
@@ -356,6 +359,8 @@ export async function adjustWiwoDetail(payload: WiwoDetailAdjustPayload): Promis
     consumed_lpg_kg: consumedLpgKg,
     billable_kg: billableKg,
     gross_amount: grossAmount,
+    vat_amount: vatAmount,
+    net_amount: netAmount,
     modified_by,
     modified_date: new Date().toISOString(),
   };
@@ -371,13 +376,13 @@ export async function adjustWiwoDetail(payload: WiwoDetailAdjustPayload): Promis
   const txBefore = await fetchTransactionRaw(transactionId);
   if (!txBefore) throw new Error(`Transaction ${transactionId} not found.`);
 
-  // Recalculate WIWO header VAT and Net
-  const newHeaderVat = txBefore.transaction_type === "ONBOARDING_BASELINE" ? 0 : parseFloat((newHeaderGross * 0.12).toFixed(2));
-  const newHeaderNet = txBefore.transaction_type === "ONBOARDING_BASELINE" ? 0 : parseFloat((newHeaderGross + newHeaderVat).toFixed(2));
+  // AG-CHANGE: Recalculate WIWO header using VAT-inclusive pricing formula
+  const newHeaderNet = txBefore.transaction_type === "ONBOARDING_BASELINE" ? 0 : parseFloat((newHeaderGross).toFixed(2));
+  const newHeaderVat = txBefore.transaction_type === "ONBOARDING_BASELINE" ? 0 : parseFloat((newHeaderNet - (newHeaderNet / 1.12)).toFixed(2));
 
   await repoPatchWiwoHeader(wiwoHeaderId, {
     total_billable_kg: newTotalBillableKg,
-    gross_amount: newHeaderGross,
+    gross_amount: newHeaderNet,
     vat_amount: newHeaderVat,
     net_amount: newHeaderNet,
     modified_by,
@@ -395,10 +400,10 @@ export async function adjustWiwoDetail(payload: WiwoDetailAdjustPayload): Promis
   const newBillableSource = meteredGrossTemp >= wiwoGrossTemp ? "METERED" : "WIWO";
   const newBillableKg = newBillableSource === "METERED" ? txBefore.metered_kg : newWiwoKg;
   const newVarianceKg = parseFloat(Math.abs(txBefore.metered_kg - newWiwoKg).toFixed(4));
-  const newTxGross = parseFloat((newBillableKg * txPricePerKg).toFixed(2));
-
-  const newTxVat = txBefore.transaction_type === "ONBOARDING_BASELINE" ? 0 : parseFloat((newTxGross * 0.12).toFixed(2));
-  const newTxNet = txBefore.transaction_type === "ONBOARDING_BASELINE" ? 0 : parseFloat((newTxGross + newTxVat).toFixed(2));
+  // AG-CHANGE: Recalculate transaction amounts using VAT-inclusive formulas where net = total and gross = net
+  const newTxNet = parseFloat((newBillableKg * txPricePerKg).toFixed(2));
+  const newTxGross = newTxNet;
+  const newTxVat = txBefore.transaction_type === "ONBOARDING_BASELINE" ? 0 : parseFloat((newTxNet - (newTxNet / 1.12)).toFixed(2));
 
   await repoPatchTransaction(transactionId, {
     wiwo_kg: newWiwoKg,
@@ -506,8 +511,9 @@ export async function approveConsolidationHeader(payload: ApproveHeaderPayload):
     invoice_date: today,
     gross_amount: parseFloat(totalGross.toFixed(2)),
     vat_amount: parseFloat(totalVat.toFixed(2)),
+    // AG-CHANGE: In a VAT-inclusive system, total_amount is equal to the sum of transaction net_amounts
     net_amount: parseFloat(totalNet.toFixed(2)),
-    total_amount: parseFloat((totalNet + totalVat).toFixed(2)),
+    total_amount: parseFloat(totalNet.toFixed(2)),
     transaction_status: "unpaid",
     remarks: `Consolidated Invoice for Billing Header ${header.header_no || headerId}`,
     salesman_id: salesmanId,
