@@ -332,12 +332,16 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
                         )}
                       >
                         <div className="flex items-center justify-between gap-1.5 w-full">
-                          <span className="text-xs font-bold text-zinc-800 dark:text-zinc-100 truncate">
-                            {tx.transaction_no}
+                          <span className="text-xs font-black text-zinc-900 dark:text-zinc-100 truncate">
+                            {tx.sales_invoice_no || "Pending Sales Invoice"}
                           </span>
                           <Badge className="text-[8px] px-1.5 py-0 bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700 shrink-0">
                             {tx.transaction_type.replace("_", " ")}
                           </Badge>
+                        </div>
+
+                        <div className="text-[10px] text-zinc-500 dark:text-zinc-400 font-bold truncate -mt-1">
+                          {tx.transaction_no}
                         </div>
 
                         <div className="flex items-center justify-between w-full text-[10px] text-muted-foreground">

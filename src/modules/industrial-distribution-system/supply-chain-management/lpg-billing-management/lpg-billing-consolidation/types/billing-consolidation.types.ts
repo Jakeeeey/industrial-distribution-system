@@ -92,6 +92,8 @@ export interface ConsolidationTransaction {
   created_date: string | null;
   modified_by: number | null;
   modified_date: string | null;
+  sales_invoice_id?: number | null;
+  sales_invoice_no?: string | null;
 
   // --- Expanded relations ---
   /** Full meter reading record attached to this transaction */

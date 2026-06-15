@@ -78,6 +78,8 @@ const TX_FIELDS = [
   "created_date",
   "modified_by",
   "modified_date",
+  "sales_invoice_id",
+  "sales_invoice_no",
 ].join(",");
 
 // ─── Mapping Helpers ──────────────────────────────────────────────────────────
@@ -146,6 +148,8 @@ function mapTransaction(raw: Record<string, unknown>): ConsolidationTransaction 
     created_date: raw["created_date"] ? String(raw["created_date"]) : null,
     modified_by: raw["modified_by"] ? Number(raw["modified_by"]) : null,
     modified_date: raw["modified_date"] ? String(raw["modified_date"]) : null,
+    sales_invoice_id: raw["sales_invoice_id"] ? Number(raw["sales_invoice_id"]) : null,
+    sales_invoice_no: raw["sales_invoice_no"] ? String(raw["sales_invoice_no"]) : null,
   };
 }
 
