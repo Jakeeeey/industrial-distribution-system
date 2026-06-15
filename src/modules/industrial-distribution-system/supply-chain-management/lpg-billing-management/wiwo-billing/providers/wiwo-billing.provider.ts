@@ -1121,8 +1121,8 @@ export async function processRegularSwap(payload: {
   // Create WIWO Header
   const wiwoNo = `WIWO-${Date.now().toString().slice(-6)}`;
   const grossAmount = Number((totalWiwoKg * payload.pricePerKg).toFixed(2));
-  const netAmount = Number((grossAmount / 1.12).toFixed(2));
-  const vatAmount = Number((grossAmount - netAmount).toFixed(2));
+  const vatAmount = Number((grossAmount * 0.12).toFixed(2));
+  const netAmount = Number((grossAmount + vatAmount).toFixed(2));
 
   const headerRes = await directusFetch<{ data: { id: number } }>(
     `${DIRECTUS_URL}/items/lpg_wiwo_headers`,
