@@ -529,7 +529,8 @@ export async function repoResolveSalesmanId(userId: number): Promise<number | nu
 /**
  * Fetches active customer site cylinders for a given site ID (used for onboarding baseline).
  */
-export async function repoFetchActiveCylindersBySite(siteId: number): Promise<any[]> {
+// Refactored from any[] to Record<string, unknown>[] to resolve ESLint typescript-eslint/no-explicit-any
+export async function repoFetchActiveCylindersBySite(siteId: number): Promise<Record<string, unknown>[]> {
   const filter = encodeURIComponent(
     JSON.stringify({
       lpg_site_id: { _eq: siteId },
@@ -549,7 +550,8 @@ export async function repoFetchActiveCylindersBySite(siteId: number): Promise<an
     "cylinder_asset_id.product_id.product_name",
   ].join(",");
 
-  const res = await directusFetch<{ data: any[] }>(
+  // Refactored response payload type from any[] to Record<string, unknown>[] to resolve ESLint warning
+  const res = await directusFetch<{ data: Record<string, unknown>[] }>(
     `${DIRECTUS_URL}/items/lpg_customer_site_cylinders?fields=${fields}&filter=${filter}&limit=-1`
   );
   return res.data ?? [];
