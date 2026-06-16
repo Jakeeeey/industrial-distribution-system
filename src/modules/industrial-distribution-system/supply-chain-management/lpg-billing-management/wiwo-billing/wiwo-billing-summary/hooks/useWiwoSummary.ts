@@ -120,6 +120,7 @@ export function useWiwoSummaryDetail(txId: number | null) {
 
   useEffect(() => {
     if (!txId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTx(null);
       return;
     }

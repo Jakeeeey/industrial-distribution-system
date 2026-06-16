@@ -117,6 +117,8 @@ export function CreateBillingWorkspace({
         setHasDraftOnboarding(draft !== null);
         if (draft) {
           setDraftTransactionNo(draft.transaction_no || `#${draft.id}`);
+        } else {
+          setDraftTransactionNo(null);
         }
       })
       .catch(() => {})
@@ -317,7 +319,7 @@ export function CreateBillingWorkspace({
               {alreadyOnboarded && hasDraftOnboarding && !checkingOnboarding && (
                 <div className="mt-3 flex items-center gap-1.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
                   <AlertCircle className="h-3 w-3" />
-                  <span>Onboarding from WIWO pending completion</span>
+                  <span>Onboarding from WIWO pending completion {draftTransactionNo ? `(${draftTransactionNo})` : ""}</span>
                 </div>
               )}
 
@@ -406,7 +408,7 @@ export function CreateBillingWorkspace({
               {hasDraftOnboarding && (
                 <div className="mt-3 flex items-center gap-1.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
                   <AlertCircle className="h-3 w-3" />
-                  <span>Active/pending onboarding from WIWO has not been finished</span>
+                  <span>Active/pending onboarding {draftTransactionNo ? `(${draftTransactionNo})` : ""} has not been finished</span>
                 </div>
               )}
 
