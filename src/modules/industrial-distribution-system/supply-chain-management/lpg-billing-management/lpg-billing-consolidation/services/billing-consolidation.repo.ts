@@ -621,5 +621,38 @@ export async function repoFetchFirstBranchId(): Promise<number> {
   return 1;
 }
 
+// AG-CHANGE: Added repoFetchOnboardingAttachmentsForCylinders to fetch cylinder photos captured during onboarding baseline transactions
+/**
+ * Fetches all onboarding baseline attachments for a list of cylinder asset IDs.
+ * Filtering by cylinder_asset_id and transaction_id.transaction_type = 'ONBOARDING_BASELINE'.
+ */
+export async function repoFetchOnboardingAttachmentsForCylinders(
+  cylinderAssetIds: number[]
+): Promise<ConsolidationAttachment[]> {
+  if (cylinderAssetIds.length === 0) return [];
+  
+  const filter = encodeURIComponent(
+    JSON.stringify({
+      cylinder_asset_id: { _in: cylinderAssetIds },
+      transaction_id: { transaction_type: { _eq: "ONBOARDING_BASELINE" } }
+    })
+  );
+
+  const res = await directusFetch<{ data: Record<string, unknown>[] }>(
+    `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments?filter=${filter}&limit=-1`
+  );
+
+  return (res.data ?? []).map((a) => ({
+    id: Number(a["id"]),
+    transaction_id: Number(a["transaction_id"]),
+    site_cylinder_id: a["site_cylinder_id"] ? Number(a["site_cylinder_id"]) : null,
+    cylinder_asset_id: a["cylinder_asset_id"] ? Number(a["cylinder_asset_id"]) : null,
+    attachment_type: (a["attachment_type"] as ConsolidationAttachment["attachment_type"]) ?? "GENERAL_PHOTO",
+    directus_file_id: String(a["directus_file_id"] ?? ""),
+    created_by: a["created_by"] ? Number(a["created_by"]) : null,
+    created_at: String(a["created_at"] ?? ""),
+  }));
+}
+
 
 

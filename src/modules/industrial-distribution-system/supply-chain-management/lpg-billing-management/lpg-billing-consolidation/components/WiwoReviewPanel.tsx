@@ -388,16 +388,22 @@ function CylinderDetailModal({
                   </span>
                 </div>
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                  {cylinderAttachments.map((att) => (
-                    <CylinderImage
-                      key={att.id}
-                      fileId={att.directus_file_id}
-                      label={att.attachment_type}
-                      onClick={() =>
-                        setLightboxFile({ id: att.directus_file_id, label: att.attachment_type })
-                      }
-                    />
-                  ))}
+                  {cylinderAttachments.map((att) => {
+                    // AG-CHANGE: Prefix label to distinguish historical onboarding baseline photos from current swap photos
+                    const displayLabel = att.transaction_id !== transactionId
+                      ? `ONBOARDING_${att.attachment_type}`
+                      : att.attachment_type;
+                    return (
+                      <CylinderImage
+                        key={att.id}
+                        fileId={att.directus_file_id}
+                        label={displayLabel}
+                        onClick={() =>
+                          setLightboxFile({ id: att.directus_file_id, label: displayLabel })
+                        }
+                      />
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -562,9 +568,30 @@ function CylinderRowCard({
           </div>
         </div>
 
+        {/* Weight stats */}
+        <div className="hidden sm:flex items-center gap-3.5 text-xs font-mono shrink-0 mr-2 text-right">
+          <div>
+            <span className="text-[8px] text-muted-foreground uppercase block font-bold tracking-wider leading-none mb-0.5">Gross</span>
+            <span className="font-bold text-foreground text-[11px]">
+              {detail.returned_gross_weight_kg != null ? `${detail.returned_gross_weight_kg.toFixed(1)} kg` : "—"}
+            </span>
+          </div>
+          <div>
+            <span className="text-[8px] text-muted-foreground uppercase block font-bold tracking-wider leading-none mb-0.5">Tare</span>
+            <span className="font-medium text-muted-foreground text-[11px]">
+              {detail.tare_weight_kg.toFixed(1)} kg
+            </span>
+          </div>
+          <div>
+            <span className="text-[8px] text-muted-foreground uppercase block font-bold tracking-wider leading-none mb-0.5">Net</span>
+            <span className="font-black text-violet-600 dark:text-violet-400 text-[11px]">
+              {detail.returned_gross_weight_kg != null ? `${Math.max(0, detail.returned_gross_weight_kg - detail.tare_weight_kg).toFixed(1)} kg` : "—"}
+            </span>
+          </div>
+        </div>
+
         {/* Right: badges + view btn */}
         <div className="flex items-center gap-2 shrink-0">
-          {/* Photo count pill */}
           {cylinderAttachmentCount > 0 && (
             <span className="flex items-center gap-1 text-[9px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/40 rounded-full px-2 py-0.5">
               <Camera className="h-3 w-3" />

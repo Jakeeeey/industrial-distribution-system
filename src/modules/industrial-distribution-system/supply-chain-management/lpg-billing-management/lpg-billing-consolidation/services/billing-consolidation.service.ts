@@ -36,6 +36,7 @@ import {
   repoResolveSalesmanId,
   repoFetchActiveCylindersBySite,
   repoFetchFirstBranchId,
+  repoFetchOnboardingAttachmentsForCylinders,
 } from "./billing-consolidation.repo";
 
 // ─── Header Listing ───────────────────────────────────────────────────────────
@@ -147,6 +148,50 @@ export async function fetchConsolidationWorkspace(headerId: number): Promise<{
     })
   );
 
+  // AG-CHANGE: Collect all unique cylinder asset IDs in the workspace to load their onboarding baseline photos
+  const cylinderAssetIds = new Set<number>();
+  enriched.forEach((tx) => {
+    if (tx.wiwo_header?.details) {
+      tx.wiwo_header.details.forEach((d) => {
+        if (d.cylinder_asset_id) {
+          cylinderAssetIds.add(d.cylinder_asset_id);
+        }
+      });
+    }
+  });
+
+  if (cylinderAssetIds.size > 0) {
+    try {
+      const onboardingAttachments = await repoFetchOnboardingAttachmentsForCylinders(
+        Array.from(cylinderAssetIds)
+      );
+      
+      // Merge onboarding baseline attachments into each transaction's attachments list
+      enriched.forEach((tx) => {
+        if (tx.transaction_type !== "ONBOARDING_BASELINE") {
+          const txCylAssetIds = new Set(
+            tx.wiwo_header?.details?.map((d) => d.cylinder_asset_id).filter(Boolean) ?? []
+          );
+          
+          const matchedOnboarding = onboardingAttachments.filter(
+            (att) => att.cylinder_asset_id && txCylAssetIds.has(att.cylinder_asset_id)
+          );
+
+          // Deduplicate by directus_file_id
+          const existingFileIds = new Set(tx.attachments?.map((a) => a.directus_file_id) ?? []);
+          const uniqueOnboarding = matchedOnboarding.filter(
+            (att) => !existingFileIds.has(att.directus_file_id)
+          );
+
+          if (uniqueOnboarding.length > 0) {
+            tx.attachments = [...(tx.attachments ?? []), ...uniqueOnboarding];
+          }
+        }
+      });
+    } catch (err) {
+      console.error("Failed to load onboarding attachments for workspace transactions:", err);
+    }
+  }
 
   return { header, transactions: enriched };
 }
