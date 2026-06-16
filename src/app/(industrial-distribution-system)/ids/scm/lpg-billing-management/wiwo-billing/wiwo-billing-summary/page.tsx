@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { NavUser } from "@/components/shared/app-sidebar/nav-user";
 import { cookies } from "next/headers";
-import MeteredBillingCreationModule from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/metered-billing/metered-billing-creation";
+import WiwoBillingSummaryModule from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/wiwo-billing/wiwo-billing-summary/WiwoBillingSummaryModule";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,8 +18,8 @@ export const dynamic = "force-dynamic";
 const COOKIE_NAME = "vos_access_token";
 
 export const metadata = {
-  title: "Create Metered Billing | IDS",
-  description: "Create a new commercial LPG metered billing record.",
+  title: "WiWO Billing Summary | IDS",
+  description: "View WiWO cylinder swap billing records, consumption details, and invoice linkage history.",
 };
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
@@ -79,9 +79,6 @@ export default async function Page() {
   const token = cookieStore.get(COOKIE_NAME)?.value ?? null;
   const headerUser = buildHeaderUserFromToken(token);
 
-  const payload = token ? decodeJwtPayload(token) : null;
-  const userId = payload?.sub ? Number(payload.sub) : null;
-  const currentUser = userId ? { id: userId, name: headerUser.name } : null;
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <header className="relative z-10 flex h-14 shrink-0 items-center justify-between border-b shadow-sm bg-background sm:h-16 overflow-hidden">
@@ -108,7 +105,7 @@ export default async function Page() {
                 <BreadcrumbSeparator className="hidden md:block shrink-0" />
                 <BreadcrumbItem className="min-w-0 overflow-hidden">
                   <BreadcrumbPage className="truncate max-w-[56vw] sm:max-w-[60vw] md:max-w-none font-bold">
-                    Create Metered Bill
+                    WiWO Billing Summary
                   </BreadcrumbPage>
                 </BreadcrumbItem>
               </BreadcrumbList>
@@ -121,7 +118,7 @@ export default async function Page() {
       </header>
 
       <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4 bg-zinc-50/20 dark:bg-zinc-950/10">
-        <MeteredBillingCreationModule currentUser={currentUser} />
+        <WiwoBillingSummaryModule />
       </main>
     </div>
   );
