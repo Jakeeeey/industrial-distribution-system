@@ -15,16 +15,16 @@ import {
   fetchNextMeterReadingSeq,
   checkOnboardingExists,
   fetchDraftOnboarding,
-} from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/metered-wiwo-billing/providers/metered-wiwo.provider";
+} from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/metered-billing/metered-billing-creation/providers/metered-billing.provider";
 import {
   fetchTransactionHeaders,
   fetchCustomers,
   fetchInvoicesForCustomer,
   createTransactionHeader,
-} from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/wiwo-billing/providers/wiwo-billing.provider";
+} from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/wiwo-billing/wiwo-billing-creation/providers/wiwo-billing.provider";
 import { handleApiError } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/error-handler";
 import { getUserIdFromToken } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/auth-utils";
-import type { TransactionType } from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/metered-wiwo-billing/types";
+import type { TransactionType } from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/metered-billing/metered-billing-creation/types";
 
 /**
  * GET /api/ids/scm/lpg-billing-management/metered-billing
@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
         : undefined;
       const finalToken = token ?? bearerToken;
       const finalUserId = getUserIdFromToken(finalToken);
-      
+
       const developmentUserId =
         process.env.NEXT_PUBLIC_AUTH_DISABLED === "true"
           ? Number(process.env.WIWO_DEV_USER_ID ?? 24)
@@ -171,8 +171,8 @@ export async function POST(request: NextRequest) {
       const resolvedUserId =
         finalUserId ??
         (developmentUserId !== null &&
-        Number.isInteger(developmentUserId) &&
-        developmentUserId > 0
+          Number.isInteger(developmentUserId) &&
+          developmentUserId > 0
           ? developmentUserId
           : null);
 

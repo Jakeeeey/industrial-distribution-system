@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { NavUser } from "@/components/shared/app-sidebar/nav-user";
 import { cookies } from "next/headers";
-import MeteredBillingSummaryModule from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/metered-billing-summary";
+import MeteredBillingSummaryModule from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/metered-billing/metered-billing-summary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
