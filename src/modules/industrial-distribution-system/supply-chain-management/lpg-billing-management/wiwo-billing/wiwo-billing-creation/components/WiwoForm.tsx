@@ -15,9 +15,12 @@ import {
   CheckCircle2,
   Loader2,
   ScanBarcode,
-  ChevronRight
+  ChevronRight,
+  Printer
 } from "lucide-react";
 import type { CylinderAsset, CustomerSiteCylinder, MeteredWiwoTransaction, CustomerSite, MeterReading, WiwoHeader, LpgTransactionHeader } from "../types";
+import WiwoThermalReceiptModal from "./WiwoThermalReceiptModal";
+import type { WiwoThermalReceiptData } from "./WiwoThermalReceiptModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -182,6 +185,12 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   const isViewMode = !!txId && !!txDetail && txDetail.status !== "DRAFT";
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [cancelledReason, setCancelledReason] = useState("");
+
+  // RULE DEV: Print receipt modal states
+  const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [isAfterSubmit, setIsAfterSubmit] = useState(false);
+  const [submittedTxNo, setSubmittedTxNo] = useState<string | null>(null);
+  const [autoPrintActive, setAutoPrintActive] = useState(false);
 
   // Combobox Search States
   const [siteSearch, setSiteSearch] = useState("");
@@ -382,7 +391,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
             console.error("Failed to parse draft", e);
           }
         }
-        
+
         if (!hydrated) {
           // Reset returned weights mapping
           setReturnedWeights({});
@@ -443,7 +452,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   useEffect(() => {
     if (isViewMode || flowType !== "ROUTINE") return;
     if (!siteId) return;
-    
+
     const draft = {
       siteId,
       customerCode,
@@ -684,8 +693,8 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   };
 
   // ─── Mathematical Calculations (Flow B) ─────────────────────────────────────
-  const meteredKg = draftMeteredKg !== null 
-    ? draftMeteredKg 
+  const meteredKg = draftMeteredKg !== null
+    ? draftMeteredKg
     : Math.max(0, currentReading - previousReading);
 
   // Map and calculate returned cylinders
@@ -915,7 +924,12 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
 
       alert("Transaction saved and posted successfully!");
       clearWeighingCache(selectedTxId);
-      onSuccess();
+      if (data.data?.transaction_no) {
+        setSubmittedTxNo(data.data.transaction_no);
+      }
+      setIsAfterSubmit(true);
+      setAutoPrintActive(true);
+      setPrintModalOpen(true);
     } catch (err) {
       const error = err as Error;
       alert(error.message || "An error occurred.");
@@ -981,6 +995,101 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   const finalNet = isViewMode ? txDetail.net_amount : parseFloat((finalGross + finalVat).toFixed(2));
   const finalBillableSource = isViewMode ? txDetail.billable_source : (meteredKg >= totalWiwoKg ? "METERED" : "WIWO");
 
+  // RULE DEV: Map printer data for WIWO receipt
+  const siteName = selectedSite?.site_name || transactionHeader?.site?.site_name || null;
+
+  const printReturnedCylinders = isViewMode
+    ? (((txDetail?.wiwo_header_id as unknown as WiwoHeader)?.details ?? [])
+      .filter((d) => d.line_type === "CONSUMPTION_RETURN")
+      .map((d) => ({
+        serialNumber: d.serial_number,
+        tareWeight: d.tare_weight_kg,
+        previousLpgKg: d.previous_lpg_kg,
+        returnedGrossWeight: d.returned_gross_weight_kg ?? 0,
+        consumedLpgKg: d.consumed_lpg_kg,
+      })))
+    : calculatedReturnedCylinders
+      .filter((c) => c.returnedGross > 0)
+      .map((c) => ({
+        serialNumber: c.cylinder_asset?.serial_number || "",
+        tareWeight: c.tare,
+        previousLpgKg: c.opening,
+        returnedGrossWeight: c.returnedGross,
+        consumedLpgKg: c.consumed,
+      }));
+
+  const printDeployedCylinders = isViewMode
+    ? (((txDetail?.wiwo_header_id as unknown as WiwoHeader)?.details ?? [])
+      .filter((d) => d.line_type === "NEW_DEPLOYMENT")
+      .map((d) => ({
+        serialNumber: d.serial_number,
+        tareWeight: d.tare_weight_kg,
+        deployedGrossWeight: d.previous_lpg_kg,
+      })))
+    : flowType === "ONBOARDING"
+      ? selectedOnboardCylinders.map((c) => ({
+        serialNumber: c.serialNumber,
+        tareWeight: c.tareWeight,
+        deployedGrossWeight: Number(c.targetKg),
+      }))
+      : selectedReplacementCylinders.map((c) => ({
+        serialNumber: c.serialNumber,
+        tareWeight: c.tareWeight,
+        deployedGrossWeight: Number(c.targetKg),
+      }));
+
+  const printTxType = isViewMode
+    ? txDetail?.transaction_type === "ONBOARDING_BASELINE"
+      ? "Onboarding Baseline"
+      : txDetail?.transaction_type === "REGULAR_BILLING"
+        ? "Regular Billing"
+        : "Adjustment"
+    : flowType === "ONBOARDING"
+      ? "Onboarding Baseline"
+      : "Regular Billing";
+
+  const printTxData: WiwoThermalReceiptData = {
+    transactionNo: isViewMode
+      ? txDetail?.transaction_no || ""
+      : submittedTxNo || txDetail?.transaction_no || "",
+    transactionDate: isViewMode ? txDetail?.transaction_date || "" : transactionDate,
+    transactionType: printTxType,
+    customerName: isViewMode
+      ? txDetail?.customer?.customer_name || txDetail?.customer_code || "—"
+      : transactionHeader?.customer_name || customerCode || "—",
+    siteName: siteName,
+    salesInvoiceNo: isViewMode
+      ? txDetail?.sales_invoice_no
+      : salesInvoice?.invoice_no || null,
+    salesOrderNo: isViewMode
+      ? txDetail?.sales_order_no
+      : null,
+    previousReading: isViewMode
+      ? txDetail?.meter_reading_id
+        ? (txDetail.meter_reading_id as unknown as MeterReading).previous_reading
+        : null
+      : previousReading,
+    currentReading: isViewMode
+      ? txDetail?.meter_reading_id
+        ? (txDetail.meter_reading_id as unknown as MeterReading).current_reading
+        : null
+      : currentReading,
+    meteredKg: isViewMode ? txDetail?.metered_kg : meteredKg,
+    wiwoKg: isViewMode ? txDetail?.wiwo_kg || 0 : totalWiwoKg,
+    billableKg: finalBillableKg,
+    billableSource: finalBillableSource as "METERED" | "WIWO" | "NONE",
+    pricePerKg: finalPricePerKg,
+    grossAmount: finalGross,
+    vatAmount: finalVat,
+    netAmount: finalNet,
+    returnedCylinders: printReturnedCylinders,
+    deployedCylinders: printDeployedCylinders,
+    isOnboarding: isViewMode
+      ? txDetail?.transaction_type === "ONBOARDING_BASELINE"
+      : flowType === "ONBOARDING",
+    remarks: isViewMode ? txDetail?.remarks : remarks,
+  };
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Locked Notice */}
@@ -1013,18 +1122,18 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
             {isViewMode
               ? `WIWO Validation Log: ${txDetail?.transaction_no}`
               : flowType === "ONBOARDING"
-              ? "New Onboarding Baseline (Flow A)"
-              : "New Routine Check & Swap (Flow B)"}
+                ? "New Onboarding Baseline (Flow A)"
+                : "New Routine Check & Swap (Flow B)"}
           </h2>
           <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
             {isViewMode
               ? `Transaction type: ${txDetail?.transaction_type?.replace("_", " ")}`
               : flowType === "ONBOARDING"
-              ? "Establish site inventory baseline with zero-amount logistics tracking"
-              : "Dual Meter-Sync & Weigh-In / Weigh-Out consumption verification"}
+                ? "Establish site inventory baseline with zero-amount logistics tracking"
+                : "Dual Meter-Sync & Weigh-In / Weigh-Out consumption verification"}
           </p>
         </div>
-    </div>
+      </div>
 
       {/* Main Layout: single column on mobile, 3-col on lg+ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1243,8 +1352,8 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                       value={isViewMode
                         ? txDetail.metered_kg
                         : draftMeteredKg !== null
-                        ? draftMeteredKg.toFixed(3)
-                        : meteredKg.toFixed(3)}
+                          ? draftMeteredKg.toFixed(3)
+                          : meteredKg.toFixed(3)}
                       readOnly
                       className="font-mono bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 font-bold"
                     />
@@ -1290,138 +1399,138 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
 
                   <div className="border border-border/80 rounded-xl overflow-hidden text-xs bg-white dark:bg-zinc-955/10">
                     <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse min-w-full">
-                      <thead className="bg-zinc-50 dark:bg-zinc-900 font-bold text-muted-foreground border-b border-border">
-                        <tr>
-                          <th className="p-2 sm:p-3 sticky left-0 bg-zinc-50 dark:bg-zinc-900 z-10 text-[10px] sm:text-xs">Serial</th>
-                          <th className="p-2 sm:p-3 text-[10px] sm:text-xs">Product Name</th>
-                          <th className="p-2 sm:p-3 text-center text-[10px] sm:text-xs">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/50">
-                        {isViewMode ? (
-                          ((txDetail?.wiwo_header_id as unknown as WiwoHeader)?.details ?? [])
-                            .filter(l => l.line_type === "CONSUMPTION_RETURN")
-                            .map((line, idx) => {
-                              const details = (txDetail?.wiwo_header_id as unknown as WiwoHeader)?.details ?? [];
-                              const deploymentLines = details.filter(d => d.line_type === "NEW_DEPLOYMENT");
-                              const matchedDeployment = deploymentLines[idx];
-                              const isSwapped = !!matchedDeployment;
-                              
-                              return (
-                                <Fragment key={idx}>
-                                  <tr className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20">
-                                    <td className="p-2 sm:p-3 font-mono font-bold sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r border-border shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] text-[10px] sm:text-xs">{line.serial_number}</td>
-                                    <td className="p-2 sm:p-3 font-semibold text-zinc-700 dark:text-zinc-300 text-[10px] sm:text-xs">
-                                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                                      {(line as any).cylinder_asset?.product?.product_name || (line as any).product_name || "LPG Cylinder"}
-                                    </td>
-                                    <td className="p-2 sm:p-3 text-center">
-                                      {isSwapped ? (
-                                        <Badge variant="outline" className="border-emerald-255 text-emerald-700 bg-emerald-50 dark:bg-emerald-950/20 dark:text-emerald-400 text-[9px] sm:text-xs px-1.5 py-0 sm:px-2 sm:py-0.5">
-                                          Swapped
-                                        </Badge>
-                                      ) : (
-                                        <Badge variant="outline" className="border-border text-muted-foreground bg-accent/20 dark:text-muted-foreground text-[9px] sm:text-xs px-1.5 py-0 sm:px-2 sm:py-0.5">
-                                          In-Place
-                                        </Badge>
-                                      )}
-                                    </td>
-                                  </tr>
-                                  <tr className="bg-zinc-50/20 dark:bg-zinc-900/5">
-                                    <td colSpan={3} className="p-4 border-l-2 border-border dark:border-zinc-700">
-                                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-2">
-                                        <div>
-                                          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Tare Weight</span>
-                                          <span className="font-mono text-xs">{line.tare_weight_kg} KG</span>
-                                        </div>
-                                        <div>
-                                          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Previous Gross KG</span>
-                                          <span className="font-mono text-xs">{line.previous_lpg_kg} KG</span>
-                                        </div>
-                                        <div>
-                                          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Remaining KG</span>
-                                          <span className="font-mono text-xs text-muted-foreground">{line.remaining_lpg_kg} KG</span>
-                                        </div>
-                                        <div>
-                                          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Consumed KG</span>
-                                          <span className="font-mono text-xs font-bold text-foreground">{line.consumed_lpg_kg} KG</span>
-                                        </div>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                  {isSwapped && (
-                                    <tr className="bg-zinc-50/40 dark:bg-zinc-900/10">
-                                      <td colSpan={3} className="p-4 border-l-2 border-primary bg-zinc-50/30 dark:bg-zinc-900/10">
-                                        <div className="flex flex-col sm:flex-row gap-6 text-xs">
+                      <table className="w-full text-left border-collapse min-w-full">
+                        <thead className="bg-zinc-50 dark:bg-zinc-900 font-bold text-muted-foreground border-b border-border">
+                          <tr>
+                            <th className="p-2 sm:p-3 sticky left-0 bg-zinc-50 dark:bg-zinc-900 z-10 text-[10px] sm:text-xs">Serial</th>
+                            <th className="p-2 sm:p-3 text-[10px] sm:text-xs">Product Name</th>
+                            <th className="p-2 sm:p-3 text-center text-[10px] sm:text-xs">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/50">
+                          {isViewMode ? (
+                            ((txDetail?.wiwo_header_id as unknown as WiwoHeader)?.details ?? [])
+                              .filter(l => l.line_type === "CONSUMPTION_RETURN")
+                              .map((line, idx) => {
+                                const details = (txDetail?.wiwo_header_id as unknown as WiwoHeader)?.details ?? [];
+                                const deploymentLines = details.filter(d => d.line_type === "NEW_DEPLOYMENT");
+                                const matchedDeployment = deploymentLines[idx];
+                                const isSwapped = !!matchedDeployment;
+
+                                return (
+                                  <Fragment key={idx}>
+                                    <tr className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20">
+                                      <td className="p-2 sm:p-3 font-mono font-bold sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r border-border shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] text-[10px] sm:text-xs">{line.serial_number}</td>
+                                      <td className="p-2 sm:p-3 font-semibold text-zinc-700 dark:text-zinc-300 text-[10px] sm:text-xs">
+                                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                                        {(line as any).cylinder_asset?.product?.product_name || (line as any).product_name || "LPG Cylinder"}
+                                      </td>
+                                      <td className="p-2 sm:p-3 text-center">
+                                        {isSwapped ? (
+                                          <Badge variant="outline" className="border-emerald-255 text-emerald-700 bg-emerald-50 dark:bg-emerald-950/20 dark:text-emerald-400 text-[9px] sm:text-xs px-1.5 py-0 sm:px-2 sm:py-0.5">
+                                            Swapped
+                                          </Badge>
+                                        ) : (
+                                          <Badge variant="outline" className="border-border text-muted-foreground bg-accent/20 dark:text-muted-foreground text-[9px] sm:text-xs px-1.5 py-0 sm:px-2 sm:py-0.5">
+                                            In-Place
+                                          </Badge>
+                                        )}
+                                      </td>
+                                    </tr>
+                                    <tr className="bg-zinc-50/20 dark:bg-zinc-900/5">
+                                      <td colSpan={3} className="p-4 border-l-2 border-border dark:border-zinc-700">
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-2">
                                           <div>
-                                            <span className="font-semibold text-muted-foreground uppercase tracking-wider block text-[10px] mb-0.5">Replacement Cylinder Serial</span>
-                                            <span className="font-mono font-bold text-foreground">{matchedDeployment.serial_number}</span>
+                                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Tare Weight</span>
+                                            <span className="font-mono text-xs">{line.tare_weight_kg} KG</span>
                                           </div>
                                           <div>
-                                            <span className="font-semibold text-muted-foreground uppercase tracking-wider block text-[10px] mb-0.5">Tare Weight</span>
-                                            <span className="font-mono">{matchedDeployment.tare_weight_kg} KG</span>
+                                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Previous Gross KG</span>
+                                            <span className="font-mono text-xs">{line.previous_lpg_kg} KG</span>
                                           </div>
                                           <div>
-                                            <span className="font-semibold text-muted-foreground uppercase tracking-wider block text-[10px] mb-0.5">Deployed Gross Weight</span>
-                                            <span className="font-mono font-bold text-primary dark:text-emerald-400">{matchedDeployment.previous_lpg_kg} KG</span>
+                                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Remaining KG</span>
+                                            <span className="font-mono text-xs text-muted-foreground">{line.remaining_lpg_kg} KG</span>
+                                          </div>
+                                          <div>
+                                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Consumed KG</span>
+                                            <span className="font-mono text-xs font-bold text-foreground">{line.consumed_lpg_kg} KG</span>
                                           </div>
                                         </div>
                                       </td>
                                     </tr>
-                                  )}
-                                </Fragment>
-                              );
-                            })
-                        ) : (
-                          calculatedReturnedCylinders.length === 0 ? (
-                            <tr>
-                              <td colSpan={3} className="p-6 text-center text-muted-foreground">
-                                No connected cylinders found for this site. Must run onboarding setup first.
-                              </td>
-                            </tr>
+                                    {isSwapped && (
+                                      <tr className="bg-zinc-50/40 dark:bg-zinc-900/10">
+                                        <td colSpan={3} className="p-4 border-l-2 border-primary bg-zinc-50/30 dark:bg-zinc-900/10">
+                                          <div className="flex flex-col sm:flex-row gap-6 text-xs">
+                                            <div>
+                                              <span className="font-semibold text-muted-foreground uppercase tracking-wider block text-[10px] mb-0.5">Replacement Cylinder Serial</span>
+                                              <span className="font-mono font-bold text-foreground">{matchedDeployment.serial_number}</span>
+                                            </div>
+                                            <div>
+                                              <span className="font-semibold text-muted-foreground uppercase tracking-wider block text-[10px] mb-0.5">Tare Weight</span>
+                                              <span className="font-mono">{matchedDeployment.tare_weight_kg} KG</span>
+                                            </div>
+                                            <div>
+                                              <span className="font-semibold text-muted-foreground uppercase tracking-wider block text-[10px] mb-0.5">Deployed Gross Weight</span>
+                                              <span className="font-mono font-bold text-primary dark:text-emerald-400">{matchedDeployment.previous_lpg_kg} KG</span>
+                                            </div>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </Fragment>
+                                );
+                              })
                           ) : (
-                            calculatedReturnedCylinders.map((row) => {
-                              return (
-                                <Fragment key={row.id}>
-                                  <tr 
-                                    onClick={() => {
-                                      setMobileEditingCylinderId(row.id);
-                                    }}
-                                    className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20 cursor-pointer transition-colors group"
-                                  >
-                                    <td className="p-2 sm:p-3 font-mono font-bold sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r border-border shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] text-[10px] sm:text-xs">
-                                      <div className="flex items-center gap-1.5">
-                                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60 transition-transform duration-200 group-hover:translate-x-0.5 shrink-0" />
-                                        {row.cylinder_asset?.serial_number}
-                                      </div>
-                                    </td>
-                                    <td className="p-2 sm:p-3 font-semibold text-zinc-700 dark:text-zinc-300 text-[10px] sm:text-xs">
-                                      {row.cylinder_asset?.product?.product_name || "LPG Cylinder"}
-                                    </td>
-                                    <td className="p-2 sm:p-3 text-center">
-                                      {row.isSwapped ? (
-                                        <Badge variant="outline" className="border-violet-250 text-violet-700 bg-violet-55/20 dark:bg-violet-955/20 dark:text-violet-400 text-[9px] sm:text-xs px-1.5 py-0 sm:px-2 sm:py-0.5">
-                                          Swapping Out
-                                        </Badge>
-                                      ) : returnedWeights[row.id] > 0 ? (
-                                        <Badge variant="outline" className="border-emerald-250 text-emerald-700 bg-emerald-50 dark:bg-emerald-955/20 dark:text-emerald-400 text-[9px] sm:text-xs px-1.5 py-0 sm:px-2 sm:py-0.5">
-                                          Weighed In-Place
-                                        </Badge>
-                                      ) : (
-                                        <Badge variant="outline" className="border-border text-muted-foreground bg-accent/10 text-[9px] sm:text-xs px-1.5 py-0 sm:px-2 sm:py-0.5">
-                                          Active In-Place
-                                        </Badge>
-                                      )}
-                                    </td>
-                                  </tr>
-                                </Fragment>
-                              );
-                            })
-                          )
-                        )}
-                      </tbody>
-                    </table>
+                            calculatedReturnedCylinders.length === 0 ? (
+                              <tr>
+                                <td colSpan={3} className="p-6 text-center text-muted-foreground">
+                                  No connected cylinders found for this site. Must run onboarding setup first.
+                                </td>
+                              </tr>
+                            ) : (
+                              calculatedReturnedCylinders.map((row) => {
+                                return (
+                                  <Fragment key={row.id}>
+                                    <tr
+                                      onClick={() => {
+                                        setMobileEditingCylinderId(row.id);
+                                      }}
+                                      className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20 cursor-pointer transition-colors group"
+                                    >
+                                      <td className="p-2 sm:p-3 font-mono font-bold sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r border-border shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] text-[10px] sm:text-xs">
+                                        <div className="flex items-center gap-1.5">
+                                          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60 transition-transform duration-200 group-hover:translate-x-0.5 shrink-0" />
+                                          {row.cylinder_asset?.serial_number}
+                                        </div>
+                                      </td>
+                                      <td className="p-2 sm:p-3 font-semibold text-zinc-700 dark:text-zinc-300 text-[10px] sm:text-xs">
+                                        {row.cylinder_asset?.product?.product_name || "LPG Cylinder"}
+                                      </td>
+                                      <td className="p-2 sm:p-3 text-center">
+                                        {row.isSwapped ? (
+                                          <Badge variant="outline" className="border-violet-250 text-violet-700 bg-violet-55/20 dark:bg-violet-955/20 dark:text-violet-400 text-[9px] sm:text-xs px-1.5 py-0 sm:px-2 sm:py-0.5">
+                                            Swapping Out
+                                          </Badge>
+                                        ) : returnedWeights[row.id] > 0 ? (
+                                          <Badge variant="outline" className="border-emerald-250 text-emerald-700 bg-emerald-50 dark:bg-emerald-955/20 dark:text-emerald-400 text-[9px] sm:text-xs px-1.5 py-0 sm:px-2 sm:py-0.5">
+                                            Weighed In-Place
+                                          </Badge>
+                                        ) : (
+                                          <Badge variant="outline" className="border-border text-muted-foreground bg-accent/10 text-[9px] sm:text-xs px-1.5 py-0 sm:px-2 sm:py-0.5">
+                                            Active In-Place
+                                          </Badge>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  </Fragment>
+                                );
+                              })
+                            )
+                          )}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 </div>
@@ -1443,58 +1552,99 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                 </div>
               </div>
 
-                <div className="space-y-3">
-                  <div className="border border-border/80 rounded-xl p-4 bg-white dark:bg-zinc-955/10 text-xs">
-                    <form onSubmit={handleAddSerial} className="flex items-center gap-2">
-                      <Input
-                        type="text"
-                        placeholder="Scan or enter serial number..."
-                        value={serialInput}
-                        onChange={(e) => setSerialInput(e.target.value)}
-                        disabled={isValidatingSerial}
-                        className="font-mono text-sm"
-                        autoFocus
-                      />
-                      <Button 
-                        type="submit" 
-                        disabled={isValidatingSerial || !serialInput.trim()}
-                        className="bg-primary hover:bg-primary/90 text-white font-bold px-6 shrink-0"
-                      >
-                        {isValidatingSerial ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
-                        {isValidatingSerial ? "Checking..." : "Add"}
-                      </Button>
-                    </form>
-                  </div>
+              <div className="space-y-3">
+                <div className="border border-border/80 rounded-xl p-4 bg-white dark:bg-zinc-955/10 text-xs">
+                  <form onSubmit={handleAddSerial} className="flex items-center gap-2">
+                    <Input
+                      type="text"
+                      placeholder="Scan or enter serial number..."
+                      value={serialInput}
+                      onChange={(e) => setSerialInput(e.target.value)}
+                      disabled={isValidatingSerial}
+                      className="font-mono text-sm"
+                      autoFocus
+                    />
+                    <Button
+                      type="submit"
+                      disabled={isValidatingSerial || !serialInput.trim()}
+                      className="bg-primary hover:bg-primary/90 text-white font-bold px-6 shrink-0"
+                    >
+                      {isValidatingSerial ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
+                      {isValidatingSerial ? "Checking..." : "Add"}
+                    </Button>
+                  </form>
+                </div>
 
-                  {selectedOnboardCylinders.length > 0 && (
-                    <div className="border border-border/80 rounded-xl overflow-hidden text-xs bg-white dark:bg-zinc-955/10 mt-3 shadow-sm">
-                      {/* Mobile View (sm:hidden) — AG-CHANGE: custom responsive list layout to eliminate horizontal scrolls */}
-                      <div className="block sm:hidden divide-y divide-border/60">
-                        {selectedOnboardCylinders.map((cyl, idx) => (
-                          <div key={cyl.cylinderAssetId} className="p-3 flex flex-col gap-2 bg-card">
-                            <div className="flex justify-between items-start gap-2">
-                              <div className="min-w-0">
-                                <p className="font-mono font-bold text-xs text-foreground truncate">{cyl.serialNumber}</p>
-                                <p className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">{cyl.productName}</p>
-                              </div>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setSelectedOnboardCylinders((prev) => prev.filter((c) => c.cylinderAssetId !== cyl.cylinderAssetId))}
-                                className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50/20 shrink-0"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
+                {selectedOnboardCylinders.length > 0 && (
+                  <div className="border border-border/80 rounded-xl overflow-hidden text-xs bg-white dark:bg-zinc-955/10 mt-3 shadow-sm">
+                    {/* Mobile View (sm:hidden) — AG-CHANGE: custom responsive list layout to eliminate horizontal scrolls */}
+                    <div className="block sm:hidden divide-y divide-border/60">
+                      {selectedOnboardCylinders.map((cyl, idx) => (
+                        <div key={cyl.cylinderAssetId} className="p-3 flex flex-col gap-2 bg-card">
+                          <div className="flex justify-between items-start gap-2">
+                            <div className="min-w-0">
+                              <p className="font-mono font-bold text-xs text-foreground truncate">{cyl.serialNumber}</p>
+                              <p className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">{cyl.productName}</p>
                             </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setSelectedOnboardCylinders((prev) => prev.filter((c) => c.cylinderAssetId !== cyl.cylinderAssetId))}
+                              className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50/20 shrink-0"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
 
-                            <div className="grid grid-cols-2 gap-3 items-center pt-2 border-t border-dashed border-border/50">
-                              <div>
-                                <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block mb-0.5">Tare Weight</span>
-                                <span className="font-mono font-bold text-xs text-foreground">{cyl.tareWeight} KG</span>
-                              </div>
-                              <div>
-                                <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">Starting Gross (KG)</span>
+                          <div className="grid grid-cols-2 gap-3 items-center pt-2 border-t border-dashed border-border/50">
+                            <div>
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block mb-0.5">Tare Weight</span>
+                              <span className="font-mono font-bold text-xs text-foreground">{cyl.tareWeight} KG</span>
+                            </div>
+                            <div>
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">Starting Gross (KG)</span>
+                              <Input
+                                type="number"
+                                step="0.1"
+                                value={cyl.targetKg}
+                                onChange={(e) => {
+                                  const raw = e.target.value;
+                                  const val = raw === "" ? "" : parseFloat(raw);
+                                  setSelectedOnboardCylinders((prev) => {
+                                    const copy = [...prev];
+                                    copy[idx] = { ...copy[idx], targetKg: val };
+                                    return copy;
+                                  });
+                                }}
+                                className={`text-xs h-8 text-right font-mono w-full ${(Number(cyl.targetKg) - cyl.tareWeight > cyl.capacity || (cyl.targetKg !== "" && Number(cyl.targetKg) < cyl.tareWeight)) ? "border-red-500 text-red-500 bg-red-50/10 focus-visible:ring-red-500" : ""
+                                  }`}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Desktop View (hidden sm:block) */}
+                    <div className="hidden sm:block overflow-x-auto">
+                      <table className="w-full text-left border-collapse min-w-full">
+                        <thead className="bg-zinc-50 dark:bg-zinc-900 font-bold text-muted-foreground border-b border-border">
+                          <tr>
+                            <th className="p-3 sticky left-0 bg-zinc-50 dark:bg-zinc-900 z-10">Serial</th>
+                            <th className="p-3">Product Name</th>
+                            <th className="p-3 text-right">Tare Weight</th>
+                            <th className="p-3 text-right w-44">Starting Gross Weight (KG)</th>
+                            <th className="p-3 w-10"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/50">
+                          {selectedOnboardCylinders.map((cyl, idx) => (
+                            <tr key={cyl.cylinderAssetId} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20">
+                              <td className="p-3 font-mono font-bold text-zinc-700 dark:text-zinc-300 sticky left-0 bg-white dark:bg-zinc-955 z-10 border-r border-border shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">{cyl.serialNumber}</td>
+                              <td className="p-3 text-muted-foreground">{cyl.productName}</td>
+                              <td className="p-3 text-right font-mono text-muted-foreground">{cyl.tareWeight} KG</td>
+                              <td className="p-3">
                                 <Input
                                   type="number"
                                   step="0.1"
@@ -1508,75 +1658,32 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                       return copy;
                                     });
                                   }}
-                                  className={`text-xs h-8 text-right font-mono w-full ${
-                                    (Number(cyl.targetKg) - cyl.tareWeight > cyl.capacity || (cyl.targetKg !== "" && Number(cyl.targetKg) < cyl.tareWeight)) ? "border-red-500 text-red-500 bg-red-50/10 focus-visible:ring-red-500" : ""
-                                  }`}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Desktop View (hidden sm:block) */}
-                      <div className="hidden sm:block overflow-x-auto">
-                        <table className="w-full text-left border-collapse min-w-full">
-                          <thead className="bg-zinc-50 dark:bg-zinc-900 font-bold text-muted-foreground border-b border-border">
-                            <tr>
-                              <th className="p-3 sticky left-0 bg-zinc-50 dark:bg-zinc-900 z-10">Serial</th>
-                              <th className="p-3">Product Name</th>
-                              <th className="p-3 text-right">Tare Weight</th>
-                              <th className="p-3 text-right w-44">Starting Gross Weight (KG)</th>
-                              <th className="p-3 w-10"></th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/50">
-                            {selectedOnboardCylinders.map((cyl, idx) => (
-                              <tr key={cyl.cylinderAssetId} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20">
-                                <td className="p-3 font-mono font-bold text-zinc-700 dark:text-zinc-300 sticky left-0 bg-white dark:bg-zinc-955 z-10 border-r border-border shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">{cyl.serialNumber}</td>
-                                <td className="p-3 text-muted-foreground">{cyl.productName}</td>
-                                <td className="p-3 text-right font-mono text-muted-foreground">{cyl.tareWeight} KG</td>
-                                <td className="p-3">
-                                  <Input
-                                    type="number"
-                                    step="0.1"
-                                    value={cyl.targetKg}
-                                    onChange={(e) => {
-                                      const raw = e.target.value;
-                                      const val = raw === "" ? "" : parseFloat(raw);
-                                      setSelectedOnboardCylinders((prev) => {
-                                        const copy = [...prev];
-                                        copy[idx] = { ...copy[idx], targetKg: val };
-                                        return copy;
-                                      });
-                                    }}
-                                    className={`text-xs h-8 text-right font-mono ${
-                                      (Number(cyl.targetKg) - cyl.tareWeight > cyl.capacity || (cyl.targetKg !== "" && Number(cyl.targetKg) < cyl.tareWeight)) ? "border-red-500 text-red-500 bg-red-50/10 focus-visible:ring-red-500" : ""
+                                  className={`text-xs h-8 text-right font-mono ${(Number(cyl.targetKg) - cyl.tareWeight > cyl.capacity || (cyl.targetKg !== "" && Number(cyl.targetKg) < cyl.tareWeight)) ? "border-red-500 text-red-500 bg-red-50/10 focus-visible:ring-red-500" : ""
                                     }`}
-                                  />
-                                </td>
-                                <td className="p-3 text-right">
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setSelectedOnboardCylinders((prev) => prev.filter((c) => c.cylinderAssetId !== cyl.cylinderAssetId))}
-                                    className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50/50"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                                />
+                              </td>
+                              <td className="p-3 text-right">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setSelectedOnboardCylinders((prev) => prev.filter((c) => c.cylinderAssetId !== cyl.cylinderAssetId))}
+                                  className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50/50"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
-                  )}
-                </div>
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
             </div>
+          )}
+        </div>
 
         {/* Right Column (Sidebar) */}
         <div className="space-y-6">
@@ -1649,11 +1756,10 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                   <span className="text-sm font-semibold">Billable Source</span>
                 </div>
                 <Badge
-                  className={`font-bold text-xs tracking-wider border-none ${
-                    finalBillableSource === "METERED"
+                  className={`font-bold text-xs tracking-wider border-none ${finalBillableSource === "METERED"
                       ? "bg-blue-300/30 text-blue-100"
                       : "bg-orange-300/30 text-orange-100"
-                  }`}
+                    }`}
                 >
                   {finalBillableSource}
                 </Badge>
@@ -1734,7 +1840,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
               )}
             </div>
           </div>
-      </div>
+        </div>
       </div>
       {/* Form Action Buttons (Moved to bottom) */}
       <div className="flex flex-wrap gap-4 items-center justify-end border-t border-border pt-6 mt-6">
@@ -1758,7 +1864,18 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
             Cancel & Rollback
           </Button>
         )}
-
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            setAutoPrintActive(false);
+            setPrintModalOpen(true);
+          }}
+          className="h-11 px-6 border-zinc-200 text-foreground hover:bg-accent transition-all active:scale-95 font-semibold gap-1.5"
+        >
+          <Printer className="h-4 w-4" />
+          Print Receipt
+        </Button>
         {!isReadOnly && !isViewMode && (
           <Button
             onClick={handleSubmit}
@@ -2110,9 +2227,8 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                   return (
                     <label
                       key={photoType}
-                      className={`min-h-36 rounded-xl border border-dashed p-3 cursor-pointer flex flex-col items-center justify-center text-center ${
-                        photoId ? "border-emerald-400 bg-emerald-50/30" : "border-border dark:border-zinc-700"
-                      }`}
+                      className={`min-h-36 rounded-xl border border-dashed p-3 cursor-pointer flex flex-col items-center justify-center text-center ${photoId ? "border-emerald-400 bg-emerald-50/30" : "border-border dark:border-zinc-700"
+                        }`}
                     >
                       {uploading ? (
                         <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -2176,7 +2292,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
 
       {/* Cylinder In-Place Weighing Modal */}
       <Dialog open={isWeighModalOpen} onOpenChange={setIsWeighModalOpen}>
-        <DialogContent 
+        <DialogContent
           onPointerDownOutside={(e) => e.preventDefault()}
           onInteractOutside={(e) => e.preventDefault()}
           className="max-w-lg p-0 border border-border rounded-2xl overflow-hidden shadow-2xl bg-white dark:bg-zinc-955 gap-0"
@@ -2267,9 +2383,9 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                             <button
                               type="button"
                               onClick={() => {
-                                  setSerialFile(null);
-                                  setSerialFileUrl(null);
-                                  setSerialDirectusId(null);
+                                setSerialFile(null);
+                                setSerialFileUrl(null);
+                                setSerialDirectusId(null);
                               }}
                               className="absolute -top-1 -right-1 bg-red-100 hover:bg-red-200 text-red-600 rounded-full p-1 shadow-sm animate-in fade-in"
                             >
@@ -2277,7 +2393,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                             </button>
                           </div>
                         ) : (
-                          <div 
+                          <div
                             onClick={() => serialPhotoInputRef.current?.click()}
                             className="cursor-pointer flex flex-col items-center text-center p-2 w-full h-full justify-center"
                           >
@@ -2312,9 +2428,9 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                             <button
                               type="button"
                               onClick={() => {
-                                  setWeightFile(null);
-                                  setWeightFileUrl(null);
-                                  setWeightDirectusId(null);
+                                setWeightFile(null);
+                                setWeightFileUrl(null);
+                                setWeightDirectusId(null);
                               }}
                               className="absolute -top-1 -right-1 bg-red-100 hover:bg-red-200 text-red-600 rounded-full p-1 shadow-sm animate-in fade-in"
                             >
@@ -2322,7 +2438,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                             </button>
                           </div>
                         ) : (
-                          <div 
+                          <div
                             onClick={() => weightPhotoInputRef.current?.click()}
                             className="cursor-pointer flex flex-col items-center text-center p-2 w-full h-full justify-center"
                           >
@@ -2442,7 +2558,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
           const repItem = repIndex !== -1 ? selectedReplacementCylinders[repIndex] : null;
 
           return (
-            <DialogContent 
+            <DialogContent
               onPointerDownOutside={(e) => e.preventDefault()}
               onInteractOutside={(e) => e.preventDefault()}
               className="max-w-lg w-[92vw] sm:w-full p-6 rounded-2xl bg-white dark:bg-zinc-950 border border-border shadow-2xl gap-0"
@@ -2453,7 +2569,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
               </DialogTitle>
 
               <div className="space-y-5 pt-4 max-h-[70vh] overflow-y-auto pr-1">
-                
+
                 <div className="grid grid-cols-2 gap-4 bg-zinc-50 dark:bg-zinc-900/40 p-3 rounded-xl border border-border">
                   <div>
                     <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Tare Weight</span>
@@ -2486,11 +2602,10 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                           prev.filter(c => c.swappedOutCylinderId !== row.id)
                         );
                       }}
-                      className={`flex-1 py-1.5 px-3 text-xs font-bold rounded-lg transition-all ${
-                        !row.isSwapped
+                      className={`flex-1 py-1.5 px-3 text-xs font-bold rounded-lg transition-all ${!row.isSwapped
                           ? "bg-white dark:bg-zinc-900 text-primary shadow-sm"
                           : "text-muted-foreground hover:text-zinc-700 dark:text-muted-foreground dark:hover:text-zinc-200"
-                      }`}
+                        }`}
                     >
                       Keep In-Place
                     </button>
@@ -2515,11 +2630,10 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                           ];
                         });
                       }}
-                      className={`flex-1 py-1.5 px-3 text-xs font-bold rounded-lg transition-all ${
-                        row.isSwapped
+                      className={`flex-1 py-1.5 px-3 text-xs font-bold rounded-lg transition-all ${row.isSwapped
                           ? "bg-white dark:bg-zinc-900 text-primary shadow-sm"
                           : "text-muted-foreground hover:text-zinc-700 dark:text-muted-foreground dark:hover:text-zinc-200"
-                      }`}
+                        }`}
                     >
                       Swap Cylinder
                     </button>
@@ -2546,20 +2660,20 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                             setWeighingCylinderId(row.id);
                             const savedGross = returnedWeights[row.id] !== undefined ? String(returnedWeights[row.id]) : "";
                             setWeighingGross(savedGross);
-                            
+
                             const serialAtt = attachmentsState.find(a => a.siteCylinderId === row.id && a.attachmentType === "SERIAL_IMAGE");
                             const weightAtt = attachmentsState.find(a => a.siteCylinderId === row.id && a.attachmentType === "WEIGHT_IMAGE");
                             const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8055";
                             const sId = serialAtt?.directusFileId || null;
                             const wId = weightAtt?.directusFileId || null;
-                            
+
                             setSerialFile(null);
                             setSerialFileUrl(sId ? `${apiBaseUrl}/assets/${sId}` : null);
                             setSerialDirectusId(sId);
                             setWeightFile(null);
                             setWeightFileUrl(wId ? `${apiBaseUrl}/assets/${wId}` : null);
                             setWeightDirectusId(wId);
-                            
+
                             setIsWeighModalOpen(true);
                           }}
                           className={`pr-8 h-9 text-xs cursor-pointer ${weightError ? "border-rose-500" : ""}`}
@@ -2575,20 +2689,20 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                             setWeighingCylinderId(row.id);
                             const savedGross = returnedWeights[row.id] !== undefined ? String(returnedWeights[row.id]) : "";
                             setWeighingGross(savedGross);
-                            
+
                             const serialAtt = attachmentsState.find(a => a.siteCylinderId === row.id && a.attachmentType === "SERIAL_IMAGE");
                             const weightAtt = attachmentsState.find(a => a.siteCylinderId === row.id && a.attachmentType === "WEIGHT_IMAGE");
                             const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8055";
                             const sId = serialAtt?.directusFileId || null;
                             const wId = weightAtt?.directusFileId || null;
-                            
+
                             setSerialFile(null);
                             setSerialFileUrl(sId ? `${apiBaseUrl}/assets/${sId}` : null);
                             setSerialDirectusId(sId);
                             setWeightFile(null);
                             setWeightFileUrl(wId ? `${apiBaseUrl}/assets/${wId}` : null);
                             setWeightDirectusId(wId);
-                            
+
                             setIsWeighModalOpen(true);
                           }}
                           className={`h-9 w-9 rounded-lg shrink-0 ${hasSerial && hasWeight ? "border-emerald-250 text-primary bg-emerald-50 dark:bg-emerald-955/20" : ""}`}
@@ -2643,144 +2757,143 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                         </Button>
                       </div>
                       <div className="hidden">
-                      <div className="space-y-1.5">
-                        <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Scan / Input New Serial</Label>
-                        <div className="flex gap-1.5 items-center w-full">
-                          <Input
-                            type="text"
-                            placeholder="Serial number..."
-                            value={repItem.serialNumber}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setSelectedReplacementCylinders((prev) => {
-                                const copy = [...prev];
-                                const idx = copy.findIndex(c => c.swappedOutCylinderId === row.id);
-                                if (idx !== -1) {
-                                  copy[idx] = {
-                                    ...copy[idx],
-                                    serialNumber: val,
-                                    cylinderAssetId: 0,
-                                    productName: "",
-                                    tareWeight: 0,
-                                    capacity: 0,
-                                    error: undefined,
-                                  };
+                        <div className="space-y-1.5">
+                          <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Scan / Input New Serial</Label>
+                          <div className="flex gap-1.5 items-center w-full">
+                            <Input
+                              type="text"
+                              placeholder="Serial number..."
+                              value={repItem.serialNumber}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setSelectedReplacementCylinders((prev) => {
+                                  const copy = [...prev];
+                                  const idx = copy.findIndex(c => c.swappedOutCylinderId === row.id);
+                                  if (idx !== -1) {
+                                    copy[idx] = {
+                                      ...copy[idx],
+                                      serialNumber: val,
+                                      cylinderAssetId: 0,
+                                      productName: "",
+                                      tareWeight: 0,
+                                      capacity: 0,
+                                      error: undefined,
+                                    };
+                                  }
+                                  return copy;
+                                });
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  const idx = selectedReplacementCylinders.findIndex(c => c.swappedOutCylinderId === row.id);
+                                  if (idx !== -1) {
+                                    handleValidateReplacementSerial(idx, repItem.serialNumber);
+                                  }
                                 }
-                                return copy;
-                              });
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                e.preventDefault();
+                              }}
+                              className={`text-xs h-8 w-full ${repItem.error ? "border-rose-500" : repItem.cylinderAssetId ? "border-primary bg-emerald-50/10" : ""}`}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="xs"
+                              onClick={() => {
                                 const idx = selectedReplacementCylinders.findIndex(c => c.swappedOutCylinderId === row.id);
                                 if (idx !== -1) {
                                   handleValidateReplacementSerial(idx, repItem.serialNumber);
                                 }
-                              }
-                            }}
-                            className={`text-xs h-8 w-full ${repItem.error ? "border-rose-500" : repItem.cylinderAssetId ? "border-primary bg-emerald-50/10" : ""}`}
-                          />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="xs"
-                            onClick={() => {
-                              const idx = selectedReplacementCylinders.findIndex(c => c.swappedOutCylinderId === row.id);
-                              if (idx !== -1) {
-                                handleValidateReplacementSerial(idx, repItem.serialNumber);
-                              }
-                            }}
-                            disabled={repItem.isValidating || !repItem.serialNumber.trim()}
-                            className="h-8 font-bold text-xs shrink-0"
-                          >
-                            {repItem.isValidating ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : repItem.cylinderAssetId ? (
-                              <CheckCircle2 className="h-3 w-3 text-primary" />
-                            ) : (
-                              "Verify"
-                            )}
-                          </Button>
-                        </div>
-                        {repItem.error && (
-                          <span className="text-[9px] text-rose-500 block mt-0.5 font-semibold">{repItem.error}</span>
-                        )}
-                        {repItem.cylinderAssetId > 0 && (
-                          <span className="text-[9px] text-primary block mt-0.5 font-semibold">
-                            Verified: {repItem.productName} (Tare: {repItem.tareWeight} KG)
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">New Cylinder Gross Weight</Label>
-                        <div className="relative">
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={repItem.targetKg}
-                            disabled={!repItem.cylinderAssetId}
-                            onChange={(e) => {
-                              const raw = e.target.value;
-                              const val = raw === "" ? "" : parseFloat(raw);
-                              setSelectedReplacementCylinders((prev) => {
-                                const copy = [...prev];
-                                const idx = copy.findIndex(c => c.swappedOutCylinderId === row.id);
-                                if (idx !== -1) {
-                                  copy[idx].targetKg = val;
-                                }
-                                return copy;
-                              });
-                            }}
-                            placeholder={repItem.cylinderAssetId ? String(repItem.tareWeight + repItem.capacity) : "N/A"}
-                            className="text-xs h-8 pr-8"
-                          />
-                          {repItem.cylinderAssetId > 0 && <span className="absolute right-2 top-2.5 text-[10px] text-muted-foreground font-bold">KG</span>}
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        {(["SERIAL", "WEIGHT"] as const).map((photoType) => {
-                          const isSerialPhoto = photoType === "SERIAL";
-                          const photoUrl = isSerialPhoto ? repItem.serialPhotoUrl : repItem.weightPhotoUrl;
-                          const photoId = isSerialPhoto ? repItem.serialPhotoId : repItem.weightPhotoId;
-                          const uploading = isSerialPhoto ? repItem.isUploadingSerial : repItem.isUploadingWeight;
-                          return (
-                            <label
-                              key={photoType}
-                              className={`min-h-20 rounded-lg border border-dashed p-2 text-center text-[9px] font-bold cursor-pointer flex flex-col items-center justify-center ${
-                                photoId ? "border-emerald-400 text-emerald-700" : "border-border text-muted-foreground"
-                              }`}
+                              }}
+                              disabled={repItem.isValidating || !repItem.serialNumber.trim()}
+                              className="h-8 font-bold text-xs shrink-0"
                             >
-                              {uploading ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : photoUrl ? (
-                                <>
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img src={photoUrl} alt={`New cylinder ${photoType.toLowerCase()}`} className="h-12 max-w-full object-contain rounded mb-1" />
-                                  {isSerialPhoto ? "Serial photo saved" : "Weight photo saved"}
-                                </>
+                              {repItem.isValidating ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : repItem.cylinderAssetId ? (
+                                <CheckCircle2 className="h-3 w-3 text-primary" />
                               ) : (
-                                <>
-                                  <Plus className="h-4 w-4 mb-1" />
-                                  {isSerialPhoto ? "Capture new serial" : "Capture new weight"}
-                                </>
+                                "Verify"
                               )}
-                              <input
-                                type="file"
-                                accept="image/*"
-                                capture="environment"
-                                className="hidden"
-                                disabled={!repItem.cylinderAssetId || uploading}
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) handleReplacementFileUpload(repIndex, file, photoType);
-                                }}
-                              />
-                            </label>
-                          );
-                        })}
-                      </div>
+                            </Button>
+                          </div>
+                          {repItem.error && (
+                            <span className="text-[9px] text-rose-500 block mt-0.5 font-semibold">{repItem.error}</span>
+                          )}
+                          {repItem.cylinderAssetId > 0 && (
+                            <span className="text-[9px] text-primary block mt-0.5 font-semibold">
+                              Verified: {repItem.productName} (Tare: {repItem.tareWeight} KG)
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">New Cylinder Gross Weight</Label>
+                          <div className="relative">
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={repItem.targetKg}
+                              disabled={!repItem.cylinderAssetId}
+                              onChange={(e) => {
+                                const raw = e.target.value;
+                                const val = raw === "" ? "" : parseFloat(raw);
+                                setSelectedReplacementCylinders((prev) => {
+                                  const copy = [...prev];
+                                  const idx = copy.findIndex(c => c.swappedOutCylinderId === row.id);
+                                  if (idx !== -1) {
+                                    copy[idx].targetKg = val;
+                                  }
+                                  return copy;
+                                });
+                              }}
+                              placeholder={repItem.cylinderAssetId ? String(repItem.tareWeight + repItem.capacity) : "N/A"}
+                              className="text-xs h-8 pr-8"
+                            />
+                            {repItem.cylinderAssetId > 0 && <span className="absolute right-2 top-2.5 text-[10px] text-muted-foreground font-bold">KG</span>}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          {(["SERIAL", "WEIGHT"] as const).map((photoType) => {
+                            const isSerialPhoto = photoType === "SERIAL";
+                            const photoUrl = isSerialPhoto ? repItem.serialPhotoUrl : repItem.weightPhotoUrl;
+                            const photoId = isSerialPhoto ? repItem.serialPhotoId : repItem.weightPhotoId;
+                            const uploading = isSerialPhoto ? repItem.isUploadingSerial : repItem.isUploadingWeight;
+                            return (
+                              <label
+                                key={photoType}
+                                className={`min-h-20 rounded-lg border border-dashed p-2 text-center text-[9px] font-bold cursor-pointer flex flex-col items-center justify-center ${photoId ? "border-emerald-400 text-emerald-700" : "border-border text-muted-foreground"
+                                  }`}
+                              >
+                                {uploading ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : photoUrl ? (
+                                  <>
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img src={photoUrl} alt={`New cylinder ${photoType.toLowerCase()}`} className="h-12 max-w-full object-contain rounded mb-1" />
+                                    {isSerialPhoto ? "Serial photo saved" : "Weight photo saved"}
+                                  </>
+                                ) : (
+                                  <>
+                                    <Plus className="h-4 w-4 mb-1" />
+                                    {isSerialPhoto ? "Capture new serial" : "Capture new weight"}
+                                  </>
+                                )}
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  capture="environment"
+                                  className="hidden"
+                                  disabled={!repItem.cylinderAssetId || uploading}
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) handleReplacementFileUpload(repIndex, file, photoType);
+                                  }}
+                                />
+                              </label>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -2819,11 +2932,11 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                 e.preventDefault();
                 setScannerError("");
                 if (!scannerInput.trim()) return;
-                
+
                 const foundRow = calculatedReturnedCylinders.find(
                   c => c.cylinder_asset?.serial_number?.toLowerCase() === scannerInput.trim().toLowerCase()
                 );
-                
+
                 if (foundRow) {
                   if (typeof window !== "undefined" && window.innerWidth < 768) {
                     setMobileEditingCylinderId(foundRow.id);
@@ -2874,6 +2987,20 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* RULE DEV: 58mm Thermal Printer Receipt Modal */}
+      <WiwoThermalReceiptModal
+        open={printModalOpen}
+        onClose={() => {
+          setPrintModalOpen(false);
+          setAutoPrintActive(false);
+          if (isAfterSubmit) {
+            onSuccess();
+          }
+        }}
+        autoPrint={autoPrintActive}
+        data={printTxData}
+      />
     </div>
   );
 }

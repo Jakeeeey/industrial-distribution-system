@@ -6,42 +6,51 @@ import type { TransactionType, WiwoDetailRef, BillableSource } from "../types";
  * Generates a transaction number based on type.
  *
  * Format:
- *   ONBOARDING_BASELINE → TXORB-{YYYYMMDD}-{siteId}-{seq3}
- *   REGULAR_BILLING     → TXREG-{YYYYMMDD}-{siteId}-{seq3}
- *
- * Sequence restarts per site per day.
+ *   ONBOARDING_BASELINE → TXO-RB-{6-digit random number}
+ *   REGULAR_BILLING     → TX-REG-{6-digit random number}
+ * 
+ * Developer Comment: Changed from sequential/date/site components to a random 6-digit identifier.
  */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 export function generateTxNo(
   type: TransactionType,
-  siteId: number | null,
-  date: string,
-  seq: number
+  siteId?: number | null,
+  date?: string,
+  seq?: number
 ): string {
-  const prefix = type === "ONBOARDING_BASELINE" ? "TXORB" : "TXREG";
-  const dateStr = date.replace(/-/g, "").slice(0, 8);
-  const sId = siteId ?? 0;
-  const seqStr = String(seq).padStart(3, "0");
-  return `${prefix}-${dateStr}-${sId}-${seqStr}`;
+  const prefix = type === "ONBOARDING_BASELINE" ? "TXO-RB" : "TX-REG";
+  const num = Math.floor(100000 + Math.random() * 900000);
+  return `${prefix}-${num}`;
 }
  
 /**
- * Generates a placeholder tx number (for display before seq is fetched).
+ * Generates a placeholder tx number.
  */
 export function generateTxNoPlaceholder(
   type: TransactionType,
-  siteId: number | null,
-  date: string
+  siteId?: number | null,
+  date?: string
 ): string {
-  return generateTxNo(type, siteId, date, 0).replace("-000", "-...");
+  return generateTxNo(type);
 }
+/* eslint-enable @typescript-eslint/no-unused-vars */
+
 
 /**
- * Generates a reading number with prefix MTR-XXXXXXXXX
+ * Generates a reading number with prefix MTR-REG- or MTR-ONB-.
+ * 
+ * Format:
+ *   ONBOARDING_BASELINE → MTR-ONB-{9-digit random number}
+ *   REGULAR_BILLING     → MTR-REG-{9-digit random number}
+ * 
+ * Developer Comment: Modified to distinguish onboarding reading numbers from regular ones.
  */
-export function generateReadingNo(): string {
+export function generateReadingNo(type?: TransactionType): string {
+  const prefix = type === "ONBOARDING_BASELINE" ? "MTR-ONB" : "MTR-REG";
   const num = Math.floor(100000000 + Math.random() * 900000000);
-  return `MTR-${num}`;
+  return `${prefix}-${num}`;
 }
+
 
 // ─── WIWO computation ─────────────────────────────────────────────────────────
 
@@ -114,15 +123,72 @@ export function computeArbitration(
 }
 
 // ─── Billing computation ──────────────────────────────────────────────────────
-
-export function calcGrossAmount(billableKg: number, pricePerKg: number): number {
-  return parseFloat((billableKg * pricePerKg).toFixed(2));
+ 
+/**
+ * Computes Gross Amount (Vatable Sales).
+ * 
+ * Under the VAT-inclusive model (default):
+ *   Vatable Sales = (Billable KG * Price / KG) / (1 + VAT Rate)
+ * Under the VAT-exclusive model:
+ *   Vatable Sales = Billable KG * Price / KG
+ * 
+ * Developer Comment: Modified to support both VAT-inclusive and VAT-exclusive models.
+ */
+export function calcGrossAmount(
+  billableKg: number,
+  pricePerKg: number,
+  inclusive = true,
+  vatRate = 0.12
+): number {
+  const totalOrBase = billableKg * pricePerKg;
+  if (inclusive) {
+    return parseFloat((totalOrBase / (1 + vatRate)).toFixed(2));
+  } else {
+    return parseFloat(totalOrBase.toFixed(2));
+  }
 }
-
-export function calcVatAmount(grossAmount: number, vatRate = 0.12): number {
+ 
+/**
+ * Computes VAT Amount.
+ * 
+ * Under the VAT-inclusive model (default):
+ *   VAT = Total - Vatable Sales
+ * Under the VAT-exclusive model:
+ *   VAT = Vatable Sales * VAT Rate
+ * 
+ * Developer Comment: Modified to support both VAT-inclusive and VAT-exclusive models.
+ */
+export function calcVatAmount(
+  grossAmount: number,
+  vatRate = 0.12,
+  inclusive = true,
+  totalAmount?: number
+): number {
+  if (inclusive && totalAmount !== undefined) {
+    return parseFloat((totalAmount - grossAmount).toFixed(2));
+  }
   return parseFloat((grossAmount * vatRate).toFixed(2));
 }
-
-export function calcNetAmount(grossAmount: number, vatAmount: number): number {
+ 
+/**
+ * Computes Net Amount (Total Amount).
+ * 
+ * Under the VAT-inclusive model (default):
+ *   Net Amount = Total Amount
+ * Under the VAT-exclusive model:
+ *   Net Amount = Vatable Sales + VAT
+ * 
+ * Developer Comment: Modified to support both VAT-inclusive and VAT-exclusive models.
+ */
+export function calcNetAmount(
+  grossAmount: number,
+  vatAmount: number,
+  inclusive = true,
+  totalAmount?: number
+): number {
+  if (inclusive && totalAmount !== undefined) {
+    return parseFloat(totalAmount.toFixed(2));
+  }
   return parseFloat((grossAmount + vatAmount).toFixed(2));
 }
+

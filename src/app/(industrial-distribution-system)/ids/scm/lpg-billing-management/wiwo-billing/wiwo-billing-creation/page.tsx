@@ -3,8 +3,15 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { NavUser } from "@/components/shared/app-sidebar/nav-user";
 import { cookies } from "next/headers";
 import WiwoBillingModule from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/wiwo-billing/wiwo-billing-creation/WiwoBillingModule";
-
-
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import { Separator } from "@/components/ui/separator";
 const COOKIE_NAME = "vos_access_token";
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
@@ -74,20 +81,45 @@ export default async function WiwoBillingPage() {
   const headerUser = buildHeaderUserFromToken(token);
 
   return (
-    <div className="flex flex-col h-[100dvh] overflow-hidden bg-background">
-      {/* Top Navbar Header */}
-      <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b bg-background px-4">
-        <div className="flex items-center gap-2">
-          <SidebarTrigger className="-ml-1" />
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <header className="relative z-10 flex h-14 shrink-0 items-center justify-between border-b shadow-sm bg-background sm:h-16 overflow-hidden">
+        <div className="flex h-full min-w-0 items-center gap-2 px-3 sm:px-4 overflow-hidden">
+          <SidebarTrigger className="-ml-1 shrink-0" />
+          <Separator
+            orientation="vertical"
+            className="hidden sm:block mr-2 data-[orientation=vertical]:h-4 shrink-0"
+          />
+          <div className="min-w-0 overflow-hidden">
+            <Breadcrumb>
+              <BreadcrumbList className="min-w-0 overflow-hidden">
+                <BreadcrumbItem className="hidden md:block shrink-0">
+                  <BreadcrumbLink href="#">IDS</BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator className="hidden md:block shrink-0" />
+                <BreadcrumbItem className="hidden md:block shrink-0">
+                  <BreadcrumbLink href="#">SCM</BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator className="hidden md:block shrink-0" />
+                <BreadcrumbItem className="hidden md:block shrink-0">
+                  <BreadcrumbLink href="#">LPG Billing Management</BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator className="hidden md:block shrink-0" />
+                <BreadcrumbItem className="min-w-0 overflow-hidden">
+                  <BreadcrumbPage className="truncate max-w-[56vw] sm:max-w-[60vw] md:max-w-none font-bold">
+                    WiWO Billing Creation
+                  </BreadcrumbPage>
+                </BreadcrumbItem>
+              </BreadcrumbList>
+            </Breadcrumb>
+          </div>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex h-full items-center px-2 sm:px-4 shrink-0 max-w-[48vw] sm:max-w-none overflow-hidden">
           <NavUser user={headerUser} />
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="min-h-0 min-w-0 flex-1 flex flex-col bg-background">
-        <WiwoBillingModule/>
+      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4 bg-zinc-50/20 dark:bg-zinc-950/10">
+        <WiwoBillingModule />
       </main>
     </div>
   );
