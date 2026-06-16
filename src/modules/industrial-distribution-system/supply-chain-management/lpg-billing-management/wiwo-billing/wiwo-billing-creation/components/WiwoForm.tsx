@@ -109,6 +109,13 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
     capacity: number;
     targetKg: number | string;
     pricePerKg: number;
+    // AG-CHANGE: Added type properties for onboarding photo capture
+    serialPhotoId?: string | null;
+    serialPhotoUrl?: string | null;
+    weightPhotoId?: string | null;
+    weightPhotoUrl?: string | null;
+    isUploadingSerial?: boolean;
+    isUploadingWeight?: boolean;
   }[]>([]);
 
   // Flow B state: Routine Check & Swap
@@ -131,6 +138,10 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   const [isWeighModalOpen, setIsWeighModalOpen] = useState(false);
   const [weighingCylinderId, setWeighingCylinderId] = useState<number | null>(null);
   const [weighingGross, setWeighingGross] = useState("");
+  // AG-CHANGE: Onboarding Weighing Modal States
+  const [isOnboardWeighModalOpen, setIsOnboardWeighModalOpen] = useState(false);
+  const [weighingOnboardIndex, setWeighingOnboardIndex] = useState<number | null>(null);
+  const [onboardingWeighingGross, setOnboardingWeighingGross] = useState("");
   const [replacementModalIndex, setReplacementModalIndex] = useState<number | null>(null);
 
   const [, setSerialFile] = useState<File | null>(null);
@@ -683,6 +694,66 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
     }
   };
 
+  // AG-CHANGE: Added handleOnboardFileUpload to support onboarding baseline cylinder photo capture & upload
+  const handleOnboardFileUpload = async (
+    index: number | null,
+    file: File,
+    type: "SERIAL" | "WEIGHT",
+  ) => {
+    if (index === null) return;
+    const isSerial = type === "SERIAL";
+    const previewUrl = URL.createObjectURL(file);
+
+    setSelectedOnboardCylinders((prev) => {
+      const copy = [...prev];
+      copy[index] = {
+        ...copy[index],
+        ...(isSerial
+          ? { isUploadingSerial: true, serialPhotoUrl: previewUrl, serialPhotoId: null }
+          : { isUploadingWeight: true, weightPhotoUrl: previewUrl, weightPhotoId: null }),
+      };
+      return copy;
+    });
+
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/ids/scm/lpg-billing-management/wiwo-billing/upload", {
+        method: "POST",
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok || data.error || !data.data?.id) {
+        throw new Error(data.error || "Upload failed");
+      }
+
+      setSelectedOnboardCylinders((prev) => {
+        const copy = [...prev];
+        copy[index] = {
+          ...copy[index],
+          ...(isSerial
+            ? { isUploadingSerial: false, serialPhotoId: data.data.id }
+            : { isUploadingWeight: false, weightPhotoId: data.data.id }),
+        };
+        return copy;
+      });
+    } catch (err) {
+      console.error(err);
+      URL.revokeObjectURL(previewUrl);
+      setSelectedOnboardCylinders((prev) => {
+        const copy = [...prev];
+        copy[index] = {
+          ...copy[index],
+          ...(isSerial
+            ? { isUploadingSerial: false, serialPhotoUrl: null, serialPhotoId: null }
+            : { isUploadingWeight: false, weightPhotoUrl: null, weightPhotoId: null }),
+        };
+        return copy;
+      });
+      alert(`Failed to upload cylinder ${isSerial ? "serial" : "weight"} photo.`);
+    }
+  };
+
   // ─── Mathematical Calculations (Flow B) ─────────────────────────────────────
   const meteredKg = draftMeteredKg !== null 
     ? draftMeteredKg 
@@ -773,6 +844,15 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
           setLoading(false);
           return;
         }
+        // AG-CHANGE: Enforce photo validation for onboarding cylinders
+        const missingEvidence = selectedOnboardCylinders.find(
+          (c) => !c.serialPhotoId || !c.weightPhotoId
+        );
+        if (missingEvidence) {
+          alert(`Please capture both serial and scale photos for onboarding cylinder ${missingEvidence.serialNumber}.`);
+          setLoading(false);
+          return;
+        }
         payload = {
           transaction_header_id: transactionHeader.header_id,
           transaction_type: "ONBOARDING_BASELINE",
@@ -781,10 +861,13 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
           transaction_date: transactionDate,
           sales_invoice_id: salesInvoice?.invoice_id,
           sales_invoice_no: salesInvoice?.invoice_no,
+          // AG-CHANGE: Pass photo IDs to onboarding baseline cylinders payload
           cylinders: selectedOnboardCylinders.map(c => ({
             cylinderAssetId: c.cylinderAssetId,
             targetKg: c.targetKg,
-            pricePerKg: c.pricePerKg
+            pricePerKg: c.pricePerKg,
+            serialPhotoId: c.serialPhotoId,
+            weightPhotoId: c.weightPhotoId,
           })),
         };
       } else {
@@ -1495,23 +1578,46 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                               </div>
                               <div>
                                 <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">Starting Gross (KG)</span>
-                                <Input
-                                  type="number"
-                                  step="0.1"
-                                  value={cyl.targetKg}
-                                  onChange={(e) => {
-                                    const raw = e.target.value;
-                                    const val = raw === "" ? "" : parseFloat(raw);
-                                    setSelectedOnboardCylinders((prev) => {
-                                      const copy = [...prev];
-                                      copy[idx] = { ...copy[idx], targetKg: val };
-                                      return copy;
-                                    });
-                                  }}
-                                  className={`text-xs h-8 text-right font-mono w-full ${
-                                    (Number(cyl.targetKg) - cyl.tareWeight > cyl.capacity || (cyl.targetKg !== "" && Number(cyl.targetKg) < cyl.tareWeight)) ? "border-red-500 text-red-500 bg-red-50/10 focus-visible:ring-red-500" : ""
-                                  }`}
-                                />
+                                <div className="flex items-center gap-1.5">
+                                  <div className="relative flex-1">
+                                    <Input
+                                      type="number"
+                                      step="0.1"
+                                      value={cyl.targetKg}
+                                      readOnly={true}
+                                      onClick={() => {
+                                        setWeighingOnboardIndex(idx);
+                                        setOnboardingWeighingGross(cyl.targetKg ? String(cyl.targetKg) : "");
+                                        setIsOnboardWeighModalOpen(true);
+                                      }}
+                                      placeholder="Weigh"
+                                      className={`text-xs h-8 text-right font-mono w-full cursor-pointer ${
+                                        (Number(cyl.targetKg) - cyl.tareWeight > cyl.capacity || (cyl.targetKg !== "" && Number(cyl.targetKg) < cyl.tareWeight)) ? "border-red-500 text-red-500 bg-red-50/10 focus-visible:ring-red-500" : ""
+                                      }`}
+                                    />
+                                    {cyl.targetKg && <span className="absolute right-2 top-2 text-[10px] text-muted-foreground font-bold">KG</span>}
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      setWeighingOnboardIndex(idx);
+                                      setOnboardingWeighingGross(cyl.targetKg ? String(cyl.targetKg) : "");
+                                      setIsOnboardWeighModalOpen(true);
+                                    }}
+                                    className={`h-8 w-8 p-0 rounded-lg shrink-0 ${cyl.serialPhotoId && cyl.weightPhotoId ? "border-emerald-250 text-primary bg-emerald-50 dark:bg-emerald-955/20" : ""}`}
+                                    title="Setup Weight & Photos"
+                                  >
+                                    <Scale className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                                {/* AG-CHANGE: Show calculated net weight dynamically below inputs on mobile layout */}
+                                {cyl.targetKg ? (
+                                  <span className="text-[9px] text-muted-foreground block text-right mt-1 w-full pr-9 font-medium">
+                                    Net: {(Number(cyl.targetKg) - cyl.tareWeight).toFixed(1)} KG
+                                  </span>
+                                ) : null}
                               </div>
                             </div>
                           </div>
@@ -1519,41 +1625,72 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                       </div>
 
                       {/* Desktop View (hidden sm:block) */}
-                      <div className="hidden sm:block overflow-x-auto">
-                        <table className="w-full text-left border-collapse min-w-full">
+                      <div className="hidden sm:block">
+                        <table className="w-full text-left border-collapse min-w-full table-fixed">
                           <thead className="bg-zinc-50 dark:bg-zinc-900 font-bold text-muted-foreground border-b border-border">
                             <tr>
-                              <th className="p-3 sticky left-0 bg-zinc-50 dark:bg-zinc-900 z-10">Serial</th>
-                              <th className="p-3">Product Name</th>
-                              <th className="p-3 text-right">Tare Weight</th>
-                              <th className="p-3 text-right w-44">Starting Gross Weight (KG)</th>
-                              <th className="p-3 w-10"></th>
+                              <th className="p-3 sticky left-0 bg-zinc-50 dark:bg-zinc-900 z-10 whitespace-nowrap w-[155px]">Serial</th>
+                              <th className="p-3 whitespace-nowrap">Product Name</th>
+                              <th className="p-3 text-right whitespace-nowrap w-[110px]">Tare Weight</th>
+                              <th className="p-3 text-right w-[165px] whitespace-nowrap">Gross Weight (KG)</th>
+                              {/* AG-CHANGE: Added Net Weight column to the onboarding baseline cylinders table */}
+                              <th className="p-3 text-right w-[110px] whitespace-nowrap">Net Weight</th>
+                              <th className="p-3 w-12 text-right"></th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/50">
                             {selectedOnboardCylinders.map((cyl, idx) => (
                               <tr key={cyl.cylinderAssetId} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20">
-                                <td className="p-3 font-mono font-bold text-zinc-700 dark:text-zinc-300 sticky left-0 bg-white dark:bg-zinc-955 z-10 border-r border-border shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">{cyl.serialNumber}</td>
-                                <td className="p-3 text-muted-foreground">{cyl.productName}</td>
-                                <td className="p-3 text-right font-mono text-muted-foreground">{cyl.tareWeight} KG</td>
-                                <td className="p-3">
-                                  <Input
-                                    type="number"
-                                    step="0.1"
-                                    value={cyl.targetKg}
-                                    onChange={(e) => {
-                                      const raw = e.target.value;
-                                      const val = raw === "" ? "" : parseFloat(raw);
-                                      setSelectedOnboardCylinders((prev) => {
-                                        const copy = [...prev];
-                                        copy[idx] = { ...copy[idx], targetKg: val };
-                                        return copy;
-                                      });
-                                    }}
-                                    className={`text-xs h-8 text-right font-mono ${
-                                      (Number(cyl.targetKg) - cyl.tareWeight > cyl.capacity || (cyl.targetKg !== "" && Number(cyl.targetKg) < cyl.tareWeight)) ? "border-red-500 text-red-500 bg-red-50/10 focus-visible:ring-red-500" : ""
-                                    }`}
-                                  />
+                                <td className="p-3 sticky left-0 bg-white dark:bg-zinc-955 z-10 border-r border-border shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] w-[155px]">
+                                  <div className="font-mono font-bold text-zinc-700 dark:text-zinc-300 truncate w-full" title={cyl.serialNumber}>
+                                    {cyl.serialNumber}
+                                  </div>
+                                </td>
+                                <td className="p-3 text-muted-foreground">
+                                  <div className="truncate w-full" title={cyl.productName}>
+                                    {cyl.productName}
+                                  </div>
+                                </td>
+                                <td className="p-3 text-right font-mono text-muted-foreground whitespace-nowrap w-[110px]">{cyl.tareWeight} KG</td>
+                                <td className="p-3 w-[165px]">
+                                  <div className="flex items-center gap-1.5 justify-end">
+                                    <div className="relative w-24">
+                                      <Input
+                                        type="number"
+                                        step="0.1"
+                                        value={cyl.targetKg}
+                                        readOnly={true}
+                                        onClick={() => {
+                                          setWeighingOnboardIndex(idx);
+                                          setOnboardingWeighingGross(cyl.targetKg ? String(cyl.targetKg) : "");
+                                          setIsOnboardWeighModalOpen(true);
+                                        }}
+                                        placeholder="Weigh"
+                                        className={`text-xs h-8 text-right font-mono pr-8 cursor-pointer ${
+                                          (Number(cyl.targetKg) - cyl.tareWeight > cyl.capacity || (cyl.targetKg !== "" && Number(cyl.targetKg) < cyl.tareWeight)) ? "border-red-500 text-red-500 bg-red-50/10 focus-visible:ring-red-500" : ""
+                                        }`}
+                                      />
+                                      {cyl.targetKg && <span className="absolute right-2 top-2 text-[10px] text-muted-foreground font-bold">KG</span>}
+                                    </div>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        setWeighingOnboardIndex(idx);
+                                        setOnboardingWeighingGross(cyl.targetKg ? String(cyl.targetKg) : "");
+                                        setIsOnboardWeighModalOpen(true);
+                                      }}
+                                      className={`h-8 w-8 p-0 rounded-lg shrink-0 ${cyl.serialPhotoId && cyl.weightPhotoId ? "border-emerald-250 text-primary bg-emerald-50 dark:bg-emerald-955/20" : ""}`}
+                                      title="Setup Weight & Photos"
+                                    >
+                                      <Scale className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
+                                </td>
+                                {/* AG-CHANGE: Show the calculated Net Weight in a dedicated column for onboarding baseline setup */}
+                                <td className="p-3 text-right font-mono text-zinc-700 dark:text-zinc-300 font-bold whitespace-nowrap w-[110px]">
+                                  {cyl.targetKg ? `${(Number(cyl.targetKg) - cyl.tareWeight).toFixed(1)} KG` : "—"}
                                 </td>
                                 <td className="p-3 text-right">
                                   <Button
@@ -2421,6 +2558,206 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                 setScannerError("");
                 setScannerInput("");
                 setIsScannerModalOpen(true);
+              }}
+              className="text-xs font-bold bg-primary hover:bg-primary/90 text-white px-5 h-9"
+            >
+              Save Weighing
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Onboarding Baseline Cylinder Weighing Modal */}
+      {/* AG-CHANGE: Added Onboarding baseline weighing modal dialog */}
+      <Dialog open={isOnboardWeighModalOpen} onOpenChange={setIsOnboardWeighModalOpen}>
+        <DialogContent 
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+          className="max-w-lg p-0 border border-border rounded-2xl overflow-hidden shadow-2xl bg-white dark:bg-zinc-955 gap-0"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+            <DialogTitle className="text-base font-extrabold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
+              <Scale className="h-5 w-5 text-primary" />
+              Onboarding Baseline Cylinder Setup
+            </DialogTitle>
+          </div>
+
+          {/* Body */}
+          <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+            {weighingOnboardIndex !== null && (() => {
+              const cyl = selectedOnboardCylinders[weighingOnboardIndex];
+              if (!cyl) return null;
+              const isWeightInvalid = onboardingWeighingGross ? parseFloat(onboardingWeighingGross) < cyl.tareWeight : false;
+              const capacityError = onboardingWeighingGross ? parseFloat(onboardingWeighingGross) - cyl.tareWeight > cyl.capacity : false;
+
+              return (
+                <>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Cylinder</Label>
+                    <div className="flex items-center h-10 w-full rounded-md border border-input bg-accent px-3 py-2 text-sm font-mono font-bold text-foreground select-none pointer-events-none">
+                      {cyl.serialNumber} (Tare: {cyl.tareWeight} KG | Cap: {cyl.capacity} KG)
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Starting Gross Weight</Label>
+                    <div className="relative">
+                      <Input
+                        type="number"
+                        step="0.1"
+                        placeholder="Scale gross weight"
+                        value={onboardingWeighingGross}
+                        autoFocus
+                        onChange={(e) => setOnboardingWeighingGross(e.target.value)}
+                        className={`pr-8 h-10 text-sm ${isWeightInvalid || capacityError ? "border-rose-500" : ""}`}
+                      />
+                      <span className="absolute right-3 top-3 text-xs text-muted-foreground font-bold">KG</span>
+                    </div>
+                    {/* AG-CHANGE: Show calculated net weight dynamically inside onboarding weighing modal */}
+                    {onboardingWeighingGross && !isWeightInvalid && !capacityError && (
+                      <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold block mt-0.5 animate-in fade-in">
+                        Calculated Net Weight: {(parseFloat(onboardingWeighingGross) - cyl.tareWeight).toFixed(1)} KG
+                      </span>
+                    )}
+                    {isWeightInvalid && (
+                      <span className="text-[11px] text-rose-500 block mt-0.5">Below tare weight of {cyl.tareWeight} KG!</span>
+                    )}
+                    {capacityError && (
+                      <span className="text-[11px] text-rose-500 block mt-0.5">Net weight exceeds cylinder capacity of {cyl.capacity} KG!</span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Cylinder Serial Photo */}
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Cylinder Serial Photo</Label>
+                      <div className="border border-dashed border-border rounded-xl p-3 flex flex-col items-center justify-center min-h-[120px] relative bg-zinc-50 dark:bg-zinc-900/40">
+                        {cyl.isUploadingSerial ? (
+                          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                        ) : cyl.serialPhotoUrl ? (
+                          <div className="relative w-full h-full flex flex-col items-center">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={cyl.serialPhotoUrl} alt="Serial Capture" className="max-h-20 object-contain rounded-lg shadow-sm border" />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedOnboardCylinders((prev) => {
+                                  const copy = [...prev];
+                                  copy[weighingOnboardIndex] = {
+                                    ...copy[weighingOnboardIndex],
+                                    serialPhotoId: null,
+                                    serialPhotoUrl: null,
+                                  };
+                                  return copy;
+                                });
+                              }}
+                              className="absolute -top-1 -right-1 bg-red-100 hover:bg-red-200 text-red-600 rounded-full p-1 shadow-sm animate-in fade-in"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="cursor-pointer flex flex-col items-center text-center p-2 w-full h-full justify-center">
+                            <Plus className="h-5 w-5 text-muted-foreground mb-1" />
+                            <span className="text-[10px] text-muted-foreground font-bold">Capture Serial</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              className="hidden"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) handleOnboardFileUpload(weighingOnboardIndex, f, "SERIAL");
+                              }}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Scale Weight Photo */}
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Scale Weight Photo</Label>
+                      <div className="border border-dashed border-border rounded-xl p-3 flex flex-col items-center justify-center min-h-[120px] relative bg-zinc-50 dark:bg-zinc-900/40">
+                        {cyl.isUploadingWeight ? (
+                          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                        ) : cyl.weightPhotoUrl ? (
+                          <div className="relative w-full h-full flex flex-col items-center">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={cyl.weightPhotoUrl} alt="Weight Capture" className="max-h-20 object-contain rounded-lg shadow-sm border" />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedOnboardCylinders((prev) => {
+                                  const copy = [...prev];
+                                  copy[weighingOnboardIndex] = {
+                                    ...copy[weighingOnboardIndex],
+                                    weightPhotoId: null,
+                                    weightPhotoUrl: null,
+                                  };
+                                  return copy;
+                                });
+                              }}
+                              className="absolute -top-1 -right-1 bg-red-100 hover:bg-red-200 text-red-600 rounded-full p-1 shadow-sm animate-in fade-in"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="cursor-pointer flex flex-col items-center text-center p-2 w-full h-full justify-center">
+                            <Plus className="h-5 w-5 text-muted-foreground mb-1" />
+                            <span className="text-[10px] text-muted-foreground font-bold">Capture Weight</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              className="hidden"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) handleOnboardFileUpload(weighingOnboardIndex, f, "WEIGHT");
+                              }}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+
+          {/* Footer */}
+          <div className="flex justify-end gap-3 px-5 py-4 border-t border-border shrink-0">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setIsOnboardWeighModalOpen(false)}
+              className="text-xs font-bold px-4 h-9"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={
+                weighingOnboardIndex === null ||
+                !onboardingWeighingGross ||
+                parseFloat(onboardingWeighingGross) < Number(selectedOnboardCylinders[weighingOnboardIndex]?.tareWeight ?? 0) ||
+                parseFloat(onboardingWeighingGross) - Number(selectedOnboardCylinders[weighingOnboardIndex]?.tareWeight ?? 0) > Number(selectedOnboardCylinders[weighingOnboardIndex]?.capacity ?? 0) ||
+                selectedOnboardCylinders[weighingOnboardIndex]?.isUploadingSerial ||
+                selectedOnboardCylinders[weighingOnboardIndex]?.isUploadingWeight ||
+                !selectedOnboardCylinders[weighingOnboardIndex]?.serialPhotoId ||
+                !selectedOnboardCylinders[weighingOnboardIndex]?.weightPhotoId
+              }
+              onClick={() => {
+                if (weighingOnboardIndex === null) return;
+                setSelectedOnboardCylinders((prev) => {
+                  const copy = [...prev];
+                  copy[weighingOnboardIndex].targetKg = parseFloat(onboardingWeighingGross);
+                  return copy;
+                });
+                setIsOnboardWeighModalOpen(false);
               }}
               className="text-xs font-bold bg-primary hover:bg-primary/90 text-white px-5 h-9"
             >
