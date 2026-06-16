@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-    X,
     ClipboardCheck,
     Loader2
 } from 'lucide-react';

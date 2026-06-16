@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
     Scan,
-    X,
     Wifi,
     Tag,
     Trash2,
