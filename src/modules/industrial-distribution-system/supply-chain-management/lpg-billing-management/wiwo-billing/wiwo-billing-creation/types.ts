@@ -147,12 +147,27 @@ export interface MeteredWiwoTransaction {
   customer?: {
     customer_code: string;
     customer_name: string;
+    store_name?: string | null;
   };
   site?: {
     id: number;
     site_name: string | null;
     default_price_per_kg: number;
   };
+  // AG-CHANGE: Embedded meter_reading and wiwo_header for summary display
+  meter_reading?: {
+    id: number;
+    lpg_site_id: number;
+    reading_date: string;
+    previous_reading: number;
+    current_reading: number;
+    kg_consumed: number;
+    price_per_kg: number;
+    raw_consumption?: number;
+    created_by?: number | null;
+    created_date?: string | null;
+  };
+  wiwo_header?: WiwoHeader | null;
 }
 
 export interface WiwoListParams {

@@ -974,12 +974,11 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   const isPosted = isViewMode && txDetail?.status === "POSTED";
 
   // Financial computations
-  // AG-CHANGE: Update calculations to use VAT-inclusive extraction formula
   const finalBillableKg = isViewMode ? txDetail.billable_kg : billableKg;
   const finalPricePerKg = isViewMode ? txDetail.price_per_kg : pricePerKg;
-  const finalNet = isViewMode ? txDetail.net_amount : parseFloat((finalBillableKg * finalPricePerKg).toFixed(2));
-  const finalGross = isViewMode ? txDetail.gross_amount : finalNet;
-  const finalVat = isViewMode ? txDetail.vat_amount : parseFloat((finalNet - (finalNet / 1.12)).toFixed(2));
+  const finalGross = isViewMode ? txDetail.gross_amount : parseFloat((finalBillableKg * finalPricePerKg).toFixed(2));
+  const finalVat = isViewMode ? txDetail.vat_amount : parseFloat((finalGross * 0.12).toFixed(2));
+  const finalNet = isViewMode ? txDetail.net_amount : parseFloat((finalGross + finalVat).toFixed(2));
   const finalBillableSource = isViewMode ? txDetail.billable_source : (meteredKg >= totalWiwoKg ? "METERED" : "WIWO");
 
   return (
@@ -1606,11 +1605,11 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                     </div>
                     <div className="flex justify-between text-violet-100">
                       <span>VAT</span>
-                      <span className="font-mono">₱ {((meteredKg * pricePerKg) - (meteredKg * pricePerKg) / 1.12).toFixed(2)}</span>
+                      <span className="font-mono">₱ {(meteredKg * pricePerKg * 0.12).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-white border-t border-white/10 pt-1.5 font-bold">
                       <span>Total</span>
-                      <span className="font-mono">₱ {(meteredKg * pricePerKg).toFixed(2)}</span>
+                      <span className="font-mono">₱ {(meteredKg * pricePerKg * 1.12).toFixed(2)}</span>
                     </div>
                   </div>
 
@@ -1627,11 +1626,11 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                     </div>
                     <div className="flex justify-between text-violet-100">
                       <span>VAT</span>
-                      <span className="font-mono">₱ {((totalWiwoKg * pricePerKg) - (totalWiwoKg * pricePerKg) / 1.12).toFixed(2)}</span>
+                      <span className="font-mono">₱ {(totalWiwoKg * pricePerKg * 0.12).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-white border-t border-white/10 pt-1.5 font-bold">
                       <span>Total</span>
-                      <span className="font-mono">₱ {(totalWiwoKg * pricePerKg).toFixed(2)}</span>
+                      <span className="font-mono">₱ {(totalWiwoKg * pricePerKg * 1.12).toFixed(2)}</span>
                     </div>
                   </div>
                 </div>

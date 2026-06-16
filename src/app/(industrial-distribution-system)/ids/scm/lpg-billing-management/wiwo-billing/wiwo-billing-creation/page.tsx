@@ -1,7 +1,9 @@
-import WiwoBillingModule from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/wiwo-billing/WiwoBillingModule";
+// RULE DEV: WiwoBillingModule replaced with ComingSoon temporarily — import removed to fix lint warning
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { NavUser } from "@/components/shared/app-sidebar/nav-user";
 import { cookies } from "next/headers";
+import WiwoBillingModule from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/wiwo-billing/wiwo-billing-creation/WiwoBillingModule";
+
 
 const COOKIE_NAME = "vos_access_token";
 
@@ -42,6 +44,7 @@ function buildHeaderUserFromToken(token: string | null | undefined) {
     "firstname",
     "first_name",
   ]);
+  
   const last = pickString(payload, [
     "LastName",
     "Lastname",
@@ -84,7 +87,7 @@ export default async function WiwoBillingPage() {
 
       {/* Main Content Area */}
       <main className="min-h-0 min-w-0 flex-1 flex flex-col bg-background">
-        <WiwoBillingModule />
+        <WiwoBillingModule/>
       </main>
     </div>
   );

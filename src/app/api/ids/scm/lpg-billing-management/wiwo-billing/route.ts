@@ -12,7 +12,7 @@ import {
   createTransactionHeader,
   fetchInvoicesForCustomer,
   checkSiteOnboarded,
-} from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/wiwo-billing/providers/wiwo-billing.provider";
+} from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/wiwo-billing/wiwo-billing-creation/providers/wiwo-billing.provider";
 import { handleApiError } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/error-handler";
 import { getUserIdFromToken } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/auth-utils";
 
@@ -32,12 +32,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ data });
     }
 
-    // AG-CHANGE: Check if a site has an existing onboarding transaction
+    // AG-CHANGE: Check if a site has completed onboarding or a draft onboarding transaction
     if (type === "check-onboarding") {
       const siteId = Number(searchParams.get("siteId"));
       if (!siteId) return NextResponse.json({ error: "siteId is required" }, { status: 400 });
-      const hasOnboarding = await checkSiteOnboarded(siteId);
-      return NextResponse.json({ data: { hasOnboarding } });
+
+      const { checkOnboardingExists, fetchDraftOnboarding } = await import(
+        "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/metered-billing/metered-billing-creation/providers/metered-billing.provider"
+      );
+      const hasCompleted = await checkOnboardingExists(siteId);
+      const draft = await fetchDraftOnboarding(siteId);
+      return NextResponse.json({ data: { hasCompleted, draft } });
     }
 
     // AG-CHANGE: Returns all lpg_metered_wiwo_transactions for a specific transaction header (POSTED view)
@@ -122,8 +127,8 @@ export async function POST(request: NextRequest) {
     const userId =
       tokenUserId ??
       (developmentUserId !== null &&
-      Number.isInteger(developmentUserId) &&
-      developmentUserId > 0
+        Number.isInteger(developmentUserId) &&
+        developmentUserId > 0
         ? developmentUserId
         : null);
 

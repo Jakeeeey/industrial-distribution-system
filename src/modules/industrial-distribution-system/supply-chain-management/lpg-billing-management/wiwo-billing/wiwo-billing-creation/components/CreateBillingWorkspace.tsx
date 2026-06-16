@@ -94,10 +94,12 @@ export function CreateBillingWorkspace({
   const [proceeding, setProceeding] = useState(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<number | null>(null);
   const [transactionType, setTransactionType] = useState<"ROUTINE" | "ONBOARDING" | null>(null);
-  const [hasOnboarding, setHasOnboarding] = useState(false);
+  const [alreadyOnboarded, setAlreadyOnboarded] = useState(false);
+  const [hasDraftOnboarding, setHasDraftOnboarding] = useState(false);
+  const [draftTransactionNo, setDraftTransactionNo] = useState<string | null>(null);
   const [checkingOnboarding, setCheckingOnboarding] = useState(true);
 
-  // ─── Check if site already onboarded ──────────────────────────────────────
+  // ─── Check onboarding status ──────────────────────────────────────────────
   useEffect(() => {
     if (!header.customer_site_id) return;
     setCheckingOnboarding(true);
@@ -105,7 +107,18 @@ export function CreateBillingWorkspace({
       `/api/ids/scm/lpg-billing-management/wiwo-billing?type=check-onboarding&siteId=${header.customer_site_id}`
     )
       .then((r) => r.json())
-      .then((json) => setHasOnboarding(json.data?.hasOnboarding || false))
+      .then((json) => {
+        const hasCompleted = json.data?.hasCompleted || false;
+        const draft = json.data?.draft || null;
+        setAlreadyOnboarded(hasCompleted);
+        if (hasCompleted) {
+          setTransactionType("ROUTINE");
+        }
+        setHasDraftOnboarding(draft !== null);
+        if (draft) {
+          setDraftTransactionNo(draft.transaction_no || `#${draft.id}`);
+        }
+      })
       .catch(() => {})
       .finally(() => setCheckingOnboarding(false));
   }, [header.customer_site_id]);
@@ -136,7 +149,8 @@ export function CreateBillingWorkspace({
 
   // ─── Handlers ─────────────────────────────────────────────────────────────
   const handleSelectType = (type: "ROUTINE" | "ONBOARDING") => {
-    if (type === "ONBOARDING" && hasOnboarding) return;
+    if (type === "ONBOARDING" && (alreadyOnboarded || hasDraftOnboarding)) return;
+    if (type === "ROUTINE" && (!alreadyOnboarded || hasDraftOnboarding)) return;
     setTransactionType(type);
   };
 
@@ -236,13 +250,13 @@ export function CreateBillingWorkspace({
 
           {/* Type Cards — single col on mobile, 2-col on md+ */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* ROUTINE — AG-CHANGE: disabled if site has no onboarding baseline yet */}
+            {/* ROUTINE — AG-CHANGE: disabled if site has no onboarding baseline yet, or if there is an active/pending draft onboarding */}
             <button
               type="button"
               onClick={() => handleSelectType("ROUTINE")}
-              disabled={!hasOnboarding || checkingOnboarding}
+              disabled={!alreadyOnboarded || hasDraftOnboarding || checkingOnboarding}
               className={`group relative p-4 sm:p-5 border-2 rounded-2xl text-left transition-all duration-200 ${
-                !hasOnboarding
+                (!alreadyOnboarded || hasDraftOnboarding)
                   ? "border-border bg-muted/30 opacity-60 cursor-not-allowed"
                   : transactionType === "ROUTINE"
                   ? "border-primary bg-primary/10 ring-2 ring-primary/20 shadow-lg shadow-primary/10"
@@ -292,15 +306,23 @@ export function CreateBillingWorkspace({
               </p>
 
               {/* Locked badge — shown when no onboarding baseline exists */}
-              {!hasOnboarding && !checkingOnboarding && (
+              {!alreadyOnboarded && !checkingOnboarding && (
                 <div className="mt-3 flex items-center gap-1.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
                   <AlertCircle className="h-3 w-3" />
                   <span>Requires onboarding baseline first</span>
                 </div>
               )}
 
+              {/* Locked badge — shown when there is an active/pending draft onboarding */}
+              {alreadyOnboarded && hasDraftOnboarding && !checkingOnboarding && (
+                <div className="mt-3 flex items-center gap-1.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                  <AlertCircle className="h-3 w-3" />
+                  <span>Onboarding from WIWO pending completion</span>
+                </div>
+              )}
+
               {/* Tag — shown only when onboarded */}
-              {hasOnboarding && (
+              {alreadyOnboarded && !hasDraftOnboarding && (
                 <div className="mt-3">
                   <span
                     className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors ${
@@ -320,9 +342,9 @@ export function CreateBillingWorkspace({
             <button
               type="button"
               onClick={() => handleSelectType("ONBOARDING")}
-              disabled={hasOnboarding || checkingOnboarding}
+              disabled={alreadyOnboarded || hasDraftOnboarding || checkingOnboarding}
               className={`group relative p-4 sm:p-5 border-2 rounded-2xl text-left transition-all duration-200 ${
-                hasOnboarding
+                (alreadyOnboarded || hasDraftOnboarding)
                   ? "border-border bg-muted/30 opacity-60 cursor-not-allowed"
                   : transactionType === "ONBOARDING"
                   ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 ring-2 ring-emerald-500/20 shadow-lg shadow-emerald-500/10"
@@ -373,14 +395,22 @@ export function CreateBillingWorkspace({
               </p>
 
               {/* Already onboarded badge */}
-              {hasOnboarding && (
+              {alreadyOnboarded && (
                 <div className="mt-3 flex items-center gap-1.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
                   <AlertCircle className="h-3 w-3" />
-                  <span>Site already has an onboarding record</span>
+                  <span>Site already has completed onboarding record</span>
                 </div>
               )}
 
-              {!hasOnboarding && (
+              {/* Draft onboarding baseline exists from WIWO but not finished */}
+              {hasDraftOnboarding && (
+                <div className="mt-3 flex items-center gap-1.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                  <AlertCircle className="h-3 w-3" />
+                  <span>Active/pending onboarding from WIWO has not been finished</span>
+                </div>
+              )}
+
+              {!alreadyOnboarded && !hasDraftOnboarding && (
                 <div className="mt-3">
                   <span
                     className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors ${
