@@ -6,7 +6,7 @@ import {
   updateMeteredTransaction,
   updateSiteReading,
   deleteMeteredTransaction,
-} from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/metered-wiwo-billing/providers/metered-wiwo.provider";
+} from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/metered-billing/metered-billing-creation/providers/metered-billing.provider";
 import { handleApiError } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/error-handler";
 import { getUserIdFromToken } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/auth-utils";
 
