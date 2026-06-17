@@ -537,9 +537,8 @@ export async function adjustWiwoDetail(payload: WiwoDetailAdjustPayload): Promis
     const txBefore = await fetchTransactionRaw(transactionId);
     if (!txBefore) throw new Error(`Transaction ${transactionId} not found.`);
 
+    // AG-CHANGE: Calculate only grossAmount for the detail return as net/vat are not stored on the customer site cylinder detail level
     const grossAmount = parseFloat((billableKg * txBefore.price_per_kg).toFixed(2));
-    const netAmount = grossAmount;
-    const vatAmount = parseFloat((netAmount - (netAmount / 1.12)).toFixed(2));
 
     // Direct update of the cylinder asset's current weight in customer site cylinders database
     await repoPatchCustomerSiteCylinder(wiwoDetailId, {
