@@ -136,7 +136,9 @@ export async function createTransactionHeader(payload: {
     throw new Error("This site already has an active transaction header overlapping the selected period.");
   }
 
-  const headerNo = `LPGH-${payload.periodFrom.replaceAll("-", "")}-${payload.siteId}-${Date.now().toString().slice(-4)}`;
+  // Developer Comment: Changed from sequential/date/site components to a random 6-digit identifier
+  const num = Math.floor(100000 + Math.random() * 900000);
+  const headerNo = `LPGH-${num}`;
   const res = await directusFetch<{ data: LpgTransactionHeader }>(
     `${DIRECTUS_URL}/items/lpg_transaction_headers`,
     {
@@ -230,6 +232,9 @@ export async function fetchWiwoBillingTransactions(params: WiwoListParams): Prom
   // AG-CHANGE: Filter by transaction_header_id when viewing a POSTED header's linked transactions
   if (params.transactionHeaderId) filters.transaction_header_id = { _eq: params.transactionHeaderId };
   if (params.salesInvoiceId) filters.sales_invoice_id = { _eq: params.salesInvoiceId };
+  if (params.transactionType && params.transactionType !== "ALL") {
+    filters.transaction_type = { _eq: params.transactionType };
+  }
   if (params.search) {
     filters._or = [
       { transaction_no: { _icontains: params.search } },

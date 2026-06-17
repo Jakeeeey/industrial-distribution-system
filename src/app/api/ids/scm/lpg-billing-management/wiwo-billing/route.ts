@@ -96,6 +96,7 @@ export async function GET(request: NextRequest) {
     const params = {
       search: searchParams.get("search") || undefined,
       status: searchParams.get("status") || undefined,
+      transactionType: searchParams.get("transactionType") || undefined,
       salesInvoiceId: searchParams.get("salesInvoiceId") ? Number(searchParams.get("salesInvoiceId")) : undefined,
       page: searchParams.get("page") ? Number(searchParams.get("page")) : 1,
       limit: searchParams.get("limit") ? Number(searchParams.get("limit")) : 10,
