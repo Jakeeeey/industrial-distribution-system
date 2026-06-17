@@ -508,12 +508,17 @@ export async function fetchActiveSiteCylinders(siteId: number): Promise<Customer
 }
 
 // Monogamy Verification
-export async function verifyCylinderMonogamy(cylinderAssetId: number): Promise<boolean> {
-  const query = {
+// IDS-CHANGE: Support excluding a specific site (e.g. current site) to allow idempotent retries
+export async function verifyCylinderMonogamy(cylinderAssetId: number, excludeSiteId?: number): Promise<boolean> {
+  // IDS-CHANGE: Avoid any type to resolve ESLint no-explicit-any error
+  const query: Record<string, unknown> = {
     cylinder_asset_id: { _eq: cylinderAssetId },
     removed_date: { _null: true },
     site_cylinder_status: { _in: ["CONNECTED", "STANDBY"] },
   };
+  if (excludeSiteId !== undefined) {
+    query.lpg_site_id = { _neq: excludeSiteId };
+  }
   const res = await directusFetch<{ data: unknown[] }>(
     `${DIRECTUS_URL}/items/lpg_customer_site_cylinders?filter=${encodeURIComponent(JSON.stringify(query))}&limit=1`
   );
@@ -641,9 +646,14 @@ export async function processOnboardingBaseline(payload: {
   salesInvoiceNo?: string | null;
   userId?: number;
 }): Promise<MeteredWiwoTransaction> {
-  // 1. Monogamy validation
+  // 1. Monogamy and Photo validation
+  // AG-CHANGE: Enforced serial and weight photo capture for onboarding baseline cylinders
   for (const cyl of payload.cylinders) {
-    const isSingle = await verifyCylinderMonogamy(cyl.cylinderAssetId);
+    if (!cyl.serialPhotoId || !cyl.weightPhotoId) {
+      throw new Error(`Serial and weight photos are required for onboarding cylinder asset ${cyl.cylinderAssetId}.`);
+    }
+    // IDS-CHANGE: Pass siteId to allow idempotent retries if the cylinder is already connected at the same site
+    const isSingle = await verifyCylinderMonogamy(cyl.cylinderAssetId, payload.siteId);
     if (!isSingle) {
       throw new Error(`Cylinder asset ${cyl.cylinderAssetId} is already connected/standby at another customer site.`);
     }
@@ -810,19 +820,65 @@ export async function processOnboardingBaseline(payload: {
   );
 
   // Link invoice to header
+  // IDS-CHANGE: Perform duplicate check and wrap in try-catch to prevent transaction failure if already linked
   if (invoiceId) {
-    await directusFetch(`${DIRECTUS_URL}/items/lpg_transaction_header_invoices`, {
-      method: "POST",
-      body: JSON.stringify({
-        header_id: payload.transactionHeaderId,
-        sales_invoice_id: invoiceId,
-        invoice_role: "SOURCE_DELIVERY",
-        linked_by: payload.userId,
-      }),
-    });
+    try {
+      const checkRes = await directusFetch<{ data: { id: number }[] }>(
+        `${DIRECTUS_URL}/items/lpg_transaction_header_invoices?filter[header_id][_eq]=${payload.transactionHeaderId}&filter[sales_invoice_id][_eq]=${invoiceId}&limit=1`
+      );
+      const existingLink = checkRes.data?.[0];
+      if (!existingLink) {
+        await directusFetch(`${DIRECTUS_URL}/items/lpg_transaction_header_invoices`, {
+          method: "POST",
+          body: JSON.stringify({
+            header_id: payload.transactionHeaderId,
+            sales_invoice_id: invoiceId,
+            invoice_role: "SOURCE_DELIVERY",
+            linked_by: payload.userId,
+          }),
+        });
+      }
+    } catch (e) {
+      console.warn("Failed to link lpg_transaction_header_invoices during onboarding baseline setup:", e);
+    }
   }
 
-  return parentTx.data;
+  // AG-CHANGE: Save onboarding cylinder serial and weight attachments
+  const parentTxData = parentTx.data;
+  for (let i = 0; i < assets.length; i++) {
+    const asset = assets[i];
+    const cylInput = payload.cylinders.find(c => c.cylinderAssetId === asset.id);
+    if (cylInput) {
+      if (cylInput.serialPhotoId) {
+        await directusFetch(`${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments`, {
+          method: "POST",
+          body: JSON.stringify({
+            transaction_id: parentTxData.id,
+            site_cylinder_id: siteCylIds[i],
+            cylinder_asset_id: asset.id,
+            attachment_type: "SERIAL_IMAGE",
+            directus_file_id: cylInput.serialPhotoId,
+            ...withUser(payload.userId, ["created_by"]),
+          }),
+        });
+      }
+      if (cylInput.weightPhotoId) {
+        await directusFetch(`${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments`, {
+          method: "POST",
+          body: JSON.stringify({
+            transaction_id: parentTxData.id,
+            site_cylinder_id: siteCylIds[i],
+            cylinder_asset_id: asset.id,
+            attachment_type: "WEIGHT_IMAGE",
+            directus_file_id: cylInput.weightPhotoId,
+            ...withUser(payload.userId, ["created_by"]),
+          }),
+        });
+      }
+    }
+  }
+
+  return parentTxData;
 }
 
 // ─── Flow B: Regular Routine Swap Loop ────────────────────────────────────────
@@ -960,7 +1016,8 @@ export async function processRegularSwap(payload: {
     if (!dep.serialPhotoId || !dep.weightPhotoId) {
       throw new Error(`Serial and weight photos are required for new cylinder asset ${dep.cylinderAssetId}.`);
     }
-    const isSingle = await verifyCylinderMonogamy(dep.cylinderAssetId);
+    // IDS-CHANGE: Pass siteId to verifyCylinderMonogamy to allow idempotent retries if the cylinder is already connected at this site
+    const isSingle = await verifyCylinderMonogamy(dep.cylinderAssetId, payload.siteId);
     if (!isSingle) {
       throw new Error(`New cylinder asset ${dep.cylinderAssetId} is actively assigned elsewhere.`);
     }

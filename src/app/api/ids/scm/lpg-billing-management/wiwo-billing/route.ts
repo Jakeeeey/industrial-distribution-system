@@ -173,7 +173,14 @@ export async function POST(request: NextRequest) {
         customerCode,
         siteId,
         transactionDate: body.transaction_date,
-        cylinders: body.cylinders || [],
+        // AG-CHANGE: Map new photo fields in cylinders payload
+        cylinders: (body.cylinders || []).map((cylinder: Record<string, unknown>) => ({
+          cylinderAssetId: Number(cylinder.cylinderAssetId),
+          targetKg: Number(cylinder.targetKg),
+          pricePerKg: Number(cylinder.pricePerKg ?? 0),
+          serialPhotoId: typeof cylinder.serialPhotoId === "string" ? cylinder.serialPhotoId : undefined,
+          weightPhotoId: typeof cylinder.weightPhotoId === "string" ? cylinder.weightPhotoId : undefined,
+        })),
         salesInvoiceId: body.sales_invoice_id ? Number(body.sales_invoice_id) : null,
         salesInvoiceNo: typeof body.sales_invoice_no === "string" ? body.sales_invoice_no : null,
         userId,

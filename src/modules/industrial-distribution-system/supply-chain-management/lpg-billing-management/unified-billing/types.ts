@@ -161,6 +161,9 @@ export interface OnboardCylinderInput {
   cylinderAssetId: number;
   targetKg: number;
   pricePerKg: number;
+  // AG-CHANGE: Added photo fields for onboarding baseline photo evidence capture
+  serialPhotoId?: string | null;
+  weightPhotoId?: string | null;
 }
 
 // ─── Filter Params ────────────────────────────────────────────────────────────
