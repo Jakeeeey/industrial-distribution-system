@@ -76,10 +76,12 @@ try {
             [System.Buffer]::BlockCopy($data, 0, $logoBytes, $header.Length, $data.Length)
             [System.Buffer]::BlockCopy($footer, 0, $logoBytes, ($header.Length + $data.Length), $footer.Length)
             
-            "Logo processed successfully. Target size: $TargetWidth x $targetHeight ($($logoBytes.Length) ESC/POS bytes)" | Out-File -FilePath $logPath -Append
+            # Developer Comment: Replaced Out-File redirect with stdout message to avoid dependency on removed debug logPath
+            Write-Output "Logo processed successfully. Target size: $TargetWidth x $targetHeight ($($logoBytes.Length) ESC/POS bytes)"
         }
         catch {
-            "Error converting logo: $_" | Out-File -FilePath $logPath -Append
+            # Developer Comment: Log converting errors to warnings standard stream to keep process transparent
+            Write-Warning "Error converting logo: $_"
             $logoBytes = $null
         }
     }
