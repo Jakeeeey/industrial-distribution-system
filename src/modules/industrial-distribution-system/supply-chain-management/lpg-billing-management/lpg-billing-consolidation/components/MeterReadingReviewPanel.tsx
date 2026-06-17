@@ -147,25 +147,38 @@ export function MeterReadingReviewPanel({
             </p>
           </div>
         </div>
-        <Badge
-          className={cn(
-            "text-[10px] px-1.5 py-0 border",
-            reading.reading_status === "POSTED"
-              ? "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400"
-              : "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400"
+        <div className="flex items-center gap-1.5 shrink-0">
+          {reading.is_adjusted && (
+            <Badge className="bg-amber-150 text-amber-700 border border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 text-[10px] px-1.5 py-0 font-bold uppercase tracking-wider select-none">
+              Adjusted
+            </Badge>
           )}
-        >
-          {reading.reading_status}
-        </Badge>
+          <Badge
+            className={cn(
+              "text-[10px] px-1.5 py-0 border",
+              reading.reading_status === "POSTED"
+                ? "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400"
+                : "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400"
+            )}
+          >
+            {reading.reading_status}
+          </Badge>
+        </div>
       </div>
 
-      {/* Reading Values Grid */}
+       {/* Reading Values Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {[
           ...(!isOnboarding ? [
             { label: "Previous Reading", value: reading.previous_reading.toFixed(3), unit: reading.meter_unit }
           ] : []),
-          { label: "Current Reading", value: reading.current_reading.toFixed(3), unit: reading.meter_unit, highlight: true },
+          { 
+            label: "Current Reading", 
+            value: reading.current_reading.toFixed(3), 
+            unit: reading.meter_unit, 
+            highlight: true,
+            original: reading.original_current_reading != null ? reading.original_current_reading.toFixed(3) : undefined
+          },
           ...(!isOnboarding ? [
             { label: "Raw Consumption", value: reading.raw_consumption.toFixed(3), unit: reading.meter_unit }
           ] : []),
@@ -187,10 +200,17 @@ export function MeterReadingReviewPanel({
             <p className="text-[9px] uppercase tracking-wide font-semibold text-muted-foreground mb-0.5">
               {item.label}
             </p>
-            <p className="text-sm font-black text-zinc-800 dark:text-zinc-100">
-              {item.value}
-              {item.unit && <span className="text-[10px] font-medium text-muted-foreground ml-1">{item.unit}</span>}
-            </p>
+            <div className="flex flex-col">
+              <p className="text-sm font-black text-zinc-800 dark:text-zinc-100">
+                {item.value}
+                {item.unit && <span className="text-[10px] font-medium text-muted-foreground ml-1">{item.unit}</span>}
+              </p>
+              {("original" in item) && item.original && (
+                <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 mt-0.5 line-through">
+                  Original: {item.original} {item.unit}
+                </p>
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -246,8 +266,14 @@ export function MeterReadingReviewPanel({
               <Label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
                 Original Reading
               </Label>
+              {/* AG-CHANGE: Show the true pre-audit original reading from the audit trail.
+                  Falls back to current_reading if no prior adjustment exists. */}
               <Input
-                value={reading.current_reading.toFixed(3)}
+                value={
+                  reading.is_adjusted && reading.original_current_reading != null
+                    ? reading.original_current_reading.toFixed(3)
+                    : reading.current_reading.toFixed(3)
+                }
                 disabled
                 className="h-8 text-sm bg-zinc-100 dark:bg-zinc-800 text-muted-foreground"
               />

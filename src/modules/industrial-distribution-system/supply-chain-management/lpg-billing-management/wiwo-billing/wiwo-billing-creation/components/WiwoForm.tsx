@@ -15,12 +15,10 @@ import {
   CheckCircle2,
   Loader2,
   ScanBarcode,
-  ChevronRight,
-  Printer
+  ChevronRight
 } from "lucide-react";
 import type { CylinderAsset, CustomerSiteCylinder, MeteredWiwoTransaction, CustomerSite, MeterReading, WiwoHeader, LpgTransactionHeader } from "../types";
-import WiwoThermalReceiptModal from "./WiwoThermalReceiptModal";
-import type { WiwoThermalReceiptData } from "./WiwoThermalReceiptModal";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -112,6 +110,13 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
     capacity: number;
     targetKg: number | string;
     pricePerKg: number;
+    // AG-CHANGE: Added type properties for onboarding photo capture
+    serialPhotoId?: string | null;
+    serialPhotoUrl?: string | null;
+    weightPhotoId?: string | null;
+    weightPhotoUrl?: string | null;
+    isUploadingSerial?: boolean;
+    isUploadingWeight?: boolean;
   }[]>([]);
 
   // Flow B state: Routine Check & Swap
@@ -134,6 +139,10 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   const [isWeighModalOpen, setIsWeighModalOpen] = useState(false);
   const [weighingCylinderId, setWeighingCylinderId] = useState<number | null>(null);
   const [weighingGross, setWeighingGross] = useState("");
+  // AG-CHANGE: Onboarding Weighing Modal States
+  const [isOnboardWeighModalOpen, setIsOnboardWeighModalOpen] = useState(false);
+  const [weighingOnboardIndex, setWeighingOnboardIndex] = useState<number | null>(null);
+  const [onboardingWeighingGross, setOnboardingWeighingGross] = useState("");
   const [replacementModalIndex, setReplacementModalIndex] = useState<number | null>(null);
 
   const [, setSerialFile] = useState<File | null>(null);
@@ -184,13 +193,8 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   const [txDetail, setTxDetail] = useState<MeteredWiwoTransaction | null>(null);
   const isViewMode = !!txId && !!txDetail && txDetail.status !== "DRAFT";
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [isExitWarningOpen, setIsExitWarningOpen] = useState(false);
   const [cancelledReason, setCancelledReason] = useState("");
-
-  // RULE DEV: Print receipt modal states
-  const [printModalOpen, setPrintModalOpen] = useState(false);
-  const [isAfterSubmit, setIsAfterSubmit] = useState(false);
-  const [submittedTxNo, setSubmittedTxNo] = useState<string | null>(null);
-  const [autoPrintActive, setAutoPrintActive] = useState(false);
 
   // Combobox Search States
   const [siteSearch, setSiteSearch] = useState("");
@@ -692,6 +696,66 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
     }
   };
 
+  // AG-CHANGE: Added handleOnboardFileUpload to support onboarding baseline cylinder photo capture & upload
+  const handleOnboardFileUpload = async (
+    index: number | null,
+    file: File,
+    type: "SERIAL" | "WEIGHT",
+  ) => {
+    if (index === null) return;
+    const isSerial = type === "SERIAL";
+    const previewUrl = URL.createObjectURL(file);
+
+    setSelectedOnboardCylinders((prev) => {
+      const copy = [...prev];
+      copy[index] = {
+        ...copy[index],
+        ...(isSerial
+          ? { isUploadingSerial: true, serialPhotoUrl: previewUrl, serialPhotoId: null }
+          : { isUploadingWeight: true, weightPhotoUrl: previewUrl, weightPhotoId: null }),
+      };
+      return copy;
+    });
+
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/ids/scm/lpg-billing-management/wiwo-billing/upload", {
+        method: "POST",
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok || data.error || !data.data?.id) {
+        throw new Error(data.error || "Upload failed");
+      }
+
+      setSelectedOnboardCylinders((prev) => {
+        const copy = [...prev];
+        copy[index] = {
+          ...copy[index],
+          ...(isSerial
+            ? { isUploadingSerial: false, serialPhotoId: data.data.id }
+            : { isUploadingWeight: false, weightPhotoId: data.data.id }),
+        };
+        return copy;
+      });
+    } catch (err) {
+      console.error(err);
+      URL.revokeObjectURL(previewUrl);
+      setSelectedOnboardCylinders((prev) => {
+        const copy = [...prev];
+        copy[index] = {
+          ...copy[index],
+          ...(isSerial
+            ? { isUploadingSerial: false, serialPhotoUrl: null, serialPhotoId: null }
+            : { isUploadingWeight: false, weightPhotoUrl: null, weightPhotoId: null }),
+        };
+        return copy;
+      });
+      alert(`Failed to upload cylinder ${isSerial ? "serial" : "weight"} photo.`);
+    }
+  };
+
   // ─── Mathematical Calculations (Flow B) ─────────────────────────────────────
   const meteredKg = draftMeteredKg !== null
     ? draftMeteredKg
@@ -782,6 +846,15 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
           setLoading(false);
           return;
         }
+        // AG-CHANGE: Enforce photo validation for onboarding cylinders
+        const missingEvidence = selectedOnboardCylinders.find(
+          (c) => !c.serialPhotoId || !c.weightPhotoId
+        );
+        if (missingEvidence) {
+          alert(`Please capture both serial and scale photos for onboarding cylinder ${missingEvidence.serialNumber}.`);
+          setLoading(false);
+          return;
+        }
         payload = {
           transaction_header_id: transactionHeader.header_id,
           transaction_type: "ONBOARDING_BASELINE",
@@ -790,10 +863,13 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
           transaction_date: transactionDate,
           sales_invoice_id: salesInvoice?.invoice_id,
           sales_invoice_no: salesInvoice?.invoice_no,
+          // AG-CHANGE: Pass photo IDs to onboarding baseline cylinders payload
           cylinders: selectedOnboardCylinders.map(c => ({
             cylinderAssetId: c.cylinderAssetId,
             targetKg: c.targetKg,
-            pricePerKg: c.pricePerKg
+            pricePerKg: c.pricePerKg,
+            serialPhotoId: c.serialPhotoId,
+            weightPhotoId: c.weightPhotoId,
           })),
         };
       } else {
@@ -922,17 +998,12 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
         throw new Error(data.error || "Failed to process transaction.");
       }
 
-      alert("Transaction saved and posted successfully!");
+      toast.success("Transaction saved and posted successfully!");
       clearWeighingCache(selectedTxId);
-      if (data.data?.transaction_no) {
-        setSubmittedTxNo(data.data.transaction_no);
-      }
-      setIsAfterSubmit(true);
-      setAutoPrintActive(true);
-      setPrintModalOpen(true);
+      onSuccess();
     } catch (err) {
       const error = err as Error;
-      alert(error.message || "An error occurred.");
+      toast.error(error.message || "An error occurred.");
     } finally {
       setLoading(false);
     }
@@ -941,7 +1012,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   // Rollback Submit Handler
   const handleCancelTransaction = async () => {
     if (!cancelledReason.trim()) {
-      alert("Please enter a valid reason for cancellation.");
+      toast.warning("Please enter a valid reason for cancellation.");
       return;
     }
 
@@ -961,13 +1032,13 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
         throw new Error(data.error || "Failed to cancel transaction.");
       }
 
-      alert("Transaction successfully rolled back and cancelled.");
+      toast.success("Transaction successfully rolled back and cancelled.");
       setIsCancelModalOpen(false);
       clearWeighingCache(selectedTxId);
       onSuccess();
     } catch (err) {
       const error = err as Error;
-      alert(error.message || "An error occurred during cancellation.");
+      toast.error(error.message || "An error occurred during cancellation.");
     } finally {
       setLoading(false);
     }
@@ -991,104 +1062,10 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   const finalBillableKg = isViewMode ? txDetail.billable_kg : billableKg;
   const finalPricePerKg = isViewMode ? txDetail.price_per_kg : pricePerKg;
   const finalGross = isViewMode ? txDetail.gross_amount : parseFloat((finalBillableKg * finalPricePerKg).toFixed(2));
-  const finalVat = isViewMode ? txDetail.vat_amount : parseFloat((finalGross * 0.12).toFixed(2));
-  const finalNet = isViewMode ? txDetail.net_amount : parseFloat((finalGross + finalVat).toFixed(2));
+  const finalVat = isViewMode ? txDetail.vat_amount : parseFloat((finalGross - (finalGross / 1.12)).toFixed(2));
+  // IDS-CHANGE: VAT is absorbed / inclusive: total amount = gross = vatable amount
+  const finalNet = isViewMode ? txDetail.gross_amount : finalGross;
   const finalBillableSource = isViewMode ? txDetail.billable_source : (meteredKg >= totalWiwoKg ? "METERED" : "WIWO");
-
-  // RULE DEV: Map printer data for WIWO receipt
-  const siteName = selectedSite?.site_name || transactionHeader?.site?.site_name || null;
-
-  const printReturnedCylinders = isViewMode
-    ? (((txDetail?.wiwo_header_id as unknown as WiwoHeader)?.details ?? [])
-      .filter((d) => d.line_type === "CONSUMPTION_RETURN")
-      .map((d) => ({
-        serialNumber: d.serial_number,
-        tareWeight: d.tare_weight_kg,
-        previousLpgKg: d.previous_lpg_kg,
-        returnedGrossWeight: d.returned_gross_weight_kg ?? 0,
-        consumedLpgKg: d.consumed_lpg_kg,
-      })))
-    : calculatedReturnedCylinders
-      .filter((c) => c.returnedGross > 0)
-      .map((c) => ({
-        serialNumber: c.cylinder_asset?.serial_number || "",
-        tareWeight: c.tare,
-        previousLpgKg: c.opening,
-        returnedGrossWeight: c.returnedGross,
-        consumedLpgKg: c.consumed,
-      }));
-
-  const printDeployedCylinders = isViewMode
-    ? (((txDetail?.wiwo_header_id as unknown as WiwoHeader)?.details ?? [])
-      .filter((d) => d.line_type === "NEW_DEPLOYMENT")
-      .map((d) => ({
-        serialNumber: d.serial_number,
-        tareWeight: d.tare_weight_kg,
-        deployedGrossWeight: d.previous_lpg_kg,
-      })))
-    : flowType === "ONBOARDING"
-      ? selectedOnboardCylinders.map((c) => ({
-        serialNumber: c.serialNumber,
-        tareWeight: c.tareWeight,
-        deployedGrossWeight: Number(c.targetKg),
-      }))
-      : selectedReplacementCylinders.map((c) => ({
-        serialNumber: c.serialNumber,
-        tareWeight: c.tareWeight,
-        deployedGrossWeight: Number(c.targetKg),
-      }));
-
-  const printTxType = isViewMode
-    ? txDetail?.transaction_type === "ONBOARDING_BASELINE"
-      ? "Onboarding Baseline"
-      : txDetail?.transaction_type === "REGULAR_BILLING"
-        ? "Regular Billing"
-        : "Adjustment"
-    : flowType === "ONBOARDING"
-      ? "Onboarding Baseline"
-      : "Regular Billing";
-
-  const printTxData: WiwoThermalReceiptData = {
-    transactionNo: isViewMode
-      ? txDetail?.transaction_no || ""
-      : submittedTxNo || txDetail?.transaction_no || "",
-    transactionDate: isViewMode ? txDetail?.transaction_date || "" : transactionDate,
-    transactionType: printTxType,
-    customerName: isViewMode
-      ? txDetail?.customer?.customer_name || txDetail?.customer_code || "—"
-      : transactionHeader?.customer_name || customerCode || "—",
-    siteName: siteName,
-    salesInvoiceNo: isViewMode
-      ? txDetail?.sales_invoice_no
-      : salesInvoice?.invoice_no || null,
-    salesOrderNo: isViewMode
-      ? txDetail?.sales_order_no
-      : null,
-    previousReading: isViewMode
-      ? txDetail?.meter_reading_id
-        ? (txDetail.meter_reading_id as unknown as MeterReading).previous_reading
-        : null
-      : previousReading,
-    currentReading: isViewMode
-      ? txDetail?.meter_reading_id
-        ? (txDetail.meter_reading_id as unknown as MeterReading).current_reading
-        : null
-      : currentReading,
-    meteredKg: isViewMode ? txDetail?.metered_kg : meteredKg,
-    wiwoKg: isViewMode ? txDetail?.wiwo_kg || 0 : totalWiwoKg,
-    billableKg: finalBillableKg,
-    billableSource: finalBillableSource as "METERED" | "WIWO" | "NONE",
-    pricePerKg: finalPricePerKg,
-    grossAmount: finalGross,
-    vatAmount: finalVat,
-    netAmount: finalNet,
-    returnedCylinders: printReturnedCylinders,
-    deployedCylinders: printDeployedCylinders,
-    isOnboarding: isViewMode
-      ? txDetail?.transaction_type === "ONBOARDING_BASELINE"
-      : flowType === "ONBOARDING",
-    remarks: isViewMode ? txDetail?.remarks : remarks,
-  };
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -1604,22 +1581,45 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                             </div>
                             <div>
                               <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">Starting Gross (KG)</span>
-                              <Input
-                                type="number"
-                                step="0.1"
-                                value={cyl.targetKg}
-                                onChange={(e) => {
-                                  const raw = e.target.value;
-                                  const val = raw === "" ? "" : parseFloat(raw);
-                                  setSelectedOnboardCylinders((prev) => {
-                                    const copy = [...prev];
-                                    copy[idx] = { ...copy[idx], targetKg: val };
-                                    return copy;
-                                  });
-                                }}
-                                className={`text-xs h-8 text-right font-mono w-full ${(Number(cyl.targetKg) - cyl.tareWeight > cyl.capacity || (cyl.targetKg !== "" && Number(cyl.targetKg) < cyl.tareWeight)) ? "border-red-500 text-red-500 bg-red-50/10 focus-visible:ring-red-500" : ""
-                                  }`}
-                              />
+                              <div className="flex items-center gap-1.5">
+                                <div className="relative flex-1">
+                                  <Input
+                                    type="number"
+                                    step="0.1"
+                                    value={cyl.targetKg}
+                                    readOnly={true}
+                                    onClick={() => {
+                                      setWeighingOnboardIndex(idx);
+                                      setOnboardingWeighingGross(cyl.targetKg ? String(cyl.targetKg) : "");
+                                      setIsOnboardWeighModalOpen(true);
+                                    }}
+                                    placeholder="Weigh"
+                                    className={`text-xs h-8 text-right font-mono w-full cursor-pointer ${(Number(cyl.targetKg) - cyl.tareWeight > cyl.capacity || (cyl.targetKg !== "" && Number(cyl.targetKg) < cyl.tareWeight)) ? "border-red-500 text-red-500 bg-red-50/10 focus-visible:ring-red-500" : ""
+                                      }`}
+                                  />
+                                  {cyl.targetKg && <span className="absolute right-2 top-2 text-[10px] text-muted-foreground font-bold">KG</span>}
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setWeighingOnboardIndex(idx);
+                                    setOnboardingWeighingGross(cyl.targetKg ? String(cyl.targetKg) : "");
+                                    setIsOnboardWeighModalOpen(true);
+                                  }}
+                                  className={`h-8 w-8 p-0 rounded-lg shrink-0 ${cyl.serialPhotoId && cyl.weightPhotoId ? "border-emerald-250 text-primary bg-emerald-50 dark:bg-emerald-955/20" : ""}`}
+                                  title="Setup Weight & Photos"
+                                >
+                                  <Scale className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                              {/* AG-CHANGE: Show calculated net weight dynamically below inputs on mobile layout */}
+                              {cyl.targetKg ? (
+                                <span className="text-[9px] text-muted-foreground block text-right mt-1 w-full pr-9 font-medium">
+                                  Net: {(Number(cyl.targetKg) - cyl.tareWeight).toFixed(1)} KG
+                                </span>
+                              ) : null}
                             </div>
                           </div>
                         </div>
@@ -1627,40 +1627,71 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                     </div>
 
                     {/* Desktop View (hidden sm:block) */}
-                    <div className="hidden sm:block overflow-x-auto">
-                      <table className="w-full text-left border-collapse min-w-full">
+                    <div className="hidden sm:block">
+                      <table className="w-full text-left border-collapse min-w-full table-fixed">
                         <thead className="bg-zinc-50 dark:bg-zinc-900 font-bold text-muted-foreground border-b border-border">
                           <tr>
-                            <th className="p-3 sticky left-0 bg-zinc-50 dark:bg-zinc-900 z-10">Serial</th>
-                            <th className="p-3">Product Name</th>
-                            <th className="p-3 text-right">Tare Weight</th>
-                            <th className="p-3 text-right w-44">Starting Gross Weight (KG)</th>
-                            <th className="p-3 w-10"></th>
+                            <th className="p-3 sticky left-0 bg-zinc-50 dark:bg-zinc-900 z-10 whitespace-nowrap w-[155px]">Serial</th>
+                            <th className="p-3 whitespace-nowrap">Product Name</th>
+                            <th className="p-3 text-right whitespace-nowrap w-[110px]">Tare Weight</th>
+                            <th className="p-3 text-right w-[165px] whitespace-nowrap">Gross Weight (KG)</th>
+                            {/* AG-CHANGE: Added Net Weight column to the onboarding baseline cylinders table */}
+                            <th className="p-3 text-right w-[110px] whitespace-nowrap">Net Weight</th>
+                            <th className="p-3 w-12 text-right"></th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-150 dark:divide-zinc-800/50">
                           {selectedOnboardCylinders.map((cyl, idx) => (
                             <tr key={cyl.cylinderAssetId} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20">
-                              <td className="p-3 font-mono font-bold text-zinc-700 dark:text-zinc-300 sticky left-0 bg-white dark:bg-zinc-955 z-10 border-r border-border shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">{cyl.serialNumber}</td>
-                              <td className="p-3 text-muted-foreground">{cyl.productName}</td>
-                              <td className="p-3 text-right font-mono text-muted-foreground">{cyl.tareWeight} KG</td>
-                              <td className="p-3">
-                                <Input
-                                  type="number"
-                                  step="0.1"
-                                  value={cyl.targetKg}
-                                  onChange={(e) => {
-                                    const raw = e.target.value;
-                                    const val = raw === "" ? "" : parseFloat(raw);
-                                    setSelectedOnboardCylinders((prev) => {
-                                      const copy = [...prev];
-                                      copy[idx] = { ...copy[idx], targetKg: val };
-                                      return copy;
-                                    });
-                                  }}
-                                  className={`text-xs h-8 text-right font-mono ${(Number(cyl.targetKg) - cyl.tareWeight > cyl.capacity || (cyl.targetKg !== "" && Number(cyl.targetKg) < cyl.tareWeight)) ? "border-red-500 text-red-500 bg-red-50/10 focus-visible:ring-red-500" : ""
-                                    }`}
-                                />
+                              <td className="p-3 sticky left-0 bg-white dark:bg-zinc-955 z-10 border-r border-border shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] w-[155px]">
+                                <div className="font-mono font-bold text-zinc-700 dark:text-zinc-300 truncate w-full" title={cyl.serialNumber}>
+                                  {cyl.serialNumber}
+                                </div>
+                              </td>
+                              <td className="p-3 text-muted-foreground">
+                                <div className="truncate w-full" title={cyl.productName}>
+                                  {cyl.productName}
+                                </div>
+                              </td>
+                              <td className="p-3 text-right font-mono text-muted-foreground whitespace-nowrap w-[110px]">{cyl.tareWeight} KG</td>
+                              <td className="p-3 w-[165px]">
+                                <div className="flex items-center gap-1.5 justify-end">
+                                  <div className="relative w-24">
+                                    <Input
+                                      type="number"
+                                      step="0.1"
+                                      value={cyl.targetKg}
+                                      readOnly={true}
+                                      onClick={() => {
+                                        setWeighingOnboardIndex(idx);
+                                        setOnboardingWeighingGross(cyl.targetKg ? String(cyl.targetKg) : "");
+                                        setIsOnboardWeighModalOpen(true);
+                                      }}
+                                      placeholder="Weigh"
+                                      className={`text-xs h-8 text-right font-mono pr-8 cursor-pointer ${(Number(cyl.targetKg) - cyl.tareWeight > cyl.capacity || (cyl.targetKg !== "" && Number(cyl.targetKg) < cyl.tareWeight)) ? "border-red-500 text-red-500 bg-red-50/10 focus-visible:ring-red-500" : ""
+                                        }`}
+                                    />
+                                    {cyl.targetKg && <span className="absolute right-2 top-2 text-[10px] text-muted-foreground font-bold">KG</span>}
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      setWeighingOnboardIndex(idx);
+                                      setOnboardingWeighingGross(cyl.targetKg ? String(cyl.targetKg) : "");
+                                      setIsOnboardWeighModalOpen(true);
+                                    }}
+                                    className={`h-8 w-8 p-0 rounded-lg shrink-0 ${cyl.serialPhotoId && cyl.weightPhotoId ? "border-emerald-250 text-primary bg-emerald-50 dark:bg-emerald-955/20" : ""}`}
+                                    title="Setup Weight & Photos"
+                                  >
+                                    <Scale className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              </td>
+                              {/* AG-CHANGE: Show the calculated Net Weight in a dedicated column for onboarding baseline setup */}
+                              <td className="p-3 text-right font-mono text-zinc-700 dark:text-zinc-300 font-bold whitespace-nowrap w-[110px]">
+                                {cyl.targetKg ? `${(Number(cyl.targetKg) - cyl.tareWeight).toFixed(1)} KG` : "—"}
                               </td>
                               <td className="p-3 text-right">
                                 <Button
@@ -1712,11 +1743,11 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                     </div>
                     <div className="flex justify-between text-violet-100">
                       <span>VAT</span>
-                      <span className="font-mono">₱ {(meteredKg * pricePerKg * 0.12).toFixed(2)}</span>
+                      <span className="font-mono">₱ {((meteredKg * pricePerKg) - ((meteredKg * pricePerKg) / 1.12)).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-white border-t border-white/10 pt-1.5 font-bold">
                       <span>Total</span>
-                      <span className="font-mono">₱ {(meteredKg * pricePerKg * 1.12).toFixed(2)}</span>
+                      <span className="font-mono">₱ {(meteredKg * pricePerKg).toFixed(2)}</span>
                     </div>
                   </div>
 
@@ -1733,11 +1764,11 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                     </div>
                     <div className="flex justify-between text-violet-100">
                       <span>VAT</span>
-                      <span className="font-mono">₱ {(totalWiwoKg * pricePerKg * 0.12).toFixed(2)}</span>
+                      <span className="font-mono">₱ {((totalWiwoKg * pricePerKg) - ((totalWiwoKg * pricePerKg) / 1.12)).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-white border-t border-white/10 pt-1.5 font-bold">
                       <span>Total</span>
-                      <span className="font-mono">₱ {(totalWiwoKg * pricePerKg * 1.12).toFixed(2)}</span>
+                      <span className="font-mono">₱ {(totalWiwoKg * pricePerKg).toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -1757,8 +1788,8 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                 </div>
                 <Badge
                   className={`font-bold text-xs tracking-wider border-none ${finalBillableSource === "METERED"
-                      ? "bg-blue-300/30 text-blue-100"
-                      : "bg-orange-300/30 text-orange-100"
+                    ? "bg-blue-300/30 text-blue-100"
+                    : "bg-orange-300/30 text-orange-100"
                     }`}
                 >
                   {finalBillableSource}
@@ -1847,7 +1878,13 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
         <Button
           variant="ghost"
           size="default"
-          onClick={onCancel}
+          onClick={() => {
+            if (isReadOnly) {
+              onCancel();
+            } else {
+              setIsExitWarningOpen(true);
+            }
+          }}
           className="h-11 px-6 hover:bg-red-50 hover:text-red-600 font-semibold"
         >
           {isReadOnly ? "Close" : "Cancel"}
@@ -1864,18 +1901,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
             Cancel & Rollback
           </Button>
         )}
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => {
-            setAutoPrintActive(false);
-            setPrintModalOpen(true);
-          }}
-          className="h-11 px-6 border-zinc-200 text-foreground hover:bg-accent transition-all active:scale-95 font-semibold gap-1.5"
-        >
-          <Printer className="h-4 w-4" />
-          Print Receipt
-        </Button>
+
         {!isReadOnly && !isViewMode && (
           <Button
             onClick={handleSubmit}
@@ -1931,6 +1957,44 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                 disabled={loading}
               >
                 {loading ? "Cancelling..." : "Void & Restore Assets"}
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Exit Warning Modal */}
+      {isExitWarningOpen && mounted && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-zinc-955 border border-border max-w-sm w-full rounded-2xl p-6 space-y-4 shadow-2xl animate-in fade-in duration-200">
+            <div className="space-y-1">
+              <h3 className="text-md font-extrabold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-amber-500" />
+                Unsaved Changes
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Are you sure you want to exit? Any unsaved data or cylinder measurements will be permanently lost.
+              </p>
+            </div>
+
+            <div className="flex gap-2.5 justify-end">
+              <Button
+                variant="secondary"
+                onClick={() => setIsExitWarningOpen(false)}
+                className="text-xs font-bold px-4 h-9"
+              >
+                No, Keep Editing
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  setIsExitWarningOpen(false);
+                  onCancel();
+                }}
+                className="text-xs font-bold px-4 h-9"
+              >
+                Yes, Discard Changes
               </Button>
             </div>
           </div>
@@ -2536,7 +2600,219 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                 setMobileEditingCylinderId(null); // AG-CHANGE: Autoclose the actions modal so that the scanner modal will be next to open
                 setScannerError("");
                 setScannerInput("");
-                setIsScannerModalOpen(true);
+
+                // IDS-CHANGE: Do not auto-open the scanner modal if all cylinders have been weighed
+                const nextReturnedWeights = {
+                  ...returnedWeights,
+                  [weighingCylinderId]: parseFloat(weighingGross),
+                };
+                const allCylsFulfilled = calculatedReturnedCylinders.every(c => {
+                  const wt = nextReturnedWeights[c.id];
+                  return wt !== undefined && wt !== null && !isNaN(Number(wt)) && Number(wt) > 0;
+                });
+                if (!allCylsFulfilled) {
+                  setIsScannerModalOpen(true);
+                }
+              }}
+              className="text-xs font-bold bg-primary hover:bg-primary/90 text-white px-5 h-9"
+            >
+              Save Weighing
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Onboarding Baseline Cylinder Weighing Modal */}
+      {/* AG-CHANGE: Added Onboarding baseline weighing modal dialog */}
+      <Dialog open={isOnboardWeighModalOpen} onOpenChange={setIsOnboardWeighModalOpen}>
+        <DialogContent
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+          className="max-w-lg p-0 border border-border rounded-2xl overflow-hidden shadow-2xl bg-white dark:bg-zinc-955 gap-0"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+            <DialogTitle className="text-base font-extrabold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
+              <Scale className="h-5 w-5 text-primary" />
+              Onboarding Baseline Cylinder Setup
+            </DialogTitle>
+          </div>
+
+          {/* Body */}
+          <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+            {weighingOnboardIndex !== null && (() => {
+              const cyl = selectedOnboardCylinders[weighingOnboardIndex];
+              if (!cyl) return null;
+              const isWeightInvalid = onboardingWeighingGross ? parseFloat(onboardingWeighingGross) < cyl.tareWeight : false;
+              const capacityError = onboardingWeighingGross ? parseFloat(onboardingWeighingGross) - cyl.tareWeight > cyl.capacity : false;
+
+              return (
+                <>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Cylinder</Label>
+                    <div className="flex items-center h-10 w-full rounded-md border border-input bg-accent px-3 py-2 text-sm font-mono font-bold text-foreground select-none pointer-events-none">
+                      {cyl.serialNumber} (Tare: {cyl.tareWeight} KG | Cap: {cyl.capacity} KG)
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Starting Gross Weight</Label>
+                    <div className="relative">
+                      <Input
+                        type="number"
+                        step="0.1"
+                        placeholder="Scale gross weight"
+                        value={onboardingWeighingGross}
+                        autoFocus
+                        onChange={(e) => setOnboardingWeighingGross(e.target.value)}
+                        className={`pr-8 h-10 text-sm ${isWeightInvalid || capacityError ? "border-rose-500" : ""}`}
+                      />
+                      <span className="absolute right-3 top-3 text-xs text-muted-foreground font-bold">KG</span>
+                    </div>
+                    {/* AG-CHANGE: Show calculated net weight dynamically inside onboarding weighing modal */}
+                    {onboardingWeighingGross && !isWeightInvalid && !capacityError && (
+                      <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold block mt-0.5 animate-in fade-in">
+                        Calculated Net Weight: {(parseFloat(onboardingWeighingGross) - cyl.tareWeight).toFixed(1)} KG
+                      </span>
+                    )}
+                    {isWeightInvalid && (
+                      <span className="text-[11px] text-rose-500 block mt-0.5">Below tare weight of {cyl.tareWeight} KG!</span>
+                    )}
+                    {capacityError && (
+                      <span className="text-[11px] text-rose-500 block mt-0.5">Net weight exceeds cylinder capacity of {cyl.capacity} KG!</span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Cylinder Serial Photo */}
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Cylinder Serial Photo</Label>
+                      <div className="border border-dashed border-border rounded-xl p-3 flex flex-col items-center justify-center min-h-[120px] relative bg-zinc-50 dark:bg-zinc-900/40">
+                        {cyl.isUploadingSerial ? (
+                          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                        ) : cyl.serialPhotoUrl ? (
+                          <div className="relative w-full h-full flex flex-col items-center">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={cyl.serialPhotoUrl} alt="Serial Capture" className="max-h-20 object-contain rounded-lg shadow-sm border" />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedOnboardCylinders((prev) => {
+                                  const copy = [...prev];
+                                  copy[weighingOnboardIndex] = {
+                                    ...copy[weighingOnboardIndex],
+                                    serialPhotoId: null,
+                                    serialPhotoUrl: null,
+                                  };
+                                  return copy;
+                                });
+                              }}
+                              className="absolute -top-1 -right-1 bg-red-100 hover:bg-red-200 text-red-600 rounded-full p-1 shadow-sm animate-in fade-in"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="cursor-pointer flex flex-col items-center text-center p-2 w-full h-full justify-center">
+                            <Plus className="h-5 w-5 text-muted-foreground mb-1" />
+                            <span className="text-[10px] text-muted-foreground font-bold">Capture Serial</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              className="hidden"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) handleOnboardFileUpload(weighingOnboardIndex, f, "SERIAL");
+                              }}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Scale Weight Photo */}
+                    <div className="space-y-2">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Scale Weight Photo</Label>
+                      <div className="border border-dashed border-border rounded-xl p-3 flex flex-col items-center justify-center min-h-[120px] relative bg-zinc-50 dark:bg-zinc-900/40">
+                        {cyl.isUploadingWeight ? (
+                          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                        ) : cyl.weightPhotoUrl ? (
+                          <div className="relative w-full h-full flex flex-col items-center">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={cyl.weightPhotoUrl} alt="Weight Capture" className="max-h-20 object-contain rounded-lg shadow-sm border" />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedOnboardCylinders((prev) => {
+                                  const copy = [...prev];
+                                  copy[weighingOnboardIndex] = {
+                                    ...copy[weighingOnboardIndex],
+                                    weightPhotoId: null,
+                                    weightPhotoUrl: null,
+                                  };
+                                  return copy;
+                                });
+                              }}
+                              className="absolute -top-1 -right-1 bg-red-100 hover:bg-red-200 text-red-600 rounded-full p-1 shadow-sm animate-in fade-in"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="cursor-pointer flex flex-col items-center text-center p-2 w-full h-full justify-center">
+                            <Plus className="h-5 w-5 text-muted-foreground mb-1" />
+                            <span className="text-[10px] text-muted-foreground font-bold">Capture Weight</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              className="hidden"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) handleOnboardFileUpload(weighingOnboardIndex, f, "WEIGHT");
+                              }}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+
+          {/* Footer */}
+          <div className="flex justify-end gap-3 px-5 py-4 border-t border-border shrink-0">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setIsOnboardWeighModalOpen(false)}
+              className="text-xs font-bold px-4 h-9"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={
+                weighingOnboardIndex === null ||
+                !onboardingWeighingGross ||
+                parseFloat(onboardingWeighingGross) < Number(selectedOnboardCylinders[weighingOnboardIndex]?.tareWeight ?? 0) ||
+                parseFloat(onboardingWeighingGross) - Number(selectedOnboardCylinders[weighingOnboardIndex]?.tareWeight ?? 0) > Number(selectedOnboardCylinders[weighingOnboardIndex]?.capacity ?? 0) ||
+                selectedOnboardCylinders[weighingOnboardIndex]?.isUploadingSerial ||
+                selectedOnboardCylinders[weighingOnboardIndex]?.isUploadingWeight ||
+                !selectedOnboardCylinders[weighingOnboardIndex]?.serialPhotoId ||
+                !selectedOnboardCylinders[weighingOnboardIndex]?.weightPhotoId
+              }
+              onClick={() => {
+                if (weighingOnboardIndex === null) return;
+                setSelectedOnboardCylinders((prev) => {
+                  const copy = [...prev];
+                  copy[weighingOnboardIndex].targetKg = parseFloat(onboardingWeighingGross);
+                  return copy;
+                });
+                setIsOnboardWeighModalOpen(false);
               }}
               className="text-xs font-bold bg-primary hover:bg-primary/90 text-white px-5 h-9"
             >
@@ -2603,8 +2879,8 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                         );
                       }}
                       className={`flex-1 py-1.5 px-3 text-xs font-bold rounded-lg transition-all ${!row.isSwapped
-                          ? "bg-white dark:bg-zinc-900 text-primary shadow-sm"
-                          : "text-muted-foreground hover:text-zinc-700 dark:text-muted-foreground dark:hover:text-zinc-200"
+                        ? "bg-white dark:bg-zinc-900 text-primary shadow-sm"
+                        : "text-muted-foreground hover:text-zinc-700 dark:text-muted-foreground dark:hover:text-zinc-200"
                         }`}
                     >
                       Keep In-Place
@@ -2631,8 +2907,8 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                         });
                       }}
                       className={`flex-1 py-1.5 px-3 text-xs font-bold rounded-lg transition-all ${row.isSwapped
-                          ? "bg-white dark:bg-zinc-900 text-primary shadow-sm"
-                          : "text-muted-foreground hover:text-zinc-700 dark:text-muted-foreground dark:hover:text-zinc-200"
+                        ? "bg-white dark:bg-zinc-900 text-primary shadow-sm"
+                        : "text-muted-foreground hover:text-zinc-700 dark:text-muted-foreground dark:hover:text-zinc-200"
                         }`}
                     >
                       Swap Cylinder
@@ -2938,9 +3214,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                 );
 
                 if (foundRow) {
-                  if (typeof window !== "undefined" && window.innerWidth < 768) {
-                    setMobileEditingCylinderId(foundRow.id);
-                  }
+                  setMobileEditingCylinderId(foundRow.id);
                   setIsScannerModalOpen(false);
                   setScannerInput("");
                 } else {
@@ -2987,20 +3261,6 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
           </div>
         </DialogContent>
       </Dialog>
-
-      {/* RULE DEV: 58mm Thermal Printer Receipt Modal */}
-      <WiwoThermalReceiptModal
-        open={printModalOpen}
-        onClose={() => {
-          setPrintModalOpen(false);
-          setAutoPrintActive(false);
-          if (isAfterSubmit) {
-            onSuccess();
-          }
-        }}
-        autoPrint={autoPrintActive}
-        data={printTxData}
-      />
     </div>
   );
 }

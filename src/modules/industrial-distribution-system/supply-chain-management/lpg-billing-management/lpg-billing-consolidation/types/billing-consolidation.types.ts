@@ -132,6 +132,9 @@ export interface ConsolidationMeterReading {
   net_amount: number;
   reading_status: "DRAFT" | "POSTED" | "CANCELLED";
   remarks: string | null;
+  // AG-CHANGE: Track if the meter reading has been adjusted by the reviewer
+  is_adjusted?: boolean;
+  original_current_reading?: number;
 }
 
 // ─── WIWO Header (lpg_wiwo_headers) ──────────────────────────────────────────
@@ -183,6 +186,9 @@ export interface ConsolidationWiwoDetail {
   vat_amount: number;
   net_amount: number;
   is_billable: 0 | 1;
+  // AG-CHANGE: Track if this specific cylinder's weights were adjusted by the reviewer
+  is_adjusted?: boolean;
+  original_returned_gross_weight_kg?: number | null;
   remarks: string | null;
 
   // --- Expanded relations ---

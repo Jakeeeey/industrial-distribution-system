@@ -301,6 +301,12 @@ function CylinderDetailModal({
                     {detail.returned_gross_weight_kg != null ? `${detail.returned_gross_weight_kg.toFixed(3)} ` : "—"}
                     {detail.returned_gross_weight_kg != null && <span className="text-xs font-medium text-muted-foreground">kg</span>}
                   </p>
+                  {/* AG-CHANGE: Show true original (pre-audit) gross when the cylinder has been adjusted */}
+                  {detail.is_adjusted && detail.original_returned_gross_weight_kg != null && (
+                    <p className="text-[9px] text-rose-500 dark:text-rose-400 font-semibold mt-0.5 line-through">
+                      Original: {detail.original_returned_gross_weight_kg.toFixed(3)} kg
+                    </p>
+                  )}
                 </div>
 
                 {/* LPG / Previous */}
@@ -438,8 +444,14 @@ function CylinderDetailModal({
                       <Label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
                         Original Gross (kg)
                       </Label>
+                      {/* AG-CHANGE: Show the true pre-audit original gross weight from the audit trail.
+                          Falls back to the current returned_gross_weight_kg if no prior adjustment exists. */}
                       <Input
-                        value={detail.returned_gross_weight_kg?.toFixed(3) ?? ""}
+                        value={
+                          detail.is_adjusted && detail.original_returned_gross_weight_kg != null
+                            ? detail.original_returned_gross_weight_kg.toFixed(3)
+                            : detail.returned_gross_weight_kg?.toFixed(3) ?? ""
+                        }
                         disabled
                         className="h-8 text-xs bg-zinc-100 dark:bg-zinc-800 text-muted-foreground"
                       />
@@ -560,11 +572,18 @@ function CylinderRowCard({
           <div className="h-7 w-7 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/30 flex items-center justify-center shrink-0">
             <Cylinder className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
           </div>
-          <div className="min-w-0">
-            <p className="text-xs font-black text-foreground truncate">{detail.serial_number}</p>
-            <p className="text-[9px] text-muted-foreground truncate">
-              {detail.product?.product_name ?? `Product #${detail.product_id}`}
-            </p>
+          <div className="min-w-0 flex items-center gap-2">
+            <div>
+              <p className="text-xs font-black text-foreground truncate">{detail.serial_number}</p>
+              <p className="text-[9px] text-muted-foreground truncate">
+                {detail.product?.product_name ?? `Product #${detail.product_id}`}
+              </p>
+            </div>
+            {detail.is_adjusted && (
+              <span className="text-[9px] font-bold uppercase tracking-wider text-amber-700 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 px-1.5 py-0.5 rounded shrink-0 select-none">
+                Adjusted
+              </span>
+            )}
           </div>
         </div>
 
@@ -572,9 +591,16 @@ function CylinderRowCard({
         <div className="hidden sm:flex items-center gap-3.5 text-xs font-mono shrink-0 mr-2 text-right">
           <div>
             <span className="text-[8px] text-muted-foreground uppercase block font-bold tracking-wider leading-none mb-0.5">Gross</span>
-            <span className="font-bold text-foreground text-[11px]">
-              {detail.returned_gross_weight_kg != null ? `${detail.returned_gross_weight_kg.toFixed(1)} kg` : "—"}
-            </span>
+            <div className="flex flex-col items-end">
+              <span className="font-bold text-foreground text-[11px]">
+                {detail.returned_gross_weight_kg != null ? `${detail.returned_gross_weight_kg.toFixed(1)} kg` : "—"}
+              </span>
+              {detail.is_adjusted && detail.original_returned_gross_weight_kg != null && (
+                <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 line-through leading-none mt-0.5">
+                  Orig: {detail.original_returned_gross_weight_kg.toFixed(1)}
+                </span>
+              )}
+            </div>
           </div>
           <div>
             <span className="text-[8px] text-muted-foreground uppercase block font-bold tracking-wider leading-none mb-0.5">Tare</span>
