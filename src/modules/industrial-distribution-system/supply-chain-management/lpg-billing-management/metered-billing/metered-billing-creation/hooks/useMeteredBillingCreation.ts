@@ -14,6 +14,7 @@ import {
   computeArbitration,
   calcGrossAmount,
   calcVatAmount,
+  calcNetAmount,
   generateTxNo,
   generateTxNoPlaceholder,
   generateReadingNo,
@@ -63,7 +64,8 @@ function defaultFormState(
       type === "ONBOARDING_BASELINE"
         ? ""
         : generateTxNoPlaceholder(type, siteId ?? null, today),
-    readingNo: generateReadingNo(),
+    // Developer Comment: Pass type to generate the correct MTR prefix (MTR-ONB or MTR-REG)
+    readingNo: generateReadingNo(type),
     transactionType: type,
     transactionDate: today,
     customerCode: "",
@@ -536,6 +538,10 @@ export function useMeteredBillingCreation(
     }
     if (!form.customerCode || !form.siteId) {
       setForm((f) => {
+        const prefix = f.transactionType === "ONBOARDING_BASELINE" ? "TXO-RB" : "TX-REG";
+        if (f.transactionNo && f.transactionNo.startsWith(prefix) && /^\d{6}$/.test(f.transactionNo.substring(prefix.length + 1))) {
+          return f;
+        }
         const placeholder = generateTxNoPlaceholder(
           f.transactionType,
           f.siteId,
@@ -562,6 +568,10 @@ export function useMeteredBillingCreation(
           seq
         );
         setForm((f) => {
+          const prefix = f.transactionType === "ONBOARDING_BASELINE" ? "TXO-RB" : "TX-REG";
+          if (f.transactionNo && f.transactionNo.startsWith(prefix) && /^\d{6}$/.test(f.transactionNo.substring(prefix.length + 1))) {
+            return f;
+          }
           if (f.transactionNo === newTxNo) return f;
           return { ...f, transactionNo: newTxNo };
         });
@@ -618,7 +628,10 @@ export function useMeteredBillingCreation(
         configLpgVapor: lpgVapor,
         configPsi: psi,
         configCorrectionFactor: cf,
-        readingNo: generateReadingNo(),
+        // Developer Comment: Generate a fresh 6-digit random transaction number for the new site
+        transactionNo: f.transactionType === "ONBOARDING_BASELINE" ? "" : generateTxNo(f.transactionType, siteId),
+        // Developer Comment: Pass current transaction type from form state to generate correct prefix
+        readingNo: generateReadingNo(f.transactionType),
         meteredReadingImageId: "",
         psiReadingImageId: "",
       }));
@@ -684,12 +697,19 @@ export function useMeteredBillingCreation(
     return computeArbitration(meteredKg, wiwoKg);
   }, [isOnboarding, meteredKg, wiwoKg]);
 
+  // Developer Comment: Using the VAT-inclusive model to compute:
+  // 1. Total (totalAmount) = billable_kg * pricePerKg
+  // 2. Vatable Sales (grossAmount) = Total / 1.12
+  // 3. VAT (vatAmount) = Total - Vatable Sales
+  // 4. Net Amount (netAmount) = Total
+  const totalAmount = isOnboarding
+    ? 0
+    : parseFloat((arbitration.billable_kg * form.pricePerKg).toFixed(2));
   const grossAmount = isOnboarding
     ? 0
-    : calcGrossAmount(arbitration.billable_kg, form.pricePerKg);
-  const vatAmount = isOnboarding ? 0 : calcVatAmount(grossAmount, form.vatRate);
-  // Net amount is VAT-inclusive, matching the gross amount (VAT is not added on top)
-  const netAmount = isOnboarding ? 0 : grossAmount;
+    : calcGrossAmount(arbitration.billable_kg, form.pricePerKg, true, form.vatRate);
+  const vatAmount = isOnboarding ? 0 : calcVatAmount(grossAmount, form.vatRate, true, totalAmount);
+  const netAmount = isOnboarding ? 0 : calcNetAmount(grossAmount, vatAmount, true, totalAmount);
 
   const hasVariance = !isOnboarding && Number(arbitration.variance_kg) > 0;
 

@@ -233,7 +233,7 @@ export function CreateBillingWorkspace({
 
   // ─── Handlers ─────────────────────────────────────────────────────────────
   const handleSelectType = (type: "ROUTINE" | "ONBOARDING") => {
-    if (type === "ONBOARDING" && hasDraftOnboarding) return;
+    if (type === "ONBOARDING" && (alreadyOnboarded || hasDraftOnboarding)) return;
     if (type === "ROUTINE" && (!alreadyOnboarded || hasDraftOnboarding)) return;
     setTransactionType(type);
   };
@@ -390,9 +390,9 @@ export function CreateBillingWorkspace({
             <button
               type="button"
               onClick={() => handleSelectType("ONBOARDING")}
-              disabled={hasDraftOnboarding || checkingOnboarded}
+              disabled={alreadyOnboarded || hasDraftOnboarding || checkingOnboarded}
               className={`group relative p-4 sm:p-5 border-2 rounded-2xl text-left transition-all duration-200 ${
-                hasDraftOnboarding
+                (alreadyOnboarded || hasDraftOnboarding)
                   ? "border-border bg-muted/30 opacity-60 cursor-not-allowed"
                   : transactionType === "ONBOARDING"
                     ? "border-emerald-500 bg-emerald-55 dark:bg-emerald-950/30 ring-2 ring-emerald-500/20 shadow-lg shadow-emerald-500/10"
@@ -588,19 +588,19 @@ export function CreateBillingWorkspace({
 
                     <div className="space-y-0.5 pl-9">
                       <p className="text-[11px] text-muted-foreground">
-                        📅 {inv.invoice_date}
+                        {inv.invoice_date}
                       </p>
                       <p className="text-[11px] font-semibold text-foreground">
                         ₱{inv.total_amount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </p>
-                      <span className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-full ${inv.transaction_status === "POSTED"
+                      {/* <span className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-full ${inv.transaction_status === "POSTED"
                         ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
                         : inv.transaction_status === "CANCELLED"
                           ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
                           : "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400"
                         }`}>
                         {inv.transaction_status}
-                      </span>
+                      </span> */}
                     </div>
                   </button>
                 );
