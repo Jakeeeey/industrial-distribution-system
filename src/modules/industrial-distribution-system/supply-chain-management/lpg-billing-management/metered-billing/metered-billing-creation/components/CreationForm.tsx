@@ -111,14 +111,6 @@ const TX_TYPE_LABELS: Record<
 type MobileTab = "details" | "readings" | "review";
 
 export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFlowType, salesInvoice, perInvoice = true, autoPeriodFrom = true, currentUserId = null }: Props) {
-  const [activeTab, setActiveTab] = useState<MobileTab>("details");
-  // RULE DEV: Controls visibility of the 58mm thermal receipt print preview modal
-  const [printModalOpen, setPrintModalOpen] = useState(false);
-  // RULE DEV: Track whether printing is triggered automatically after a successful submission
-  const [isAfterSubmit, setIsAfterSubmit] = useState(false);
-  const [submittedTxNo, setSubmittedTxNo] = useState<string | null>(null);
-  const [autoPrintActive, setAutoPrintActive] = useState(false);
-
   const {
     form,
     setForm,
@@ -147,6 +139,50 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
     meterDirection,
     pressureLine,
   } = useMeteredBillingCreation(transactionHeader, initialFlowType, salesInvoice, currentUserId);
+
+  const [activeTab, setActiveTab] = useState<MobileTab>("details");
+  // RULE DEV: Print receipt modal states (active when onboarding is true)
+  const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [isAfterSubmit, setIsAfterSubmit] = useState(false);
+  const [submittedTxNo, setSubmittedTxNo] = useState<string | null>(null);
+  const [autoPrintActive, setAutoPrintActive] = useState(false);
+
+  // Active site cylinders (fetched for printing onboarding baseline cylinders)
+  interface ActiveSiteCylinder {
+    id: number;
+    site_cylinder_status?: string | null;
+    previous_lpg_kg?: number | null;
+    cylinder_asset?: {
+      serial_number: string;
+      tare_weight: number;
+      product?: {
+        unit_of_measurement_count?: number | null;
+      } | null;
+    } | null;
+  }
+  const [activeSiteCylinders, setActiveSiteCylinders] = useState<ActiveSiteCylinder[]>([]);
+
+  // Added comments to clarify that hook declaration was moved to resolve 'used before declaration' TypeScript errors
+  useEffect(() => {
+    if (!form.siteId) {
+      setActiveSiteCylinders([]);
+      return;
+    }
+    const fetchCylinders = async () => {
+      try {
+        const res = await fetch(`/api/ids/scm/lpg-billing-management/wiwo-billing?type=site-cylinders&siteId=${form.siteId}`);
+        const json = await res.json();
+        if (json.data) {
+          setActiveSiteCylinders(json.data);
+        } else if (Array.isArray(json)) {
+          setActiveSiteCylinders(json);
+        }
+      } catch (err) {
+        console.error("Failed to fetch site cylinders", err);
+      }
+    };
+    fetchCylinders();
+  }, [form.siteId]);
 
   // commented out for now might need it later
   // const getNextDay = (dateString: string | undefined | null): string => {
@@ -255,9 +291,13 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
         }));
       }
 
-      setIsAfterSubmit(true);
-      setAutoPrintActive(true);
-      setPrintModalOpen(true);
+      if (isOnboarding) {
+        setIsAfterSubmit(true);
+        setAutoPrintActive(true);
+        setPrintModalOpen(true);
+      } else {
+        onSuccess();
+      }
     } else {
       toast.error("Failed to submit transaction");
     }
@@ -372,18 +412,20 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
           >
             Cancel
           </Button>
-          {/* RULE DEV: Print Receipt button — opens the 58mm thermal receipt preview modal */}
-          <Button
-            variant="outline"
-            onClick={() => {
-              setAutoPrintActive(true);
-              setPrintModalOpen(true);
-            }}
-            className="h-10 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 gap-1.5"
-          >
-            <Printer className="h-4 w-4" />
-            Print Receipt
-          </Button>
+          {/* Print Receipt button (only for onboarding baseline setup) */}
+          {isOnboarding && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAutoPrintActive(true);
+                setPrintModalOpen(true);
+              }}
+              className="h-10 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 gap-1.5"
+            >
+              <Printer className="h-4 w-4" />
+              Print Receipt
+            </Button>
+          )}
           <Button
             onClick={handleSubmit}
             disabled={submitting || !canPost}
@@ -413,17 +455,19 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
         >
           Cancel
         </Button>
-        <Button
-          variant="outline"
-          onClick={() => {
-            setAutoPrintActive(true);
-            setPrintModalOpen(true);
-          }}
-          className="flex-1 h-10 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 font-medium gap-1.5"
-        >
-          <Printer className="h-4 w-4" />
-          Print Receipt
-        </Button>
+        {isOnboarding && (
+          <Button
+            variant="outline"
+            onClick={() => {
+              setAutoPrintActive(true);
+              setPrintModalOpen(true);
+            }}
+            className="flex-1 h-10 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 font-medium gap-1.5"
+          >
+            <Printer className="h-4 w-4" />
+            Print Receipt
+          </Button>
+        )}
       </div>
 
       {/* Desktop border bottom (only visible on desktop) */}
@@ -668,37 +712,43 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
 
                 <div className="flex flex-col md:flex-row gap-8 bg-zinc-50/50 dark:bg-zinc-800/20 p-5 rounded-xl border border-zinc-100 dark:border-zinc-800/50">
                   <div className="flex-1 space-y-5 max-w-sm">
-                    <div className="space-y-2.5">
-                      <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
-                        Previous Reading
-                      </Label>
-                      <Input
-                        type="number"
-                        value={form.previousReading}
-                        onChange={(e) =>
-                          setForm((f) => ({
-                            ...f,
-                            previousReading: Number(e.target.value),
-                          }))
-                        }
-                        onWheel={(e) => e.currentTarget.blur()}
-                        disabled
-                        className="font-mono bg-white dark:bg-zinc-900"
-                      />
-                    </div>
+                    {/* DEV-CHANGE: Hide previous reading field during onboarding baseline creation */}
+                    {!isOnboarding && (
+                      <div className="space-y-2.5">
+                        <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+                          Previous Reading
+                        </Label>
+                        <Input
+                          type="number"
+                          value={form.previousReading}
+                          onChange={(e) =>
+                            setForm((f) => ({
+                              ...f,
+                              previousReading: Number(e.target.value),
+                            }))
+                          }
+                          onWheel={(e) => e.currentTarget.blur()}
+                          disabled
+                          className="font-mono bg-white dark:bg-zinc-900"
+                        />
+                      </div>
+                    )}
                     <div className="space-y-2.5">
                       <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
                         Current Reading
                       </Label>
+                      {/* DEV-CHANGE: Allow clearing the zero value so users do not have to type and then delete the leading zero */}
                       <Input
                         type="number"
-                        value={form.currentReading}
-                        onChange={(e) =>
+                        value={form.currentReading === 0 ? "" : form.currentReading}
+                        placeholder="0"
+                        onChange={(e) => {
+                          const val = e.target.value;
                           setForm((f) => ({
                             ...f,
-                            currentReading: Number(e.target.value),
-                          }))
-                        }
+                            currentReading: val === "" ? 0 : Number(val),
+                          }));
+                        }}
                         onWheel={(e) => e.currentTarget.blur()}
                         className="font-mono bg-white dark:bg-zinc-900"
                       />
@@ -1074,7 +1124,7 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
         )}
       </div>
 
-      {/* RULE DEV: 58mm Thermal Printer Receipt Modal — triggered by Print Receipt button */}
+      {/* 58mm Thermal Printer Receipt Modal — triggered by Print Receipt button for onboarding baseline setup */}
       <ThermalReceiptModal
         open={printModalOpen}
         onClose={() => {
@@ -1110,6 +1160,13 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
           vatRate: form.vatRate,
           // status: form.status,
           isOnboarding: isOnboarding,
+          // Map active site cylinders to the printable format
+          siteCylinders: activeSiteCylinders.map(sc => ({
+            serialNumber: sc.cylinder_asset?.serial_number || "—",
+            tareWeight: Number(sc.cylinder_asset?.tare_weight || sc.previous_lpg_kg || 0),
+            capacity: Number(sc.cylinder_asset?.product?.unit_of_measurement_count || 50),
+            status: sc.site_cylinder_status || "CONNECTED",
+          })),
         } satisfies ThermalReceiptData}
       />
     </div>

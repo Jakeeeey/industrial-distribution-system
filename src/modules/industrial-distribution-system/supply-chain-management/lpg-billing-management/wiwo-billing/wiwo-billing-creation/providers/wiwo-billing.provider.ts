@@ -648,12 +648,9 @@ export async function processOnboardingBaseline(payload: {
   salesInvoiceNo?: string | null;
   userId?: number;
 }): Promise<MeteredWiwoTransaction> {
-  // 1. Monogamy and Photo validation
-  // AG-CHANGE: Enforced serial and weight photo capture for onboarding baseline cylinders
+  // 1. Monogamy validation
+  // DEV-CHANGE: Only serial (cylinder asset selection/verification) is required for onboarding. Photo evidence is not enforced.
   for (const cyl of payload.cylinders) {
-    if (!cyl.serialPhotoId || !cyl.weightPhotoId) {
-      throw new Error(`Serial and weight photos are required for onboarding cylinder asset ${cyl.cylinderAssetId}.`);
-    }
     // IDS-CHANGE: Pass siteId to allow idempotent retries if the cylinder is already connected at the same site
     const isSingle = await verifyCylinderMonogamy(cyl.cylinderAssetId, payload.siteId);
     if (!isSingle) {
