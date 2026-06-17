@@ -15,10 +15,13 @@ import {
   CheckCircle2,
   Loader2,
   ScanBarcode,
-  ChevronRight
+  ChevronRight,
+  Printer
 } from "lucide-react";
 import type { CylinderAsset, CustomerSiteCylinder, MeteredWiwoTransaction, CustomerSite, MeterReading, WiwoHeader, LpgTransactionHeader } from "../types";
 import { toast } from "sonner";
+import WiwoThermalReceiptModal from "./WiwoThermalReceiptModal";
+import type { WiwoThermalReceiptData } from "./WiwoThermalReceiptModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -195,6 +198,12 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [isExitWarningOpen, setIsExitWarningOpen] = useState(false);
   const [cancelledReason, setCancelledReason] = useState("");
+
+  // RULE DEV: Print receipt modal states
+  const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [isAfterSubmit, setIsAfterSubmit] = useState(false);
+  const [submittedTxNo, setSubmittedTxNo] = useState<string | null>(null);
+  const [autoPrintActive, setAutoPrintActive] = useState(false);
 
   // Combobox Search States
   const [siteSearch, setSiteSearch] = useState("");
@@ -1000,7 +1009,17 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
 
       toast.success("Transaction saved and posted successfully!");
       clearWeighingCache(selectedTxId);
-      onSuccess();
+      if (data.data?.transaction_no) {
+        setSubmittedTxNo(data.data.transaction_no);
+      }
+      setIsAfterSubmit(true);
+      // DEV-CHANGE: Bypass printing flow if onboarding
+      if (flowType !== "ONBOARDING") {
+        setAutoPrintActive(true);
+        setPrintModalOpen(true);
+      } else {
+        onSuccess();
+      }
     } catch (err) {
       const error = err as Error;
       toast.error(error.message || "An error occurred.");
@@ -1066,6 +1085,101 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   // IDS-CHANGE: VAT is absorbed / inclusive: total amount = gross = vatable amount
   const finalNet = isViewMode ? txDetail.gross_amount : finalGross;
   const finalBillableSource = isViewMode ? txDetail.billable_source : (meteredKg >= totalWiwoKg ? "METERED" : "WIWO");
+
+  // RULE DEV: Map printer data for WIWO receipt
+  const siteName = selectedSite?.site_name || transactionHeader?.site?.site_name || null;
+
+  const printReturnedCylinders = isViewMode
+    ? (((txDetail?.wiwo_header_id as unknown as WiwoHeader)?.details ?? [])
+      .filter((d) => d.line_type === "CONSUMPTION_RETURN")
+      .map((d) => ({
+        serialNumber: d.serial_number,
+        tareWeight: d.tare_weight_kg,
+        previousLpgKg: d.previous_lpg_kg,
+        returnedGrossWeight: d.returned_gross_weight_kg ?? 0,
+        consumedLpgKg: d.consumed_lpg_kg,
+      })))
+    : calculatedReturnedCylinders
+      .filter((c) => c.returnedGross > 0)
+      .map((c) => ({
+        serialNumber: c.cylinder_asset?.serial_number || "",
+        tareWeight: c.tare,
+        previousLpgKg: c.opening,
+        returnedGrossWeight: c.returnedGross,
+        consumedLpgKg: c.consumed,
+      }));
+
+  const printDeployedCylinders = isViewMode
+    ? (((txDetail?.wiwo_header_id as unknown as WiwoHeader)?.details ?? [])
+      .filter((d) => d.line_type === "NEW_DEPLOYMENT")
+      .map((d) => ({
+        serialNumber: d.serial_number,
+        tareWeight: d.tare_weight_kg,
+        deployedGrossWeight: d.previous_lpg_kg,
+      })))
+    : flowType === "ONBOARDING"
+      ? selectedOnboardCylinders.map((c) => ({
+        serialNumber: c.serialNumber,
+        tareWeight: c.tareWeight,
+        deployedGrossWeight: Number(c.targetKg),
+      }))
+      : selectedReplacementCylinders.map((c) => ({
+        serialNumber: c.serialNumber,
+        tareWeight: c.tareWeight,
+        deployedGrossWeight: Number(c.targetKg),
+      }));
+
+  const printTxType = isViewMode
+    ? txDetail?.transaction_type === "ONBOARDING_BASELINE"
+      ? "Onboarding Baseline"
+      : txDetail?.transaction_type === "REGULAR_BILLING"
+        ? "Regular Billing"
+        : "Adjustment"
+    : flowType === "ONBOARDING"
+      ? "Onboarding Baseline"
+      : "Regular Billing";
+
+  const printTxData: WiwoThermalReceiptData = {
+    transactionNo: isViewMode
+      ? txDetail?.transaction_no || ""
+      : submittedTxNo || txDetail?.transaction_no || "",
+    transactionDate: isViewMode ? txDetail?.transaction_date || "" : transactionDate,
+    transactionType: printTxType,
+    customerName: isViewMode
+      ? txDetail?.customer?.customer_name || txDetail?.customer_code || "—"
+      : transactionHeader?.customer_name || customerCode || "—",
+    siteName: siteName,
+    salesInvoiceNo: isViewMode
+      ? txDetail?.sales_invoice_no
+      : salesInvoice?.invoice_no || null,
+    salesOrderNo: isViewMode
+      ? txDetail?.sales_order_no
+      : null,
+    previousReading: isViewMode
+      ? txDetail?.meter_reading_id
+        ? (txDetail.meter_reading_id as unknown as MeterReading).previous_reading
+        : null
+      : previousReading,
+    currentReading: isViewMode
+      ? txDetail?.meter_reading_id
+        ? (txDetail.meter_reading_id as unknown as MeterReading).current_reading
+        : null
+      : currentReading,
+    meteredKg: isViewMode ? txDetail?.metered_kg : meteredKg,
+    wiwoKg: isViewMode ? txDetail?.wiwo_kg || 0 : totalWiwoKg,
+    billableKg: finalBillableKg,
+    billableSource: finalBillableSource as "METERED" | "WIWO" | "NONE",
+    pricePerKg: finalPricePerKg,
+    grossAmount: finalGross,
+    vatAmount: finalVat,
+    netAmount: finalNet,
+    returnedCylinders: printReturnedCylinders,
+    deployedCylinders: printDeployedCylinders,
+    isOnboarding: isViewMode
+      ? txDetail?.transaction_type === "ONBOARDING_BASELINE"
+      : flowType === "ONBOARDING",
+    remarks: isViewMode ? txDetail?.remarks : remarks,
+  };
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -1901,7 +2015,21 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
             Cancel & Rollback
           </Button>
         )}
-
+        {/* DEV-CHANGE: Hide print button if onboarding */}
+        {flowType !== "ONBOARDING" && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setAutoPrintActive(false);
+              setPrintModalOpen(true);
+            }}
+            className="h-11 px-6 border-zinc-200 text-foreground hover:bg-accent transition-all active:scale-95 font-semibold gap-1.5"
+          >
+            <Printer className="h-4 w-4" />
+            Print Receipt
+          </Button>
+        )}
         {!isReadOnly && !isViewMode && (
           <Button
             onClick={handleSubmit}
@@ -3261,6 +3389,20 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* RULE DEV: 58mm Thermal Printer Receipt Modal */}
+      <WiwoThermalReceiptModal
+        open={printModalOpen}
+        onClose={() => {
+          setPrintModalOpen(false);
+          setAutoPrintActive(false);
+          if (isAfterSubmit) {
+            onSuccess();
+          }
+        }}
+        autoPrint={autoPrintActive}
+        data={printTxData}
+      />
     </div>
   );
 }

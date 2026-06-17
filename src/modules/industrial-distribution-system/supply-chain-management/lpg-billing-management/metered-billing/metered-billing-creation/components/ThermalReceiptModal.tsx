@@ -272,10 +272,15 @@ function buildReceiptText(company: CompanyProfile, data: ThermalReceiptData): st
   lines.push(dashes);
 
   // 4. Readings (Rendered in monospace details block)
-  lines.push(formatLine("Prev. Reading:", data.previousReading.toFixed(4)));
-  lines.push(formatLine("Curr. Reading:", data.currentReading.toFixed(4)));
-  lines.push(formatLine("Consumption:", (data.currentReading - data.previousReading).toFixed(4)));
-  lines.push(formatLine("Metered KG:", `${data.meteredKg.toFixed(4)} kg`));
+  if (data.isOnboarding) {
+    // Developer Comment: Print only the baseline target index during onboarding setup
+    lines.push(formatLine("Baseline Reading:", data.currentReading.toFixed(4)));
+  } else {
+    lines.push(formatLine("Prev. Reading:", data.previousReading.toFixed(4)));
+    lines.push(formatLine("Curr. Reading:", data.currentReading.toFixed(4)));
+    lines.push(formatLine("Consumption:", (data.currentReading - data.previousReading).toFixed(4)));
+    lines.push(formatLine("Metered KG:", `${data.meteredKg.toFixed(4)} kg`));
+  }
 
   lines.push(dashes);
 
@@ -495,7 +500,7 @@ export function ThermalReceiptModal({ open, onClose, data, autoPrint = false }: 
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-sm w-full p-0 overflow-hidden rounded-2xl">
+      <DialogContent className="max-w-sm w-full p-0 overflow-hidden rounded-2xl" showCloseButton={false}>
         {/* ── Modal Header ── */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/40">
           <div className="flex items-center gap-2">
