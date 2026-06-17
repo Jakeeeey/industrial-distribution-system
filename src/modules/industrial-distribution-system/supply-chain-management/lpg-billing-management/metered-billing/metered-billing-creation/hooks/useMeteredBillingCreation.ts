@@ -83,7 +83,8 @@ function defaultFormState(
     configPsi: 10.0,
     configCorrectionFactor: 14.7,
     billingPeriodFrom: "",
-    billingPeriodTo: "",
+    // DEV-CHANGE: Default billingPeriodTo (Current Transaction Date) to today's date so it is not blank by default.
+    billingPeriodTo: today,
     meteredReadingImageId: "",
     psiReadingImageId: "",
     transaction_header_id: null,

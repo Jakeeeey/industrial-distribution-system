@@ -72,6 +72,12 @@ export interface ThermalReceiptData {
   // Status
   // status: string;
   isOnboarding: boolean;
+  siteCylinders?: Array<{
+    serialNumber: string;
+    tareWeight: number;
+    capacity: number;
+    status: string;
+  }>;
 }
 
 interface ThermalReceiptModalProps {
@@ -272,6 +278,17 @@ function buildReceiptText(company: CompanyProfile, data: ThermalReceiptData): st
   lines.push(formatLine("Metered KG:", `${data.meteredKg.toFixed(4)} kg`));
 
   lines.push(dashes);
+
+  // 4.5. Onboarding Connected Cylinders
+  if (data.isOnboarding && data.siteCylinders && data.siteCylinders.length > 0) {
+    lines.push(formatCenter("--- CONNECTED CYLINDERS ---"));
+    data.siteCylinders.forEach((cyl) => {
+      lines.push(`SN: ${cyl.serialNumber}`);
+      lines.push(formatLine("  Status:", cyl.status));
+      lines.push(formatLine("  Tare | Capacity:", `${cyl.tareWeight.toFixed(1)}kg | ${cyl.capacity}kg`));
+    });
+    lines.push(dashes);
+  }
 
   // 5. Item table Header
   lines.push(formatItemLine("Item", "Qty", "Total"));
