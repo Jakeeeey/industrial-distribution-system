@@ -21,11 +21,11 @@ import {
   Camera,
   Settings2,
   Lock,
-  // Printer,
+  Printer,
   // Activity,
 } from "lucide-react";
-// import { ThermalReceiptModal } from "./ThermalReceiptModal";
-// import type { ThermalReceiptData } from "./ThermalReceiptModal";
+import { ThermalReceiptModal } from "./ThermalReceiptModal";
+import type { ThermalReceiptData } from "./ThermalReceiptModal";
 import { MeteredReadingPanel } from "./MeteredReadingPanel";
 import { VariancePanel } from "./VariancePanel";
 import { MeteredBillingSummaryCard } from "./MeteredBillingSummaryCard";
@@ -111,13 +111,6 @@ const TX_TYPE_LABELS: Record<
 type MobileTab = "details" | "readings" | "review";
 
 export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFlowType, salesInvoice, perInvoice = true, autoPeriodFrom = true, currentUserId = null }: Props) {
-  const [activeTab, setActiveTab] = useState<MobileTab>("details");
-  // DEV-CHANGE: Printing state variables commented out as printing is bypassed (going to WIWO before printing)
-  // const [printModalOpen, setPrintModalOpen] = useState(false);
-  // const [isAfterSubmit, setIsAfterSubmit] = useState(false);
-  // const [submittedTxNo, setSubmittedTxNo] = useState<string | null>(null);
-  // const [autoPrintActive, setAutoPrintActive] = useState(false);
-
   const {
     form,
     setForm,
@@ -146,6 +139,50 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
     meterDirection,
     pressureLine,
   } = useMeteredBillingCreation(transactionHeader, initialFlowType, salesInvoice, currentUserId);
+
+  const [activeTab, setActiveTab] = useState<MobileTab>("details");
+  // RULE DEV: Print receipt modal states (active when onboarding is true)
+  const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [isAfterSubmit, setIsAfterSubmit] = useState(false);
+  const [submittedTxNo, setSubmittedTxNo] = useState<string | null>(null);
+  const [autoPrintActive, setAutoPrintActive] = useState(false);
+
+  // Active site cylinders (fetched for printing onboarding baseline cylinders)
+  interface ActiveSiteCylinder {
+    id: number;
+    site_cylinder_status?: string | null;
+    previous_lpg_kg?: number | null;
+    cylinder_asset?: {
+      serial_number: string;
+      tare_weight: number;
+      product?: {
+        unit_of_measurement_count?: number | null;
+      } | null;
+    } | null;
+  }
+  const [activeSiteCylinders, setActiveSiteCylinders] = useState<ActiveSiteCylinder[]>([]);
+
+  // Added comments to clarify that hook declaration was moved to resolve 'used before declaration' TypeScript errors
+  useEffect(() => {
+    if (!form.siteId) {
+      setActiveSiteCylinders([]);
+      return;
+    }
+    const fetchCylinders = async () => {
+      try {
+        const res = await fetch(`/api/ids/scm/lpg-billing-management/wiwo-billing?type=site-cylinders&siteId=${form.siteId}`);
+        const json = await res.json();
+        if (json.data) {
+          setActiveSiteCylinders(json.data);
+        } else if (Array.isArray(json)) {
+          setActiveSiteCylinders(json);
+        }
+      } catch (err) {
+        console.error("Failed to fetch site cylinders", err);
+      }
+    };
+    fetchCylinders();
+  }, [form.siteId]);
 
   // commented out for now might need it later
   // const getNextDay = (dateString: string | undefined | null): string => {
@@ -247,15 +284,20 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
       toast.success(isOnboarding ? "Baseline recorded successfully" : "Billing saved successfully");
 
       if (createdTx.transaction_no) {
-        // setSubmittedTxNo(createdTx.transaction_no || null);
+        setSubmittedTxNo(createdTx.transaction_no || null);
         setForm((f) => ({
           ...f,
           transactionNo: createdTx.transaction_no || "",
         }));
       }
 
-      // DEV-CHANGE: Bypass printing flow as we go to WIWO before printing. Call onSuccess directly.
-      onSuccess();
+      if (isOnboarding) {
+        setIsAfterSubmit(true);
+        setAutoPrintActive(true);
+        setPrintModalOpen(true);
+      } else {
+        onSuccess();
+      }
     } else {
       toast.error("Failed to submit transaction");
     }
@@ -370,7 +412,20 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
           >
             Cancel
           </Button>
-          {/* DEV-CHANGE: Print Receipt button removed since we go to WIWO before printing */}
+          {/* Print Receipt button (only for onboarding baseline setup) */}
+          {isOnboarding && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAutoPrintActive(true);
+                setPrintModalOpen(true);
+              }}
+              className="h-10 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 gap-1.5"
+            >
+              <Printer className="h-4 w-4" />
+              Print Receipt
+            </Button>
+          )}
           <Button
             onClick={handleSubmit}
             disabled={submitting || !canPost}
@@ -400,7 +455,19 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
         >
           Cancel
         </Button>
-        {/* DEV-CHANGE: Print Receipt button removed since we go to WIWO before printing */}
+        {isOnboarding && (
+          <Button
+            variant="outline"
+            onClick={() => {
+              setAutoPrintActive(true);
+              setPrintModalOpen(true);
+            }}
+            className="flex-1 h-10 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 font-medium gap-1.5"
+          >
+            <Printer className="h-4 w-4" />
+            Print Receipt
+          </Button>
+        )}
       </div>
 
       {/* Desktop border bottom (only visible on desktop) */}
@@ -1057,7 +1124,51 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
         )}
       </div>
 
-      {/* DEV-CHANGE: ThermalReceiptModal removed since we go to WIWO before printing */}
+      {/* 58mm Thermal Printer Receipt Modal — triggered by Print Receipt button for onboarding baseline setup */}
+      <ThermalReceiptModal
+        open={printModalOpen}
+        onClose={() => {
+          setPrintModalOpen(false);
+          setAutoPrintActive(false);
+          if (isAfterSubmit) {
+            onSuccess();
+          }
+        }}
+        autoPrint={autoPrintActive}
+        data={{
+          transactionNo: submittedTxNo || form.transactionNo,
+          transactionDate: form.transactionDate,
+          transactionType: form.transactionType === "ONBOARDING_BASELINE"
+            ? "Onboarding Baseline"
+            : form.transactionType === "REGULAR_BILLING"
+              ? "Regular Billing"
+              : "Adjustment",
+          customerName: customerName || form.customerCode || "—",
+          siteName: form.siteName,
+          salesInvoiceNo: salesInvoice?.sales_invoice_no || salesInvoice?.invoice_no || form.salesInvoiceNo,
+          salesOrderNo: salesInvoice?.sales_order_no || form.salesOrderNo,
+          previousReading: form.previousReading,
+          currentReading: form.currentReading,
+          billingPeriodFrom: form.billingPeriodFrom,
+          billingPeriodTo: form.billingPeriodTo,
+          meteredKg: meteredKg,
+          billableKg: arbitration.billable_kg,
+          pricePerKg: form.pricePerKg,
+          grossAmount: grossAmount,
+          vatAmount: vatAmount,
+          netAmount: netAmount,
+          vatRate: form.vatRate,
+          // status: form.status,
+          isOnboarding: isOnboarding,
+          // Map active site cylinders to the printable format
+          siteCylinders: activeSiteCylinders.map(sc => ({
+            serialNumber: sc.cylinder_asset?.serial_number || "—",
+            tareWeight: Number(sc.cylinder_asset?.tare_weight || sc.previous_lpg_kg || 0),
+            capacity: Number(sc.cylinder_asset?.product?.unit_of_measurement_count || 50),
+            status: sc.site_cylinder_status || "CONNECTED",
+          })),
+        } satisfies ThermalReceiptData}
+      />
     </div>
   );
 }
