@@ -30,7 +30,7 @@ import type { LpgTransactionHeader } from "../types";
 // AG-CHANGE: Format ISO date/datetime to readable "Jun 13, 2026" robustly
 const formatDate = (iso?: string | null) => {
   if (!iso) return "—";
-  
+
   // Try standard parsing first
   const parsed = new Date(iso);
   if (!isNaN(parsed.getTime())) {
@@ -55,7 +55,7 @@ const formatDate = (iso?: string | null) => {
         });
       }
     }
-  } catch {}
+  } catch { }
 
   return iso; // fallback to raw string if completely unparseable
 };
@@ -121,7 +121,7 @@ export function CreateBillingWorkspace({
           setDraftTransactionNo(null);
         }
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setCheckingOnboarding(false));
   }, [header.customer_site_id]);
 
@@ -136,7 +136,7 @@ export function CreateBillingWorkspace({
     )
       .then((r) => r.json())
       .then((json) => setInvoices(json.data || []))
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setLoadingInvoices(false));
   }, [step, header.customer_id]);
 
@@ -214,18 +214,15 @@ export function CreateBillingWorkspace({
           {/* Step Indicator — compact on mobile (dots only), labels on sm+ */}
           <div className="flex items-center gap-2 shrink-0 pt-0.5">
             {/* Step 1 dot */}
-            <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-black transition-all ${
-              step > 1 ? "bg-emerald-500 text-white" : step === 1 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-            }`}>
+            <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-black transition-all ${step > 1 ? "bg-emerald-500 text-white" : step === 1 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+              }`}>
               {step > 1 ? "✓" : "1"}
             </div>
-            <div className={`h-px w-4 sm:w-6 transition-colors duration-300 ${
-              step > 1 ? "bg-emerald-400" : "bg-border"
-            }`} />
+            <div className={`h-px w-4 sm:w-6 transition-colors duration-300 ${step > 1 ? "bg-emerald-400" : "bg-border"
+              }`} />
             {/* Step 2 dot */}
-            <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-black transition-all ${
-              step === 2 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-            }`}>
+            <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-black transition-all ${step === 2 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+              }`}>
               2
             </div>
             {/* Labels only on sm+ */}
@@ -257,21 +254,19 @@ export function CreateBillingWorkspace({
               type="button"
               onClick={() => handleSelectType("ROUTINE")}
               disabled={!alreadyOnboarded || hasDraftOnboarding || checkingOnboarding}
-              className={`group relative p-4 sm:p-5 border-2 rounded-2xl text-left transition-all duration-200 ${
-                (!alreadyOnboarded || hasDraftOnboarding)
-                  ? "border-border bg-muted/30 opacity-60 cursor-not-allowed"
-                  : transactionType === "ROUTINE"
+              className={`group relative p-4 sm:p-5 border-2 rounded-2xl text-left transition-all duration-200 ${(!alreadyOnboarded || hasDraftOnboarding)
+                ? "border-border bg-muted/30 opacity-60 cursor-not-allowed"
+                : transactionType === "ROUTINE"
                   ? "border-primary bg-primary/10 ring-2 ring-primary/20 shadow-lg shadow-primary/10"
                   : "border-border hover:border-primary/40 hover:bg-accent/60"
-              }`}
+                }`}
             >
               {/* Selection Indicator */}
               <div
-                className={`absolute top-4 right-4 h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${
-                  transactionType === "ROUTINE"
-                    ? "border-primary bg-primary"
-                    : "border-muted-foreground/40"
-                }`}
+                className={`absolute top-4 right-4 h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${transactionType === "ROUTINE"
+                  ? "border-primary bg-primary"
+                  : "border-muted-foreground/40"
+                  }`}
               >
                 {transactionType === "ROUTINE" && (
                   <CheckCircle2 className="h-3 w-3 text-white" />
@@ -287,19 +282,17 @@ export function CreateBillingWorkspace({
 
               {/* Icon + Content */}
               <div
-                className={`h-10 w-10 rounded-xl flex items-center justify-center mb-4 transition-colors ${
-                  transactionType === "ROUTINE"
-                    ? "bg-primary/20 text-primary"
-                    : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
-                }`}
+                className={`h-10 w-10 rounded-xl flex items-center justify-center mb-4 transition-colors ${transactionType === "ROUTINE"
+                  ? "bg-primary/20 text-primary"
+                  : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
+                  }`}
               >
                 <RefreshCw className="h-5 w-5" />
               </div>
 
               <h3
-                className={`font-bold text-base mb-1.5 transition-colors ${
-                  transactionType === "ROUTINE" ? "text-primary" : "text-foreground"
-                }`}
+                className={`font-bold text-base mb-1.5 transition-colors ${transactionType === "ROUTINE" ? "text-primary" : "text-foreground"
+                  }`}
               >
                 Regular Routine Check &amp; Swap
               </h3>
@@ -327,11 +320,10 @@ export function CreateBillingWorkspace({
               {alreadyOnboarded && !hasDraftOnboarding && (
                 <div className="mt-3">
                   <span
-                    className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors ${
-                      transactionType === "ROUTINE"
-                        ? "bg-primary/20 text-primary"
-                        : "bg-muted text-muted-foreground"
-                    }`}
+                    className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors ${transactionType === "ROUTINE"
+                      ? "bg-primary/20 text-primary"
+                      : "bg-muted text-muted-foreground"
+                      }`}
                   >
                     <Zap className="h-2.5 w-2.5" />
                     REGULAR_BILLING
@@ -345,21 +337,19 @@ export function CreateBillingWorkspace({
               type="button"
               onClick={() => handleSelectType("ONBOARDING")}
               disabled={alreadyOnboarded || hasDraftOnboarding || checkingOnboarding}
-              className={`group relative p-4 sm:p-5 border-2 rounded-2xl text-left transition-all duration-200 ${
-                (alreadyOnboarded || hasDraftOnboarding)
-                  ? "border-border bg-muted/30 opacity-60 cursor-not-allowed"
-                  : transactionType === "ONBOARDING"
+              className={`group relative p-4 sm:p-5 border-2 rounded-2xl text-left transition-all duration-200 ${(alreadyOnboarded || hasDraftOnboarding)
+                ? "border-border bg-muted/30 opacity-60 cursor-not-allowed"
+                : transactionType === "ONBOARDING"
                   ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 ring-2 ring-emerald-500/20 shadow-lg shadow-emerald-500/10"
                   : "border-border hover:border-emerald-500/40 hover:bg-accent/60"
-              }`}
+                }`}
             >
               {/* Selection Indicator */}
               <div
-                className={`absolute top-4 right-4 h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${
-                  transactionType === "ONBOARDING"
-                    ? "border-emerald-500 bg-emerald-500"
-                    : "border-muted-foreground/40"
-                }`}
+                className={`absolute top-4 right-4 h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${transactionType === "ONBOARDING"
+                  ? "border-emerald-500 bg-emerald-500"
+                  : "border-muted-foreground/40"
+                  }`}
               >
                 {transactionType === "ONBOARDING" && (
                   <CheckCircle2 className="h-3 w-3 text-white" />
@@ -374,21 +364,19 @@ export function CreateBillingWorkspace({
               )}
 
               <div
-                className={`h-10 w-10 rounded-xl flex items-center justify-center mb-4 transition-colors ${
-                  transactionType === "ONBOARDING"
-                    ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
-                    : "bg-muted text-muted-foreground group-hover:bg-emerald-50 dark:group-hover:bg-emerald-950/30 group-hover:text-emerald-600 dark:group-hover:text-emerald-400"
-                }`}
+                className={`h-10 w-10 rounded-xl flex items-center justify-center mb-4 transition-colors ${transactionType === "ONBOARDING"
+                  ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
+                  : "bg-muted text-muted-foreground group-hover:bg-emerald-50 dark:group-hover:bg-emerald-950/30 group-hover:text-emerald-600 dark:group-hover:text-emerald-400"
+                  }`}
               >
                 <Package className="h-5 w-5" />
               </div>
 
               <h3
-                className={`font-bold text-base mb-1.5 transition-colors ${
-                  transactionType === "ONBOARDING"
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : "text-foreground"
-                }`}
+                className={`font-bold text-base mb-1.5 transition-colors ${transactionType === "ONBOARDING"
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : "text-foreground"
+                  }`}
               >
                 Onboarding Baseline Setup
               </h3>
@@ -415,11 +403,10 @@ export function CreateBillingWorkspace({
               {!alreadyOnboarded && !hasDraftOnboarding && (
                 <div className="mt-3">
                   <span
-                    className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors ${
-                      transactionType === "ONBOARDING"
-                        ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
-                        : "bg-muted text-muted-foreground"
-                    }`}
+                    className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors ${transactionType === "ONBOARDING"
+                      ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
+                      : "bg-muted text-muted-foreground"
+                      }`}
                   >
                     <Zap className="h-2.5 w-2.5" />
                     ONBOARDING_BASELINE
@@ -457,11 +444,10 @@ export function CreateBillingWorkspace({
           {/* Type summary pill */}
           <div className="flex items-center gap-3">
             <div
-              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold ${
-                transactionType === "ROUTINE"
-                  ? "bg-primary/10 text-primary"
-                  : "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
-              }`}
+              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold ${transactionType === "ROUTINE"
+                ? "bg-primary/10 text-primary"
+                : "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
+                }`}
             >
               {transactionType === "ROUTINE" ? (
                 <RefreshCw className="h-3.5 w-3.5" />
@@ -522,54 +508,35 @@ export function CreateBillingWorkspace({
                     key={inv.invoice_id}
                     type="button"
                     onClick={() => setSelectedInvoiceId(inv.invoice_id)}
-                    className={`w-full flex items-center justify-between p-3 sm:p-4 text-left transition-all duration-150 ${
-                      isSelected
-                        ? "bg-primary/5 hover:bg-primary/10"
-                        : "hover:bg-accent/50 bg-card"
-                    }`}
+                    className={`w-full flex items-center justify-between p-3 sm:p-4 text-left transition-all duration-150 ${isSelected
+                      ? "bg-primary/5 hover:bg-primary/10"
+                      : "hover:bg-accent/50 bg-card"
+                      }`}
                   >
                     {/* Left side: selection radio + Invoice No + formatted Date */}
                     <div className="flex items-center gap-3 min-w-0">
                       <div
-                        className={`h-4.5 w-4.5 rounded-full border flex items-center justify-center shrink-0 transition-all duration-200 ${
-                          isSelected
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-muted-foreground/35"
-                        }`}
+                        className={`h-4.5 w-4.5 rounded-full border flex items-center justify-center shrink-0 transition-all duration-200 ${isSelected
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-muted-foreground/35"
+                          }`}
                       >
                         {isSelected && (
                           <div className="h-1.5 w-1.5 rounded-full bg-white" />
                         )}
                       </div>
-                      
+
                       <div className="min-w-0">
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2">
-                          <span className={`text-xs sm:text-sm font-bold truncate ${isSelected ? "text-primary" : "text-foreground"}`}>
-                            {inv.invoice_no}
-                          </span>
-                          <span className="text-muted-foreground hidden sm:inline">·</span>
-                          <span className="text-[10px] sm:text-xs text-muted-foreground whitespace-nowrap">
-                            {formatDate(inv.invoice_date)}
-                          </span>
-                        </div>
+                        <span className={`text-sm font-bold truncate ${isSelected ? "text-primary" : "text-foreground"}`}>
+                          {inv.invoice_no}
+                        </span>
                       </div>
                     </div>
 
                     {/* Right side: Amount + Status badge */}
                     <div className="flex items-center gap-2 sm:gap-3 shrink-0 ml-2">
-                      <span className="text-xs sm:text-sm font-semibold text-foreground">
-                        ₱{inv.total_amount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </span>
-                      <span
-                        className={`text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          inv.transaction_status === "POSTED"
-                            ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
-                            : inv.transaction_status === "CANCELLED"
-                            ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
-                            : "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400"
-                        }`}
-                      >
-                        {inv.transaction_status}
+                      <span className="text-[12px] sm:text-sm text-foreground whitespace-nowrap">
+                        {formatDate(inv.invoice_date)}
                       </span>
                     </div>
                   </button>
