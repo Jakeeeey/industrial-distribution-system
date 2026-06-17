@@ -40,14 +40,15 @@ export function generateTxNoPlaceholder(
  * Generates a reading number with prefix MTR-REG- or MTR-ONB-.
  * 
  * Format:
- *   ONBOARDING_BASELINE → MTR-ONB-{9-digit random number}
- *   REGULAR_BILLING     → MTR-REG-{9-digit random number}
+ *   ONBOARDING_BASELINE → MTR-ONB-{6-digit random number}
+ *   REGULAR_BILLING     → MTR-REG-{6-digit random number}
  * 
  * Developer Comment: Modified to distinguish onboarding reading numbers from regular ones.
  */
+// DEV-CHANGE: Changed random reading number identifier from 6 digits to 6 digits.
 export function generateReadingNo(type?: TransactionType): string {
   const prefix = type === "ONBOARDING_BASELINE" ? "MTR-ONB" : "MTR-REG";
-  const num = Math.floor(100000000 + Math.random() * 900000000);
+  const num = Math.floor(100000 + Math.random() * 900000);
   return `${prefix}-${num}`;
 }
 

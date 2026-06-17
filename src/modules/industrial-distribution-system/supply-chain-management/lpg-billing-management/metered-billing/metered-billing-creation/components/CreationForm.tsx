@@ -21,11 +21,11 @@ import {
   Camera,
   Settings2,
   Lock,
-  Printer,
+  // Printer,
   // Activity,
 } from "lucide-react";
-import { ThermalReceiptModal } from "./ThermalReceiptModal";
-import type { ThermalReceiptData } from "./ThermalReceiptModal";
+// import { ThermalReceiptModal } from "./ThermalReceiptModal";
+// import type { ThermalReceiptData } from "./ThermalReceiptModal";
 import { MeteredReadingPanel } from "./MeteredReadingPanel";
 import { VariancePanel } from "./VariancePanel";
 import { MeteredBillingSummaryCard } from "./MeteredBillingSummaryCard";
@@ -112,12 +112,11 @@ type MobileTab = "details" | "readings" | "review";
 
 export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFlowType, salesInvoice, perInvoice = true, autoPeriodFrom = true, currentUserId = null }: Props) {
   const [activeTab, setActiveTab] = useState<MobileTab>("details");
-  // RULE DEV: Controls visibility of the 58mm thermal receipt print preview modal
-  const [printModalOpen, setPrintModalOpen] = useState(false);
-  // RULE DEV: Track whether printing is triggered automatically after a successful submission
-  const [isAfterSubmit, setIsAfterSubmit] = useState(false);
-  const [submittedTxNo, setSubmittedTxNo] = useState<string | null>(null);
-  const [autoPrintActive, setAutoPrintActive] = useState(false);
+  // DEV-CHANGE: Printing state variables commented out as printing is bypassed (going to WIWO before printing)
+  // const [printModalOpen, setPrintModalOpen] = useState(false);
+  // const [isAfterSubmit, setIsAfterSubmit] = useState(false);
+  // const [submittedTxNo, setSubmittedTxNo] = useState<string | null>(null);
+  // const [autoPrintActive, setAutoPrintActive] = useState(false);
 
   const {
     form,
@@ -248,16 +247,15 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
       toast.success(isOnboarding ? "Baseline recorded successfully" : "Billing saved successfully");
 
       if (createdTx.transaction_no) {
-        setSubmittedTxNo(createdTx.transaction_no || null);
+        // setSubmittedTxNo(createdTx.transaction_no || null);
         setForm((f) => ({
           ...f,
           transactionNo: createdTx.transaction_no || "",
         }));
       }
 
-      setIsAfterSubmit(true);
-      setAutoPrintActive(true);
-      setPrintModalOpen(true);
+      // DEV-CHANGE: Bypass printing flow as we go to WIWO before printing. Call onSuccess directly.
+      onSuccess();
     } else {
       toast.error("Failed to submit transaction");
     }
@@ -372,18 +370,7 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
           >
             Cancel
           </Button>
-          {/* RULE DEV: Print Receipt button — opens the 58mm thermal receipt preview modal */}
-          <Button
-            variant="outline"
-            onClick={() => {
-              setAutoPrintActive(true);
-              setPrintModalOpen(true);
-            }}
-            className="h-10 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 gap-1.5"
-          >
-            <Printer className="h-4 w-4" />
-            Print Receipt
-          </Button>
+          {/* DEV-CHANGE: Print Receipt button removed since we go to WIWO before printing */}
           <Button
             onClick={handleSubmit}
             disabled={submitting || !canPost}
@@ -413,17 +400,7 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
         >
           Cancel
         </Button>
-        <Button
-          variant="outline"
-          onClick={() => {
-            setAutoPrintActive(true);
-            setPrintModalOpen(true);
-          }}
-          className="flex-1 h-10 border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 font-medium gap-1.5"
-        >
-          <Printer className="h-4 w-4" />
-          Print Receipt
-        </Button>
+        {/* DEV-CHANGE: Print Receipt button removed since we go to WIWO before printing */}
       </div>
 
       {/* Desktop border bottom (only visible on desktop) */}
@@ -668,37 +645,43 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
 
                 <div className="flex flex-col md:flex-row gap-8 bg-zinc-50/50 dark:bg-zinc-800/20 p-5 rounded-xl border border-zinc-100 dark:border-zinc-800/50">
                   <div className="flex-1 space-y-5 max-w-sm">
-                    <div className="space-y-2.5">
-                      <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
-                        Previous Reading
-                      </Label>
-                      <Input
-                        type="number"
-                        value={form.previousReading}
-                        onChange={(e) =>
-                          setForm((f) => ({
-                            ...f,
-                            previousReading: Number(e.target.value),
-                          }))
-                        }
-                        onWheel={(e) => e.currentTarget.blur()}
-                        disabled
-                        className="font-mono bg-white dark:bg-zinc-900"
-                      />
-                    </div>
+                    {/* DEV-CHANGE: Hide previous reading field during onboarding baseline creation */}
+                    {!isOnboarding && (
+                      <div className="space-y-2.5">
+                        <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+                          Previous Reading
+                        </Label>
+                        <Input
+                          type="number"
+                          value={form.previousReading}
+                          onChange={(e) =>
+                            setForm((f) => ({
+                              ...f,
+                              previousReading: Number(e.target.value),
+                            }))
+                          }
+                          onWheel={(e) => e.currentTarget.blur()}
+                          disabled
+                          className="font-mono bg-white dark:bg-zinc-900"
+                        />
+                      </div>
+                    )}
                     <div className="space-y-2.5">
                       <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
                         Current Reading
                       </Label>
+                      {/* DEV-CHANGE: Allow clearing the zero value so users do not have to type and then delete the leading zero */}
                       <Input
                         type="number"
-                        value={form.currentReading}
-                        onChange={(e) =>
+                        value={form.currentReading === 0 ? "" : form.currentReading}
+                        placeholder="0"
+                        onChange={(e) => {
+                          const val = e.target.value;
                           setForm((f) => ({
                             ...f,
-                            currentReading: Number(e.target.value),
-                          }))
-                        }
+                            currentReading: val === "" ? 0 : Number(val),
+                          }));
+                        }}
                         onWheel={(e) => e.currentTarget.blur()}
                         className="font-mono bg-white dark:bg-zinc-900"
                       />
@@ -1074,44 +1057,7 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
         )}
       </div>
 
-      {/* RULE DEV: 58mm Thermal Printer Receipt Modal — triggered by Print Receipt button */}
-      <ThermalReceiptModal
-        open={printModalOpen}
-        onClose={() => {
-          setPrintModalOpen(false);
-          setAutoPrintActive(false);
-          if (isAfterSubmit) {
-            onSuccess();
-          }
-        }}
-        autoPrint={autoPrintActive}
-        data={{
-          transactionNo: submittedTxNo || form.transactionNo,
-          transactionDate: form.transactionDate,
-          transactionType: form.transactionType === "ONBOARDING_BASELINE"
-            ? "Onboarding Baseline"
-            : form.transactionType === "REGULAR_BILLING"
-              ? "Regular Billing"
-              : "Adjustment",
-          customerName: customerName || form.customerCode || "—",
-          siteName: form.siteName,
-          salesInvoiceNo: salesInvoice?.sales_invoice_no || salesInvoice?.invoice_no || form.salesInvoiceNo,
-          salesOrderNo: salesInvoice?.sales_order_no || form.salesOrderNo,
-          previousReading: form.previousReading,
-          currentReading: form.currentReading,
-          billingPeriodFrom: form.billingPeriodFrom,
-          billingPeriodTo: form.billingPeriodTo,
-          meteredKg: meteredKg,
-          billableKg: arbitration.billable_kg,
-          pricePerKg: form.pricePerKg,
-          grossAmount: grossAmount,
-          vatAmount: vatAmount,
-          netAmount: netAmount,
-          vatRate: form.vatRate,
-          // status: form.status,
-          isOnboarding: isOnboarding,
-        } satisfies ThermalReceiptData}
-      />
+      {/* DEV-CHANGE: ThermalReceiptModal removed since we go to WIWO before printing */}
     </div>
   );
 }
