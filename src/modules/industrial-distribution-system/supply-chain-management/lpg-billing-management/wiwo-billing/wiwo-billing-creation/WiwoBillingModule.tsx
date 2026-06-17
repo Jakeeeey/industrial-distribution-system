@@ -31,6 +31,8 @@ export default function WiwoBillingModule() {
   } | null>(null);
 
   const handleSuccess = () => {
+    // IDS-CHANGE: Redirect to header selection screen on success
+    setSelectedHeader(null);
     setBillingContext(null);
     setFormKey((k) => k + 1);
   };

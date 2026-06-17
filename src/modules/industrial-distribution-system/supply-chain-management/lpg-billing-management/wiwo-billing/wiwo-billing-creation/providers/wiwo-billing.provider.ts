@@ -592,8 +592,10 @@ export async function createSalesInvoice(
   const ts = Date.now().toString().slice(-6);
   const invoiceNo = `SI-${ts.slice(0, 3)}-${ts.slice(3, 6)}`;
 
-  const vat = parseFloat((amount * 0.12).toFixed(2));
-  const net = parseFloat((amount + vat).toFixed(2));
+  // VAT is absorbed / inclusive: gross = amount, net = gross / 1.12, vat = gross - net.
+  const gross = amount;
+  const net = parseFloat((gross / 1.12).toFixed(2));
+  const vat = parseFloat((gross - net).toFixed(2));
 
   let salesmanId: number | null = null;
   if (userId) {
@@ -618,10 +620,10 @@ export async function createSalesInvoice(
         order_id: invoiceNo,
         customer_code: customerCode,
         invoice_date: today,
-        gross_amount: amount,
+        gross_amount: gross,
         vat_amount: vat,
-        net_amount: net,
-        total_amount: net,
+        net_amount: gross,
+        total_amount: gross,
         transaction_status: "POSTED",
         remarks: remarks,
         salesman_id: salesmanId,
@@ -1047,6 +1049,12 @@ export async function processRegularSwap(payload: {
   const varianceKg = Math.abs(meteredKg - totalWiwoKg);
   const billableSource = meteredKg >= totalWiwoKg ? "METERED" : "WIWO";
 
+  // IDS-CHANGE: Compute final transaction amounts based on the consolidated billableKg
+  // VAT is absorbed / inclusive: gross = vatable amount, net = vatable sales, vat = gross - net.
+  const txGrossAmount = Number((billableKg * payload.pricePerKg).toFixed(2));
+  const txNetAmount = Number((txGrossAmount / 1.12).toFixed(2));
+  const txVatAmount = Number((txGrossAmount - txNetAmount).toFixed(2));
+
   // Mismatch remarks requirement (2% Tolerance)
   const referenceKg = Math.max(meteredKg, totalWiwoKg, 0.0001);
   const diffPercentage = varianceKg / referenceKg;
@@ -1182,6 +1190,7 @@ export async function processRegularSwap(payload: {
 
   // Create WIWO Header
   const wiwoNo = `WIWO-${Date.now().toString().slice(-6)}`;
+  // IDS-CHANGE: VAT is absorbed / inclusive: gross = vatable amount, net = vatable sales, vat = gross - net.
   const grossAmount = Number((totalWiwoKg * payload.pricePerKg).toFixed(2));
   const netAmount = Number((grossAmount / 1.12).toFixed(2));
   const vatAmount = Number((grossAmount - netAmount).toFixed(2));
@@ -1202,7 +1211,7 @@ export async function processRegularSwap(payload: {
         price_per_kg: payload.pricePerKg,
         gross_amount: grossAmount,
         vat_amount: vatAmount,
-        net_amount: netAmount,
+        net_amount: grossAmount,
         wiwo_status: "POSTED",
         sales_invoice_id: invoiceId,
         sales_invoice_no: invoiceNo,
@@ -1237,9 +1246,10 @@ export async function processRegularSwap(payload: {
         consumed_lpg_kg: retItem.consumed,
         billable_kg: retItem.consumed,
         price_per_kg: payload.pricePerKg,
+        // IDS-CHANGE: VAT is absorbed / inclusive: gross = vatable amount, net = gross = total, vat = gross - net (informative).
         gross_amount: parseFloat((retItem.consumed * payload.pricePerKg).toFixed(2)),
-        vat_amount: parseFloat((retItem.consumed * payload.pricePerKg * 0.12).toFixed(2)),
-        net_amount: parseFloat((retItem.consumed * payload.pricePerKg * 1.12).toFixed(2)),
+        vat_amount: parseFloat((parseFloat((retItem.consumed * payload.pricePerKg).toFixed(2)) - parseFloat((parseFloat((retItem.consumed * payload.pricePerKg).toFixed(2)) / 1.12).toFixed(2))).toFixed(2)),
+        net_amount: parseFloat((retItem.consumed * payload.pricePerKg).toFixed(2)),
         is_billable: 1,
         result_site_cylinder_status: retItem.isSwapped ? "REMOVED" : "CONNECTED",
         result_asset_status: retItem.isSwapped ? "EMPTY" : "WITH_CUSTOMER",
@@ -1308,9 +1318,10 @@ export async function processRegularSwap(payload: {
           billable_source: billableSource,
           billable_kg: billableKg,
           price_per_kg: payload.pricePerKg,
-          gross_amount: grossAmount,
-          vat_amount: vatAmount,
-          net_amount: netAmount,
+          // IDS-CHANGE: Save arbitrated / billable values based on consolidated billableKg
+          gross_amount: txGrossAmount,
+          vat_amount: txVatAmount,
+          net_amount: txGrossAmount,
           sales_invoice_id: invoiceId,
           sales_invoice_no: invoiceNo,
           status: "POSTED",
@@ -1351,9 +1362,10 @@ export async function processRegularSwap(payload: {
           billable_source: billableSource,
           billable_kg: billableKg,
           price_per_kg: payload.pricePerKg,
-          gross_amount: grossAmount,
-          vat_amount: vatAmount,
-          net_amount: netAmount,
+          // IDS-CHANGE: Save arbitrated / billable values based on consolidated billableKg
+          gross_amount: txGrossAmount,
+          vat_amount: txVatAmount,
+          net_amount: txGrossAmount,
           sales_invoice_id: invoiceId,
           sales_invoice_no: invoiceNo,
           status: "POSTED",
