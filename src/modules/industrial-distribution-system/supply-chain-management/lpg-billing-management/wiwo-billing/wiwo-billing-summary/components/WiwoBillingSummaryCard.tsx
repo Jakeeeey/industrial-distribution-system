@@ -30,7 +30,6 @@ export function WiwoBillingSummaryCard({
   billableSource,
   grossAmount,
   vatAmount,
-  netAmount,
   pricePerKg,
   isOnboarding = false,
 }: Props) {
@@ -128,7 +127,7 @@ export function WiwoBillingSummaryCard({
           </span>
           <span className="text-2xl font-black font-mono">
             ₱{" "}
-            {Number(netAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+            {Number(grossAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
           </span>
         </div>
       </div>

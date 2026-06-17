@@ -15,6 +15,7 @@ import type {
   MeterReadingAdjustPayload,
   WiwoDetailAdjustPayload,
   ApproveHeaderPayload,
+  WiwoLineType,
 } from "../types/billing-consolidation.types";
 
 import {
@@ -37,6 +38,9 @@ import {
   repoFetchActiveCylindersBySite,
   repoFetchFirstBranchId,
   repoFetchOnboardingAttachmentsForCylinders,
+  // AG-CHANGE: Import cylinder helpers to adjust onboarding baseline cylinders directly in the database
+  repoFetchCustomerSiteCylinder,
+  repoPatchCustomerSiteCylinder,
 } from "./billing-consolidation.repo";
 
 // ─── Header Listing ───────────────────────────────────────────────────────────
@@ -83,6 +87,47 @@ export async function fetchConsolidationWorkspace(headerId: number): Promise<{
         try {
           const activeCylinders = await repoFetchActiveCylindersBySite(tx.lpg_site_id);
           if (activeCylinders && activeCylinders.length > 0) {
+            // AG-CHANGE: Calculate billable_kg per cylinder based on initial LPG weight (gross - tare)
+            const details = activeCylinders.map((cyl, idx) => {
+              const tare = Number(cyl.cylinder_asset_id?.tare_weight ?? 0);
+              const gross = Number(cyl.current_lpg_kg ?? 0);
+              const prodName = cyl.cylinder_asset_id?.product_id?.product_name || null;
+              const remaining = Math.max(0, parseFloat((gross - tare).toFixed(3)));
+              const lineGross = parseFloat((remaining * tx.price_per_kg).toFixed(2));
+              const lineVat = parseFloat((lineGross - (lineGross / 1.12)).toFixed(2));
+
+              return {
+                id: cyl.id,
+                wiwo_header_id: 0,
+                line_no: idx + 1,
+                lpg_site_id: tx.lpg_site_id,
+                customer_code: tx.customer_code,
+                line_type: "NEW_DEPLOYMENT" as WiwoLineType,
+                site_cylinder_id: cyl.id,
+                cylinder_asset_id: cyl.cylinder_asset_id?.id ?? 0,
+                product_id: 0,
+                serial_number: cyl.cylinder_asset_id?.serial_number ?? "UNKNOWN",
+                tare_weight_kg: tare,
+                previous_lpg_kg: Number(cyl.previous_lpg_kg ?? 0),
+                returned_gross_weight_kg: gross,
+                remaining_lpg_kg: remaining,
+                consumed_lpg_kg: remaining,
+                billable_kg: remaining,
+                price_per_kg: tx.price_per_kg,
+                gross_amount: lineGross,
+                discount_amount: 0,
+                vat_amount: lineVat,
+                net_amount: lineGross,
+                is_billable: 1 as 0 | 1,
+                remarks: null,
+                product: prodName ? { product_name: prodName } : undefined,
+              };
+            });
+
+            const totalLpgKg = parseFloat(details.reduce((sum, d) => sum + d.billable_kg, 0).toFixed(3));
+            const headerGross = parseFloat((totalLpgKg * tx.price_per_kg).toFixed(2));
+            const headerVat = parseFloat((headerGross - (headerGross / 1.12)).toFixed(2));
+
             finalWiwoHeader = {
               id: 0,
               wiwo_no: "WIWO-ONB-BASELINE",
@@ -92,57 +137,155 @@ export async function fetchConsolidationWorkspace(headerId: number): Promise<{
               wiwo_type: "DEPLOYMENT_ONLY",
               total_returned_cylinders: 0,
               total_deployed_cylinders: activeCylinders.length,
-              total_billable_kg: 0,
+              total_billable_kg: totalLpgKg,
               price_per_kg: tx.price_per_kg,
-              gross_amount: 0,
+              gross_amount: headerGross,
               discount_amount: 0,
-              vat_amount: 0,
-              net_amount: 0,
+              vat_amount: headerVat,
+              net_amount: headerGross,
               wiwo_status: "POSTED", // Renders table as read-only
               remarks: "Synthesized baseline cylinders list",
-              details: activeCylinders.map((cyl, idx) => {
-                const tare = Number(cyl.cylinder_asset_id?.tare_weight ?? 0);
-                const gross = Number(cyl.current_lpg_kg ?? 0);
-                const prodName = cyl.cylinder_asset_id?.product_id?.product_name || null;
-
-                return {
-                  id: cyl.id,
-                  wiwo_header_id: 0,
-                  line_no: idx + 1,
-                  lpg_site_id: tx.lpg_site_id,
-                  customer_code: tx.customer_code,
-                  line_type: "NEW_DEPLOYMENT",
-                  site_cylinder_id: cyl.id,
-                  cylinder_asset_id: cyl.cylinder_asset_id?.id ?? 0,
-                  product_id: 0,
-                  serial_number: cyl.cylinder_asset_id?.serial_number ?? "UNKNOWN",
-                  tare_weight_kg: tare,
-                  previous_lpg_kg: Number(cyl.previous_lpg_kg ?? 0),
-                  returned_gross_weight_kg: gross,
-                  remaining_lpg_kg: Math.max(0, gross - tare),
-                  consumed_lpg_kg: 0,
-                  billable_kg: 0,
-                  price_per_kg: tx.price_per_kg,
-                  gross_amount: 0,
-                  discount_amount: 0,
-                  vat_amount: 0,
-                  net_amount: 0,
-                  is_billable: 0,
-                  remarks: null,
-                  product: prodName ? { product_name: prodName } : undefined,
-                };
-              }),
+              details,
             };
+
+            // AG-CHANGE: Update the parent transaction values to match the computed baseline cylinder totals
+            tx.wiwo_kg = totalLpgKg;
+            tx.billable_kg = totalLpgKg;
+            tx.billable_source = "WIWO";
+            tx.gross_amount = headerGross;
+            tx.net_amount = headerGross;
+            tx.vat_amount = headerVat;
           }
         } catch (err) {
           console.error("Failed to fetch active cylinders for onboarding baseline transaction:", err);
         }
       }
 
+      // AG-CHANGE: Query the audit trail for this transaction to mark adjusted meter readings and cylinder weights
+      const audits = await repoFetchAuditTrail(tx.id);
+      const isMeterAdjusted = audits.some(
+        (a) =>
+          a.action_type === "REVIEWER_ADJUSTMENT" &&
+          a.changes_payload &&
+          "current_reading" in a.changes_payload
+      );
+
+      // --- Pass 1: Collect cylinder IDs from audits that carry explicit identifier fields ---
+      const adjustedCylinderIds = new Set<number>();
+      audits.forEach((a) => {
+        if (a.action_type === "REVIEWER_ADJUSTMENT" && a.changes_payload) {
+          if (a.changes_payload.wiwo_detail_id) {
+            adjustedCylinderIds.add(Number(a.changes_payload.wiwo_detail_id.new));
+          }
+          if (a.changes_payload.site_cylinder_id) {
+            adjustedCylinderIds.add(Number(a.changes_payload.site_cylinder_id.new));
+          }
+        }
+      });
+
+      // AG-CHANGE: Parse chronological audits (oldest to newest) to find the original values before any reviewer adjustments
+      const chronologicalAudits = [...audits].reverse();
+      
+      let originalCurrentReading: number | undefined = undefined;
+      if (isMeterAdjusted) {
+        const oldestMeterAudit = chronologicalAudits.find(
+          (a) =>
+            a.action_type === "REVIEWER_ADJUSTMENT" &&
+            a.changes_payload &&
+            "current_reading" in a.changes_payload
+        );
+        if (oldestMeterAudit) {
+          originalCurrentReading = Number(oldestMeterAudit.changes_payload.current_reading.old);
+        }
+      }
+
+      // --- Pass 2: Map detail IDs and serial numbers to their original gross weights before the first adjustment ---
+      // Also build a value-keyed fallback for legacy audits that have returned_gross_weight_kg but no identifier fields.
+      // For those, we match later by comparing a cylinder's current returned_gross_weight_kg to the audit's .new value.
+      const originalCylGrossWeights = new Map<number, number>();
+      const originalCylGrossWeightsBySerial = new Map<string, number>();
+
+      // Legacy fallback: keyed by the POST-adjustment gross weight (.new) → original gross weight (.old)
+      // Only populated for audits that have no wiwo_detail_id, site_cylinder_id, or serial_number.
+      const legacyGrossWeightFallback = new Map<number, number>();
+
+      chronologicalAudits.forEach((a) => {
+        if (
+          a.action_type === "REVIEWER_ADJUSTMENT" &&
+          a.changes_payload &&
+          "returned_gross_weight_kg" in a.changes_payload
+        ) {
+          const detailId = a.changes_payload.wiwo_detail_id
+            ? Number(a.changes_payload.wiwo_detail_id.new)
+            : a.changes_payload.site_cylinder_id
+              ? Number(a.changes_payload.site_cylinder_id.new)
+              : null;
+          const serialNo = a.changes_payload.serial_number
+            ? String(a.changes_payload.serial_number.new)
+            : null;
+
+          const oldGross = Number(a.changes_payload.returned_gross_weight_kg.old);
+          const newGross = Number(a.changes_payload.returned_gross_weight_kg.new);
+
+          if (detailId !== null) {
+            // Explicit ID — standard path: record only the FIRST (oldest) audit entry per cylinder
+            if (!originalCylGrossWeights.has(detailId)) {
+              originalCylGrossWeights.set(detailId, oldGross);
+            }
+          }
+          if (serialNo !== null) {
+            if (!originalCylGrossWeightsBySerial.has(serialNo)) {
+              originalCylGrossWeightsBySerial.set(serialNo, oldGross);
+            }
+          }
+          if (detailId === null && serialNo === null) {
+            // AG-CHANGE: Legacy audit with no identifier — store old value keyed by the post-adjustment gross weight.
+            // At render time we check if a cylinder's current returned_gross_weight_kg matches any .new value here.
+            // Only keep the FIRST (oldest) entry for each unique .new value so we always get the true original.
+            if (!legacyGrossWeightFallback.has(newGross)) {
+              legacyGrossWeightFallback.set(newGross, oldGross);
+            }
+          }
+        }
+      });
+
+      const finalMeterReading = meterReading
+        ? { 
+            ...meterReading, 
+            is_adjusted: isMeterAdjusted,
+            original_current_reading: originalCurrentReading,
+          }
+        : undefined;
+
+      const finalWiwoHeaderWithFlags = finalWiwoHeader
+        ? {
+            ...finalWiwoHeader,
+            details: finalWiwoHeader.details?.map((d) => {
+              // Explicit ID / serial lookup first, then legacy value-keyed fallback
+              const origGross =
+                originalCylGrossWeights.get(d.id) ??
+                originalCylGrossWeightsBySerial.get(d.serial_number) ??
+                // AG-CHANGE: Legacy fallback — match by current returned_gross_weight_kg matching audit's .new value
+                legacyGrossWeightFallback.get(Number(d.returned_gross_weight_kg)) ??
+                null;
+
+              // A cylinder is adjusted if: it has an explicit audit ID match, OR the legacy fallback resolved an original value,
+              // OR serial number matched an audit entry.
+              const isAdjustedByLegacy = origGross !== null && !adjustedCylinderIds.has(d.id);
+
+              return {
+                ...d,
+                is_adjusted: adjustedCylinderIds.has(d.id) || isAdjustedByLegacy,
+                original_returned_gross_weight_kg: origGross,
+              };
+            }),
+          }
+        : undefined;
+
       return {
         ...tx,
-        meter_reading: meterReading ?? undefined,
-        wiwo_header: finalWiwoHeader ?? undefined,
+        meter_reading: finalMeterReading,
+        wiwo_header: finalWiwoHeaderWithFlags,
         attachments,
       } as ConsolidationTransaction;
     })
@@ -375,6 +518,97 @@ export async function adjustWiwoDetail(payload: WiwoDetailAdjustPayload): Promis
     modified_by,
   } = payload;
 
+  // AG-CHANGE: Support adjusting onboarding baseline cylinder weights directly.
+  // When wiwoHeaderId is 0, no wiwo_header exists, so we fetch and update the customer site cylinder table instead.
+  if (wiwoHeaderId === 0) {
+    const cylinder = await repoFetchCustomerSiteCylinder(wiwoDetailId);
+    if (!cylinder) throw new Error(`Customer site cylinder ${wiwoDetailId} not found.`);
+
+    const oldGrossWeight = cylinder.current_lpg_kg ?? 0;
+    const tareWeight = cylinder.cylinder_asset_id?.tare_weight ?? 0;
+
+    const remainingLpgKg = Math.max(0, parseFloat(
+      (new_returned_gross_weight_kg - tareWeight).toFixed(3)
+    ));
+    // AG-CHANGE: On onboarding baseline transactions, the cylinder's billable kg is its LPG weight (remaining LPG weight)
+    const consumedLpgKg = remainingLpgKg;
+    const billableKg = remainingLpgKg;
+    
+    const txBefore = await fetchTransactionRaw(transactionId);
+    if (!txBefore) throw new Error(`Transaction ${transactionId} not found.`);
+
+    const grossAmount = parseFloat((billableKg * txBefore.price_per_kg).toFixed(2));
+    const netAmount = grossAmount;
+    const vatAmount = parseFloat((netAmount - (netAmount / 1.12)).toFixed(2));
+
+    // Direct update of the cylinder asset's current weight in customer site cylinders database
+    await repoPatchCustomerSiteCylinder(wiwoDetailId, {
+      current_lpg_kg: new_returned_gross_weight_kg,
+    });
+
+    // Fetch all active cylinders at this site to compute the updated transaction-level totals
+    const activeCylinders = await repoFetchActiveCylindersBySite(txBefore.lpg_site_id);
+    const newTotalBillableKg = parseFloat(
+      activeCylinders.reduce((sum, cyl) => {
+        const tare = Number(cyl.cylinder_asset_id?.tare_weight ?? 0);
+        // Use the newly adjusted weight for this cylinder, fallback to database weight for others
+        const gross = cyl.id === wiwoDetailId ? new_returned_gross_weight_kg : Number(cyl.current_lpg_kg ?? 0);
+        return sum + Math.max(0, gross - tare);
+      }, 0).toFixed(3)
+    );
+
+    const newTxGross = parseFloat((newTotalBillableKg * txBefore.price_per_kg).toFixed(2));
+    const newTxNet = newTxGross;
+    const newTxVat = parseFloat((newTxNet - (newTxNet / 1.12)).toFixed(2));
+
+    // Patch the baseline transaction in the database with updated totals
+    await repoPatchTransaction(transactionId, {
+      wiwo_kg: newTotalBillableKg,
+      billable_source: "WIWO",
+      billable_kg: newTotalBillableKg,
+      gross_amount: newTxGross,
+      vat_amount: newTxVat,
+      net_amount: newTxNet,
+      modified_by,
+      modified_date: new Date().toISOString(),
+    });
+
+    await refreshHeaderTotals(txBefore.transaction_header_id, modified_by);
+
+    await repoInsertAuditEntry({
+      transaction_id: transactionId,
+      transaction_no: txBefore.transaction_no,
+      action_type: "REVIEWER_ADJUSTMENT",
+      changes_payload: {
+        site_cylinder_id: { old: null, new: wiwoDetailId },
+        serial_number: { old: null, new: cylinder.cylinder_asset_id?.serial_number ?? "" },
+        returned_gross_weight_kg: { old: oldGrossWeight, new: new_returned_gross_weight_kg },
+        remaining_lpg_kg: { old: Math.max(0, oldGrossWeight - tareWeight), new: remainingLpgKg },
+        consumed_lpg_kg: { old: Math.max(0, oldGrossWeight - tareWeight), new: consumedLpgKg },
+        detail_billable_kg: { old: Math.max(0, oldGrossWeight - tareWeight), new: billableKg },
+        wiwo_total_billable_kg: { old: txBefore.wiwo_kg, new: newTotalBillableKg },
+        wiwo_kg: { old: txBefore.wiwo_kg, new: newTotalBillableKg },
+        variance_kg: { old: txBefore.variance_kg, new: txBefore.variance_kg },
+        billable_source: { old: txBefore.billable_source, new: "WIWO" },
+        billable_kg: { old: txBefore.billable_kg, new: newTotalBillableKg },
+        gross_amount: { old: txBefore.gross_amount, new: newTxGross },
+        vat_amount: { old: txBefore.vat_amount, new: newTxVat },
+        net_amount: { old: txBefore.net_amount, new: newTxNet },
+        adjustment_reason: { old: null, new: adjustment_reason },
+      },
+      modified_by,
+    });
+
+    return {
+      updated_detail: {
+        remaining_lpg_kg: remainingLpgKg,
+        consumed_lpg_kg: consumedLpgKg,
+        billable_kg: billableKg,
+        gross_amount: grossAmount,
+      },
+    };
+  }
+
   // 1. Fetch all current details to get the full context for this line
   const wiwoHeader = await repoFetchWiwoWithDetails(wiwoHeaderId);
   if (!wiwoHeader) throw new Error(`WIWO header ${wiwoHeaderId} not found.`);
@@ -471,6 +705,8 @@ export async function adjustWiwoDetail(payload: WiwoDetailAdjustPayload): Promis
     transaction_no: txBefore.transaction_no,
     action_type: "REVIEWER_ADJUSTMENT",
     changes_payload: {
+      wiwo_detail_id: { old: null, new: wiwoDetailId },
+      serial_number: { old: null, new: detail.serial_number },
       returned_gross_weight_kg: { old: oldGrossWeight, new: new_returned_gross_weight_kg },
       remaining_lpg_kg: { old: detail.remaining_lpg_kg, new: remainingLpgKg },
       consumed_lpg_kg: { old: detail.consumed_lpg_kg, new: consumedLpgKg },

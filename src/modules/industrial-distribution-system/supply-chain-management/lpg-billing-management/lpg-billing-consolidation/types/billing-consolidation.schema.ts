@@ -9,12 +9,12 @@ import { z } from "zod";
 // ─── Meter Reading Adjustment ─────────────────────────────────────────────────
 
 export const MeterReadingAdjustSchema = z.object({
-  transactionId: z.number().int().positive(),
-  meterReadingId: z.number().int().positive(),
+  transactionId: z.number().int().nonnegative(),
+  meterReadingId: z.number().int().nonnegative(),
   /** Corrected current reading value from the reviewer (must be >= 0) */
   new_current_reading: z.number().min(0),
   adjustment_reason: z.string().min(1, "Adjustment reason is required"),
-  modified_by: z.number().int().positive(),
+  modified_by: z.number().int().nonnegative(),
 });
 
 export type MeterReadingAdjustInput = z.infer<typeof MeterReadingAdjustSchema>;
@@ -22,13 +22,13 @@ export type MeterReadingAdjustInput = z.infer<typeof MeterReadingAdjustSchema>;
 // ─── WIWO Detail Adjustment ───────────────────────────────────────────────────
 
 export const WiwoDetailAdjustSchema = z.object({
-  transactionId: z.number().int().positive(),
-  wiwoDetailId: z.number().int().positive(),
-  wiwoHeaderId: z.number().int().positive(),
+  transactionId: z.number().int().nonnegative(),
+  wiwoDetailId: z.number().int().nonnegative(),
+  wiwoHeaderId: z.number().int().nonnegative(),
   /** Corrected returned gross weight in kg (must be >= 0) */
   new_returned_gross_weight_kg: z.number().min(0),
   adjustment_reason: z.string().min(1, "Adjustment reason is required"),
-  modified_by: z.number().int().positive(),
+  modified_by: z.number().int().nonnegative(),
 });
 
 export type WiwoDetailAdjustInput = z.infer<typeof WiwoDetailAdjustSchema>;
@@ -36,8 +36,8 @@ export type WiwoDetailAdjustInput = z.infer<typeof WiwoDetailAdjustSchema>;
 // ─── Approve Header ───────────────────────────────────────────────────────────
 
 export const ApproveHeaderSchema = z.object({
-  headerId: z.number().int().positive(),
-  approved_by: z.number().int().positive(),
+  headerId: z.number().int().nonnegative(),
+  approved_by: z.number().int().nonnegative(),
 });
 
 export type ApproveHeaderInput = z.infer<typeof ApproveHeaderSchema>;

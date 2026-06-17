@@ -145,10 +145,12 @@ export function useBillingConsolidation(): UseBillingConsolidationReturn {
    * Fetches the full workspace for a selected header ID.
    * Stored in selectedHeader + transactions state.
    */
-  const loadWorkspace = useCallback(async (headerId: number) => {
-    setIsLoadingWorkspace(true);
+  const loadWorkspace = useCallback(async (headerId: number, silent = false) => {
+    if (!silent) {
+      setIsLoadingWorkspace(true);
+      setTransactions([]);
+    }
     setWorkspaceError(null);
-    setTransactions([]);
     try {
       const res = await fetch(`${BASE_URL}?type=workspace&headerId=${headerId}`);
       if (!res.ok) throw new Error(`Failed to load workspace (${res.status})`);
@@ -163,7 +165,9 @@ export function useBillingConsolidation(): UseBillingConsolidationReturn {
       setWorkspaceError(msg);
       toast.error("Workspace Error", { description: msg });
     } finally {
-      setIsLoadingWorkspace(false);
+      if (!silent) {
+        setIsLoadingWorkspace(false);
+      }
     }
   }, []);
 
@@ -192,7 +196,7 @@ export function useBillingConsolidation(): UseBillingConsolidationReturn {
   const refreshWorkspace = useCallback(async () => {
     const id = selectedHeaderIdRef.current;
     if (!id) return;
-    await loadWorkspace(id);
+    await loadWorkspace(id, true);
   }, [loadWorkspace]);
 
   // ── Reviewer Actions ──────────────────────────────────────────────────────

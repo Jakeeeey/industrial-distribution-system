@@ -116,9 +116,9 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
   const totalBillableKg = transactions.reduce((s, tx) => s + tx.billable_kg, 0);
   const totalGross = transactions.reduce((s, tx) => s + tx.gross_amount, 0);
   const totalDiscount = transactions.reduce((s, tx) => s + tx.discount_amount, 0);
-  const totalVat = transactions.reduce((s, tx) => s + tx.vat_amount, 0);
-  const totalNet = transactions.reduce((s, tx) => s + tx.net_amount, 0);
-  const totalAmountBilled = totalNet;
+  const totalVat = transactions.reduce((s, tx) => s + (tx.gross_amount - (tx.gross_amount / 1.12)), 0);
+  const totalNet = totalGross;
+  const totalAmountBilled = totalGross;
 
   const handleApprove = async () => {
     const success = await approveHeader(selectedHeader.header_id);
@@ -465,7 +465,7 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
                             <div className="h-8 w-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
                               <Calculator className="h-4.5 w-4.5" />
                             </div>
-                            <h3 className="font-bold text-sm">WIWO Billing Summary</h3>
+                            <h3 className="font-bold text-sm">Billing Summary</h3>
                           </div>
 
                           {activeTx.transaction_type === "REGULAR_BILLING" && (
@@ -473,49 +473,59 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
                               <div className="flex flex-col gap-3">
                                 {/* Metered Calculation Box */}
                                 <div className="bg-white/10 rounded-xl p-3.5 space-y-2 text-xs">
-                                  <div className="text-violet-200 font-bold mb-1 uppercase tracking-wider text-[9px] flex items-center gap-1.5 border-b border-white/10 pb-1">
-                                    <Gauge className="h-3.5 w-3.5 shrink-0" /> Metered Calculation
+                                  <div className="text-violet-200 font-bold mb-1 uppercase tracking-wider text-[9px] border-b border-white/10 pb-1 flex flex-col gap-0.5">
+                                    <div className="flex items-center gap-1.5">
+                                      <Gauge className="h-3.5 w-3.5 shrink-0" /> Metered Calculation
+                                    </div>
+                                    <span className="text-[8px] text-violet-300 font-mono normal-case">kg = (current - prev) × vapor × factor</span>
                                   </div>
-                                  {/* BIR labels: Vatable Sales, Output VAT, Amount Due */}
                                   <div className="flex justify-between items-center text-violet-100">
                                     <span className="text-[11px]">KG</span>
                                     <span className="font-mono font-bold text-sm">{activeTx.metered_kg.toFixed(3)}</span>
                                   </div>
                                   <div className="flex justify-between items-center text-violet-100">
-                                    <span className="text-[11px]">Vatable Sales</span>
-                                    <span className="font-mono text-[11px]">₱ {((activeTx.metered_kg * activeTx.price_per_kg) / 1.12).toFixed(2)}</span>
+                                    <span className="text-[11px]">Gross</span>
+                                    <span className="font-mono text-[11px]">₱ {(activeTx.metered_kg * activeTx.price_per_kg).toFixed(2)}</span>
                                   </div>
                                   <div className="flex justify-between items-center text-violet-100">
-                                    <span className="text-[11px]">Output VAT</span>
+                                    <span className="text-[11px]">VAT</span>
                                     <span className="font-mono text-[11px]">₱ {((activeTx.metered_kg * activeTx.price_per_kg) - (activeTx.metered_kg * activeTx.price_per_kg) / 1.12).toFixed(2)}</span>
                                   </div>
                                   <div className="flex justify-between items-center text-white border-t border-white/10 pt-2 font-bold">
-                                    <span className="text-xs">Amount Due</span>
+                                    <span className="text-xs">Total</span>
                                     <span className="font-mono text-xs">₱ {(activeTx.metered_kg * activeTx.price_per_kg).toFixed(2)}</span>
+                                  </div>
+                                  <div className="text-[7.5px] text-violet-300/80 border-t border-white/5 pt-1.5 mt-1 text-center font-mono normal-case">
+                                    gross = kg × price | vat = gross - (gross / 1.12)
                                   </div>
                                 </div>
 
                                 {/* WIWO Calculation Box */}
                                 <div className="bg-white/10 rounded-xl p-3.5 space-y-2 text-xs">
-                                  <div className="text-violet-200 font-bold mb-1 uppercase tracking-wider text-[9px] flex items-center gap-1.5 border-b border-white/10 pb-1">
-                                    <Scale className="h-3.5 w-3.5 shrink-0" /> WIWO Calculation
+                                  <div className="text-violet-200 font-bold mb-1 uppercase tracking-wider text-[9px] border-b border-white/10 pb-1 flex flex-col gap-0.5">
+                                    <div className="flex items-center gap-1.5">
+                                      <Scale className="h-3.5 w-3.5 shrink-0" /> WIWO Calculation
+                                    </div>
+                                    <span className="text-[8px] text-violet-300 font-mono normal-case">kg = previous kg - returned gross kg</span>
                                   </div>
-                                  {/* BIR labels: Vatable Sales, Output VAT, Amount Due */}
                                   <div className="flex justify-between items-center text-violet-100">
                                     <span className="text-[11px]">KG</span>
                                     <span className="font-mono font-bold text-sm">{activeTx.wiwo_kg.toFixed(3)}</span>
                                   </div>
                                   <div className="flex justify-between items-center text-violet-100">
-                                    <span className="text-[11px]">Vatable Sales</span>
-                                    <span className="font-mono text-[11px]">₱ {((activeTx.wiwo_kg * activeTx.price_per_kg) / 1.12).toFixed(2)}</span>
+                                    <span className="text-[11px]">Gross</span>
+                                    <span className="font-mono text-[11px]">₱ {(activeTx.wiwo_kg * activeTx.price_per_kg).toFixed(2)}</span>
                                   </div>
                                   <div className="flex justify-between items-center text-violet-100">
-                                    <span className="text-[11px]">Output VAT</span>
+                                    <span className="text-[11px]">VAT</span>
                                     <span className="font-mono text-[11px]">₱ {((activeTx.wiwo_kg * activeTx.price_per_kg) - (activeTx.wiwo_kg * activeTx.price_per_kg) / 1.12).toFixed(2)}</span>
                                   </div>
                                   <div className="flex justify-between items-center text-white border-t border-white/10 pt-2 font-bold">
-                                    <span className="text-xs">Amount Due</span>
+                                    <span className="text-xs">Total</span>
                                     <span className="font-mono text-xs">₱ {(activeTx.wiwo_kg * activeTx.price_per_kg).toFixed(2)}</span>
+                                  </div>
+                                  <div className="text-[7.5px] text-violet-300/80 border-t border-white/5 pt-1.5 mt-1 text-center font-mono normal-case">
+                                    gross = kg × price | vat = gross - (gross / 1.12)
                                   </div>
                                 </div>
                               </div>
@@ -547,17 +557,17 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
                               <span className="font-bold font-mono">₱ {activeTx.price_per_kg.toFixed(2)}</span>
                             </div>
                             <div className="flex justify-between text-violet-100 border-t border-white/10 pt-2">
-                              <span>Vatable Sales</span>
-                              <span className="font-bold font-mono">₱ {(activeTx.gross_amount / 1.12).toFixed(2)}</span>
+                              <span>Gross Amount</span>
+                              <span className="font-bold font-mono">₱ {activeTx.gross_amount.toFixed(2)}</span>
                             </div>
                             <div className="flex justify-between text-violet-100">
-                              <span>12% Output VAT</span>
-                              <span className="font-bold font-mono">₱ {activeTx.vat_amount.toFixed(2)}</span>
+                              <span>12% VAT</span>
+                              <span className="font-bold font-mono">₱ {(activeTx.gross_amount - (activeTx.gross_amount / 1.12)).toFixed(2)}</span>
                             </div>
                             <div className="border-t border-white/20 pt-2 flex justify-between items-end">
-                              <span className="font-bold text-sm">Total Amount Due</span>
+                              <span className="font-bold text-sm">Total Amount</span>
                               <span className="text-base font-black font-mono">
-                                ₱ {activeTx.net_amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                ₱ {activeTx.gross_amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
                             </div>
                           </div>
@@ -604,8 +614,8 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
                 {totalBillableKg.toFixed(3)}{" "}
                 <span className="text-xs font-semibold text-muted-foreground">kg</span>
               </span>
-              <p className="text-[9px] text-muted-foreground mt-1">
-                Metered: {totalMeteredKg.toFixed(2)} kg · WIWO: {totalWiwoKg.toFixed(2)} kg
+              <p className="text-[9px] text-muted-foreground mt-1 flex items-center gap-1">
+                <Scale className="h-2.5 w-2.5" /> Consolidated total kilogram consumption
               </p>
             </div>
 
@@ -700,8 +710,8 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
                       <td className="p-3 text-right text-rose-600 dark:text-rose-400">
                         {tx.discount_amount > 0 ? `-₱ ${tx.discount_amount.toFixed(2)}` : "—"}
                       </td>
-                      <td className="p-3 text-right text-muted-foreground">₱ {tx.vat_amount.toFixed(2)}</td>
-                      <td className="p-3 text-right font-black text-foreground">₱ {tx.net_amount.toFixed(2)}</td>
+                      <td className="p-3 text-right text-muted-foreground">₱ {(tx.gross_amount - (tx.gross_amount / 1.12)).toFixed(2)}</td>
+                      <td className="p-3 text-right font-black text-foreground">₱ {tx.gross_amount.toFixed(2)}</td>
                     </tr>
                   ))}
                   <tr className="bg-zinc-50/50 dark:bg-zinc-900/20 font-black border-t border-border">

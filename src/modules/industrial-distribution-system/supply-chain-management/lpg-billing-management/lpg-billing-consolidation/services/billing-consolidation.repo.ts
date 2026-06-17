@@ -654,5 +654,42 @@ export async function repoFetchOnboardingAttachmentsForCylinders(
   }));
 }
 
+/**
+ * Fetches a specific customer site cylinder by id.
+ */
+export async function repoFetchCustomerSiteCylinder(id: number): Promise<ActiveCylinderRaw | null> {
+  const fields = [
+    "id",
+    "lpg_site_id",
+    "customer_code",
+    "previous_lpg_kg",
+    "current_lpg_kg",
+    "installed_date",
+    "cylinder_asset_id.id",
+    "cylinder_asset_id.serial_number",
+    "cylinder_asset_id.tare_weight",
+  ].join(",");
+
+  try {
+    const res = await directusFetch<{ data: ActiveCylinderRaw }>(
+      `${DIRECTUS_URL}/items/lpg_customer_site_cylinders/${id}?fields=${fields}`
+    );
+    return res.data ?? null;
+  } catch (err) {
+    console.error("Failed to fetch customer site cylinder:", err);
+    return null;
+  }
+}
+
+/**
+ * Patches a specific customer site cylinder by id.
+ */
+export async function repoPatchCustomerSiteCylinder(id: number, data: Record<string, unknown>): Promise<void> {
+  await directusFetch(
+    `${DIRECTUS_URL}/items/lpg_customer_site_cylinders/${id}`,
+    { method: "PATCH", body: JSON.stringify(data) }
+  );
+}
+
 
 
