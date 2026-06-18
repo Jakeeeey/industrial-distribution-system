@@ -7,6 +7,7 @@
 import {
   directusFetch,
   getDirectusBase,
+  getDirectusToken,
 } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/directus";
 import type {
   ConsolidationHeader,
@@ -18,6 +19,7 @@ import type {
   ConsolidationAuditEntry,
   ConsolidationHeaderListParams,
   ActiveCylinderRaw,
+  CompanyProfile,
 } from "../types/billing-consolidation.types";
 
 const DIRECTUS_URL = getDirectusBase();
@@ -35,6 +37,7 @@ const HEADER_FIELDS = [
   "status",
   "is_billed",
   "remarks",
+  "invoice_attachments_uuid",
   "created_by",
   "posted_by",
   "posted_at",
@@ -101,6 +104,7 @@ function mapHeader(raw: Record<string, unknown>): ConsolidationHeader {
     status: (raw["status"] as ConsolidationHeader["status"]) ?? "DRAFT",
     is_billed: (Number(raw["is_billed"] ?? 0)) as 0 | 1,
     remarks: raw["remarks"] ? String(raw["remarks"]) : null,
+    invoice_attachments_uuid: raw["invoice_attachments_uuid"] ? String(raw["invoice_attachments_uuid"]) : null,
     created_by: raw["created_by"] ? Number(raw["created_by"]) : null,
     posted_by: raw["posted_by"] ? Number(raw["posted_by"]) : null,
     posted_at: raw["posted_at"] ? String(raw["posted_at"]) : null,
@@ -728,5 +732,113 @@ export async function repoPatchCustomerSiteCylinder(id: number, data: Record<str
   );
 }
 
+// DEV-CHANGE: Added helper to fetch customer email and full name from Directus by customer code
+/**
+ * Fetches customer name and customer_email from Directus items by customer code.
+ * Used for sending transactional email notices to customers.
+ */
+export async function repoFetchCustomerEmailByCode(
+  customerCode: string
+): Promise<{ customer_name: string; customer_email?: string | null } | null> {
+  try {
+    const filterObj = { customer_code: { _eq: customerCode } };
+    const custRes = await directusFetch<{ data: { customer_code: string; customer_name: string; customer_email?: string | null }[] }>(
+      `${DIRECTUS_URL}/items/customer?fields=customer_code,customer_name,customer_email&filter=${encodeURIComponent(JSON.stringify(filterObj))}`
+    );
+    if (custRes.data && custRes.data.length > 0) {
+      return custRes.data[0];
+    }
+  } catch (e) {
+    console.warn(`Failed to fetch customer email by code ${customerCode}`, e);
+  }
+  return null;
+}
+
+// DEV-CHANGE: Added helper to fetch company profile from Directus for dynamically branding emails
+/**
+ * Fetches company profile details (name, email, phone, TIN, address) for company_id = 1.
+ * Used for dynamic signature/branding in email invoices.
+ */
+export async function repoFetchCompanyProfile(): Promise<CompanyProfile | null> {
+  try {
+    const res = await directusFetch<{ data: CompanyProfile[] }>(
+      `${DIRECTUS_URL}/items/company?filter[company_id][_eq]=1`
+    );
+    if (res.data && res.data.length > 0) {
+      return res.data[0];
+    }
+  } catch (err) {
+    console.error("Failed to fetch company details for email:", err);
+  }
+  return null;
+}
+
+// DEV-CHANGE: Added Directus folder resolution and base64 PDF upload repository helpers
+/**
+ * Resolves the folder ID for a given folder name in Directus.
+ * Creates it if it doesn't exist.
+ */
+export async function repoGetOrCreateFolderId(folderName: string): Promise<string | null> {
+  try {
+    const searchUrl = `${DIRECTUS_URL}/folders?filter[name][_eq]=${encodeURIComponent(folderName)}&fields=id`;
+    const searchRes = await directusFetch<{ data: { id: string }[] }>(searchUrl);
+    if (searchRes.data && searchRes.data.length > 0) {
+      return searchRes.data[0].id;
+    }
+
+    const createRes = await directusFetch<{ data: { id: string } }>(
+      `${DIRECTUS_URL}/folders`,
+      {
+        method: "POST",
+        body: JSON.stringify({ name: folderName }),
+      }
+    );
+    return createRes.data?.id || null;
+  } catch (err) {
+    console.error(`[Directus Folder] Failed to resolve folder '${folderName}':`, err);
+    return null;
+  }
+}
+
+/**
+ * Uploads a base64 encoded PDF file to Directus.
+ * Returns the uploaded file UUID.
+ */
+export async function repoUploadInvoicePdf(
+  pdfBase64: string,
+  filename: string,
+  folderId?: string | null
+): Promise<string | null> {
+  try {
+    const buffer = Buffer.from(pdfBase64, "base64");
+    const blob = new Blob([buffer], { type: "application/pdf" });
+
+    const formData = new FormData();
+    if (folderId) {
+      formData.append("folder", folderId);
+    }
+    formData.append("title", filename.replace(".pdf", ""));
+    formData.append("file", blob, filename);
+
+    const uploadRes = await fetch(`${DIRECTUS_URL}/files`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${getDirectusToken()}`,
+      },
+      body: formData,
+    });
+
+    if (!uploadRes.ok) {
+      const errText = await uploadRes.text();
+      throw new Error(`Directus upload responded ${uploadRes.status}: ${errText}`);
+    }
+
+    const json = (await uploadRes.json()) as { data: { id: string } };
+    return json.data?.id || null;
+  } catch (err) {
+    console.error(`[Directus Upload] Failed to upload PDF file '${filename}':`, err);
+    return null;
+  }
+}
 
 
