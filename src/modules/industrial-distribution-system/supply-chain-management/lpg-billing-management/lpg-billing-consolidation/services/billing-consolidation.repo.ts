@@ -119,6 +119,37 @@ function mapHeader(raw: Record<string, unknown>): ConsolidationHeader {
   };
 }
 
+// AG-CHANGE: Helper to hydrate customer details (such as customer_name) using Directus customer items
+async function hydrateCustomerNamesForHeaders(headers: ConsolidationHeader[]): Promise<ConsolidationHeader[]> {
+  if (headers.length === 0) return headers;
+
+  const customerCodes = Array.from(new Set(headers.map((h) => h.customer_id).filter(Boolean)));
+  if (customerCodes.length === 0) return headers;
+
+  let customerMap: Record<string, { customer_name: string; store_name?: string | null }> = {};
+  try {
+    const filterObj = { customer_code: { _in: customerCodes } };
+    const custRes = await directusFetch<{ data: { customer_code: string; customer_name: string; store_name?: string | null }[] }>(
+      `${DIRECTUS_URL}/items/customer?fields=customer_code,customer_name,store_name&filter=${encodeURIComponent(JSON.stringify(filterObj))}`
+    );
+    customerMap = Object.fromEntries(
+      (custRes.data ?? []).map((c) => [
+        c.customer_code,
+        { customer_name: c.customer_name, store_name: c.store_name },
+      ])
+    );
+  } catch (e) {
+    console.warn("Failed to fetch customer names for headers", e);
+  }
+
+  return headers.map((h) => {
+    if (h.customer_id && customerMap[h.customer_id]) {
+      h.customer = customerMap[h.customer_id];
+    }
+    return h;
+  });
+}
+
 function mapTransaction(raw: Record<string, unknown>): ConsolidationTransaction {
   return {
     id: Number(raw["id"]),
@@ -203,8 +234,11 @@ export async function repoFetchHeaders(params: ConsolidationHeaderListParams): P
     meta?: { total_count: number };
   }>(`${DIRECTUS_URL}/items/lpg_transaction_headers?${qs}`);
 
+  const mapped = (res.data ?? []).map(mapHeader);
+  const hydrated = await hydrateCustomerNamesForHeaders(mapped);
+
   return {
-    data: (res.data ?? []).map(mapHeader),
+    data: hydrated,
     total: res.meta?.total_count ?? 0,
   };
 }
@@ -216,7 +250,10 @@ export async function repoFetchHeaderById(headerId: number): Promise<Consolidati
   const res = await directusFetch<{ data: Record<string, unknown> }>(
     `${DIRECTUS_URL}/items/lpg_transaction_headers/${headerId}?fields=${HEADER_FIELDS}`
   );
-  return res.data ? mapHeader(res.data) : null;
+  if (!res.data) return null;
+  const mapped = mapHeader(res.data);
+  const [hydrated] = await hydrateCustomerNamesForHeaders([mapped]);
+  return hydrated;
 }
 
 // ─── Transaction Queries ──────────────────────────────────────────────────────

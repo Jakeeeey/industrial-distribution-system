@@ -6,7 +6,10 @@
 // Shows child transaction cards, totals, and audit drawers.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
+// AG-CHANGE: Import html-to-image and jsPDF for server-side quality PDF exports
+import { toPng } from "html-to-image";
+import jsPDF from "jspdf";
 import {
   ReceiptText,
   CheckCircle2,
@@ -23,6 +26,7 @@ import {
   TrendingUp,
   Gauge,
   Scale,
+  Printer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +34,19 @@ import { cn } from "@/lib/utils";
 import { AuditTrailDrawer } from "./AuditTrailDrawer";
 import { MeterReadingReviewPanel } from "./MeterReadingReviewPanel";
 import { WiwoReviewPanel } from "./WiwoReviewPanel";
+import { InvoicePrintTemplate } from "./InvoicePrintTemplate";
 import type { UseBillingConsolidationReturn } from "../hooks/useBillingConsolidation";
+// DEV-CHANGE: Import CompanyProfile interface for companyData state typing
+import type { CompanyProfile } from "../types/billing-consolidation.types";
+// AG-CHANGE: Import dialog layout components for the approval success print preview modal
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface ConsolidationWorkspaceProps {
   hook: UseBillingConsolidationReturn;
@@ -56,6 +72,33 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
   const [auditTxNo, setAuditTxNo] = useState("");
   const [selectedTxId, setSelectedTxId] = useState<number | null>(null);
 
+  // AG-CHANGE: Success print preview modal state
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+
+  // AG-CHANGE: Off-screen element ref and loader state for jsPDF generation
+  const printRef = useRef<HTMLDivElement>(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  // AG-CHANGE: Dynamic company metadata state and fetch hook
+  // DEV-CHANGE: Strong-typed companyData state using CompanyProfile to resolve unexpected any error
+  const [companyData, setCompanyData] = useState<CompanyProfile | null>(null);
+
+  useEffect(() => {
+    const fetchCompany = async () => {
+      try {
+        const res = await fetch("/api/pdf/company");
+        if (res.ok) {
+          const json = await res.json();
+          const comp = json.data?.[0] || (Array.isArray(json.data) ? null : json.data);
+          setCompanyData(comp);
+        }
+      } catch (err) {
+        console.error("Failed to fetch company details:", err);
+      }
+    };
+    fetchCompany();
+  }, []);
+
   const activeTxId = selectedTxId;
   const activeTx = transactions.find((t) => t.id === activeTxId);
 
@@ -67,6 +110,49 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
     },
     [loadAuditTrail]
   );
+
+  // AG-CHANGE: Callback to generate an 8.5" x 11" PDF (standard letter size)
+  const generatePDF = useCallback(async () => {
+    if (!printRef.current || !selectedHeader) return null;
+    setIsGeneratingPdf(true);
+    try {
+      const dataUrl = await toPng(printRef.current, {
+        quality: 0.95,
+        pixelRatio: 2,
+        backgroundColor: "#ffffff",
+        cacheBust: true,
+      });
+
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "in",
+        format: "letter", // Standard US Letter paper format
+      });
+
+      const imgWidth = 8.5; // 8.5 inches (Letter size width)
+      const imgHeight = (printRef.current.offsetHeight * imgWidth) / printRef.current.offsetWidth;
+
+      pdf.addImage(dataUrl, "PNG", 0, 0, imgWidth, imgHeight, undefined, "FAST");
+      setIsGeneratingPdf(false);
+      return pdf;
+    } catch (err) {
+      console.error("Failed to generate PDF:", err);
+      setIsGeneratingPdf(false);
+      return null;
+    }
+    // DEV-CHANGE: Removed unnecessary 'transactions' dependency to resolve react-hooks warning
+  }, [selectedHeader]);
+
+  // AG-CHANGE: Open print-ready PDF blob in a new browser tab
+  const handlePrintPDF = useCallback(async () => {
+    const doc = await generatePDF();
+    if (doc) {
+      const blob = doc.output("blob");
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    }
+  }, [generatePDF]);
 
   // ── Loading ──
   if (isLoadingWorkspace) {
@@ -124,11 +210,14 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
     const success = await approveHeader(selectedHeader.header_id);
     if (success) {
       setStep(3);
+      // AG-CHANGE: Trigger success print preview modal automatically on successful invoice generation
+      setIsSuccessModalOpen(true);
     }
   };
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-card rounded-2xl border border-border overflow-hidden shadow-sm animate-in fade-in duration-300">
+    <>
+      <div className="flex flex-col h-full min-h-0 bg-card rounded-2xl border border-border overflow-hidden shadow-sm animate-in fade-in duration-300 print:hidden">
       {/* ── Header Summary Banner ── */}
       <div className="px-5 py-4 border-b border-border bg-zinc-50/50 dark:bg-zinc-900/30 shrink-0">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -216,9 +305,24 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
                   </Button>
                 ) : (
                   selectedHeader.status === "POSTED" && (
-                    <Badge className="gap-1.5 bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 text-xs font-black px-3.5 py-1.5 shrink-0 border">
-                      <CheckCircle2 className="h-4 w-4" /> Approved & Invoiced
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        onClick={handlePrintPDF}
+                        disabled={isGeneratingPdf}
+                        className="h-9 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 shadow-sm"
+                      >
+                        {isGeneratingPdf ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Printer className="h-3.5 w-3.5" />
+                        )}
+                        {isGeneratingPdf ? "Generating..." : "Print Invoice"}
+                      </Button>
+                      <Badge className="gap-1.5 bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 text-xs font-black px-3.5 py-1.5 shrink-0 border">
+                        <CheckCircle2 className="h-4 w-4" /> Approved & Invoiced
+                      </Badge>
+                    </div>
                   )
                 )}
               </>
@@ -671,10 +775,10 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
+                  {/* AG-CHANGE: Removed Type column per user request to simplify billing consumption details */}
                   <tr className="border-b border-border text-muted-foreground bg-zinc-50/30 dark:bg-zinc-900/10 font-bold">
                     <th className="p-3">Transaction No</th>
                     <th className="p-3">Date</th>
-                    <th className="p-3">Type</th>
                     <th className="p-3 text-right">Billable Qty</th>
                     <th className="p-3 text-right">Price/Kg</th>
                     <th className="p-3 text-right">Vatable Sales</th>
@@ -694,11 +798,6 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
                     >
                       <td className="p-3 font-mono font-bold text-foreground">{tx.transaction_no}</td>
                       <td className="p-3 text-muted-foreground">{tx.transaction_date || "—"}</td>
-                      <td className="p-3">
-                        <Badge variant="outline" className="text-[9px] px-1 py-0 font-bold whitespace-nowrap">
-                          {tx.transaction_type}
-                        </Badge>
-                      </td>
                       <td className="p-3 text-right font-bold">
                         {tx.billable_kg.toFixed(3)} kg
                         <span className="text-[9px] text-muted-foreground block font-normal">
@@ -714,8 +813,9 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
                       <td className="p-3 text-right font-black text-foreground">₱ {tx.gross_amount.toFixed(2)}</td>
                     </tr>
                   ))}
+                  {/* AG-CHANGE: Adjusted colSpan to 2 since Type column was removed */}
                   <tr className="bg-zinc-50/50 dark:bg-zinc-900/20 font-black border-t border-border">
-                    <td colSpan={3} className="p-3 text-right">Summary Totals</td>
+                    <td colSpan={2} className="p-3 text-right">Summary Totals</td>
                     <td className="p-3 text-right text-primary">
                       {totalBillableKg.toFixed(3)} kg
                     </td>
@@ -734,6 +834,58 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
         </div>
       )}
 
+      {/* AG-CHANGE: Success print preview modal showing generated invoice */}
+      <Dialog open={isSuccessModalOpen} onOpenChange={setIsSuccessModalOpen}>
+        <DialogContent className="flex flex-col gap-0 p-0 overflow-hidden bg-background border-border shadow-2xl h-[95vh] !max-w-[95vw] rounded-2xl">
+          <div className="px-6 py-4 border-b border-border bg-gradient-to-r from-emerald-50/50 to-transparent dark:from-emerald-950/10 flex items-center gap-3 shrink-0">
+            <div className="h-9 w-9 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+              <CheckCircle2 className="h-5 w-5" />
+            </div>
+            <div>
+              <DialogTitle className="text-sm font-black text-foreground">
+                Billing Approved & Sales Invoice Generated
+              </DialogTitle>
+              <DialogDescription className="text-[11px] text-muted-foreground">
+                Invoice print preview for {selectedHeader.header_no || `Header #${selectedHeader.header_id}`}
+              </DialogDescription>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-6 bg-zinc-100 dark:bg-zinc-900/40 custom-scrollbar flex justify-center">
+            {/* Paper sheet styled wrapper matching 8.5" x 11" proportions (816px x 1056px) */}
+            <div className="w-[816px] min-h-[1056px] bg-white text-black shadow-md border border-zinc-200 p-8 my-2 shrink-0 overflow-x-auto flex flex-col">
+              <InvoicePrintTemplate header={selectedHeader} transactions={transactions} company={companyData} />
+            </div>
+          </div>
+
+          <DialogFooter className="px-6 py-4 border-t border-border bg-card flex sm:items-center justify-between gap-2 shrink-0">
+            <p className="text-[10px] text-muted-foreground hidden sm:block">
+              Approved and locked. Ready for distribution.
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                onClick={handlePrintPDF}
+                disabled={isGeneratingPdf}
+                className="h-8 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold"
+              >
+                {isGeneratingPdf ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Printer className="h-3.5 w-3.5" />
+                )}
+                {isGeneratingPdf ? "Generating..." : "Print Invoice"}
+              </Button>
+              <DialogClose asChild>
+                <Button variant="outline" size="sm" className="h-8 text-xs font-semibold">
+                  Done
+                </Button>
+              </DialogClose>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Audit Trail Drawer ── */}
       <AuditTrailDrawer
         isOpen={auditOpen}
@@ -743,6 +895,17 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
         onClose={() => setAuditOpen(false)}
       />
     </div>
+
+    {/* AG-CHANGE: Hidden print target container positioned behind the viewport (z-index: -50) to allow html-to-image to capture it successfully */}
+    <div
+      className="fixed top-0 left-0 -z-50 pointer-events-none w-[816px] min-h-[1056px] bg-white text-black p-8 font-sans flex flex-col"
+      ref={printRef}
+    >
+      {selectedHeader && (
+        <InvoicePrintTemplate header={selectedHeader} transactions={transactions} company={companyData} />
+      )}
+    </div>
+  </>
   );
 }
 
