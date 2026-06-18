@@ -34,7 +34,6 @@ interface LpgSiteViewProps {
 
 export function LpgSiteView({ id, onBack }: LpgSiteViewProps) {
   const [fetching, setFetching] = useState(false);
-  const [customers, setCustomers] = useState<{ customer_code: string; customer_name: string; brgy?: string; city?: string; province?: string }[]>([]);
 
   const [formData, setFormData] = useState<Partial<LpgSite>>({
     site_name: "",
@@ -60,8 +59,6 @@ export function LpgSiteView({ id, onBack }: LpgSiteViewProps) {
     const loadData = async () => {
       try {
         setFetching(true);
-        const customerList = await lpgSiteService.fetchCustomers();
-        setCustomers(customerList);
 
         if (id) {
           const site = await lpgSiteService.fetchSiteById(id);
@@ -134,9 +131,7 @@ export function LpgSiteView({ id, onBack }: LpgSiteViewProps) {
                   className="w-full justify-start rounded-xl border-zinc-200 dark:border-zinc-800 font-normal h-10 bg-zinc-50 dark:bg-zinc-900/50 cursor-default opacity-100 text-left px-3 sm:px-4"
                 >
                   <span className="truncate">
-                    {formData?.customer_code
-                      ? customers.find((c) => c.customer_code === formData.customer_code)?.customer_name || formData.customer_code
-                      : "No customer selected"}
+                    {formData?.customer?.customer_name || formData?.customer_code || "No customer selected"}
                   </span>
                 </Button>
               </div>
