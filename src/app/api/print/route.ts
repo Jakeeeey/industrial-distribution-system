@@ -6,9 +6,21 @@ import path from "path";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+export async function GET() {
+  try {
+    const defaultPrinterName = process.env.THERMAL_PRINTER_CONNECTION || "POS-58";
+    return NextResponse.json({ defaultPrinterName });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Internal server error";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { receiptText, logoUrl, printerName = "POS-58" } = await req.json();
+    const { receiptText, logoUrl, printerName } = await req.json();
+    const defaultPrinterName = process.env.THERMAL_PRINTER_CONNECTION || "POS-58";
+    const targetPrinterName = printerName || defaultPrinterName;
 
     if (logoUrl) {
       console.log("[Print Route] Printing with logo URL:", logoUrl);
@@ -83,7 +95,7 @@ export async function POST(req: NextRequest) {
     const psScriptPath = path.join(process.cwd(), "src/app/api/print/raw-print-helper.ps1");
 
     // Execute PowerShell printing process
-    let command = `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${psScriptPath}" -FilePath "${tempFilePath}" -PrinterName "${printerName}"`;
+    let command = `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${psScriptPath}" -FilePath "${tempFilePath}" -PrinterName "${targetPrinterName}"`;
     if (logoTempFilePath) {
       command += ` -LogoPath "${logoTempFilePath}"`;
     }
