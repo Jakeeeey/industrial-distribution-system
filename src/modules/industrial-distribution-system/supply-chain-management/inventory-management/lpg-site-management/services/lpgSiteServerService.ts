@@ -270,16 +270,16 @@ export const lpgSiteServerService = {
 
   async fetchCustomers(search?: string) {
     const DIRECTUS_URL = getDirectusBase();
-    let query = `fields=customer_code,customer_name,brgy,city,province&filter[isActive][_eq]=1&limit=-1&sort=customer_name`;
+    const filters: Record<string, unknown> = {
+      isActive: { _eq: 1 }
+    };
     if (search) {
-      const filter = {
-        _or: [
-          { customer_code: { _icontains: search } },
-          { customer_name: { _icontains: search } },
-        ],
-      };
-      query += `&filter=${encodeURIComponent(JSON.stringify(filter))}`;
+      filters._or = [
+        { customer_code: { _icontains: search } },
+        { customer_name: { _icontains: search } },
+      ];
     }
+    const query = `fields=customer_code,customer_name,brgy,city,province&limit=100&sort=customer_name&filter=${encodeURIComponent(JSON.stringify(filters))}`;
     const res = await directusFetch<{ data: { customer_code: string; customer_name: string }[] }>(`${DIRECTUS_URL}/items/customer?${query}`);
     return res.data;
   }

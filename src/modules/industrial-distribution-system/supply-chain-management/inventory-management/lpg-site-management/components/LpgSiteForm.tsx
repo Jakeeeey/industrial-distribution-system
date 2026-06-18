@@ -57,6 +57,8 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [customers, setCustomers] = useState<{ customer_code: string; customer_name: string; brgy?: string; city?: string; province?: string }[]>([]);
   const [customerOpen, setCustomerOpen] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
 
   const [formData, setFormData] = useState<Partial<LpgSite>>({
     site_name: "",
@@ -88,7 +90,8 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
         if (!customerList) {
           throw new Error("Failed to load customer list — the server returned no data.");
         }
-        setCustomers(customerList);
+
+        let initialCustomers = [...customerList];
 
         if (id) {
           const site = await lpgSiteService.fetchSiteById(id);
@@ -123,6 +126,15 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
             }
           }
 
+          // Ensure site customer is in the initial customers list
+          if (site.customer_code && !initialCustomers.some(c => c.customer_code === site.customer_code)) {
+            const siteCustomer = site.customer || {
+              customer_code: site.customer_code,
+              customer_name: site.customer_code
+            };
+            initialCustomers = [siteCustomer, ...initialCustomers];
+          }
+
           setFormData({
             ...site,
             meter_direction: site.meter_direction || "INCREASING",
@@ -132,6 +144,8 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
             cylinders: site.cylinders || []
           });
         }
+
+        setCustomers(initialCustomers);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to load site data.";
         setFetchError(msg);
@@ -142,6 +156,43 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
     };
     loadData();
   }, [id]);
+
+  // Debounced search for customers
+  useEffect(() => {
+    if (!customerOpen) return;
+
+    const searchCustomers = async () => {
+      try {
+        setLoadingCustomers(true);
+        const list = await lpgSiteService.fetchCustomers(customerSearch);
+        if (list) {
+          setCustomers(prev => {
+            // Keep the currently selected customer in the options list so it remains visible
+            const currentSelected = prev.find(c => c.customer_code === formData.customer_code);
+            let merged = [...list];
+            if (currentSelected && !merged.some(c => c.customer_code === currentSelected.customer_code)) {
+              merged = [currentSelected, ...merged];
+            }
+            return merged;
+          });
+        }
+      } catch (err) {
+        console.error("Error searching customers:", err);
+      } finally {
+        setLoadingCustomers(false);
+      }
+    };
+
+    const timer = setTimeout(searchCustomers, 300);
+    return () => clearTimeout(timer);
+  }, [customerSearch, customerOpen, formData.customer_code]);
+
+  const handleCustomerOpenChange = (open: boolean) => {
+    setCustomerOpen(open);
+    if (!open) {
+      setCustomerSearch("");
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -274,7 +325,7 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
             <CardContent className="p-4 sm:p-6 space-y-4">
               <div className="space-y-2">
                 <Label>Customer</Label>
-                <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
+                <Popover open={customerOpen} onOpenChange={handleCustomerOpenChange}>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
@@ -291,39 +342,52 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-[calc(100vw-2rem)] sm:w-[400px] p-0 rounded-xl border-zinc-200 dark:border-zinc-800 shadow-2xl" align="start">
-                    <Command className="rounded-xl max-w-full">
-                      <CommandInput placeholder="Search customer name or code..." className="h-10" />
+                    <Command className="rounded-xl max-w-full" shouldFilter={false}>
+                      <CommandInput 
+                        placeholder="Search customer name or code..." 
+                        className="h-10" 
+                        value={customerSearch}
+                        onValueChange={setCustomerSearch}
+                      />
                       <CommandList>
-                        <CommandEmpty>No customer found.</CommandEmpty>
-                        <CommandGroup>
-                          {customers.map((c) => (
-                            <CommandItem
-                              key={c.customer_code}
-                              value={`${c.customer_name} ${c.customer_code}`}
-                              onSelect={() => {
-                                const fullAddress = [c.brgy, c.city, c.province].filter(Boolean).join(", ");
-                                setFormData({
-                                  ...formData,
-                                  customer_code: c.customer_code,
-                                  site_address: formData?.site_address || fullAddress
-                                });
-                                setCustomerOpen(false);
-                              }}
-                              className="cursor-pointer"
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4 shrink-0",
-                                  formData.customer_code === c.customer_code ? "opacity-100" : "opacity-0"
-                                )}
-                              />
-                              <div className="flex flex-col truncate pr-2">
-                                <span className="font-medium truncate">{c.customer_name}</span>
-                                <span className="text-[10px] text-muted-foreground uppercase truncate">{c.customer_code}</span>
-                              </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
+                        {loadingCustomers ? (
+                          <div className="flex items-center justify-center py-6 text-sm text-muted-foreground gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin text-orange-600" />
+                            Searching customers...
+                          </div>
+                        ) : customers.length === 0 ? (
+                          <CommandEmpty>No customer found.</CommandEmpty>
+                        ) : (
+                          <CommandGroup>
+                            {customers.map((c) => (
+                              <CommandItem
+                                key={c.customer_code}
+                                value={`${c.customer_name} ${c.customer_code}`}
+                                onSelect={() => {
+                                  const fullAddress = [c.brgy, c.city, c.province].filter(Boolean).join(", ");
+                                  setFormData({
+                                    ...formData,
+                                    customer_code: c.customer_code,
+                                    site_address: formData?.site_address || fullAddress
+                                  });
+                                  handleCustomerOpenChange(false);
+                                }}
+                                className="cursor-pointer"
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4 shrink-0",
+                                    formData.customer_code === c.customer_code ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                <div className="flex flex-col truncate pr-2">
+                                  <span className="font-medium truncate">{c.customer_name}</span>
+                                  <span className="text-[10px] text-muted-foreground uppercase truncate">{c.customer_code}</span>
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        )}
                       </CommandList>
                     </Command>
                   </PopoverContent>
