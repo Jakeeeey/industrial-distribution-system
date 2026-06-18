@@ -53,7 +53,7 @@ export interface UseBillingConsolidationReturn {
     new_returned_gross_weight_kg: number;
     adjustment_reason: string;
   }) => Promise<boolean>;
-  approveHeader: (headerId: number) => Promise<boolean>;
+  approveHeader: (headerId: number, pdfBase64?: string) => Promise<boolean>;
 
   // Audit trail
   auditEntries: ConsolidationAuditEntry[];
@@ -276,13 +276,13 @@ export function useBillingConsolidation(): UseBillingConsolidationReturn {
    * Approves the selected billing header (sets status → POSTED).
    * Returns true on success, false on failure.
    */
-  const approveHeader = useCallback(async (headerId: number): Promise<boolean> => {
+  const approveHeader = useCallback(async (headerId: number, pdfBase64?: string): Promise<boolean> => {
     setIsSubmitting(true);
     try {
       const res = await fetch(`${BASE_URL}?action=approve-header`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ headerId }),
+        body: JSON.stringify({ headerId, pdfBase64 }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({})) as { error?: string };

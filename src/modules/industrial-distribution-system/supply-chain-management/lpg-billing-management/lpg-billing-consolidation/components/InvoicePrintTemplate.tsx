@@ -80,7 +80,7 @@ export function InvoicePrintTemplate({ header, transactions, company }: InvoiceP
               />
             )}
             <h1 className="text-base font-bold text-gray-900 leading-tight">
-              {company?.company_name || "Vos Gas Solutions"}
+              {company?.company_name || ""}
             </h1>
             <p className="text-[10px] text-gray-500 leading-normal max-w-[280px]">
               {companyAddress}
@@ -288,7 +288,7 @@ export function InvoicePrintTemplate({ header, transactions, company }: InvoiceP
             {/* Payee Box */}
             <div className="text-[8.5px] text-gray-500 leading-snug mt-4">
               <p className="font-bold text-gray-700">Make checks payable to:</p>
-              <p className="font-bold text-gray-900">{company?.company_name || "Vos Gas Solutions"}</p>
+              <p className="font-bold text-gray-900">{company?.company_name || ""}</p>
               <p className="max-w-[150px]">{companyAddress}</p>
             </div>
           </div>

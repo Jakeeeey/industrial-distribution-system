@@ -28,6 +28,7 @@ export interface ConsolidationHeader {
   status: HeaderStatus;
   is_billed: 0 | 1;
   remarks: string | null;
+  invoice_attachments_uuid?: string | null;
   created_by: number | null;
   posted_by: number | null;
   posted_at: string | null;
@@ -254,6 +255,7 @@ export interface WiwoDetailAdjustPayload {
 export interface ApproveHeaderPayload {
   headerId: number;
   approved_by: number;
+  pdfBase64?: string;
 }
 
 // ─── Active Cylinder Raw Response (lpg_customer_site_cylinders) ────────────────

@@ -41,7 +41,13 @@ import {
   // AG-CHANGE: Import cylinder helpers to adjust onboarding baseline cylinders directly in the database
   repoFetchCustomerSiteCylinder,
   repoPatchCustomerSiteCylinder,
+  repoFetchCustomerEmailByCode,
+  repoFetchCompanyProfile,
+  repoGetOrCreateFolderId,
+  repoUploadInvoicePdf,
 } from "./billing-consolidation.repo";
+
+import { sendInvoiceEmail } from "../utils/email-sender";
 
 // ─── Header Listing ───────────────────────────────────────────────────────────
 
@@ -762,14 +768,13 @@ export async function approveConsolidationHeader(payload: ApproveHeaderPayload):
   // 2. Consolidate child transaction totals
   let totalGross = 0;
   let totalVat = 0;
-  let totalNet = 0;
+  // DEV-CHANGE: Removed unused totalNet variable to resolve eslint warning
   let totalDiscount = 0;
 
   for (const tx of transactions) {
     if (tx.status !== "CANCELLED") {
       totalGross += tx.gross_amount;
       totalVat += tx.vat_amount;
-      totalNet += tx.net_amount;
       totalDiscount += tx.discount_amount;
     }
   }
@@ -784,6 +789,7 @@ export async function approveConsolidationHeader(payload: ApproveHeaderPayload):
   const branchId = await repoFetchFirstBranchId();
 
   // 5. Create Sales Invoice
+  // DEV-CHANGE: Align net_amount and total_amount with the VAT-inclusive totalGross to resolve discrepancy with PDF invoice
   const invoice = await repoCreateSalesInvoice({
     invoice_no: invoiceNo,
     order_id: invoiceNo,
@@ -791,9 +797,9 @@ export async function approveConsolidationHeader(payload: ApproveHeaderPayload):
     invoice_date: today,
     gross_amount: parseFloat(totalGross.toFixed(2)),
     vat_amount: parseFloat(totalVat.toFixed(2)),
-    // AG-CHANGE: In a VAT-inclusive system, total_amount is equal to the sum of transaction net_amounts
-    net_amount: parseFloat(totalNet.toFixed(2)),
-    total_amount: parseFloat(totalNet.toFixed(2)),
+    // AG-CHANGE: In a VAT-inclusive system, total_amount is equal to the sum of transaction gross_amounts (totalGross)
+    net_amount: parseFloat(totalGross.toFixed(2)),
+    total_amount: parseFloat(totalGross.toFixed(2)),
     transaction_status: "unpaid",
     remarks: `Consolidated Invoice for Billing Header ${header.header_no || headerId}`,
     salesman_id: salesmanId,
@@ -829,14 +835,74 @@ export async function approveConsolidationHeader(payload: ApproveHeaderPayload):
     status: "POSTED",
   });
 
-  // 8. Update header status to POSTED and mark as billed (read-only)
+  // 7.5 Upload PDF to Directus if pdfBase64 is provided
+  let pdfAttachmentUuid: string | null = null;
+  if (payload.pdfBase64) {
+    try {
+      const folderId = await repoGetOrCreateFolderId("ids_invoice_pdf");
+      const fileId = await repoUploadInvoicePdf(
+        payload.pdfBase64,
+        `Consolidated_Invoice_${invoiceNo}.pdf`,
+        folderId
+      );
+      if (fileId) {
+        pdfAttachmentUuid = fileId;
+        console.log(`[Directus File Upload] Successfully uploaded consolidated PDF. UUID: ${fileId}`);
+      }
+    } catch (uploadErr) {
+      console.error("[Directus File Upload] Failed to upload PDF attachment:", uploadErr);
+    }
+  }
+
+  // 8. Update header status to POSTED, mark as billed, and link the PDF UUID
   await repoPatchHeader(headerId, {
     status: "POSTED",
     is_billed: 1,
+    invoice_attachments_uuid: pdfAttachmentUuid,
     posted_by: approved_by,
     posted_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   });
+
+  // 9. Fetch company profile, customer email, and send email notification with PDF attachment (non-blocking)
+  try {
+    const custInfo = await repoFetchCustomerEmailByCode(header.customer_id);
+    if (custInfo && custInfo.customer_email) {
+      const company = await repoFetchCompanyProfile();
+      const companyName = company?.company_name || "";
+
+      // Calculate due date (10 days in the future)
+      const invDate = new Date();
+      const dueDateObj = new Date();
+      dueDateObj.setDate(dueDateObj.getDate() + 10);
+
+      const formatDate = (d: Date) => d.toISOString().split("T")[0];
+
+      // DEV-CHANGE: Send clean informational billing notification to customer attaching the PDF invoice.
+      // Align netAmount with the VAT-inclusive totalGross to match the PDF invoice amount.
+      await sendInvoiceEmail({
+        to: custInfo.customer_email,
+        customerName: custInfo.customer_name || header.customer_id,
+        invoiceNo: invoice.invoice_no,
+        invoiceDate: formatDate(invDate),
+        dueDate: formatDate(dueDateObj),
+        netAmount: totalGross,
+        periodFrom: header.period_from,
+        periodTo: header.period_to,
+        pdfBase64: payload.pdfBase64,
+        companyName,
+        companyContact: company?.company_contact,
+        companyEmail: company?.company_email,
+        companyTin: company?.company_tin,
+      });
+      console.log(`[Email Service] Successfully sent invoice notification for ${invoice.invoice_no} to ${custInfo.customer_email}`);
+    } else {
+      console.warn(`[Email Service] Customer ${header.customer_id} has no customer_email set. Skipping notification.`);
+    }
+  } catch (err) {
+    // DEV-CHANGE: Catch and log email errors to ensure transaction posting success is NOT interrupted by SMTP delivery failures
+    console.error(`[Email Service] Failed to send email for invoice ${invoice.invoice_no}:`, err);
+  }
 }
 
 
