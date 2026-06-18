@@ -207,7 +207,18 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
   const totalAmountBilled = totalGross;
 
   const handleApprove = async () => {
-    const success = await approveHeader(selectedHeader.header_id);
+    let pdfBase64: string | undefined = undefined;
+    try {
+      const doc = await generatePDF();
+      if (doc) {
+        const dataUri = doc.output("datauristring");
+        pdfBase64 = dataUri.split(",")[1];
+      }
+    } catch (err) {
+      console.error("Failed to pre-generate PDF for email attachment:", err);
+    }
+
+    const success = await approveHeader(selectedHeader.header_id, pdfBase64);
     if (success) {
       setStep(3);
       // AG-CHANGE: Trigger success print preview modal automatically on successful invoice generation

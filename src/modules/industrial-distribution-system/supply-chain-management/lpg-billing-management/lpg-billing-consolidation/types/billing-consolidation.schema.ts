@@ -38,6 +38,7 @@ export type WiwoDetailAdjustInput = z.infer<typeof WiwoDetailAdjustSchema>;
 export const ApproveHeaderSchema = z.object({
   headerId: z.number().int().nonnegative(),
   approved_by: z.number().int().nonnegative(),
+  pdfBase64: z.string().optional(),
 });
 
 export type ApproveHeaderInput = z.infer<typeof ApproveHeaderSchema>;
