@@ -31,6 +31,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -373,6 +374,32 @@ export default function WiwoThermalReceiptModal({ open, onClose, data, autoPrint
   const [printing, setPrinting] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [autoPrintTriggered, setAutoPrintTriggered] = useState(false);
+  const [printerConnection, setPrinterConnection] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("thermal_printer_connection") || "POS-58";
+    }
+    return "POS-58";
+  });
+
+  // Load default printer name
+  useEffect(() => {
+    if (!open) return;
+    fetch("/api/print")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.defaultPrinterName) {
+          setPrinterConnection(data.defaultPrinterName);
+        } else {
+          const saved = localStorage.getItem("thermal_printer_connection");
+          if (saved) {
+            setPrinterConnection(saved);
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn("[WiwoThermalReceiptModal] Failed to fetch default printer config:", err);
+      });
+  }, [open]);
 
   // Fetch company profile once when modal opens
   useEffect(() => {
@@ -434,11 +461,11 @@ export default function WiwoThermalReceiptModal({ open, onClose, data, autoPrint
       const res = await fetch("/api/print", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ receiptText, logoUrl, printerName: "POS-58" }),
+        body: JSON.stringify({ receiptText, logoUrl, printerName: printerConnection }),
       });
 
       if (res.ok) {
-        toast.success("Receipt printed silently on POS-58.");
+        toast.success(`Receipt printed silently on ${printerConnection}.`);
       } else {
         const errJson = await res.json().catch(() => ({}));
         throw new Error(errJson.error || "Silent printer connection failed.");
@@ -449,7 +476,9 @@ export default function WiwoThermalReceiptModal({ open, onClose, data, autoPrint
 
       const isConnectionIssue =
         errMsg.toLowerCase().includes("offline") ||
-        errMsg.toLowerCase().includes("not found");
+        errMsg.toLowerCase().includes("not found") ||
+        errMsg.toLowerCase().includes("timed out") ||
+        errMsg.toLowerCase().includes("did not respond");
 
       if (isConnectionIssue) {
         toast.error("Printer Offline or Not Found", {
@@ -502,7 +531,7 @@ export default function WiwoThermalReceiptModal({ open, onClose, data, autoPrint
     } finally {
       setPrinting(false);
     }
-  }, [company, data]);
+  }, [company, data, printerConnection]);
 
   // Automatically trigger print if autoPrint prop is active
   useEffect(() => {
@@ -530,6 +559,24 @@ export default function WiwoThermalReceiptModal({ open, onClose, data, autoPrint
               <X className="h-4 w-4 text-muted-foreground" />
             </button>
           </DialogClose>
+        </div>
+
+        {/* ── Printer Connection Toggle ── */}
+        <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/20 text-xs">
+          <span className="font-semibold text-muted-foreground">Printer Connection:</span>
+          <NativeSelect
+            size="sm"
+            value={printerConnection}
+            onChange={(e) => {
+              const val = e.target.value;
+              setPrinterConnection(val);
+              localStorage.setItem("thermal_printer_connection", val);
+            }}
+            className="w-[160px] text-xs h-8"
+          >
+            <NativeSelectOption value="POS-58">USB (POS-58)</NativeSelectOption>
+            <NativeSelectOption value="POS-58-BT">Bluetooth (POS-58-BT)</NativeSelectOption>
+          </NativeSelect>
         </div>
 
         {/* Preview Area */}
