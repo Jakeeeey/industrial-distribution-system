@@ -81,7 +81,7 @@ export function VariancePanel({ result }: Props) {
           <p className={`font-mono font-bold ${isHighVariance ? "text-red-600" : "text-zinc-700 dark:text-zinc-300"}`}>
             {Number(variance_kg).toFixed(4)} kg
           </p>
-          <p className="text-[10px] text-muted-foreground">{variancePct}%</p>
+          {/* <p className="text-[10px] text-muted-foreground">{variancePct}%</p> */}
         </div>
       </div>
 

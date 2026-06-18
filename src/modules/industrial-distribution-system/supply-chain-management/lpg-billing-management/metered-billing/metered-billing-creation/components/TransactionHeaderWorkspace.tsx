@@ -222,11 +222,11 @@ export function TransactionHeaderWorkspace({
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <>
-      <div className="w-full max-w-4xl mx-auto flex flex-col bg-card/80 backdrop-blur-md rounded-3xl shadow-md border border-border overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="bg-card/80 backdrop-blur-md border border-border h-[calc(100dvh-160px)] min-h-[380px] sm:h-auto flex flex-col rounded-3xl shadow-md w-full max-w-4xl mx-auto overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
 
-        {/* ── Header ─────────────────────────────────────────────────────── */}
-        <div className="px-4 py-4 sm:px-6 sm:py-5 border-b border-border bg-gradient-to-r from-primary/5 via-transparent to-transparent shrink-0">
-          <div className="flex items-center justify-between gap-3">
+      {/* ── Header ─────────────────────────────────────────────────────── */}
+      <div className="px-4 py-4 sm:px-6 sm:py-5 border-b border-border bg-gradient-to-r from-primary/5 via-transparent to-transparent shrink-0">
+        <div className="flex items-start justify-between gap-3">
             {/* Title */}
             <div className="min-w-0">
               <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-0.5">
@@ -358,8 +358,8 @@ export function TransactionHeaderWorkspace({
           </p>
         </div>
 
-        {/* ── Header Cards Grid ──────────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 custom-scrollbar" style={{ minHeight: 300, maxHeight: 540 }}>
+        {/* AG-CHANGE: Replaced maxHeight with flex-1 on mobile to utilize full height, scaling back to sm:max-h-[540px] and sm:flex-initial on desktop */}
+        <div className="flex-1 sm:flex-initial overflow-y-auto p-3 sm:p-4 lg:p-6 custom-scrollbar sm:max-h-[540px]" style={{ minHeight: 250 }}>
           {loading && headers.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 gap-3 text-muted-foreground">
               <Loader2 className="h-7 w-7 animate-spin" />

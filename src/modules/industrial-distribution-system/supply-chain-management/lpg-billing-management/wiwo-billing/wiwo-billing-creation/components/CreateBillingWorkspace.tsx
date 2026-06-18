@@ -193,10 +193,10 @@ export function CreateBillingWorkspace({
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="bg-card/80 backdrop-blur-md border border-border rounded-3xl shadow-md w-full max-w-4xl mx-auto overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="bg-card/80 backdrop-blur-md border border-border h-[calc(100dvh-260px)] min-h-[380px] sm:h-auto flex flex-col rounded-3xl shadow-md w-full max-w-4xl mx-auto overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div className="px-4 py-4 sm:px-6 sm:py-5 border-b border-border bg-gradient-to-r from-primary/5 via-transparent to-transparent">
+      <div className="px-4 py-4 sm:px-6 sm:py-5 border-b border-border bg-gradient-to-r from-primary/5 via-transparent to-transparent shrink-0">
         <div className="flex items-start justify-between gap-3">
           {/* Site + period info */}
           <div className="min-w-0">
@@ -237,191 +237,193 @@ export function CreateBillingWorkspace({
 
       {/* ── Step 1: Select Transaction Type ────────────────────────────── */}
       {step === 1 && (
-        <div className="p-4 sm:p-6 space-y-5 animate-in fade-in slide-in-from-right-4 duration-300">
-          <div className="space-y-1">
-            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-              Step 1 of 2 · Transaction Type
-            </p>
-            <p className="text-xs sm:text-sm text-muted-foreground">
-              Choose the billing flow for this header.
-            </p>
-          </div>
-
-          {/* Type Cards — single col on mobile, 2-col on md+ */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* ROUTINE — AG-CHANGE: disabled if site has no onboarding baseline yet, or if there is an active/pending draft onboarding */}
-            <button
-              type="button"
-              onClick={() => handleSelectType("ROUTINE")}
-              disabled={!alreadyOnboarded || hasDraftOnboarding || checkingOnboarding}
-              className={`group relative p-4 sm:p-5 border-2 rounded-2xl text-left transition-all duration-200 ${(!alreadyOnboarded || hasDraftOnboarding)
-                ? "border-border bg-muted/30 opacity-60 cursor-not-allowed"
-                : transactionType === "ROUTINE"
-                  ? "border-primary bg-primary/10 ring-2 ring-primary/20 shadow-lg shadow-primary/10"
-                  : "border-border hover:border-primary/40 hover:bg-accent/60"
-                }`}
-            >
-              {/* Selection Indicator */}
-              <div
-                className={`absolute top-4 right-4 h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${transactionType === "ROUTINE"
-                  ? "border-primary bg-primary"
-                  : "border-muted-foreground/40"
-                  }`}
-              >
-                {transactionType === "ROUTINE" && (
-                  <CheckCircle2 className="h-3 w-3 text-white" />
-                )}
-              </div>
-
-              {/* Spinner if checking */}
-              {checkingOnboarding && (
-                <div className="absolute inset-0 flex items-center justify-center bg-card/60 rounded-2xl z-10">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                </div>
-              )}
-
-              {/* Icon + Content */}
-              <div
-                className={`h-10 w-10 rounded-xl flex items-center justify-center mb-4 transition-colors ${transactionType === "ROUTINE"
-                  ? "bg-primary/20 text-primary"
-                  : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
-                  }`}
-              >
-                <RefreshCw className="h-5 w-5" />
-              </div>
-
-              <h3
-                className={`font-bold text-base mb-1.5 transition-colors ${transactionType === "ROUTINE" ? "text-primary" : "text-foreground"
-                  }`}
-              >
-                Regular Routine Check &amp; Swap
-              </h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Process physical cylinder validation, consumption comparison, weigh-in/weigh-out, and potential cylinder replacement.
+        <div className="p-4 sm:p-6 space-y-5 flex-1 flex flex-col justify-between min-h-0 animate-in fade-in slide-in-from-right-4 duration-300">
+          <div className="space-y-5 flex-1 flex flex-col min-h-0">
+            <div className="space-y-1 shrink-0">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                Step 1 of 2 · Transaction Type
               </p>
-
-              {/* Locked badge — shown when no onboarding baseline exists */}
-              {!alreadyOnboarded && !checkingOnboarding && (
-                <div className="mt-3 flex items-center gap-1.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
-                  <AlertCircle className="h-3 w-3" />
-                  <span>Requires onboarding baseline first</span>
-                </div>
-              )}
-
-              {/* Locked badge — shown when there is an active/pending draft onboarding */}
-              {alreadyOnboarded && hasDraftOnboarding && !checkingOnboarding && (
-                <div className="mt-3 flex items-center gap-1.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
-                  <AlertCircle className="h-3 w-3" />
-                  <span>Onboarding from WIWO pending completion {draftTransactionNo ? `(${draftTransactionNo})` : ""}</span>
-                </div>
-              )}
-
-              {/* Tag — shown only when onboarded */}
-              {alreadyOnboarded && !hasDraftOnboarding && (
-                <div className="mt-3">
-                  <span
-                    className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors ${transactionType === "ROUTINE"
-                      ? "bg-primary/20 text-primary"
-                      : "bg-muted text-muted-foreground"
-                      }`}
-                  >
-                    <Zap className="h-2.5 w-2.5" />
-                    REGULAR_BILLING
-                  </span>
-                </div>
-              )}
-            </button>
-
-            {/* ONBOARDING */}
-            <button
-              type="button"
-              onClick={() => handleSelectType("ONBOARDING")}
-              disabled={alreadyOnboarded || hasDraftOnboarding || checkingOnboarding}
-              className={`group relative p-4 sm:p-5 border-2 rounded-2xl text-left transition-all duration-200 ${(alreadyOnboarded || hasDraftOnboarding)
-                ? "border-border bg-muted/30 opacity-60 cursor-not-allowed"
-                : transactionType === "ONBOARDING"
-                  ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 ring-2 ring-emerald-500/20 shadow-lg shadow-emerald-500/10"
-                  : "border-border hover:border-emerald-500/40 hover:bg-accent/60"
-                }`}
-            >
-              {/* Selection Indicator */}
-              <div
-                className={`absolute top-4 right-4 h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${transactionType === "ONBOARDING"
-                  ? "border-emerald-500 bg-emerald-500"
-                  : "border-muted-foreground/40"
-                  }`}
-              >
-                {transactionType === "ONBOARDING" && (
-                  <CheckCircle2 className="h-3 w-3 text-white" />
-                )}
-              </div>
-
-              {/* Spinner if checking */}
-              {checkingOnboarding && (
-                <div className="absolute inset-0 flex items-center justify-center bg-card/60 rounded-2xl z-10">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                </div>
-              )}
-
-              <div
-                className={`h-10 w-10 rounded-xl flex items-center justify-center mb-4 transition-colors ${transactionType === "ONBOARDING"
-                  ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
-                  : "bg-muted text-muted-foreground group-hover:bg-emerald-50 dark:group-hover:bg-emerald-950/30 group-hover:text-emerald-600 dark:group-hover:text-emerald-400"
-                  }`}
-              >
-                <Package className="h-5 w-5" />
-              </div>
-
-              <h3
-                className={`font-bold text-base mb-1.5 transition-colors ${transactionType === "ONBOARDING"
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : "text-foreground"
-                  }`}
-              >
-                Onboarding Baseline Setup
-              </h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Deploy initial cylinders to a new LPG site. Establishes inventory baseline without billing consumption.
+              <p className="text-xs sm:text-sm text-muted-foreground">
+                Choose the billing flow for this header.
               </p>
+            </div>
 
-              {/* Already onboarded badge */}
-              {alreadyOnboarded && (
-                <div className="mt-3 flex items-center gap-1.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
-                  <AlertCircle className="h-3 w-3" />
-                  <span>Site already has completed onboarding record</span>
+            {/* Type Cards — single col on mobile, 2-col on md+ */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 overflow-y-auto">
+              {/* ROUTINE — AG-CHANGE: disabled if site has no onboarding baseline yet, or if there is an active/pending draft onboarding */}
+              <button
+                type="button"
+                onClick={() => handleSelectType("ROUTINE")}
+                disabled={!alreadyOnboarded || hasDraftOnboarding || checkingOnboarding}
+                className={`group relative p-4 sm:p-5 border-2 rounded-2xl text-left transition-all duration-200 ${(!alreadyOnboarded || hasDraftOnboarding)
+                  ? "border-border bg-muted/30 opacity-60 cursor-not-allowed"
+                  : transactionType === "ROUTINE"
+                    ? "border-primary bg-primary/10 ring-2 ring-primary/20 shadow-lg shadow-primary/10"
+                    : "border-border hover:border-primary/40 hover:bg-accent/60"
+                  }`}
+              >
+                {/* Selection Indicator */}
+                <div
+                  className={`absolute top-4 right-4 h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${transactionType === "ROUTINE"
+                    ? "border-primary bg-primary"
+                    : "border-muted-foreground/40"
+                    }`}
+                >
+                  {transactionType === "ROUTINE" && (
+                    <CheckCircle2 className="h-3 w-3 text-white" />
+                  )}
                 </div>
-              )}
 
-              {/* Draft onboarding baseline exists from WIWO but not finished */}
-              {hasDraftOnboarding && (
-                <div className="mt-3 flex items-center gap-1.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
-                  <AlertCircle className="h-3 w-3" />
-                  <span>Active/pending onboarding {draftTransactionNo ? `(${draftTransactionNo})` : ""} has not been finished</span>
-                </div>
-              )}
+                {/* Spinner if checking */}
+                {checkingOnboarding && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-card/60 rounded-2xl z-10">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                )}
 
-              {!alreadyOnboarded && !hasDraftOnboarding && (
-                <div className="mt-3">
-                  <span
-                    className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors ${transactionType === "ONBOARDING"
-                      ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
-                      : "bg-muted text-muted-foreground"
-                      }`}
-                  >
-                    <Zap className="h-2.5 w-2.5" />
-                    ONBOARDING_BASELINE
-                  </span>
+                {/* Icon + Content */}
+                <div
+                  className={`h-10 w-10 rounded-xl flex items-center justify-center mb-4 transition-colors ${transactionType === "ROUTINE"
+                    ? "bg-primary/20 text-primary"
+                    : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
+                    }`}
+                >
+                  <RefreshCw className="h-5 w-5" />
                 </div>
-              )}
-            </button>
+
+                <h3
+                  className={`font-bold text-base mb-1.5 transition-colors ${transactionType === "ROUTINE" ? "text-primary" : "text-foreground"
+                    }`}
+                >
+                  Regular Routine Check &amp; Swap
+                </h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Process physical cylinder validation, consumption comparison, weigh-in/weigh-out, and potential cylinder replacement.
+                </p>
+
+                {/* Locked badge — shown when no onboarding baseline exists */}
+                {!alreadyOnboarded && !checkingOnboarding && (
+                  <div className="mt-3 flex items-center gap-1.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                    <AlertCircle className="h-3 w-3" />
+                    <span>Requires onboarding baseline first</span>
+                  </div>
+                )}
+
+                {/* Locked badge — shown when there is an active/pending draft onboarding */}
+                {alreadyOnboarded && hasDraftOnboarding && !checkingOnboarding && (
+                  <div className="mt-3 flex items-center gap-1.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                    <AlertCircle className="h-3 w-3" />
+                    <span>Onboarding from WIWO pending completion {draftTransactionNo ? `(${draftTransactionNo})` : ""}</span>
+                  </div>
+                )}
+
+                {/* Tag — shown only when onboarded */}
+                {alreadyOnboarded && !hasDraftOnboarding && (
+                  <div className="mt-3">
+                    <span
+                      className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors ${transactionType === "ROUTINE"
+                        ? "bg-primary/20 text-primary"
+                        : "bg-muted text-muted-foreground"
+                        }`}
+                    >
+                      <Zap className="h-2.5 w-2.5" />
+                      REGULAR_BILLING
+                    </span>
+                  </div>
+                )}
+              </button>
+
+              {/* ONBOARDING */}
+              <button
+                type="button"
+                onClick={() => handleSelectType("ONBOARDING")}
+                disabled={alreadyOnboarded || hasDraftOnboarding || checkingOnboarding}
+                className={`group relative p-4 sm:p-5 border-2 rounded-2xl text-left transition-all duration-200 ${(alreadyOnboarded || hasDraftOnboarding)
+                  ? "border-border bg-muted/30 opacity-60 cursor-not-allowed"
+                  : transactionType === "ONBOARDING"
+                    ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 ring-2 ring-emerald-500/20 shadow-lg shadow-emerald-500/10"
+                    : "border-border hover:border-emerald-500/40 hover:bg-accent/60"
+                  }`}
+              >
+                {/* Selection Indicator */}
+                <div
+                  className={`absolute top-4 right-4 h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${transactionType === "ONBOARDING"
+                    ? "border-emerald-500 bg-emerald-500"
+                    : "border-muted-foreground/40"
+                    }`}
+                >
+                  {transactionType === "ONBOARDING" && (
+                    <CheckCircle2 className="h-3 w-3 text-white" />
+                  )}
+                </div>
+
+                {/* Spinner if checking */}
+                {checkingOnboarding && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-card/60 rounded-2xl z-10">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                )}
+
+                <div
+                  className={`h-10 w-10 rounded-xl flex items-center justify-center mb-4 transition-colors ${transactionType === "ONBOARDING"
+                    ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
+                    : "bg-muted text-muted-foreground group-hover:bg-emerald-50 dark:group-hover:bg-emerald-950/30 group-hover:text-emerald-600 dark:group-hover:text-emerald-400"
+                    }`}
+                >
+                  <Package className="h-5 w-5" />
+                </div>
+
+                <h3
+                  className={`font-bold text-base mb-1.5 transition-colors ${transactionType === "ONBOARDING"
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-foreground"
+                    }`}
+                >
+                  Onboarding Baseline Setup
+                </h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Deploy initial cylinders to a new LPG site. Establishes inventory baseline without billing consumption.
+                </p>
+
+                {/* Already onboarded badge */}
+                {alreadyOnboarded && (
+                  <div className="mt-3 flex items-center gap-1.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                    <AlertCircle className="h-3 w-3" />
+                    <span>Site already has completed onboarding record</span>
+                  </div>
+                )}
+
+                {/* Draft onboarding baseline exists from WIWO but not finished */}
+                {hasDraftOnboarding && (
+                  <div className="mt-3 flex items-center gap-1.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                    <AlertCircle className="h-3 w-3" />
+                    <span>Active/pending onboarding {draftTransactionNo ? `(${draftTransactionNo})` : ""} has not been finished</span>
+                  </div>
+                )}
+
+                {!alreadyOnboarded && !hasDraftOnboarding && (
+                  <div className="mt-3">
+                    <span
+                      className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors ${transactionType === "ONBOARDING"
+                        ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
+                        : "bg-muted text-muted-foreground"
+                        }`}
+                    >
+                      <Zap className="h-2.5 w-2.5" />
+                      ONBOARDING_BASELINE
+                    </span>
+                  </div>
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Actions */}
-          <div className="flex items-center justify-between pt-3 border-t border-border gap-2">
+          <div className="flex items-center justify-between pt-3 border-t border-border gap-2 shrink-0">
             <button
               type="button"
               onClick={onCancel}
-              className="text-xs sm:text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-1"
+              className="inline-flex items-center justify-center px-4 sm:px-5 py-2.5 border border-border bg-card hover:bg-accent hover:text-foreground text-muted-foreground text-xs sm:text-sm font-bold rounded-xl transition-all duration-200"
             >
               Cancel
             </button>
@@ -440,9 +442,9 @@ export function CreateBillingWorkspace({
 
       {/* ── Step 2: Link Sales Invoice ──────────────────────────────────── */}
       {step === 2 && (
-        <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+        <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 flex-1 flex flex-col min-h-0 animate-in fade-in slide-in-from-right-4 duration-300">
           {/* Type summary pill */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 shrink-0">
             <div
               className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold ${transactionType === "ROUTINE"
                 ? "bg-primary/10 text-primary"
@@ -467,7 +469,7 @@ export function CreateBillingWorkspace({
             </button>
           </div>
 
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 shrink-0">
             <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
               Step 2 of 2 · Link Sales Invoice
             </p>
@@ -483,12 +485,12 @@ export function CreateBillingWorkspace({
 
           {/* Invoice List */}
           {loadingInvoices ? (
-            <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
+            <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground flex-1">
               <Loader2 className="h-7 w-7 animate-spin" />
               <span className="text-sm animate-pulse">Fetching eligible invoices...</span>
             </div>
           ) : filteredInvoices.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground bg-accent/40 rounded-2xl border border-dashed border-border">
+            <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground bg-accent/40 rounded-2xl border border-dashed border-border flex-1">
               <Receipt className="h-8 w-8 opacity-40" />
               <div className="text-center">
                 <p className="text-sm font-semibold">No eligible invoices found</p>
@@ -500,7 +502,8 @@ export function CreateBillingWorkspace({
               </div>
             </div>
           ) : (
-            <div className="border border-border rounded-2xl overflow-hidden divide-y divide-border max-h-60 sm:max-h-72 overflow-y-auto custom-scrollbar">
+            /* AG-CHANGE: Replaced max-h-60 with flex-1 min-h-[180px] on mobile (fills height), scaling back to sm:max-h-72 sm:flex-none on desktop */
+            <div className="border border-border rounded-2xl overflow-hidden divide-y divide-border flex-1 min-h-[180px] sm:flex-none sm:min-h-0 sm:max-h-72 overflow-y-auto custom-scrollbar">
               {filteredInvoices.map((inv) => {
                 const isSelected = selectedInvoiceId === inv.invoice_id;
                 return (
@@ -546,7 +549,7 @@ export function CreateBillingWorkspace({
           )}
 
           {/* Actions */}
-          <div className="flex items-center justify-between pt-3 border-t border-border gap-2">
+          <div className="flex items-center justify-between pt-3 border-t border-border gap-2 shrink-0">
             <button
               type="button"
               onClick={handleBack}

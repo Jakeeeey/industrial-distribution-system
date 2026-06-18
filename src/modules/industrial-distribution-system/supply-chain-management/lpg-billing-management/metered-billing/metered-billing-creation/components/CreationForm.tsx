@@ -894,7 +894,7 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
               </div>
 
               {/* WIWO Linking */}
-              {!isOnboarding && form.siteId && (
+              {/* {!isOnboarding && form.siteId && (
                 <>
                   <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800" />
                   <div className="bg-violet-50/50 dark:bg-violet-500/5 p-5 rounded-xl border border-violet-100 dark:border-violet-500/20 space-y-3">
@@ -951,7 +951,7 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
                     )}
                   </div>
                 </>
-              )}
+              )} */}
             </section>
 
             <MeteredReadingPanel

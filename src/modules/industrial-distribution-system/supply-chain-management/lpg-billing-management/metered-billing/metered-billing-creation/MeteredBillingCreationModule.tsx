@@ -116,7 +116,8 @@ export default function MeteredBillingCreationModule({ currentUser }: MeteredBil
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 pt-0 bg-zinc-50/10 dark:bg-zinc-900/5 custom-scrollbar">
+      {/* AG-CHANGE: Modified wrapper to use flex container and optimized mobile padding for better height scaling */}
+      <div className="flex-1 min-h-0 flex flex-col p-2 sm:p-6 pt-0 bg-zinc-50/10 dark:bg-zinc-900/5 custom-scrollbar overflow-y-auto">
         {!selectedHeader ? (
           <TransactionHeaderWorkspace
             selectedHeader={selectedHeader}
