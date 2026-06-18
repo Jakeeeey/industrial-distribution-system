@@ -683,7 +683,10 @@ export function useMeteredBillingCreation(
       ? Math.max(0, form.previousReading - form.currentReading)
       : Math.max(0, form.currentReading - form.previousReading);
 
-  const meteredKg = Number((rawConsumption * activeLpgVapor * pressureLine).toFixed(4));
+  // Developer Comment: Do not calculate metered consumption (KG) during onboarding baseline setup since it only establishes a starting index.
+  const meteredKg = isOnboarding
+    ? 0
+    : Number((rawConsumption * activeLpgVapor * pressureLine).toFixed(4));
 
   const arbitration = useMemo(() => {
     if (isOnboarding) {

@@ -345,6 +345,7 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
         );
       }
     }
+    
     return errors;
   };
 
@@ -647,6 +648,8 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
                     <Input
                       type="date"
                       value={form.billingPeriodTo || ""}
+                      min={transactionHeader?.period_from || undefined}
+                      max={transactionHeader?.period_to || undefined}
                       onChange={(e) =>
                         setForm((f) => ({
                           ...f,
@@ -712,27 +715,25 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
 
                 <div className="flex flex-col md:flex-row gap-8 bg-zinc-50/50 dark:bg-zinc-800/20 p-5 rounded-xl border border-zinc-100 dark:border-zinc-800/50">
                   <div className="flex-1 space-y-5 max-w-sm">
-                    {/* DEV-CHANGE: Hide previous reading field during onboarding baseline creation */}
-                    {!isOnboarding && (
-                      <div className="space-y-2.5">
-                        <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
-                          Previous Reading
-                        </Label>
-                        <Input
-                          type="number"
-                          value={form.previousReading}
-                          onChange={(e) =>
-                            setForm((f) => ({
-                              ...f,
-                              previousReading: Number(e.target.value),
-                            }))
-                          }
-                          onWheel={(e) => e.currentTarget.blur()}
-                          disabled
-                          className="font-mono bg-white dark:bg-zinc-900"
-                        />
-                      </div>
-                    )}
+                    {/* DEV-CHANGE: Show previous reading field even during onboarding baseline creation as requested */}
+                    <div className="space-y-2.5">
+                      <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+                        Previous Reading
+                      </Label>
+                      <Input
+                        type="number"
+                        value={form.previousReading}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            previousReading: Number(e.target.value),
+                          }))
+                        }
+                        onWheel={(e) => e.currentTarget.blur()}
+                        disabled
+                        className="font-mono bg-white dark:bg-zinc-900"
+                      />
+                    </div>
                     <div className="space-y-2.5">
                       <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
                         Current Reading
@@ -753,16 +754,19 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
                         className="font-mono bg-white dark:bg-zinc-900"
                       />
                     </div>
-                    <div className="space-y-2.5 pt-2">
-                      <Label className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
-                        Metered KG (Computed)
-                      </Label>
-                      <Input
-                        value={Number(meteredKg).toFixed(4)}
-                        readOnly
-                        className="font-mono bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 font-bold border-blue-200 dark:border-blue-800 h-11 text-lg shadow-inner"
-                      />
-                    </div>
+                    {/* DEV-CHANGE: Do not display or calculate metered KG during onboarding baseline establishment */}
+                    {!isOnboarding && (
+                      <div className="space-y-2.5 pt-2">
+                        <Label className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                          Metered KG (Computed)
+                        </Label>
+                        <Input
+                          value={Number(meteredKg).toFixed(4)}
+                          readOnly
+                          className="font-mono bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 font-bold border-blue-200 dark:border-blue-800 h-11 text-lg shadow-inner"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex flex-col justify-center items-center md:items-start shrink-0">
@@ -1000,15 +1004,6 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
                     </span>
                     <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
                       {form.currentReading.toFixed(3)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center py-3 border-t border-dashed border-zinc-200 dark:border-zinc-800 mt-2">
-                    <span className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">
-                      Initial KG
-                    </span>
-                    <span className="font-mono font-bold text-lg">
-                      {Number(meteredKg).toFixed(4)}{" "}
-                      <span className="text-xs text-zinc-400">kg</span>
                     </span>
                   </div>
                   <div className="bg-zinc-50 dark:bg-zinc-800/50 rounded-xl p-3.5 text-xs text-zinc-500 leading-relaxed">
