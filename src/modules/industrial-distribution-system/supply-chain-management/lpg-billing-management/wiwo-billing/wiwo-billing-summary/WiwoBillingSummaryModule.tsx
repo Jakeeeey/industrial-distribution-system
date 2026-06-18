@@ -65,7 +65,7 @@ export default function WiwoBillingSummaryModule() {
 
         {/* Right: Detail Panel */}
         <div
-          className={`flex-1 h-full overflow-y-auto p-4 sm:p-6 bg-zinc-50/10 dark:bg-zinc-900/5 ${
+          className={`flex-1 h-full overflow-y-auto px-4 sm:px-6 bg-zinc-50/10 dark:bg-zinc-900/5 ${
             selectedId ? "block" : "hidden lg:block"
           }`}
         >
