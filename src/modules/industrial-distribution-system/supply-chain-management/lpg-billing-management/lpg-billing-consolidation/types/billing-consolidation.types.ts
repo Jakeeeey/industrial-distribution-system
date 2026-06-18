@@ -275,3 +275,18 @@ export interface ActiveCylinderRaw {
   } | null;
 }
 
+// DEV-CHANGE: Added CompanyProfile interface for strong-typed company metadata
+export interface CompanyProfile {
+  company_id: number;
+  company_name: string;
+  company_address?: string | null;
+  company_brgy?: string | null;
+  company_city?: string | null;
+  company_province?: string | null;
+  company_zipCode?: string | null;
+  company_contact?: string | null;
+  company_email?: string | null;
+  company_tin?: string | null;
+  company_logo?: string | null;
+}
+
