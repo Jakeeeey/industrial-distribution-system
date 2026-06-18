@@ -16,14 +16,20 @@ export const automaticMobilePrint = async (receiptText: string) => {
   try {
     toast.info("Connecting to print server...");
 
+    const savedPrinter = typeof window !== "undefined" ? localStorage.getItem("thermal_printer_connection") : null;
+    const requestPayload: { receiptText: string; printerName?: string } = { receiptText };
+    if (savedPrinter) {
+      requestPayload.printerName = savedPrinter;
+    }
+
     const res = await fetch("/api/print", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ receiptText, printerName: "POS-58" }),
+      body: JSON.stringify(requestPayload),
     });
 
     if (res.ok) {
-      toast.success("Receipt printed successfully!");
+      toast.success(`Receipt printed successfully on ${savedPrinter || "default printer"}!`);
     } else {
       const errJson = await res.json().catch(() => ({}));
       throw new Error(errJson.error || "Printer server error");

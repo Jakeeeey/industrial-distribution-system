@@ -74,7 +74,7 @@ export default function MeteredBillingCreationModule({ currentUser }: MeteredBil
             </div>
             <div>
               <h1 className="text-lg sm:text-xl font-black tracking-tight text-zinc-900 dark:text-zinc-100">
-                LPG Metered Billing & Validation
+                LPG Metered Billing
               </h1>
               <p className="text-xs text-muted-foreground mt-0.5 hidden sm:block">
                 Metered volume validation with linked transaction context.
