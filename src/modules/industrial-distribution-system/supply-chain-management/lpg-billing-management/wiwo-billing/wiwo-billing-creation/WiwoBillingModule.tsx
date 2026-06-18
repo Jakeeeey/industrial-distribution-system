@@ -64,9 +64,8 @@ export default function WiwoBillingModule() {
         </div>
       </div>
 
-      {/* ── Main Content ─────────────────────────────────────────────── */}
-      {/* AG-CHANGE: p-2 on mobile, p-4/p-6 on larger screens */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-2 sm:p-4 lg:p-6 bg-background custom-scrollbar">
+      {/* AG-CHANGE: Updated content wrapper to use a flex container layout for responsive stretch scaling */}
+      <div className="flex-1 min-h-0 flex flex-col p-2 sm:p-4 lg:p-6 bg-background custom-scrollbar overflow-y-auto">
         {!selectedHeader ? (
           <TransactionHeaderWorkspace selectedHeader={selectedHeader} onSelect={setSelectedHeader} />
         ) : (

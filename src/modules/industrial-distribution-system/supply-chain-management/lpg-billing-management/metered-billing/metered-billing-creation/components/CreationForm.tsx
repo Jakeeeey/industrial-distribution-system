@@ -14,7 +14,6 @@ import {
   CheckCircle2,
   Gauge,
   Info,
-  Link2,
   X,
   ImagePlus,
   AlertTriangle,
@@ -43,7 +42,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { format } from "date-fns";
 import { toast } from "sonner";
 import type { TransactionType } from "../../metered-billing-common/types";
 
@@ -132,9 +130,6 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
     // meterReadings,
     // readingsLoading,
     // handleReadingChange,
-    wiwoHeaders,
-    wiwoLoading,
-    linkedWiwo,
     isValidReading,
     meterDirection,
     pressureLine,
@@ -894,7 +889,7 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
               </div>
 
               {/* WIWO Linking */}
-              {!isOnboarding && form.siteId && (
+              {/* {!isOnboarding && form.siteId && (
                 <>
                   <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800" />
                   <div className="bg-violet-50/50 dark:bg-violet-500/5 p-5 rounded-xl border border-violet-100 dark:border-violet-500/20 space-y-3">
@@ -951,7 +946,7 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
                     )}
                   </div>
                 </>
-              )}
+              )} */}
             </section>
 
             <MeteredReadingPanel
