@@ -14,7 +14,6 @@ import {
   CheckCircle2,
   Gauge,
   Info,
-  Link2,
   X,
   ImagePlus,
   AlertTriangle,
@@ -43,7 +42,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { format } from "date-fns";
 import { toast } from "sonner";
 import type { TransactionType } from "../../metered-billing-common/types";
 
@@ -132,9 +130,6 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
     // meterReadings,
     // readingsLoading,
     // handleReadingChange,
-    wiwoHeaders,
-    wiwoLoading,
-    linkedWiwo,
     isValidReading,
     meterDirection,
     pressureLine,

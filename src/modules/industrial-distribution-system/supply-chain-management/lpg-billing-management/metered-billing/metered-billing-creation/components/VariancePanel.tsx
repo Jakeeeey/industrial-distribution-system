@@ -11,8 +11,6 @@ interface Props {
 
 export function VariancePanel({ result }: Props) {
   const { metered_kg, wiwo_kg, variance_kg, billable_kg, billable_source } = result;
-  const variancePct =
-    Number(metered_kg) > 0 ? ((Number(variance_kg) / Number(metered_kg)) * 100).toFixed(1) : "0.0";
   const isHighVariance = Number(variance_kg) > 10;
 
   return (
