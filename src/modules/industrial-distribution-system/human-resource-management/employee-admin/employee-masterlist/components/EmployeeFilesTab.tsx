@@ -1,13 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { 
-  FileText, 
-  Plus, 
-  Search, 
-  Download, 
-  Trash2, 
-  Loader2, 
+import {
+  FileText,
+  Plus,
+  Search,
+  Download,
+  Trash2,
+  Loader2,
   AlertCircle,
   FolderOpen,
   Folder,
@@ -33,11 +33,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
   DialogFooter,
   DialogDescription
 } from "@/components/ui/dialog";
@@ -46,14 +46,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { 
-  User, 
-  EmployeeFileRecordDisplay, 
+import {
+  User,
+  EmployeeFileRecordDisplay,
   EmployeeFileRecordType,
   EmployeeFileRecordList
 } from "../types";
-import { 
-  getEmployeeFileRecordsDirectus, 
+import {
+  getEmployeeFileRecordsDirectus,
   getRecordTypesDirectus,
   getRecordListsDirectus,
   createEmployeeFileRecordDirectus,
@@ -63,7 +63,7 @@ import { cn, formatDateTime } from "@/lib/utils";
 import imageCompression from "browser-image-compression";
 import { toast } from "sonner";
 
-const UPLOAD_API = "/api/hrm/employee-admin/employee-master-list/upload";
+const UPLOAD_API = "/api/ids/hrm/employee-admin/employee-master-list/upload";
 const MAX_FILE_SIZE_MB = 10;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
@@ -142,8 +142,8 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
 
   async function handleUpload() {
     if (uploadBatch.files.length === 0 || !uploadBatch.typeId || !uploadBatch.listId) {
-        toast.error("Please fill in all required fields and select at least one file");
-        return;
+      toast.error("Please fill in all required fields and select at least one file");
+      return;
     }
 
     setIsUploading(true);
@@ -155,7 +155,7 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
         try {
           // 1. Upload file to Directus
           const file = fileItem.file;
-          
+
           let uploadFile = file;
           if (file.type.startsWith("image/")) {
             uploadFile = await imageCompression(file, {
@@ -168,11 +168,11 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
           const fd = new FormData();
           fd.append("file", uploadFile, file.name);
           const res = await fetch(`${UPLOAD_API}?type=employee_file`, { method: "POST", body: fd });
-          
+
           if (!res.ok) throw new Error(`Upload failed for ${fileItem.name}`);
           const json = await res.json();
           const fileId = json?.data?.id;
-          
+
           if (!fileId) throw new Error(`Directus error for ${fileItem.name}`);
 
           // 2. Create record
@@ -236,8 +236,8 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
   const displayedRecords = records.filter(r => {
     if (isSearching) {
       return (r.record_name?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
-             (r.type?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
-             (r.list_name?.toLowerCase() || "").includes(searchTerm.toLowerCase());
+        (r.type?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
+        (r.list_name?.toLowerCase() || "").includes(searchTerm.toLowerCase());
     }
     return r.type === selectedFolder;
   });
@@ -250,13 +250,13 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
 
   const uncategorizedCount = records.filter(r => !types.some(t => t.name === r.type)).length;
   if (uncategorizedCount > 0) {
-      folders.push({ id: 'uncategorized', name: 'Uncategorized', count: uncategorizedCount });
+    folders.push({ id: 'uncategorized', name: 'Uncategorized', count: uncategorizedCount });
   }
 
   const filteredLists = lists.filter(l => l.record_type_id.toString() === uploadBatch.typeId);
 
   return (
-    <div 
+    <div
       className="space-y-6"
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => e.preventDefault()}
@@ -265,16 +265,16 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search documents by name, type, or list..." 
+          <Input
+            placeholder="Search documents by name, type, or list..."
             className="pl-9 h-10 rounded-xl bg-muted/30 border-none"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        
+
         <div className="flex flex-col sm:flex-row items-center gap-3">
-          <Button 
+          <Button
             onClick={() => {
               const typeId = types.find(t => t.name === selectedFolder)?.id?.toString() || "";
               setUploadBatch({
@@ -351,19 +351,19 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
                       <TableCell>
                         <span className="text-sm text-muted-foreground">
                           {record.created_at && !isNaN(new Date(record.created_at).getTime())
-                            ? formatDateTime(new Date(record.created_at)) 
+                            ? formatDateTime(new Date(record.created_at))
                             : "---"}
                         </span>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             className="h-8 w-8 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10"
                             title="Download"
                             onClick={() => {
-                              const url = `/api/hrm/employee-admin/employee-master-list/assets/${record.file_ref}?filename=${encodeURIComponent(record.record_name)}`;
+                              const url = `/api/ids/hrm/employee-admin/employee-master-list/assets/${record.file_ref}?filename=${encodeURIComponent(record.record_name)}`;
                               const a = document.createElement('a');
                               a.href = url;
                               a.download = record.record_name;
@@ -374,9 +374,9 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
                           >
                             <Download className="h-4 w-4" />
                           </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             className="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                             title="Delete"
                             onClick={() => {
@@ -411,7 +411,7 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
             <h3 className="text-lg font-bold mb-6 text-foreground">Document Folders</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {folders.map(folder => (
-                <div 
+                <div
                   key={folder.id}
                   onClick={() => setSelectedFolder(folder.name)}
                   onDragEnter={(e) => {
@@ -445,7 +445,7 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
                       if (largeFiles.length > 0) {
                         toast.error(`Some files are too large. Maximum size is ${MAX_FILE_SIZE_MB}MB.`);
                       }
-                      
+
                       const validFiles = droppedFiles.filter(f => f.size <= MAX_FILE_SIZE_BYTES);
                       if (validFiles.length === 0) return;
 
@@ -455,7 +455,7 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
                         name: file.name.replace(/\.[^/.]+$/, ""),
                         id: Math.random().toString(36).substring(7)
                       }));
-                      
+
                       setUploadBatch({
                         typeId: typeId,
                         listId: "",
@@ -494,7 +494,7 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
             </div>
           </div>
         ) : (
-          <div 
+          <div
             className="flex-1 flex flex-col relative group transition-all duration-200"
             onDragOver={(e) => {
               e.preventDefault();
@@ -516,7 +516,7 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
                 if (largeFiles.length > 0) {
                   toast.error(`Some files are too large. Maximum size is ${MAX_FILE_SIZE_MB}MB.`);
                 }
-                
+
                 const validFiles = droppedFiles.filter(f => f.size <= MAX_FILE_SIZE_BYTES);
                 if (validFiles.length === 0) return;
 
@@ -544,7 +544,7 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
               <div className="absolute inset-x-2 inset-y-2 z-20 flex items-center justify-center bg-background/60 backdrop-blur-sm border-2 border-dashed border-primary/50 rounded-xl transition-all duration-200 fade-in zoom-in-95 animate-in pointer-events-none">
                 <div className="flex flex-col items-center gap-3 p-8 bg-card rounded-2xl shadow-2xl border border-primary/20 scale-100">
                   <div className="p-4 bg-primary/10 rounded-full dark:bg-primary/20 mb-1 animate-bounce">
-                     <Plus className="h-8 w-8 text-primary" />
+                    <Plus className="h-8 w-8 text-primary" />
                   </div>
                   <div className="space-y-1 text-center">
                     <p className="text-xl font-bold text-foreground tracking-tight">Drop files to add</p>
@@ -613,19 +613,19 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
                         <TableCell className="w-[22%]">
                           <span className="text-xs text-muted-foreground whitespace-nowrap">
                             {record.created_at && !isNaN(new Date(record.created_at).getTime())
-                              ? formatDateTime(new Date(record.created_at)) 
+                              ? formatDateTime(new Date(record.created_at))
                               : "---"}
                           </span>
                         </TableCell>
                         <TableCell className="w-[12%] text-right">
                           <div className="flex items-center justify-end gap-1">
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               className="h-8 w-8 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10"
                               title="Download"
                               onClick={() => {
-                                const url = `/api/hrm/employee-admin/employee-master-list/assets/${record.file_ref}?filename=${encodeURIComponent(record.record_name)}`;
+                                const url = `/api/ids/hrm/employee-admin/employee-master-list/assets/${record.file_ref}?filename=${encodeURIComponent(record.record_name)}`;
                                 const a = document.createElement('a');
                                 a.href = url;
                                 a.download = record.record_name;
@@ -636,9 +636,9 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
                             >
                               <Download className="h-4 w-4" />
                             </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               className="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                               title="Delete"
                               onClick={() => {
@@ -666,8 +666,8 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
                     There are no documents in this folder yet.
                   </p>
                 </div>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={() => {
                     const typeId = types.find(t => t.name === selectedFolder)?.id?.toString() || "";
                     setUploadBatch({
@@ -690,8 +690,8 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
       </div>
 
       {/* Upload Modal */}
-      <Dialog 
-        open={isAddModalOpen} 
+      <Dialog
+        open={isAddModalOpen}
         onOpenChange={(open) => {
           setIsAddModalOpen(open);
           if (!open) {
@@ -728,7 +728,7 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
                         <FileText className="h-4 w-4" />
                       </div>
                       <div className="flex-1 min-w-0 space-y-1">
-                        <Input 
+                        <Input
                           value={fileItem.name}
                           onChange={(e) => {
                             const newFiles = [...uploadBatch.files];
@@ -742,9 +742,9 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
                           {fileItem.file.name} ({(fileItem.file.size / 1024).toFixed(0)} KB)
                         </p>
                       </div>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         className="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                         onClick={() => {
                           setUploadBatch({
@@ -770,9 +770,9 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
               <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70">
                 Document Type <span className="text-red-500">*</span>
               </Label>
-              <Select 
+              <Select
                 value={uploadBatch.typeId}
-                onValueChange={(v) => setUploadBatch({...uploadBatch, typeId: v, listId: ""})}
+                onValueChange={(v) => setUploadBatch({ ...uploadBatch, typeId: v, listId: "" })}
               >
                 <SelectTrigger className="h-11 bg-muted/40 border-transparent focus-visible:bg-background rounded-xl">
                   <SelectValue placeholder="Select type" />
@@ -790,11 +790,11 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
                 <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70">
                   Document List <span className="text-red-500">*</span>
                 </Label>
-                <Select 
+                <Select
                   value={uploadBatch.listId}
                   onValueChange={(v) => {
                     setUploadBatch({
-                      ...uploadBatch, 
+                      ...uploadBatch,
                       listId: v
                     });
                   }}
@@ -819,11 +819,11 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
               <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70">
                 Description (Optional)
               </Label>
-              <Input 
-                placeholder="Brief description of the document" 
+              <Input
+                placeholder="Brief description of the document"
                 className="h-11 bg-muted/40 border-transparent focus-visible:bg-background rounded-xl"
                 value={uploadBatch.description}
-                onChange={(e) => setUploadBatch({...uploadBatch, description: e.target.value})}
+                onChange={(e) => setUploadBatch({ ...uploadBatch, description: e.target.value })}
               />
             </div>
 
@@ -831,9 +831,9 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
               <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70">
                 File <span className="text-red-500">*</span>
               </Label>
-              <input 
-                type="file" 
-                className="hidden" 
+              <input
+                type="file"
+                className="hidden"
                 multiple
                 ref={fileInputRef}
                 onChange={(e) => {
@@ -851,15 +851,15 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
                         name: file.name.replace(/\.[[^/.]+$/, ""),
                         id: Math.random().toString(36).substring(7)
                       }));
-                      setUploadBatch({ 
-                        ...uploadBatch, 
-                        files: [...uploadBatch.files, ...fileItems] 
+                      setUploadBatch({
+                        ...uploadBatch,
+                        files: [...uploadBatch.files, ...fileItems]
                       });
                     }
                   }
                 }}
               />
-              <div 
+              <div
                 onClick={() => fileInputRef.current?.click()}
                 onDragOver={(e) => {
                   e.preventDefault();
@@ -889,9 +889,9 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
                         name: file.name.replace(/\.[^/.]+$/, ""),
                         id: Math.random().toString(36).substring(7)
                       }));
-                      setUploadBatch({ 
-                        ...uploadBatch, 
-                        files: [...uploadBatch.files, ...fileItems] 
+                      setUploadBatch({
+                        ...uploadBatch,
+                        files: [...uploadBatch.files, ...fileItems]
                       });
                       if (fileInputRef.current) {
                         fileInputRef.current.value = "";
@@ -904,29 +904,29 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
                   isDragging && "bg-primary/20 border-primary shadow-inner"
                 )}
               >
-                  <div className="flex flex-col items-center gap-2 text-muted-foreground text-center">
-                    <div className="p-2 bg-primary/10 rounded-full">
-                       <Plus className="h-5 w-5 text-primary opacity-80" />
-                    </div>
-                    {isDragging ? (
-                      <span className="text-xs font-bold text-primary">Drop files here</span>
-                    ) : (
-                      <span className="text-xs font-medium">Add more files</span>
-                    )}
+                <div className="flex flex-col items-center gap-2 text-muted-foreground text-center">
+                  <div className="p-2 bg-primary/10 rounded-full">
+                    <Plus className="h-5 w-5 text-primary opacity-80" />
                   </div>
+                  {isDragging ? (
+                    <span className="text-xs font-bold text-primary">Drop files here</span>
+                  ) : (
+                    <span className="text-xs font-medium">Add more files</span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
 
           <DialogFooter className="p-6 bg-muted/30 gap-2 flex-shrink-0">
-            <Button 
-              variant="ghost" 
+            <Button
+              variant="ghost"
               onClick={() => setIsAddModalOpen(false)}
               className="rounded-xl h-11 px-6 font-semibold"
             >
               Cancel
             </Button>
-            <Button 
+            <Button
               disabled={isUploading || uploadBatch.files.length === 0 || !uploadBatch.typeId || !uploadBatch.listId}
               onClick={handleUpload}
               className="rounded-xl h-11 px-8 bg-primary hover:bg-primary/90 font-semibold shadow-lg shadow-primary/20 min-w-[140px]"
@@ -965,7 +965,7 @@ export function EmployeeFilesTab({ user }: EmployeeFilesTabProps) {
             <p className="text-xs text-muted-foreground mt-1">Type: {recordToDelete?.type}</p>
           </div>
           <DialogFooter className="p-6 pt-0 bg-transparent gap-2 sm:justify-end">
-            <Button 
+            <Button
               variant="outline"
               onClick={() => setIsDeleteDialogOpen(false)}
               className="rounded-xl h-10 px-4"

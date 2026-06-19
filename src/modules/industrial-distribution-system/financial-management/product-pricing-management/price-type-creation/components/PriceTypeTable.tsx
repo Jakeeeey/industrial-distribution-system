@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Edit2, Trash2 } from "lucide-react";
 import type { PriceType } from "../../product-pricing/types";
+import { mapPriceTypeName } from "../../product-pricing/utils/constants";
 
 interface PriceTypeTableProps {
     priceTypes: PriceType[];
@@ -42,7 +43,7 @@ export function PriceTypeTable({ priceTypes, onEdit, onDelete }: PriceTypeTableP
                         priceTypes.map((pt) => (
                             <TableRow key={pt.price_type_id} className="hover:bg-muted/30 transition-colors">
                                 <TableCell className="font-mono text-xs">{pt.price_type_id}</TableCell>
-                                <TableCell className="font-medium text-primary">{pt.price_type_name}</TableCell>
+                                <TableCell className="font-medium text-primary">{mapPriceTypeName(pt.price_type_name)}</TableCell>
                                 <TableCell>{pt.sort ?? "—"}</TableCell>
                                 <TableCell className="text-right">
                                     <div className="flex justify-end gap-2">

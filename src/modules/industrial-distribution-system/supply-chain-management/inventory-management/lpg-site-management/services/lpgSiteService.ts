@@ -95,7 +95,7 @@ export const lpgSiteService = {
   async fetchCustomers(search?: string) {
     const query = new URLSearchParams();
     if (search) query.append("search", search);
-    const res = await fetch(`/api/ids/scm/inventory-management/lpg-site-management/customers?limit=-1,${query}`);
+    const res = await fetch(`/api/ids/scm/inventory-management/lpg-site-management/customers?${query.toString()}`);
     const d = await res.json();
     return d.data;
   }

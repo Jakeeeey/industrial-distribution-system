@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Search, Package, Minus, Plus, Tag } from "lucide-react";
@@ -28,18 +28,61 @@ export function ProductSelectionModal({
   onConfirm,
 }: ProductSelectionModalProps) {
   const [catalogSearch, setCatalogSearch] = useState("");
-  const [cartItems, setCartItems] = useState<StockAdjustmentItem[]>(initialSelectedItems || []);
+  const [cartItems, setCartItems] = useState<StockAdjustmentItem[]>([]);
+  const [units, setUnits] = useState<{ unit_id: number; unit_name: string; unit_shortcut: string }[]>([]);
+
+  // Fetch dynamic units
+  useEffect(() => {
+    if (isOpen) {
+      fetch("/api/ids/scm/inventory-management/stock-adjustment/units")
+        .then((res) => res.json())
+        .then((result) => {
+          if (result.data) {
+            setUnits(result.data);
+          }
+        })
+        .catch((err) => console.error("Failed to fetch units in modal:", err));
+    }
+  }, [isOpen]);
+
+  const allowedUnitNames = useMemo(() => {
+    const emptyNames = units
+      .filter((u) => u.unit_name.toUpperCase() === "EMPTY" || u.unit_shortcut.toUpperCase() === "EMPTY")
+      .map((u) => u.unit_name.toUpperCase());
+    const fullNames = units
+      .filter((u) => u.unit_name.toUpperCase() === "FULL" || u.unit_shortcut.toUpperCase() === "FULL")
+      .map((u) => u.unit_name.toUpperCase());
+    return new Set([...emptyNames, ...fullNames]);
+  }, [units]);
+
+  // Synchronize cart when modal opens during render
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen);
+    if (isOpen) {
+      setCartItems(initialSelectedItems || []);
+      setCatalogSearch("");
+    }
+  }
 
   const filteredProducts = useMemo(() => {
-    if (!catalogSearch.trim()) return products;
+    const activeProducts = products.filter((p) => {
+      const uomName = (p.unit_name || "").toUpperCase();
+      if (units.length > 0) {
+        return allowedUnitNames.has(uomName);
+      }
+      return uomName === "EMPTY" || uomName === "FULL";
+    });
+
+    if (!catalogSearch.trim()) return activeProducts;
     const t = catalogSearch.toLowerCase();
-    return products.filter(
+    return activeProducts.filter(
       (p) =>
         p.product_name?.toLowerCase().includes(t) ||
         p.product_code?.toLowerCase().includes(t) ||
         p.barcode?.toLowerCase().includes(t)
     );
-  }, [products, catalogSearch]);
+  }, [products, catalogSearch, units, allowedUnitNames]);
 
   const addedProductIds = useMemo(() => {
     const ids = new Set<number>();
@@ -68,7 +111,7 @@ export function ProductSelectionModal({
       barcode: product.barcode || "N/A",
       description: product.description || "No description available.",
       unit_order: product.unit_of_measurement?.order || 1,
-      is_serialized: isSerialized,
+      is_serialized: isSerialized || !!product.is_serialized,
       serial_numbers: [],
       serial_count: 0,
       remarks: "",
@@ -283,7 +326,7 @@ export function ProductSelectionModal({
                       
                       <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/50">
                         {isItemSerial ? (
-                          <div className="text-[10px] font-black text-amber-600 bg-amber-50 dark:bg-amber-900/20 border border-amber-200/50 px-2 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm max-w-[170px] select-none">
+                          <div className="text-[10px] font-black text-amber-600 bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 px-2 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm max-w-[170px] select-none">
                             <Tag className="h-3 w-3 text-amber-500 fill-amber-500" />
                             Input serial numbers in form to change qty
                           </div>

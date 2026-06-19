@@ -35,7 +35,7 @@ export function useOperations(): UseOperationsReturn {
             setError(null);
 
             const res = await fetch(
-                "/api/hrm/employee-admin/structure/operation",
+                "/api/ids/hrm/employee-admin/structure/operation",
                 { cache: "no-store" }
             );
 
@@ -76,7 +76,7 @@ export function useOperations(): UseOperationsReturn {
 
     const createOperation = useCallback(async (data: OperationFormData) => {
         try {
-            const res = await fetch("/api/hrm/employee-admin/structure/operation", {
+            const res = await fetch("/api/ids/hrm/employee-admin/structure/operation", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(data),
@@ -96,7 +96,7 @@ export function useOperations(): UseOperationsReturn {
 
     const updateOperation = useCallback(async (id: number, data: OperationFormData) => {
         try {
-            const res = await fetch("/api/hrm/employee-admin/structure/operation", {
+            const res = await fetch("/api/ids/hrm/employee-admin/structure/operation", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ id, ...data }),
@@ -117,7 +117,7 @@ export function useOperations(): UseOperationsReturn {
     const deleteOperation = useCallback(async (id: number) => {
         try {
             const res = await fetch(
-                `/api/hrm/employee-admin/structure/operation?id=${id}`,
+                `/api/ids/hrm/employee-admin/structure/operation?id=${id}`,
                 { method: "DELETE" }
             );
 

@@ -36,7 +36,7 @@ export function EmployeeFileRecordTypeFetchProvider({
             setIsError(false);
 
             const res = await fetch(
-                "/api/hrm/file-management/employee-file-record-type",
+                "/api/ids/hrm/file-management/employee-file-record-type",
                 { cache: "no-store" }
             );
 
@@ -59,7 +59,7 @@ export function EmployeeFileRecordTypeFetchProvider({
     const createRecord = useCallback(
         async (data: EmployeeFileRecordTypeFormData) => {
             const res = await fetch(
-                "/api/hrm/file-management/employee-file-record-type",
+                "/api/ids/hrm/file-management/employee-file-record-type",
                 {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -75,7 +75,7 @@ export function EmployeeFileRecordTypeFetchProvider({
     const updateRecord = useCallback(
         async (id: number, data: EmployeeFileRecordTypeFormData) => {
             const res = await fetch(
-                "/api/hrm/file-management/employee-file-record-type",
+                "/api/ids/hrm/file-management/employee-file-record-type",
                 {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },
@@ -91,7 +91,7 @@ export function EmployeeFileRecordTypeFetchProvider({
     const deleteRecord = useCallback(
         async (id: number) => {
             const res = await fetch(
-                `/api/hrm/file-management/employee-file-record-type?id=${id}`,
+                `/api/ids/hrm/file-management/employee-file-record-type?id=${id}`,
                 { method: "DELETE" }
             );
             if (!res.ok) throw new Error("Delete failed");

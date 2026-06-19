@@ -41,10 +41,7 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
   }
 }
 
-function pickString(
-  obj: Record<string, unknown> | null,
-  keys: string[],
-): string {
+function pickString(obj: Record<string, unknown> | null, keys: string[]): string {
   for (const k of keys) {
     const v = obj?.[k];
     if (typeof v === "string" && v.trim()) return v.trim();
@@ -55,20 +52,8 @@ function pickString(
 function buildHeaderUserFromToken(token: string | null | undefined) {
   const payload = token ? decodeJwtPayload(token) : null;
 
-  const first = pickString(payload, [
-    "Firstname",
-    "FirstName",
-    "firstName",
-    "firstname",
-    "first_name",
-  ]);
-  const last = pickString(payload, [
-    "LastName",
-    "Lastname",
-    "lastName",
-    "lastname",
-    "last_name",
-  ]);
+  const first = pickString(payload, ["Firstname", "FirstName", "firstName", "firstname", "first_name"]);
+  const last = pickString(payload, ["LastName", "Lastname", "lastName", "lastname", "last_name"]);
   const email = pickString(payload, ["email", "Email"]);
 
   const name = [first, last].filter(Boolean).join(" ") || email || "User";

@@ -36,6 +36,7 @@ export interface CylinderAsset {
     product_id: number;
     product_name: string;
     product_code: string;
+    unit_of_measurement?: number | null;
   };
   branch?: {
     id: number;

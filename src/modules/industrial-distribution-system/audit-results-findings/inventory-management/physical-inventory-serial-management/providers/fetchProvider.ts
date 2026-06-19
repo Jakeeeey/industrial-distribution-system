@@ -1,4 +1,4 @@
-//src/modules/supply-chain-management/physical-inventory-serial-management/providers/fetchProvider.ts
+//src/modules/industrial-distribution-system/supply-chain-management/physical-inventory-serial-management/providers/fetchProvider.ts
 import type {
     BranchRow,
     CategoryRow,
@@ -442,6 +442,10 @@ export function buildEligibleVariants(input: {
     return lookup.products
         .filter((product) => product.isActive === 1)
         .filter((product) => {
+            if (product.unit_of_measurement === null) return true;
+            return ![19, 20, 21, 22].includes(product.unit_of_measurement);
+        })
+        .filter((product) => {
             const familyKey = (product.parent_id && product.parent_id > 0)
                 ? product.parent_id
                 : product.product_id;
@@ -819,7 +823,7 @@ export async function updatePhysicalInventoryDetailsBulk(
     const json = await apiPatch<
         { updates: BulkPhysicalInventoryDetailUpdateItem[] },
         DirectusBulkItemsResponse<PhysicalInventoryDetailRow>
-    >(`/api/arf/inventory-management/physical-inventory/details/bulk`, { updates });
+    >(`/api/ids/arf/inventory-management/physical-inventory/details/bulk`, { updates });
 
     return Array.isArray(json.data) ? json.data : [];
 }
@@ -858,6 +862,10 @@ export function buildVariantsFromSavedDetails(input: {
     return lookup.products
         .filter((product) => product.isActive === 1)
         .filter((product) => productIds.has(product.product_id))
+        .filter((product) => {
+            if (product.unit_of_measurement === null) return true;
+            return ![19, 20, 21, 22].includes(product.unit_of_measurement);
+        })
         .map((product) => {
             const detail = detailMap.get(product.product_id);
             const category =

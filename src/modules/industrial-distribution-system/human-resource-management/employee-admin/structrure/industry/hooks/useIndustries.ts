@@ -34,7 +34,7 @@ export function useIndustries(): UseIndustriesReturn {
             setError(null);
 
             const res = await fetch(
-                "/api/hrm/employee-admin/structure/industry",
+                "/api/ids/hrm/employee-admin/structure/industry",
                 { cache: "no-store" }
             );
 
@@ -76,7 +76,7 @@ export function useIndustries(): UseIndustriesReturn {
 
     const createIndustry = useCallback(async (data: IndustryFormData) => {
         try {
-            const res = await fetch("/api/hrm/employee-admin/structure/industry", {
+            const res = await fetch("/api/ids/hrm/employee-admin/structure/industry", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(data),
@@ -96,7 +96,7 @@ export function useIndustries(): UseIndustriesReturn {
 
     const updateIndustry = useCallback(async (id: number, data: IndustryFormData) => {
         try {
-            const res = await fetch("/api/hrm/employee-admin/structure/industry", {
+            const res = await fetch("/api/ids/hrm/employee-admin/structure/industry", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ id, ...data }),

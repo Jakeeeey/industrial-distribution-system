@@ -113,7 +113,7 @@ export function SalesmanCreationView() {
       await createSalesman(draft);
       toast.success("Salesman registered successfully.");
       // Optional: redirect to listing or clear form
-      router.push("/hrm/employee-admin/structure/sales-management/salesman-qr-code");
+      router.push("ids/hrm/employee-admin/structure/sales-management/salesman-qr-code");
     } catch (e) {
       toast.error((e as Error).message ?? "Failed to save.");
     } finally {
@@ -128,11 +128,11 @@ export function SalesmanCreationView() {
   };
 
   if (!lookups && loading) {
-      return (
-          <div className="flex items-center justify-center py-20 text-muted-foreground">
-              Loading metadata...
-          </div>
-      )
+    return (
+      <div className="flex items-center justify-center py-20 text-muted-foreground">
+        Loading metadata...
+      </div>
+    )
   }
 
   return (
@@ -203,7 +203,7 @@ export function SalesmanCreationView() {
             </div>
 
             <div className="md:col-span-12 py-1">
-                <Separator />
+              <Separator />
             </div>
 
             {/* Row 4: Contact & Location (6, 6) */}
@@ -239,7 +239,7 @@ export function SalesmanCreationView() {
             </div>
 
             <div className="md:col-span-12 py-1">
-                <Separator />
+              <Separator />
             </div>
 
             {/* Row 6: Business (6, 6) */}

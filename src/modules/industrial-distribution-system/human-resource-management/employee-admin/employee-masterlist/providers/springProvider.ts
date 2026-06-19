@@ -4,7 +4,7 @@
  * Employee creation goes through Spring Boot; file uploads still use Directus.
  */
 
-const PROXY_BASE = "/api/hrm/employee-admin/employee-master-list";
+const PROXY_BASE = "/api/ids/hrm/employee-admin/employee-master-list";
 
 export interface CreateEmployeePayload {
   email: string;
@@ -62,10 +62,10 @@ export async function createEmployeeSpring(
   });
 
   const data = await res.json().catch(() => null);
-  
+
   if (!res.ok) {
-    const errorMsg = data 
-      ? JSON.stringify(data) 
+    const errorMsg = data
+      ? JSON.stringify(data)
       : `Server Error: ${res.status} ${res.statusText}`;
     throw new Error(errorMsg);
   }
@@ -96,10 +96,10 @@ export async function updateEmployeeSpring(
   });
 
   const data = await res.json().catch(() => null);
-  
+
   if (!res.ok) {
-    const errorMsg = data 
-      ? JSON.stringify(data) 
+    const errorMsg = data
+      ? JSON.stringify(data)
       : `Server Error: ${res.status} ${res.statusText}`;
     throw new Error(errorMsg);
   }

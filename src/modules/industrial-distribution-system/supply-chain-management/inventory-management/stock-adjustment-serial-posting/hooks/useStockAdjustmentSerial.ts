@@ -21,8 +21,12 @@ export function useStockAdjustmentSerial(defaultStatus?: string) {
   const [branchId, setBranchId] = useState<number | undefined>();
   const [type, setType] = useState<string | undefined>();
   const [status, setStatus] = useState<string | undefined>(defaultStatus);
-  const [fromDate, setFromDate] = useState<string | undefined>();
-  const [toDate, setToDate] = useState<string | undefined>();
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10); // Default to 10
 
   // Debounce search input
   useEffect(() => {
@@ -37,10 +41,8 @@ export function useStockAdjustmentSerial(defaultStatus?: string) {
     setError(null);
     try {
       const queryParams = new URLSearchParams();
-      if (debouncedSearch) queryParams.set("search", debouncedSearch);
       if (branchId) queryParams.set("branchId", String(branchId));
       if (type) queryParams.set("type", type);
-      // NOTE: status is filtered client-side to avoid Directus boolean filter issues
 
       const response = await fetch(
         `/api/ids/scm/inventory-management/stock-adjustment-serial-posting?${queryParams.toString()}`
@@ -55,14 +57,14 @@ export function useStockAdjustmentSerial(defaultStatus?: string) {
     } finally {
       setIsLoading(false);
     }
-  }, [debouncedSearch, branchId, type]);
+  }, [branchId, type]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
   // Client-side status and date range filter — avoids Directus boolean/date inconsistencies
-  const data = rawData.filter((item) => {
+  const filteredData = rawData.filter((item) => {
     // 1. Status Filter
     if (status) {
       const rawPosted = item.isPosted as unknown;
@@ -92,8 +94,47 @@ export function useStockAdjustmentSerial(defaultStatus?: string) {
       if (itemDate > filterTo) return false;
     }
 
+    // 4. Client-side search check (doc_no, remarks, branch name, supplier name)
+    if (debouncedSearch) {
+      const term = debouncedSearch.toLowerCase();
+      const docNo = (item.doc_no || "").toLowerCase();
+      const remarks = (item.remarks || "").toLowerCase();
+
+      const branchName = (
+        typeof item.branch_id === "object"
+          ? item.branch_id?.branch_name
+          : item.branch_id
+      )?.toString().toLowerCase() || "";
+
+      const supplierName = (
+        typeof item.supplier_id === "object"
+          ? item.supplier_id?.supplier_name
+          : item.supplier_id
+      )?.toString().toLowerCase() || "";
+
+      if (
+        !docNo.includes(term) &&
+        !remarks.includes(term) &&
+        !branchName.includes(term) &&
+        !supplierName.includes(term)
+      ) {
+        return false;
+      }
+    }
+
     return true;
   });
+
+  // Reset pagination to first page when any filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, branchId, type, status, fromDate, toDate]);
+
+  // Calculate paginated slice of filtered adjustments
+  const totalItems = filteredData.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const startIndex = (currentPage - 1) * pageSize;
+  const paginatedData = filteredData.slice(startIndex, startIndex + pageSize);
 
   const deleteAdjustment = async (id: number) => {
     try {
@@ -111,12 +152,30 @@ export function useStockAdjustmentSerial(defaultStatus?: string) {
     }
   };
 
+  const resetFilters = useCallback(() => {
+    setSearch("");
+    setBranchId(undefined);
+    setType(undefined);
+    setStatus(undefined);
+    setFromDate("");
+    setToDate("");
+    setCurrentPage(1);
+    setPageSize(10);
+  }, []);
+
   return {
-    data,  // already filtered by status client-side
+    data: paginatedData, // Expose sliced dataset for active view
+    totalItems,
+    currentPage,
+    setCurrentPage,
+    totalPages,
+    pageSize,
+    setPageSize,
     isLoading,
     error,
     refresh,
     deleteAdjustment,
+    resetFilters,
     filters: {
       search, setSearch,
       branchId, setBranchId,

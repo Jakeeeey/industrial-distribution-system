@@ -62,13 +62,17 @@ export function SearchableSelect({
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+            <PopoverContent 
+                className="w-[--radix-popover-trigger-width] p-0" 
+                align="start"
+                onWheel={(e) => e.stopPropagation()}
+            >
                 <Command shouldFilter={!onSearchChange}>
                     <CommandInput 
                         placeholder={`Search ${placeholder.toLowerCase()}...`} 
                         onValueChange={onSearchChange}
                     />
-                    <CommandList>
+                    <CommandList onWheel={(e) => e.stopPropagation()}>
                         <CommandEmpty>No results found.</CommandEmpty>
                         <CommandGroup>
                             {options.map((opt) => (

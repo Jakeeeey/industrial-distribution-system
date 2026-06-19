@@ -14,6 +14,10 @@ import {
   ArrowDownCircle,
   Clock,
   UserCheck,
+  Paperclip,
+  Image as ImageIcon,
+  Download,
+  ExternalLink,
   Tag
 } from "lucide-react";
 import jsPDF from "jspdf";
@@ -37,6 +41,7 @@ import {
 import { format } from "date-fns";
 import { isPostedStatus } from "../utils/status-utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 interface StockAdjustmentDetailProps {
   id: number;
@@ -48,6 +53,7 @@ export function StockAdjustmentDetailView({ id, onBack, mode = "creation" }: Sto
   const { fetchById } = useStockAdjustmentSerialForm();
   const [data, setData] = useState<DetailType | null>(null);
   const [loading, setLoading] = useState(true);
+  const [previewAttachment, setPreviewAttachment] = useState<{ url: string, type: string, filename: string } | null>(null);
 
   useEffect(() => {
     const loadDetails = async () => {
@@ -128,20 +134,59 @@ export function StockAdjustmentDetailView({ id, onBack, mode = "creation" }: Sto
     doc.text(data.type || "-", 145, 36);
 
     // --- Product Table ---
-    const tableRows = data.items?.map((item, index) => {
-      const product = (item.product_id as unknown as StockAdjustmentProduct) || {};
-      const serialLabel = item.serial_numbers && item.serial_numbers.length > 0 
-        ? `\nSerials: ${item.serial_numbers.join(", ")}`
-        : "";
-      return [
-        index + 1,
-        `${product.product_name || "Unknown"}\n(${product.product_code || "N/A"})${serialLabel}`,
-        item.brand_name || "N/A",
-        item.category_name || "N/A",
-        item.unit_name || product.unit_name || "pcs",
-        item.quantity || 0
-      ];
-    }) || [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tableRows: any[] = [];
+    
+    const supplierName = typeof data.supplier_id === 'object' ? data.supplier_id?.supplier_name : data.supplier_id || "Unknown Supplier";
+    const stNumber = data.doc_no || "-";
+    
+    const groupedItems: Record<string, typeof data.items> = {};
+    data.items?.forEach(item => {
+      const sName = typeof supplierName === 'string' ? supplierName : String(supplierName);
+      if (!groupedItems[sName]) groupedItems[sName] = [];
+      groupedItems[sName].push(item);
+    });
+
+    Object.entries(groupedItems).forEach(([groupSupplier, items]) => {
+      // Supplier Header Row
+      tableRows.push([{
+        content: `${groupSupplier} - ${stNumber}`,
+        colSpan: 6,
+        styles: { fontStyle: 'bold', fillColor: [241, 245, 249], textColor: [15, 23, 42], halign: 'left' }
+      }]);
+
+      let subTotalAmount = 0;
+
+      // Items
+      items?.forEach((item, index) => {
+        const product = (item.product_id as unknown as StockAdjustmentProduct) || {};
+        const qty = item.quantity || 0;
+        const cost = item.cost_per_unit || product.price_per_unit || 0;
+        subTotalAmount += (qty * cost);
+
+        // Include serial numbers in the description if available
+        let productInfo = `${product.product_name || "Unknown"}\n(${product.product_code || "N/A"})`;
+        if (item.serial_numbers && item.serial_numbers.length > 0) {
+          productInfo += `\nSerials: ${item.serial_numbers.join(", ")}`;
+        }
+
+        tableRows.push([
+          index + 1,
+          productInfo,
+          item.brand_name || "N/A",
+          item.category_name || "N/A",
+          item.unit_name || product.unit_name || "pcs",
+          qty
+        ]);
+      });
+
+      // Sub Total Row
+      tableRows.push([{
+        content: `Sub Total: ${subTotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        colSpan: 6,
+        styles: { halign: 'right', fontStyle: 'bold', textColor: [15, 23, 42], fillColor: [250, 250, 250] }
+      }]);
+    });
 
     autoTable(doc, {
       startY: 45,
@@ -483,6 +528,110 @@ export function StockAdjustmentDetailView({ id, onBack, mode = "creation" }: Sto
           </div>
         </div>
       </div>
+
+      {/* Attachments Section */}
+      {data.stock_adjustment_attachment && data.stock_adjustment_attachment.length > 0 && (
+        <div className="space-y-4 print:hidden">
+          <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+            <Paperclip className="h-5 w-5 text-primary" />
+            Attachments
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+            {data.stock_adjustment_attachment.map((att: any, index: number) => {
+              const uuid = typeof att.attachment === 'object' ? att.attachment.id : att.attachment;
+              const filename = typeof att.attachment === 'object' ? att.attachment.filename_download : `Attachment-${index + 1}`;
+              const fileType = typeof att.attachment === 'object' ? (att.attachment.type || '') : '';
+              const filenameStr = String(filename || '').toLowerCase();
+              const isImage = typeof att.attachment === 'object' && (fileType.startsWith('image') || filenameStr.match(/\.(jpg|jpeg|png|gif|webp|svg)$/));
+              const fileSize = typeof att.attachment === 'object' && att.attachment.filesize 
+                ? `${(att.attachment.filesize / 1024 / 1024).toFixed(2)} MB` 
+                : '';
+              const displayType = fileType || 'Unknown type';
+              const downloadUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/assets/${uuid}?download`;
+              const previewUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/assets/${uuid}`;
+
+              return (
+                <div 
+                  key={uuid || index} 
+                  className="flex items-center gap-4 p-4 bg-card border border-border/50 rounded-xl shadow-sm hover:shadow-md hover:border-primary/30 transition-all group relative cursor-pointer"
+                  onClick={() => setPreviewAttachment({ url: previewUrl, type: fileType, filename: filename })}
+                >
+                  <div className="h-12 w-12 shrink-0 bg-muted rounded-lg flex items-center justify-center text-muted-foreground group-hover:bg-primary/5 group-hover:text-primary transition-colors">
+                    {isImage ? <ImageIcon className="h-6 w-6" /> : <FileText className="h-6 w-6" />}
+                  </div>
+                  <div className="flex-1 min-w-0 pr-16">
+                    <p className="text-sm font-bold truncate text-foreground/90 leading-snug group-hover:text-primary transition-colors" title={filename}>
+                      {filename}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground font-medium mt-1 uppercase tracking-wider flex items-center gap-2">
+                      <span>{fileSize || displayType}</span>
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 absolute right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setPreviewAttachment({ url: previewUrl, type: displayType, filename: filename }); }}
+                      className="h-8 w-8 rounded-lg flex items-center justify-center hover:bg-muted text-muted-foreground hover:text-foreground transition-colors border border-border/50"
+                      title="Preview file"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </button>
+                    <a
+                      href={downloadUrl}
+                      download
+                      onClick={(e) => e.stopPropagation()}
+                      className="h-8 w-8 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary flex items-center justify-center transition-colors"
+                      title="Download file"
+                    >
+                      <Download className="h-4 w-4" />
+                    </a>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Attachment Preview Modal */}
+      <Dialog open={!!previewAttachment} onOpenChange={(open) => !open && setPreviewAttachment(null)}>
+        <DialogContent className="max-w-full sm:max-w-5xl w-11/12 h-[85vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="px-6 py-4 border-b shrink-0">
+            <DialogTitle className="truncate">{previewAttachment?.filename}</DialogTitle>
+            <DialogDescription>
+              Attachment preview
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 bg-muted/30 overflow-hidden flex items-center justify-center relative bg-[url('https://transparenttextures.com/patterns/cubes.png')]">
+            {previewAttachment?.type?.startsWith('image') || previewAttachment?.filename?.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp|svg)$/) ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img 
+                src={previewAttachment.url} 
+                alt={previewAttachment.filename} 
+                className="max-w-full max-h-full object-contain drop-shadow-md"
+              />
+            ) : previewAttachment?.type === 'application/pdf' || previewAttachment?.filename?.toLowerCase().match(/\.pdf$/) ? (
+              <iframe 
+                src={previewAttachment.url} 
+                className="w-full h-full border-0" 
+                title={previewAttachment.filename}
+              />
+            ) : (
+              <div className="flex flex-col items-center gap-4 text-muted-foreground p-8">
+                <FileText className="h-16 w-16 opacity-50" />
+                <p className="text-center font-medium">Preview not available for this file type.</p>
+                <a 
+                  href={previewAttachment?.url + '?download'} 
+                  className="text-primary hover:underline font-bold flex items-center gap-2 mt-4 bg-background px-4 py-2 border rounded-md shadow-sm"
+                >
+                  <Download className="h-4 w-4" /> Download File
+                </a>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

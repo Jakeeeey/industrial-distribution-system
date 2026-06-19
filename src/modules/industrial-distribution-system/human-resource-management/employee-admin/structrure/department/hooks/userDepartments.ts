@@ -42,7 +42,7 @@ export function useDepartments(): UseDepartmentsReturn {
       setIsLoading(true);
       setIsError(false);
 
-      const res = await fetch("/api/hrm/employee-admin/structure/department", {
+      const res = await fetch("/api/ids/hrm/employee-admin/structure/department", {
         cache: "no-store",
       });
 
@@ -99,7 +99,7 @@ export function useDepartments(): UseDepartmentsReturn {
   // =========================
   const createDepartment = useCallback(
     async (data: Record<string, unknown>) => {
-      const res = await fetch("/api/hrm/employee-admin/structure/department", {
+      const res = await fetch("/api/ids/hrm/employee-admin/structure/department", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -112,7 +112,7 @@ export function useDepartments(): UseDepartmentsReturn {
 
   const updateDepartment = useCallback(
     async (id: number, data: Record<string, unknown>) => {
-      const res = await fetch("/api/hrm/employee-admin/structure/department", {
+      const res = await fetch("/api/ids/hrm/employee-admin/structure/department", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ department_id: id, ...data }),
@@ -126,7 +126,7 @@ export function useDepartments(): UseDepartmentsReturn {
   const deleteDepartment = useCallback(
     async (id: number) => {
       const res = await fetch(
-        `/api/hrm/employee-admin/structure/department?id=${id}`,
+        `/api/ids/hrm/employee-admin/structure/department?id=${id}`,
         { method: "DELETE" },
       );
       if (!res.ok) throw new Error("Delete failed");

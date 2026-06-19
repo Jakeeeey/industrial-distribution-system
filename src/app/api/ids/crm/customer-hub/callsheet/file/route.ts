@@ -11,77 +11,65 @@ export const dynamic = "force-dynamic";
  *
  * Strategy:
  * All images and files are now stored in Directus assets (port 8056).
- * This endpoint proxies the request to ensure proper MIME types and
+ * This endpoint proxies the request to ensure proper MIME types and 
  * avoid Cross-Origin/X-Frame issues during preview.
  */
 
 const MIME_MAP: Record<string, string> = {
-  pdf: "application/pdf",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  png: "image/png",
-  gif: "image/gif",
-  webp: "image/webp",
-  svg: "image/svg+xml",
-  bmp: "image/bmp",
+    pdf: "application/pdf",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    webp: "image/webp",
+    svg: "image/svg+xml",
+    bmp: "image/bmp",
 };
 
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const id = searchParams.get("id");
-  const filename = searchParams.get("filename") || id || "file";
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+    const filename = searchParams.get("filename") || id || "file";
 
-  if (!id) {
-    return NextResponse.json({ error: "File ID is required" }, { status: 400 });
-  }
+    if (!id) {
+        return NextResponse.json({ error: "File ID is required" }, { status: 400 });
+    }
 
-  const ext = (filename.split(".").pop() ?? "").toLowerCase();
-  const contentType = MIME_MAP[ext] ?? "application/octet-stream";
+    const ext = (filename.split(".").pop() ?? "").toLowerCase();
+    const contentType = MIME_MAP[ext] ?? "application/octet-stream";
 
-  try {
-    const isRaw = searchParams.get("raw") === "true";
-    const isDownload = searchParams.get("download") === "true";
+    try {
+        const isRaw = searchParams.get("raw") === "true";
+        const isDownload = searchParams.get("download") === "true";
 
-    // Serve interactive UI if not downloading or requesting raw binary, and it's an image
-    if (!isRaw && !isDownload && contentType.startsWith("image/")) {
-      let relatedFiles = [{ file_id: id, attachment_name: filename }];
-      try {
-        // Discover parent order logically for Next/Previous functionality
-        const attachRes = await fetch(
-          `${DIRECTUS_URL}/items/sales_order_attachment?filter[file_id][_eq]=${id}&fields=sales_order_no,sales_order_id&limit=1`,
-          {
-            headers: DIRECTUS_TOKEN
-              ? { Authorization: `Bearer ${DIRECTUS_TOKEN}` }
-              : {},
-          },
-        );
-        const attachData = (await attachRes.json()).data;
-        if (attachData && attachData.length > 0) {
-          const { sales_order_no, sales_order_id } = attachData[0];
-          let filter = "";
-          if (sales_order_id)
-            filter = `filter[sales_order_id][_eq]=${sales_order_id}`;
-          else if (sales_order_no)
-            filter = `filter[sales_order_no][_eq]=${encodeURIComponent(sales_order_no)}`;
+        // Serve interactive UI if not downloading or requesting raw binary, and it's an image
+        if (!isRaw && !isDownload && contentType.startsWith("image/")) {
+            let relatedFiles = [{ file_id: id, attachment_name: filename }];
+            try {
+                // Discover parent order logically for Next/Previous functionality
+                const attachRes = await fetch(`${DIRECTUS_URL}/items/sales_order_attachment?filter[file_id][_eq]=${id}&fields=sales_order_no,sales_order_id&limit=1`, {
+                    headers: DIRECTUS_TOKEN ? { Authorization: `Bearer ${DIRECTUS_TOKEN}` } : {}
+                });
+                const attachData = (await attachRes.json()).data;
+                if (attachData && attachData.length > 0) {
+                    const { sales_order_no, sales_order_id } = attachData[0];
+                    let filter = "";
+                    if (sales_order_id) filter = `filter[sales_order_id][_eq]=${sales_order_id}`;
+                    else if (sales_order_no) filter = `filter[sales_order_no][_eq]=${encodeURIComponent(sales_order_no)}`;
 
-          if (filter) {
-            const groupRes = await fetch(
-              `${DIRECTUS_URL}/items/sales_order_attachment?${filter}&fields=file_id,attachment_name&limit=-1`,
-              {
-                headers: DIRECTUS_TOKEN
-                  ? { Authorization: `Bearer ${DIRECTUS_TOKEN}` }
-                  : {},
-              },
-            );
-            const groupData = (await groupRes.json()).data;
-            if (groupData && groupData.length > 0) relatedFiles = groupData;
-          }
-        }
-      } catch (e) {
-        console.error("Failed to fetch related attachments for viewer", e);
-      }
+                    if (filter) {
+                        const groupRes = await fetch(`${DIRECTUS_URL}/items/sales_order_attachment?${filter}&fields=file_id,attachment_name&limit=-1`, {
+                            headers: DIRECTUS_TOKEN ? { Authorization: `Bearer ${DIRECTUS_TOKEN}` } : {}
+                        });
+                        const groupData = (await groupRes.json()).data;
+                        if (groupData && groupData.length > 0) relatedFiles = groupData;
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to fetch related attachments for viewer", e);
+            }
 
-      const html = `
+            const html = `
             <!DOCTYPE html>
             <html lang="en">
             <head>
@@ -275,52 +263,44 @@ export async function GET(req: NextRequest) {
             </html>
             `;
 
-      return new NextResponse(html, {
-        status: 200,
-        headers: { "Content-Type": "text/html" },
-      });
+            return new NextResponse(html, {
+                status: 200,
+                headers: { "Content-Type": "text/html" }
+            });
+        }
+
+        // --- Standard Raw Binary Fallback Below ---
+        // Directus /assets/ stores everything now
+        const directusUrl = `${DIRECTUS_URL}/assets/${id}`;
+
+        const directusRes = await fetch(directusUrl, {
+            cache: "no-store",
+            headers: DIRECTUS_TOKEN ? { Authorization: `Bearer ${DIRECTUS_TOKEN}` } : {},
+        });
+
+        if (!directusRes.ok) {
+            console.error(`File not found in Directus. status=${directusRes.status}`);
+            return NextResponse.json(
+                { error: "File not found in Directus assets", status: directusRes.status },
+                { status: 404 }
+            );
+        }
+
+        const buffer = await directusRes.arrayBuffer();
+
+        return new NextResponse(buffer, {
+            status: 200,
+            headers: {
+                "Content-Type": contentType,
+                "Content-Disposition": `${isDownload ? "attachment" : "inline"}; filename="${filename}"`,
+                "X-Frame-Options": "SAMEORIGIN",
+            },
+        });
+    } catch (e) {
+        console.error("File proxy error:", e);
+        return NextResponse.json(
+            { error: "Failed to fetch file from Directus", message: e instanceof Error ? e.message : "Unknown" },
+            { status: 500 }
+        );
     }
-
-    // --- Standard Raw Binary Fallback Below ---
-    // Directus /assets/ stores everything now
-    const directusUrl = `${DIRECTUS_URL}/assets/${id}`;
-
-    const directusRes = await fetch(directusUrl, {
-      cache: "no-store",
-      headers: DIRECTUS_TOKEN
-        ? { Authorization: `Bearer ${DIRECTUS_TOKEN}` }
-        : {},
-    });
-
-    if (!directusRes.ok) {
-      console.error(`File not found in Directus. status=${directusRes.status}`);
-      return NextResponse.json(
-        {
-          error: "File not found in Directus assets",
-          status: directusRes.status,
-        },
-        { status: 404 },
-      );
-    }
-
-    const buffer = await directusRes.arrayBuffer();
-
-    return new NextResponse(buffer, {
-      status: 200,
-      headers: {
-        "Content-Type": contentType,
-        "Content-Disposition": `${isDownload ? "attachment" : "inline"}; filename="${filename}"`,
-        "X-Frame-Options": "SAMEORIGIN",
-      },
-    });
-  } catch (e) {
-    console.error("File proxy error:", e);
-    return NextResponse.json(
-      {
-        error: "Failed to fetch file from Directus",
-        message: e instanceof Error ? e.message : "Unknown",
-      },
-      { status: 500 },
-    );
-  }
 }

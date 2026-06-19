@@ -12,6 +12,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 
 import { Check, ChevronsUpDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { mapPriceTypeName } from "../../product-pricing/utils/constants";
 
 import * as api from "../providers/pcrApi";
 
@@ -511,7 +512,7 @@ export default function CreateRequestDialog(props: {
                             <option value="">Select…</option>
                             {props.priceTypes.map((p) => (
                                 <option key={p.price_type_id} value={String(p.price_type_id)}>
-                                    {p.price_type_name}
+                                    {mapPriceTypeName(p.price_type_name)}
                                 </option>
                             ))}
                         </select>

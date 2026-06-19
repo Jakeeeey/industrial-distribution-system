@@ -1,4 +1,4 @@
-//src/modules/supply-chain-management/physical-inventory-management/providers/fetchProvider.ts
+//src/modules/industrial-distribution-system/supply-chain-management/physical-inventory-management/providers/fetchProvider.ts
 import type {
     BranchRow,
     CategoryRow,
@@ -27,7 +27,7 @@ import {
 } from "../utils/grouping";
 import { isAllCategoryName, normalizeUnitCount } from "../utils/compute";
 
-const API_BASE = "/api/scm/inventory-management/physical-inventory";
+const API_BASE = "/api/ids/scm/inventory-management/physical-inventory";
 
 const TABLES = {
     physical_inventory: "physical_inventory",
@@ -621,7 +621,7 @@ export async function createPhysicalInventoryHeader(
     const json = await apiPost<
         PhysicalInventoryHeaderUpsertPayload,
         DirectusItemResponse<PhysicalInventoryHeaderRow>
-    >(`/api/scm/inventory-management/physical-inventory/header`, payload);
+    >(`/api/ids/scm/inventory-management/physical-inventory/header`, payload);
 
     return json.data;
 }
@@ -633,7 +633,7 @@ export async function updatePhysicalInventoryHeader(
     const json = await apiPatch<
         Partial<PhysicalInventoryHeaderUpsertPayload>,
         DirectusItemResponse<PhysicalInventoryHeaderRow>
-    >(`/api/scm/inventory-management/physical-inventory/header/${id}`, payload);
+    >(`/api/ids/scm/inventory-management/physical-inventory/header/${id}`, payload);
 
     return json.data;
 }
@@ -642,7 +642,7 @@ export async function commitPhysicalInventory(
     id: number,
 ): Promise<PhysicalInventoryHeaderRow> {
     const json = await apiPost<Record<string, never>, DirectusItemResponse<PhysicalInventoryHeaderRow>>(
-        `/api/scm/inventory-management/physical-inventory/header/${id}/commit`,
+        `/api/ids/scm/inventory-management/physical-inventory/header/${id}/commit`,
         {},
     );
 
@@ -653,7 +653,7 @@ export async function cancelPhysicalInventory(
     id: number,
 ): Promise<PhysicalInventoryHeaderRow> {
     const json = await apiPost<Record<string, never>, DirectusItemResponse<PhysicalInventoryHeaderRow>>(
-        `/api/scm/inventory-management/physical-inventory/header/${id}/cancel`,
+        `/api/ids/scm/inventory-management/physical-inventory/header/${id}/cancel`,
         {},
     );
 
@@ -689,7 +689,7 @@ export async function updatePhysicalInventoryDetailsBulk(
     const json = await apiPatch<
         { updates: BulkPhysicalInventoryDetailUpdateItem[] },
         DirectusBulkItemsResponse<PhysicalInventoryDetailRow>
-    >(`/api/scm/inventory-management/physical-inventory/details/bulk`, { updates });
+    >(`/api/ids/scm/inventory-management/physical-inventory/details/bulk`, { updates });
 
     return Array.isArray(json.data) ? json.data : [];
 }

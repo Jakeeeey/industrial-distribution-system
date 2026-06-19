@@ -19,6 +19,21 @@ export const StockAdjustmentSerialSchema = z.object({
 export type StockAdjustmentSerial = z.infer<typeof StockAdjustmentSerialSchema>;
 
 /**
+ * Stock Adjustment Attachment Schema
+ */
+export const StockAdjustmentAttachmentSchema = z.object({
+  id: z.number().optional(),
+  stock_adjustment_id: z.number().optional(),
+  attachment: z.any(), // UUID string or File object
+  created_at: z.string().nullable().optional(),
+  created_by: z.any().optional(),
+  updated_at: z.string().nullable().optional(),
+  updated_by: z.any().optional(),
+});
+export type StockAdjustmentAttachment = z.infer<typeof StockAdjustmentAttachmentSchema>;
+
+
+/**
  * Branch Data Schema
  */
 export const BranchSchema = z.object({
@@ -41,10 +56,13 @@ export type User = z.infer<typeof UserSchema>;
 /**
  * Stock Adjustment Item Schema
  */
-export const StockAdjustmentItemSchema = z.object({
+const StockAdjustmentItemSchemaBase = z.object({
   id: z.number().optional(),
   stock_adjustment_id: z.number().optional(),
-  product_id: z.number().min(1, "Product selection is required"),
+  product_id: z.any().refine((val) => {
+    const num = Number(val);
+    return !isNaN(num) && num > 0;
+  }, "Product selection is required"),
   quantity: z.number().min(0.01, "Quantity must be greater than 0"),
   branch_id: z.any().optional(),
   remarks: z.string().optional(),
@@ -70,6 +88,18 @@ export const StockAdjustmentItemSchema = z.object({
   unit_order: z.number().nullable().optional(),
   db_id: z.number().optional(),
 });
+export const StockAdjustmentItemSchema = StockAdjustmentItemSchemaBase.refine(
+  (item) => {
+    if (item.is_serialized) {
+      return Array.isArray(item.serial_numbers) && item.serial_numbers.length > 0;
+    }
+    return true;
+  },
+  {
+    message: "Serial numbers are required for serialized items",
+    path: ["serial_numbers"],
+  }
+);
 export type StockAdjustmentItem = z.infer<typeof StockAdjustmentItemSchema>;
 
 /**
@@ -89,15 +119,17 @@ export const StockAdjustmentHeaderSchema = z.object({
   posted_by: z.any().optional(),
   postedAt: z.string().optional(),
   items: z.any().optional(), // Expanded items or count
+  stock_adjustment_attachment: z.array(StockAdjustmentAttachmentSchema).optional(),
 });
 export type StockAdjustmentHeader = z.infer<typeof StockAdjustmentHeaderSchema>;
 
 /**
- * Full Stock Adjustment (Header + Items + Serial)
+ * Full Stock Adjustment (Header + Items + Serial + Attachments)
  */
 export const StockAdjustmentDetailSchema = StockAdjustmentHeaderSchema.extend({
   items: z.array(StockAdjustmentItemSchema).default([]),
   serial_numbers: z.array(StockAdjustmentSerialSchema).default([]),
+  stock_adjustment_attachment: z.array(StockAdjustmentAttachmentSchema).default([]),
 });
 export type StockAdjustmentDetail = z.infer<typeof StockAdjustmentDetailSchema>;
 
@@ -114,7 +146,20 @@ export const StockAdjustmentFormSchema = z.object({
   isPosted: z.boolean(),
   postedAt: z.string().optional(),
   posted_by: z.any().optional(),
-});
+  stock_adjustment_attachment: z.array(StockAdjustmentAttachmentSchema).min(1, "At least one attachment is required"),
+}).refine(
+  (data) => {
+    if (data.type === "IN") {
+      return data.doc_no.startsWith("SAIN-");
+    } else {
+      return data.doc_no.startsWith("SAOUT-");
+    }
+  },
+  {
+    message: "Document number prefix must match the adjustment type (SAIN for Stock In, SAOUT for Stock Out)",
+    path: ["doc_no"],
+  }
+);
 export type StockAdjustmentFormValues = z.infer<typeof StockAdjustmentFormSchema>;
 
 /**

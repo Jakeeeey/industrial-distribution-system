@@ -112,7 +112,7 @@ function getStatusColor(status: string) {
     case "approved": return "bg-emerald-500/10 text-emerald-700 border-emerald-300";
     case "rejected": return "bg-red-500/10 text-red-700 border-red-300";
     case "returned": return "bg-amber-500/10 text-amber-700 border-amber-300";
-    default:          return "bg-blue-500/10 text-blue-700 border-blue-300";
+    default: return "bg-blue-500/10 text-blue-700 border-blue-300";
   }
 }
 
@@ -202,7 +202,7 @@ function ActionButtons({
     }
 
     return (
-      <Button 
+      <Button
         onClick={onOverride}
         size="sm"
         className="w-full h-8 text-[11px] font-black uppercase tracking-widest bg-red-600 hover:bg-red-700 text-white shadow-sm shadow-red-200"
@@ -217,8 +217,8 @@ function ActionButtons({
     const isForwarded = status === "pending" && isLevelMismatch;
     let fallbackText = status;
     if (isForwarded && currentLevel !== undefined && assignedLevel !== undefined) {
-      fallbackText = currentLevel < assignedLevel 
-        ? `Awaiting Lvl ${currentLevel}` 
+      fallbackText = currentLevel < assignedLevel
+        ? `Awaiting Lvl ${currentLevel}`
         : "Pending Next Approver";
     }
 
@@ -299,8 +299,8 @@ function ActionButtons({
               className={cn(
                 "h-7 text-xs font-bold",
                 pendingAction === "approve" && "bg-emerald-600 hover:bg-emerald-700",
-                pendingAction === "reject"  && "bg-red-600 hover:bg-red-700",
-                pendingAction === "return"  && "bg-amber-600 hover:bg-amber-700",
+                pendingAction === "reject" && "bg-red-600 hover:bg-red-700",
+                pendingAction === "return" && "bg-amber-600 hover:bg-amber-700",
               )}
             >
               {isActing ? <Loader2 className="h-3 w-3 animate-spin" /> : `Confirm ${pendingAction}`}
@@ -343,15 +343,15 @@ function EmployeeRequestsDrawer({
 
   // ── HR Override State ─────────────────────────────────────────────────────
   const [overrideRequestId, setOverrideRequestId] = useState<number | null>(null);
-  const [overrideFile, setOverrideFile]           = useState<File | null>(null);
-  const [overrideRemarks, setOverrideRemarks]     = useState("");
-  const [isUploading, setIsUploading]             = useState(false);
+  const [overrideFile, setOverrideFile] = useState<File | null>(null);
+  const [overrideRemarks, setOverrideRemarks] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
 
   // ── Bulk Override State ───────────────────────────────────────────────────
   const [isBulkOverrideMode, setIsBulkOverrideMode] = useState(false);
-  const [bulkActionType, setBulkActionType]         = useState<'approve_override' | 'reject_override'>('approve_override');
-  const [bulkFile, setBulkFile]                     = useState<File | null>(null);
-  const [bulkRemarks, setBulkRemarks]               = useState("");
+  const [bulkActionType, setBulkActionType] = useState<'approve_override' | 'reject_override'>('approve_override');
+  const [bulkFile, setBulkFile] = useState<File | null>(null);
+  const [bulkRemarks, setBulkRemarks] = useState("");
 
   const handleOverride = async (requestId: number, actionType: 'approve_override' | 'reject_override' = 'approve_override') => {
     if (!overrideFile) {
@@ -368,8 +368,8 @@ function EmployeeRequestsDrawer({
       // 1. Upload proof to Directus
       const fd = new FormData();
       fd.append("file", overrideFile);
-      
-      const res = await fetch(`/api/hrm/employee-admin/employee-master-list/upload?type=hr_attachment`, {
+
+      const res = await fetch(`/api/ids/hrm/employee-admin/employee-master-list/upload?type=hr_attachment`, {
         method: "POST",
         body: fd
       });
@@ -436,8 +436,8 @@ function EmployeeRequestsDrawer({
       // 1. Upload proof once
       const fd = new FormData();
       fd.append("file", bulkFile);
-      
-      const res = await fetch(`/api/hrm/employee-admin/employee-master-list/upload?type=hr_attachment`, {
+
+      const res = await fetch(`/api/ids/hrm/employee-admin/employee-master-list/upload?type=hr_attachment`, {
         method: "POST",
         body: fd
       });
@@ -527,14 +527,14 @@ function EmployeeRequestsDrawer({
           {/* Bulk Override Panel */}
           {isBulkOverrideMode && (
             <div className="p-5 rounded-2xl border-2 border-red-200 bg-red-50/30 mb-6 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
-               <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2 text-red-700">
                   <AlertTriangle className="h-5 w-5" />
                   <span className="text-sm font-black uppercase tracking-widest">Bulk Force Override Confirmation</span>
                 </div>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setIsBulkOverrideMode(false)}
                   className="h-7 text-[10px] font-bold uppercase text-muted-foreground hover:text-foreground"
                 >
@@ -549,8 +549,8 @@ function EmployeeRequestsDrawer({
 
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[10px] font-black uppercase text-red-900/60 ml-1">Universal Proof Attachment</label>
-                  <Input 
-                    type="file" 
+                  <Input
+                    type="file"
                     onChange={(e) => setBulkFile(e.target.files?.[0] || null)}
                     className="h-10 text-[11px] bg-white border-red-200 focus-visible:ring-red-200 file:text-[10px] file:font-black file:uppercase file:bg-red-50 file:text-red-700 file:border-red-100 file:rounded-md file:mr-3"
                   />
@@ -558,7 +558,7 @@ function EmployeeRequestsDrawer({
 
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[10px] font-black uppercase text-red-900/60 ml-1">Bulk Override Logic/Remarks</label>
-                  <textarea 
+                  <textarea
                     placeholder="Provide reasoning for this bulk override action..."
                     value={bulkRemarks}
                     onChange={(e) => setBulkRemarks(e.target.value)}
@@ -566,7 +566,7 @@ function EmployeeRequestsDrawer({
                   />
                 </div>
 
-                <Button 
+                <Button
                   className={cn(
                     "w-full h-11 text-white font-black uppercase text-xs tracking-[0.2em] shadow-lg transition-transform active:scale-[0.98]",
                     bulkActionType === "approve_override" ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200" : "bg-red-600 hover:bg-red-700 shadow-red-200"
@@ -630,8 +630,8 @@ function EmployeeRequestsDrawer({
                     <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider">
                       <span className="text-muted-foreground">Approval Progress</span>
                       <span className={cn(req.status === "approved" ? "text-emerald-600" : "text-foreground")}>
-                        {req.status === "approved" 
-                          ? "Fully Approved" 
+                        {req.status === "approved"
+                          ? "Fully Approved"
                           : `Level ${Math.min(req.current_approval_level, Math.max(req.total_levels || 1, req.current_approval_level))} of ${Math.max(req.total_levels || 1, req.current_approval_level)}`}
                       </span>
                     </div>
@@ -640,15 +640,15 @@ function EmployeeRequestsDrawer({
                         const stepLevel = i + 1;
                         const isCompleted = stepLevel < req.current_approval_level || req.status === "approved";
                         const isCurrent = stepLevel === req.current_approval_level && req.status === "pending";
-                        
+
                         return (
                           <div
                             key={i}
                             className={cn(
                               "flex-1 rounded-full transition-all duration-500",
                               isCompleted ? `bg-gradient-to-r ${cfg.gradient} opacity-100 shadow-sm` :
-                              isCurrent ? `bg-gradient-to-r ${cfg.gradient} opacity-50 animate-pulse` :
-                              "bg-muted border border-muted-foreground/10"
+                                isCurrent ? `bg-gradient-to-r ${cfg.gradient} opacity-50 animate-pulse` :
+                                  "bg-muted border border-muted-foreground/10"
                             )}
                           />
                         );
@@ -681,11 +681,11 @@ function EmployeeRequestsDrawer({
                           <p className="text-[10px] font-bold text-red-800 leading-tight">
                             Providing a proof of permission attachment and remarks will immediately move this request to Final Approved or Rejected.
                           </p>
-                          
+
                           <div className="flex flex-col gap-1.5">
                             <label className="text-[10px] font-black uppercase text-red-900/60 ml-1">Attachment (Required)</label>
-                            <Input 
-                              type="file" 
+                            <Input
+                              type="file"
                               onChange={(e) => setOverrideFile(e.target.files?.[0] || null)}
                               className="h-10 text-[11px] bg-white border-red-200 focus-visible:ring-red-200 file:text-[10px] file:font-black file:uppercase file:bg-red-50 file:text-red-700 file:border-red-100 file:rounded-md file:mr-3"
                             />
@@ -693,7 +693,7 @@ function EmployeeRequestsDrawer({
 
                           <div className="flex flex-col gap-1.5">
                             <label className="text-[10px] font-black uppercase text-red-900/60 ml-1">Override Logic/Remarks</label>
-                            <textarea 
+                            <textarea
                               placeholder="Why is this being overridden? (e.g. Per email from Dept Head...)"
                               value={overrideRemarks}
                               onChange={(e) => setOverrideRemarks(e.target.value)}
@@ -702,7 +702,7 @@ function EmployeeRequestsDrawer({
                           </div>
 
                           <div className="flex gap-3">
-                            <Button 
+                            <Button
                               className="flex-1 h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-xs tracking-widest shadow-md shadow-emerald-200"
                               disabled={isUploading || isActing || !overrideFile || !overrideRemarks.trim()}
                               onClick={() => handleOverride(rid, 'approve_override')}
@@ -711,7 +711,7 @@ function EmployeeRequestsDrawer({
                               {isUploading ? "Uploading..." : "Approve Override"}
                             </Button>
 
-                            <Button 
+                            <Button
                               className="flex-1 h-10 bg-red-600 hover:bg-red-700 text-white font-black uppercase text-xs tracking-widest shadow-md shadow-red-200"
                               disabled={isUploading || isActing || !overrideFile || !overrideRemarks.trim()}
                               onClick={() => handleOverride(rid, 'reject_override')}
@@ -896,9 +896,9 @@ export function RequestTypeModal({
                 Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filtered.length)} of {filtered.length}
               </span>
               <div className="flex items-center gap-2">
-                <Button 
-                  size="sm" 
-                  variant="outline" 
+                <Button
+                  size="sm"
+                  variant="outline"
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
                   className="h-8 rounded-lg px-3 text-xs font-black shadow-sm bg-background border-muted-foreground/20 hover:bg-muted"
@@ -908,9 +908,9 @@ export function RequestTypeModal({
                 <span className="text-[11px] font-black text-foreground px-1 bg-muted/50 py-1 rounded w-10 text-center">
                   {currentPage} <span className="text-muted-foreground/50 mx-0.5">/</span> {totalPages}
                 </span>
-                <Button 
-                  size="sm" 
-                  variant="outline" 
+                <Button
+                  size="sm"
+                  variant="outline"
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages}
                   className="h-8 rounded-lg px-3 text-xs font-black shadow-sm bg-background border-muted-foreground/20 hover:bg-muted"

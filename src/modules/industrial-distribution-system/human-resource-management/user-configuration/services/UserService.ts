@@ -27,12 +27,12 @@ export class UserService {
       // Fetch from our local proxy route with pagination params
       const searchParam = search ? `&search=${encodeURIComponent(search)}` : "";
       const response = await fetch(
-        `/api/hrm/user-configuration/users?limit=${limit}&offset=${offset}${searchParam}`,
+        `/api/ids/hrm/user-configuration/users?limit=${limit}&offset=${offset}${searchParam}`,
       );
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         console.error(
-          "Failed to fetch users from /api/hrm/user-configuration/users:",
+          "Failed to fetch users from /api/ids/hrm/user-configuration/users:",
           {
             status: response.status,
             details: errorData,
@@ -100,10 +100,10 @@ export class UserService {
       // Fetch from both tables in parallel
       const [subRes, modRes] = await Promise.all([
         fetch(
-          `/api/hrm/user-configuration/user-access-subsystems?filter=${filter}&limit=-1&fields=id,user_id,subsystem_id.slug,subsystem_id.id`,
+          `/api/ids/hrm/user-configuration/user-access-subsystems?filter=${filter}&limit=-1&fields=id,user_id,subsystem_id.slug,subsystem_id.id`,
         ),
         fetch(
-          `/api/hrm/user-configuration/user-access-modules?filter=${filter}&limit=-1&fields=id,user_id,module_id.slug,module_id.id`,
+          `/api/ids/hrm/user-configuration/user-access-modules?filter=${filter}&limit=-1&fields=id,user_id,module_id.slug,module_id.id`,
         ),
       ]);
 
@@ -210,7 +210,7 @@ export class UserService {
       // 1. Subsystems
       if (updates.subsystemsToAdd.length > 0) {
         promises.push(
-          fetch(`/api/hrm/user-configuration/user-access-subsystems`, {
+          fetch(`/api/ids/hrm/user-configuration/user-access-subsystems`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(
@@ -225,7 +225,7 @@ export class UserService {
       }
       if (updates.subsystemsToRemove.length > 0) {
         promises.push(
-          fetch(`/api/hrm/user-configuration/user-access-subsystems`, {
+          fetch(`/api/ids/hrm/user-configuration/user-access-subsystems`, {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(updates.subsystemsToRemove),
@@ -236,7 +236,7 @@ export class UserService {
       // 2. Modules
       if (updates.modulesToAdd.length > 0) {
         promises.push(
-          fetch(`/api/hrm/user-configuration/user-access-modules`, {
+          fetch(`/api/ids/hrm/user-configuration/user-access-modules`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(
@@ -251,7 +251,7 @@ export class UserService {
       }
       if (updates.modulesToRemove.length > 0) {
         promises.push(
-          fetch(`/api/hrm/user-configuration/user-access-modules`, {
+          fetch(`/api/ids/hrm/user-configuration/user-access-modules`, {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(updates.modulesToRemove),
@@ -275,8 +275,8 @@ export class UserService {
     try {
       // Fetch subsystems and all modules in parallel for User Configuration registry
       const [subsystemsRes, modulesRes] = await Promise.all([
-        fetch(`/api/hrm/user-configuration/subsystems`),
-        fetch(`/api/hrm/user-configuration/modules`),
+        fetch(`/api/ids/hrm/user-configuration/subsystems`),
+        fetch(`/api/ids/hrm/user-configuration/modules`),
       ]);
 
       if (!subsystemsRes.ok || !modulesRes.ok) return [];

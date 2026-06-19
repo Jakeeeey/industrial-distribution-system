@@ -436,11 +436,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // console.log("[POST] Creating customer with payload:", JSON.stringify(newCustomerData, null, 2));
+
     const createRes = await fetchWithRetry(
       `${DIRECTUS_URL}/items/${COLLECTIONS.CUSTOMER}`,
       { method: "POST", headers, body: JSON.stringify(newCustomerData) },
     );
-    if (!createRes.ok) throw new Error(`Directus customer create failed`);
+    if (!createRes.ok) {
+      const errText = await createRes.text().catch(() => "");
+      console.error("[POST] Directus error response:", errText);
+      throw new Error(`Directus customer create failed: ${errText}`);
+    }
     const createJson = await createRes.json();
     const newId = createJson.data.id;
 
@@ -549,11 +555,17 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
+    // console.log("[PATCH] Updating customer id =", id, "with payload:", JSON.stringify(updateData, null, 2));
+
     const res = await fetchWithRetry(
       `${DIRECTUS_URL}/items/${COLLECTIONS.CUSTOMER}/${id}`,
       { method: "PATCH", headers, body: JSON.stringify(updateData) },
     );
-    if (!res.ok) throw new Error(`Directus customer update failed`);
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      console.error("[PATCH] Directus error response:", errText);
+      throw new Error(`Directus customer update failed: ${errText}`);
+    }
     return NextResponse.json((await res.json()).data);
   } catch (error) {
     return NextResponse.json(

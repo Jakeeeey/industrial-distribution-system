@@ -38,7 +38,7 @@ export function CompanyProfileProvider({
     setError(null);
     try {
       const response = await fetch(
-        "/api/hrm/employee-admin/structure/company-profile",
+        "/api/ids/hrm/employee-admin/structure/company-profile",
       );
       if (!response.ok) {
         const errData = await response.json();
@@ -62,7 +62,7 @@ export function CompanyProfileProvider({
   const updateProfile = async (profile: Partial<CompanyProfile>) => {
     try {
       const response = await fetch(
-        "/api/hrm/employee-admin/structure/company-profile",
+        "/api/ids/hrm/employee-admin/structure/company-profile",
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -88,7 +88,7 @@ export function CompanyProfileProvider({
       formData.append("file", file);
 
       const response = await fetch(
-        "/api/hrm/employee-admin/structure/company-profile/upload",
+        "/api/ids/hrm/employee-admin/structure/company-profile/upload",
         {
           method: "POST",
           body: formData,

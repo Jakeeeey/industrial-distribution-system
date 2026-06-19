@@ -1,7 +1,7 @@
 import { directusFetch, getDirectusBase } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/cylinder-assets/utils/directus";
 import { LpgSite, SiteCylinder } from "../types";
 
-export const lpgSiteService = {
+export const lpgSiteServerService = {
   async fetchSites(params?: { search?: string; customer_code?: string; page?: number; limit?: number; sort?: string }) {
     const DIRECTUS_URL = getDirectusBase();
     const page = params?.page || 1;
@@ -9,9 +9,33 @@ export const lpgSiteService = {
     const offset = (page - 1) * limit;
     const sort = params?.sort || "-id";
 
-    let query = `fields=*,customer.customer_name&sort=${sort}&limit=${limit}&offset=${offset}&meta=total_count`;
+    // 1. If searching, find any matching customer codes first to allow searching by customer name
+    let matchedCustomerCodes: string[] = [];
+    if (params?.search) {
+      const customerSearchFilter = {
+        _or: [
+          { customer_code: { _icontains: params.search } },
+          { customer_name: { _icontains: params.search } }
+        ],
+        isActive: { _eq: 1 }
+      };
+      try {
+        const custRes = await directusFetch<{ data: { customer_code: string }[] }>(
+          `${DIRECTUS_URL}/items/customer?fields=customer_code&filter=${encodeURIComponent(JSON.stringify(customerSearchFilter))}&limit=100`
+        );
+        matchedCustomerCodes = (custRes.data ?? []).map(c => c.customer_code);
+      } catch (err) {
+        console.error("Error fetching customers for search filter:", err);
+      }
+    }
 
-    type FilterValue = { _eq?: string | number } | { _icontains?: string } | Array<Record<string, { _icontains: string }>>;
+    // 2. Build filters for sites
+    type FilterValue =
+      | { _eq?: string | number }
+      | { _icontains?: string }
+      | { _in?: string[] }
+      | Array<Record<string, { _icontains: string } | { _in: string[] }>>;
+
     const filters: Record<string, FilterValue> = {
       is_active: { _eq: 1 }
     };
@@ -21,29 +45,71 @@ export const lpgSiteService = {
     }
 
     if (params?.search) {
-      filters._or = [
+      const orConditions: Array<Record<string, { _icontains: string } | { _in: string[] }>> = [
         { site_name: { _icontains: params.search } },
         { customer_code: { _icontains: params.search } },
-        { "customer.customer_name": { _icontains: params.search } },
         { meter_no: { _icontains: params.search } },
       ];
+      if (matchedCustomerCodes.length > 0) {
+        orConditions.push({ customer_code: { _in: matchedCustomerCodes } });
+      }
+      filters._or = orConditions;
     }
 
+    let query = `fields=*&sort=${sort}&limit=${limit}&offset=${offset}&meta=total_count`;
     query += `&filter=${encodeURIComponent(JSON.stringify(filters))}`;
 
     const res = await directusFetch<{ data: LpgSite[]; meta?: { total_count: number } }>(`${DIRECTUS_URL}/items/lpg_customer_lpg_sites?${query}`);
+    const sites = res.data ?? [];
+
+    // 3. Fetch customer details for the returned sites to map customer_name
+    const customerCodes = Array.from(new Set(sites.map(s => s.customer_code).filter(Boolean)));
+    const customerMap: Record<string, { customer_code: string; customer_name: string }> = {};
+
+    if (customerCodes.length > 0) {
+      try {
+        const custRes = await directusFetch<{ data: { customer_code: string; customer_name: string }[] }>(
+          `${DIRECTUS_URL}/items/customer?fields=customer_code,customer_name&filter=${encodeURIComponent(JSON.stringify({ customer_code: { _in: customerCodes } }))}&limit=100`
+        );
+        (custRes.data ?? []).forEach(c => {
+          customerMap[c.customer_code] = c;
+        });
+      } catch (err) {
+        console.error("Error fetching customers for mapping:", err);
+      }
+    }
+
+    const mappedData = sites.map(site => ({
+      ...site,
+      customer: customerMap[site.customer_code] || undefined
+    }));
+
     return {
-      data: res.data,
-      total: res.meta?.total_count || res.data.length
+      data: mappedData,
+      total: res.meta?.total_count || mappedData.length
     };
   },
 
   async fetchSiteById(id: number) {
     const DIRECTUS_URL = getDirectusBase();
-    // We fetch basic details; cylinders are handled by the SiteCylinderManager's own fetch
-    const query = `fields=*,customer.customer_name`;
+    const query = `fields=*`;
     const res = await directusFetch<{ data: LpgSite }>(`${DIRECTUS_URL}/items/lpg_customer_lpg_sites/${id}?${query}`);
-    return res.data;
+    const site = res.data;
+    if (site) {
+      if (site.customer_code) {
+        try {
+          const custRes = await directusFetch<{ data: { customer_code: string; customer_name: string }[] }>(
+            `${DIRECTUS_URL}/items/customer?fields=customer_code,customer_name&filter=${encodeURIComponent(JSON.stringify({ customer_code: { _eq: site.customer_code } }))}`
+          );
+          if (custRes.data && custRes.data.length > 0) {
+            site.customer = custRes.data[0];
+          }
+        } catch (err) {
+          console.error("Error fetching customer for site details:", err);
+        }
+      }
+    }
+    return site;
   },
 
   async createSite(payload: Partial<LpgSite>) {
@@ -52,7 +118,20 @@ export const lpgSiteService = {
       method: "POST",
       body: JSON.stringify(payload),
     });
-    return res.data;
+    const site = res.data;
+    if (site && site.customer_code) {
+      try {
+        const custRes = await directusFetch<{ data: { customer_code: string; customer_name: string }[] }>(
+          `${DIRECTUS_URL}/items/customer?fields=customer_code,customer_name&filter=${encodeURIComponent(JSON.stringify({ customer_code: { _eq: site.customer_code } }))}`
+        );
+        if (custRes.data && custRes.data.length > 0) {
+          site.customer = custRes.data[0];
+        }
+      } catch (err) {
+        console.error("Error fetching customer for created site:", err);
+      }
+    }
+    return site;
   },
 
   async updateSite(id: number, payload: Partial<LpgSite>) {
@@ -61,7 +140,20 @@ export const lpgSiteService = {
       method: "PATCH",
       body: JSON.stringify(payload),
     });
-    return res.data;
+    const site = res.data;
+    if (site && site.customer_code) {
+      try {
+        const custRes = await directusFetch<{ data: { customer_code: string; customer_name: string }[] }>(
+          `${DIRECTUS_URL}/items/customer?fields=customer_code,customer_name&filter=${encodeURIComponent(JSON.stringify({ customer_code: { _eq: site.customer_code } }))}`
+        );
+        if (custRes.data && custRes.data.length > 0) {
+          site.customer = custRes.data[0];
+        }
+      } catch (err) {
+        console.error("Error fetching customer for updated site:", err);
+      }
+    }
+    return site;
   },
 
   async deleteSite(id: number) {
@@ -178,16 +270,16 @@ export const lpgSiteService = {
 
   async fetchCustomers(search?: string) {
     const DIRECTUS_URL = getDirectusBase();
-    let query = `fields=customer_code,customer_name,brgy,city,province&filter[isActive][_eq]=1&limit=100&sort=customer_name`;
+    const filters: Record<string, unknown> = {
+      isActive: { _eq: 1 }
+    };
     if (search) {
-      const filter = {
-        _or: [
-          { customer_code: { _icontains: search } },
-          { customer_name: { _icontains: search } },
-        ],
-      };
-      query += `&filter=${encodeURIComponent(JSON.stringify(filter))}`;
+      filters._or = [
+        { customer_code: { _icontains: search } },
+        { customer_name: { _icontains: search } },
+      ];
     }
+    const query = `fields=customer_code,customer_name,brgy,city,province&limit=100&sort=customer_name&filter=${encodeURIComponent(JSON.stringify(filters))}`;
     const res = await directusFetch<{ data: { customer_code: string; customer_name: string }[] }>(`${DIRECTUS_URL}/items/customer?${query}`);
     return res.data;
   }

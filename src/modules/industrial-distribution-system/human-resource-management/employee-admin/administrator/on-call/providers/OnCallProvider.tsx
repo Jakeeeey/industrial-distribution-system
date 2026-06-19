@@ -61,7 +61,7 @@ export function OnCallProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     try {
       const response = await fetch(
-        "/api/hrm/employee-admin/administrator/on-call",
+        "/api/ids/hrm/employee-admin/administrator/on-call",
       );
       if (!response.ok) {
         const errData = await response.json();
@@ -99,7 +99,7 @@ export function OnCallProvider({ children }: { children: React.ReactNode }) {
     async (schedule: Record<string, unknown>, staffIds: number[]) => {
       try {
         const response = await fetch(
-          "/api/hrm/employee-admin/administrator/on-call",
+          "/api/ids/hrm/employee-admin/administrator/on-call",
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -129,7 +129,7 @@ export function OnCallProvider({ children }: { children: React.ReactNode }) {
     ) => {
       try {
         const response = await fetch(
-          `/api/hrm/employee-admin/administrator/on-call/${id}`,
+          `/api/ids/hrm/employee-admin/administrator/on-call/${id}`,
           {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
@@ -155,7 +155,7 @@ export function OnCallProvider({ children }: { children: React.ReactNode }) {
     async (id: number) => {
       try {
         const response = await fetch(
-          `/api/hrm/employee-admin/administrator/on-call/${id}`,
+          `/api/ids/hrm/employee-admin/administrator/on-call/${id}`,
           {
             method: "DELETE",
           },
