@@ -197,6 +197,8 @@ export const StockAdjustmentProductSchema = z.object({
     quantity: z.number().optional(),
     count: z.number().optional(),
   }).optional(),
+  // added is_serialized field to resolve TypeScript issues in catalog product selectors
+  is_serialized: z.boolean().optional(),
   index: z.number().optional(),
 });
 export type StockAdjustmentProduct = z.infer<typeof StockAdjustmentProductSchema>;

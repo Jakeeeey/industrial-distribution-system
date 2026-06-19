@@ -34,7 +34,8 @@ export function ProductSelectionModal({
   // Fetch dynamic units
   useEffect(() => {
     if (isOpen) {
-      fetch("/api/ids/scm/inventory-management/stock-adjustment/units")
+      // Updated fetch path to stock-adjustment-serial-posting/units to reference the correct endpoint
+      fetch("/api/ids/scm/inventory-management/stock-adjustment-serial-posting/units")
         .then((res) => res.json())
         .then((result) => {
           if (result.data) {

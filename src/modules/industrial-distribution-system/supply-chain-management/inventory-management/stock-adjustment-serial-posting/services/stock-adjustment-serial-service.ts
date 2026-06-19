@@ -14,13 +14,7 @@ interface DraftCylinder {
   [key: string]: unknown;
 }
 
-/** Shape of a record returned from cylinder_assets_draft */
-interface DraftCylinder {
-  id: number;
-  product_id: number;
-  cylinder_status?: string;
-  [key: string]: unknown;
-}
+// NOTE: Duplicate DraftCylinder interface definition removed to fix TS2374 error.
 
 interface RawItem {
   id?: number;
@@ -196,12 +190,12 @@ export const stockAdjustmentService = {
         }
       }
 
+      // Removed duplicate supplier_id property to avoid TS1117 error.
       return {
         ...header,
         supplier_id: resolvedSupplier,
         items: headerItems,
-        amount: totalAmount > 0 ? totalAmount : (Number(header.amount) || 0),
-        supplier_id: resolvedSupplier as unknown
+        amount: totalAmount > 0 ? totalAmount : (Number(header.amount) || 0)
       };
     });
 
@@ -211,7 +205,8 @@ export const stockAdjustmentService = {
         const docNo = h.doc_no || "";
         const remarks = h.remarks || "";
         const branchName = (h.branch_id && typeof h.branch_id === "object" ? h.branch_id.branch_name : "") || "";
-        const supplierName = (h.supplier_id && typeof h.supplier_id === "object" ? h.supplier_id.supplier_name : "") || "";
+        // Cast to structured interface (instead of any) to safely access supplier_name under ESLint no-explicit-any rule
+        const supplierName = (h.supplier_id && typeof h.supplier_id === "object" ? (h.supplier_id as { supplier_name?: string }).supplier_name : "") || "";
         
         return (
           docNo.toLowerCase().includes(query) ||

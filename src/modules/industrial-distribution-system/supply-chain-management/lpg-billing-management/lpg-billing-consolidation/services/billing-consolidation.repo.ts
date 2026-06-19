@@ -4,11 +4,12 @@
 // All recompute logic lives in billing-consolidation.service.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Updated import path from stock-adjustment to stock-adjustment-serial-posting
 import {
   directusFetch,
   getDirectusBase,
   getDirectusToken,
-} from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/directus";
+} from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment-serial-posting/utils/directus";
 import type {
   ConsolidationHeader,
   ConsolidationTransaction,
@@ -136,8 +137,9 @@ async function hydrateCustomerNamesForHeaders(headers: ConsolidationHeader[]): P
     const custRes = await directusFetch<{ data: { customer_code: string; customer_name: string; store_name?: string | null }[] }>(
       `${DIRECTUS_URL}/items/customer?fields=customer_code,customer_name,store_name&filter=${encodeURIComponent(JSON.stringify(filterObj))}`
     );
+    // Added concrete type annotation to customer record parameter c to resolve ESLint no-explicit-any error
     customerMap = Object.fromEntries(
-      (custRes.data ?? []).map((c) => [
+      (custRes.data ?? []).map((c: { customer_code: string; customer_name: string; store_name?: string | null }) => [
         c.customer_code,
         { customer_name: c.customer_name, store_name: c.store_name },
       ])
@@ -350,7 +352,8 @@ export async function repoFetchWiwoWithDetails(wiwoHeaderId: number): Promise<Co
   if (!headerRes.data) return null;
   const h = headerRes.data;
 
-  const details: ConsolidationWiwoDetail[] = (detailRes.data ?? []).map((d) => {
+  // Added Record<string, unknown> type annotation to closure parameter d to resolve ESLint no-explicit-any error
+  const details: ConsolidationWiwoDetail[] = (detailRes.data ?? []).map((d: Record<string, unknown>) => {
     const productObj =
       d["product_id"] && typeof d["product_id"] === "object"
         ? (d["product_id"] as Record<string, unknown>)
@@ -470,7 +473,8 @@ export async function repoFetchAttachments(transactionId: number): Promise<Conso
   const res = await directusFetch<{ data: Record<string, unknown>[] }>(
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments?filter[transaction_id][_eq]=${transactionId}&limit=-1`
   );
-  return (res.data ?? []).map((a) => ({
+  // Added Record<string, unknown> type annotation to closure parameter a to resolve ESLint no-explicit-any error
+  return (res.data ?? []).map((a: Record<string, unknown>) => ({
     id: Number(a["id"]),
     transaction_id: Number(a["transaction_id"]),
     site_cylinder_id: a["site_cylinder_id"] ? Number(a["site_cylinder_id"]) : null,
@@ -496,8 +500,9 @@ export async function repoFetchAuditTrail(transactionId: number): Promise<Consol
   const userIds = Array.from(
     new Set(
       rawEntries
-        .map((a) => (a["modified_by"] ? Number(a["modified_by"]) : null))
-        .filter((id): id is number => id !== null && !isNaN(id) && id > 0)
+        // Added Record<string, unknown> and number | null type annotations to closure parameters to resolve ESLint no-explicit-any errors
+        .map((a: Record<string, unknown>) => (a["modified_by"] ? Number(a["modified_by"]) : null))
+        .filter((id: number | null): id is number => id !== null && !isNaN(id) && id > 0)
     )
   );
 
@@ -522,7 +527,8 @@ export async function repoFetchAuditTrail(transactionId: number): Promise<Consol
     }
   }
 
-  return rawEntries.map((a) => {
+  // Added Record<string, unknown> type annotation to closure parameter a to resolve ESLint no-explicit-any error
+  return rawEntries.map((a: Record<string, unknown>) => {
     const modifiedBy = a["modified_by"] ? Number(a["modified_by"]) : null;
     return {
       audit_id: Number(a["audit_id"]),
@@ -683,7 +689,8 @@ export async function repoFetchOnboardingAttachmentsForCylinders(
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments?filter=${filter}&limit=-1`
   );
 
-  return (res.data ?? []).map((a) => ({
+  // Added Record<string, unknown> type annotation to closure parameter a to resolve ESLint no-explicit-any error
+  return (res.data ?? []).map((a: Record<string, unknown>) => ({
     id: Number(a["id"]),
     transaction_id: Number(a["transaction_id"]),
     site_cylinder_id: a["site_cylinder_id"] ? Number(a["site_cylinder_id"]) : null,
