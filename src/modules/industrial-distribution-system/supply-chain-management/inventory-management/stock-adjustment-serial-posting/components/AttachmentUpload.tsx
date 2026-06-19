@@ -4,7 +4,8 @@ import React, { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Upload, X, Loader2, FileText, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
-import { StockAdjustmentAttachment } from "../types/stock-adjustment.schema";
+// Updated import path to reference the renamed stock-adjustment-serial schema file
+import { StockAdjustmentAttachment } from "../types/stock-adjustment-serial.schema";
 
 interface AttachmentUploadProps {
   value?: StockAdjustmentAttachment[];
