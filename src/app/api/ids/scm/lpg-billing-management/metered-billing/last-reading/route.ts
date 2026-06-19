@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchLastReadingByInvoice } from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/metered-billing/metered-billing-creation/providers/metered-billing.provider";
-import { handleApiError } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/error-handler";
+// Updated import path from stock-adjustment to stock-adjustment-serial-posting
+import { handleApiError } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment-serial-posting/utils/error-handler";
 
 /**
  * GET /api/ids/scm/lpg-billing-management/metered-billing/last-reading

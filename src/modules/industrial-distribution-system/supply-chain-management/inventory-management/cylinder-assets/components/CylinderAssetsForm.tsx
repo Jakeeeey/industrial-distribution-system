@@ -113,7 +113,8 @@ export function CylinderAssetsForm({
       })
       .catch(console.error);
 
-    fetch("/api/ids/scm/inventory-management/stock-adjustment/branches?division_id=1")
+    // Updated fetch path to stock-adjustment-serial-posting/branches to reference the correct endpoint
+    fetch("/api/ids/scm/inventory-management/stock-adjustment-serial-posting/branches?division_id=1")
       .then((r) => r.json())
       .then((d) => {
         if (d.data)
