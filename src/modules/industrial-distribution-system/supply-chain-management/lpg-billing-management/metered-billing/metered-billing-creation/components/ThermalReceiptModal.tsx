@@ -77,7 +77,7 @@ export interface ThermalReceiptData {
     serialNumber: string;
     tareWeight: number;
     capacity: number;
-    // status: string;
+    status?: string;
   }>;
 }
 
@@ -286,19 +286,29 @@ function buildReceiptText(company: CompanyProfile, data: ThermalReceiptData): st
   lines.push(dashes);
 
   // 4.5. Onboarding Connected Cylinders
+  // RULE DEV: Only print cylinders that are currently connected (status is "CONNECTED" or empty)
   if (data.isOnboarding && data.siteCylinders && data.siteCylinders.length > 0) {
-    lines.push(formatCenter("--- CONNECTED CYLINDERS ---"));
-    data.siteCylinders.forEach((cyl) => {
-      lines.push(`SN: ${cyl.serialNumber}`);
-      // lines.push(formatLine("  Status:", cyl.status));
-      lines.push(formatLine("  Tare | Capacity:", `${cyl.tareWeight.toFixed(1)}kg | ${cyl.capacity}kg`));
-    });
+    const connectedCylinders = data.siteCylinders.filter(cyl => !cyl.status || cyl.status === "CONNECTED");
+    if (connectedCylinders.length > 0) {
+      lines.push(formatCenter("--- CONNECTED CYLINDERS ---"));
+      connectedCylinders.forEach((cyl) => {
+        lines.push(`SN: ${cyl.serialNumber}`);
+        lines.push(
+          formatLine(
+            "Tare:",
+            `${cyl.tareWeight.toFixed(1)}kg | Capacity: ${cyl.capacity}kg`
+          )
+        );
+      });
+      lines.push(dashes);
+    }
+  }
+  if (!data.isOnboarding) {
+    // 5. Item table Header
+    lines.push(formatItemLine("Item", "Qty", "Total"));
     lines.push(dashes);
   }
 
-  // 5. Item table Header
-  lines.push(formatItemLine("Item", "Qty", "Total"));
-  lines.push(dashes);
 
   if (!data.isOnboarding) {
     // Item details
