@@ -1006,7 +1006,7 @@ async function fetchTransactionRaw(transactionId: number): Promise<Consolidation
     directusFetch,
     getDirectusBase,
   } = await import(
-    "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/directus"
+    "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment-serial-posting/utils/directus"
   );
   const DIRECTUS_URL = getDirectusBase();
 
