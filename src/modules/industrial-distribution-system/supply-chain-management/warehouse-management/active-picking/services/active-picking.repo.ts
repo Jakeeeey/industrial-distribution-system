@@ -207,14 +207,17 @@ export const ActivePickingRepo = {
         return data.data;
     },
 
-    async updatePickedQuantity(detailId: number, incrementBy: number, userId: number | null, timestamp: string): Promise<number> {
-        // First fetch current to increment safely
-        const getUrl = `${DIRECTUS_BASE}/items/consolidator_details/${detailId}?fields=picked_quantity`;
-        const getRes = await fetch(getUrl, { headers: getHeaders() });
-        if (!getRes.ok) throw new Error("Failed to fetch current quantity");
-        const getData = await getRes.json();
-        const currentQty = getData.data.picked_quantity || 0;
-        const newQty = Math.max(0, currentQty + incrementBy);
+    async updatePickedQuantity(detailId: number, incrementBy: number, userId: number | null, timestamp: string, newQtyOverride?: number): Promise<number> {
+        let newQty = newQtyOverride;
+        if (newQty === undefined) {
+            // First fetch current to increment safely
+            const getUrl = `${DIRECTUS_BASE}/items/consolidator_details/${detailId}?fields=picked_quantity`;
+            const getRes = await fetch(getUrl, { headers: getHeaders() });
+            if (!getRes.ok) throw new Error("Failed to fetch current quantity");
+            const getData = await getRes.json();
+            const currentQty = getData.data.picked_quantity || 0;
+            newQty = Math.max(0, currentQty + incrementBy);
+        }
 
         const patchUrl = `${DIRECTUS_BASE}/items/consolidator_details/${detailId}`;
         const patchRes = await fetch(patchUrl, {
@@ -304,28 +307,25 @@ export const ActivePickingRepo = {
         };
 
         try {
-            // 1. Try specific search (Serial + Branch)
-            let data = await tryFetch("v-serial-onhand", `serialNumber=${encodeURIComponent(serialNumber.trim())}&branchId=${branchId}`);
+            // Optimize by querying all serial-based patterns concurrently
+            const serialQueries = [
+                tryFetch("v-serial-onhand", `serialNumber=${encodeURIComponent(inputSerial)}&branchId=${branchId}`),
+                tryFetch("v-serial-onhand", `serial_number=${encodeURIComponent(inputSerial)}&branch_id=${branchId}`),
+                tryFetch("v-serial-onhand", `serialNumber=${encodeURIComponent(inputSerial)}`),
+                tryFetch("v-serial-onhand", `serial_number=${encodeURIComponent(inputSerial)}`)
+            ];
 
-            // 2. Try specific search (Serial + Branch) - snake_case
-            if (data.length === 0) {
-                data = await tryFetch("v-serial-onhand", `serial_number=${encodeURIComponent(serialNumber.trim())}&branch_id=${branchId}`);
-            }
+            const results = await Promise.all(serialQueries);
+            let data = results.flat();
 
-            // 3. Try SERIAL ONLY
+            // Fallback to branch-only scan only if specific serial searches return nothing
             if (data.length === 0) {
-                data = await tryFetch("v-serial-onhand", `serialNumber=${encodeURIComponent(serialNumber.trim())}`);
-                if (data.length === 0) {
-                    data = await tryFetch("v-serial-onhand", `serial_number=${encodeURIComponent(serialNumber.trim())}`);
-                }
-            }
-
-            // 4. Try BRANCH ONLY
-            if (data.length === 0) {
-                data = await tryFetch("v-serial-onhand", `branchId=${branchId}`);
-                if (data.length === 0) {
-                    data = await tryFetch("v-serial-onhand", `branch_id=${branchId}`);
-                }
+                const branchQueries = [
+                    tryFetch("v-serial-onhand", `branchId=${branchId}`),
+                    tryFetch("v-serial-onhand", `branch_id=${branchId}`)
+                ];
+                const branchResults = await Promise.all(branchQueries);
+                data = branchResults.flat();
             }
 
             const onhand = data.find((item: Record<string, unknown>) => {

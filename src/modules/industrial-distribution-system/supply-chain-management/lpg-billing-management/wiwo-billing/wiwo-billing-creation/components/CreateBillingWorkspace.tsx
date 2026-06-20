@@ -25,7 +25,7 @@ import {
   Package,
   AlertCircle,
 } from "lucide-react";
-import type { LpgTransactionHeader } from "../types";
+import type { LpgTransactionHeader, CustomerSite } from "../types";
 
 // AG-CHANGE: Format ISO date/datetime to readable "Jun 13, 2026" robustly
 const formatDate = (iso?: string | null) => {
@@ -140,12 +140,39 @@ export function CreateBillingWorkspace({
       .finally(() => setLoadingInvoices(false));
   }, [step, header.customer_id]);
 
+  // ─── Resolve site billing mode robustly ────────────────────────────────────
+  const [siteBillingMode, setSiteBillingMode] = useState<string | null>(header.site?.billing_mode || null);
+
+  useEffect(() => {
+    if (header.site?.billing_mode) {
+      setSiteBillingMode(header.site.billing_mode);
+      return;
+    }
+    if (!header.customer_site_id) return;
+    fetch(
+      `/api/ids/scm/lpg-billing-management/wiwo-billing?type=sites&customerCode=${encodeURIComponent(
+        header.customer_id
+      )}`
+    )
+      .then((r) => r.json())
+      .then((json) => {
+        const sites: CustomerSite[] = json.data || [];
+        const currentSite = sites.find((s) => s.id === header.customer_site_id);
+        if (currentSite?.billing_mode) {
+          setSiteBillingMode(currentSite.billing_mode);
+        }
+      })
+      .catch(() => {});
+  }, [header.customer_site_id, header.site?.billing_mode, header.customer_id]);
+
+  const isKiloMode = siteBillingMode === "KILO";
+
   // ─── Filter invoices by transaction type ───────────────────────────────────
   const filteredInvoices = invoices.filter((inv) => {
     // ROUTINE should NOT show invoices flagged as onboarding baselines
     if (transactionType === "ROUTINE" && inv.isOnboardingBaseline) return false;
-    // ROUTINE should NOT show invoices that do not have a transaction on lpg_metered_wiwo_transactions
-    if (transactionType === "ROUTINE" && !inv.hasMeteredTransaction) return false;
+    // ROUTINE should NOT show invoices that do not have a transaction on lpg_metered_wiwo_transactions (except for KILO mode)
+    if (transactionType === "ROUTINE" && !inv.hasMeteredTransaction && !isKiloMode) return false;
     return true;
   });
 
