@@ -395,6 +395,8 @@ export function StockAdjustmentForm({
       remarks: "",
       items: [],
       isPosted: false,
+      // Added per dev-rule.md: Init with empty array as this field is optional
+      stock_adjustment_attachment: [],
     },
   });
 
@@ -484,6 +486,8 @@ export function StockAdjustmentForm({
               db_id: Number(item.id || 0),
               is_serialized: (item.serial_numbers && item.serial_numbers.length > 0) || serialProductIds.has(Number((item.product_id as { id?: number; product_id?: number })?.product_id || (item.product_id as { id?: number; product_id?: number })?.id || item.product_id)),
             })),
+            // Added per dev-rule.md: Carry over the existing attachments to form state
+            stock_adjustment_attachment: data.stock_adjustment_attachment || [],
           };
 
           form.reset(resetObj);
