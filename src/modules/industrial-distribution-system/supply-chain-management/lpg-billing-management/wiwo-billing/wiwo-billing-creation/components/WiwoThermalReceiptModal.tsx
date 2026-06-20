@@ -277,7 +277,12 @@ function buildReceiptText(company: CompanyProfile, data: WiwoThermalReceiptData)
   lines.push(dashes);
 
   // 4. Meter Sync Readings (if regular routine billing)
-  if (!data.isOnboarding && data.previousReading !== undefined && data.previousReading !== null) {
+  const hasMeterSync = !data.isOnboarding && 
+                       data.previousReading !== undefined && 
+                       data.previousReading !== null && 
+                       !(data.previousReading === 0 && data.currentReading === 0 && (data.meteredKg || 0) === 0);
+
+  if (hasMeterSync) {
     lines.push(formatCenter("--- METER DUAL CHECK ---"));
     lines.push(formatLine("Prev. Reading:", Number(data.previousReading).toFixed(4)));
     lines.push(formatLine("Curr. Reading:", Number(data.currentReading).toFixed(4)));
@@ -318,9 +323,13 @@ function buildReceiptText(company: CompanyProfile, data: WiwoThermalReceiptData)
     lines.push(` (${data.billableKg.toFixed(4)} kg @ ${formatCurrency(data.pricePerKg)}/kg)`);
 
     lines.push("");
-    lines.push(formatLine("Metered Sync:", `${(data.meteredKg || 0).toFixed(2)} kg`));
-    lines.push(formatLine("WIWO Weigh-In:", `${data.wiwoKg.toFixed(2)} kg`));
-    lines.push(formatLine("Billable Source:", data.billableSource));
+    if (hasMeterSync) {
+      lines.push(formatLine("Metered Sync:", `${(data.meteredKg || 0).toFixed(2)} kg`));
+      lines.push(formatLine("WIWO Weigh-In:", `${data.wiwoKg.toFixed(2)} kg`));
+      lines.push(formatLine("Billable Source:", data.billableSource));
+    } else {
+      lines.push(formatLine("Total Consumed:", `${data.wiwoKg.toFixed(2)} kg`));
+    }
     lines.push(dashes);
 
     const finalVatAmount = data.vatAmount > 0 ? data.vatAmount : parseFloat((data.grossAmount * 0.12).toFixed(2));

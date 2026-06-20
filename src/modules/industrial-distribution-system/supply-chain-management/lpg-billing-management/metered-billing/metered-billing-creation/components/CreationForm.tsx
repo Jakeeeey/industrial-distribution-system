@@ -340,7 +340,7 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
         );
       }
     }
-    
+
     return errors;
   };
 
@@ -365,7 +365,7 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
                 </strong>{" "}
                 Prefix:{" "}
                 <code className="bg-amber-200/50 dark:bg-amber-900/50 px-1.5 py-0.5 rounded font-mono text-xs">
-                  TXORB-
+                  TX-ORB-XXXXXX
                 </code>
               </span>
             </div>
@@ -570,6 +570,7 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
                   </Label>
                   <Input
                     value={form.transactionNo}
+                    placeholder={isOnboarding ? "TX-ONB-XXXXXX" : "TX-REG-XXXXXX"}
                     readOnly
                     className="bg-zinc-50 dark:bg-zinc-950/50 border-dashed text-zinc-600 dark:text-zinc-400 font-mono"
                   />
@@ -750,13 +751,24 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
                       />
                     </div>
                     {/* DEV-CHANGE: Do not display or calculate metered KG during onboarding baseline establishment */}
-                    {!isOnboarding && (
+                    {!isOnboarding ? (
                       <div className="space-y-2.5 pt-2">
                         <Label className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
                           Metered KG (Computed)
                         </Label>
                         <Input
                           value={Number(meteredKg).toFixed(4)}
+                          readOnly
+                          className="font-mono bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 font-bold border-blue-200 dark:border-blue-800 h-11 text-lg shadow-inner"
+                        />
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5 pt-2">
+                        <Label className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                          Baseline Reading 
+                        </Label>
+                        <Input
+                          value={Number(form.currentReading).toFixed(4)}
                           readOnly
                           className="font-mono bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 font-bold border-blue-200 dark:border-blue-800 h-11 text-lg shadow-inner"
                         />
@@ -1150,13 +1162,15 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
           vatRate: form.vatRate,
           // status: form.status,
           isOnboarding: isOnboarding,
-          // Map active site cylinders to the printable format
-          siteCylinders: activeSiteCylinders.map(sc => ({
-            serialNumber: sc.cylinder_asset?.serial_number || "—",
-            tareWeight: Number(sc.cylinder_asset?.tare_weight || sc.previous_lpg_kg || 0),
-            capacity: Number(sc.cylinder_asset?.product?.unit_of_measurement_count || 50),
-            status: sc.site_cylinder_status || "CONNECTED",
-          })),
+          // Map active site cylinders to the printable format (only CONNECTED cylinders for onboarding print receipt)
+          siteCylinders: activeSiteCylinders
+            .filter(sc => !sc.site_cylinder_status || sc.site_cylinder_status === "CONNECTED")
+            .map(sc => ({
+              serialNumber: sc.cylinder_asset?.serial_number || "—",
+              tareWeight: Number(sc.cylinder_asset?.tare_weight || sc.previous_lpg_kg || 0),
+              capacity: Number(sc.cylinder_asset?.product?.unit_of_measurement_count || 50),
+              status: sc.site_cylinder_status || "CONNECTED",
+            })),
         } satisfies ThermalReceiptData}
       />
     </div>

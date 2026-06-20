@@ -46,7 +46,7 @@ export async function fetchTransactionHeaders(params: {
   let qs =
     `fields=*,customer_site_id.id,customer_site_id.site_name,` +
     `customer_site_id.customer_code,customer_site_id.default_price_per_kg,` +
-    `customer_site_id.last_meter_reading,customer_site_id.default_target_lpg_kg` +
+    `customer_site_id.last_meter_reading,customer_site_id.default_target_lpg_kg,customer_site_id.billing_mode` +
     `&sort=-period_from,-header_id&limit=${limit}`;
   if (Object.keys(filters).length) {
     qs += `&filter=${encodeURIComponent(JSON.stringify(filters))}`;
@@ -83,7 +83,7 @@ export async function fetchTransactionHeaders(params: {
     try {
       const filterObj = { id: { _in: siteIds } };
       const siteRes = await directusFetch<{ data: CustomerSite[] }>(
-        `${DIRECTUS_URL}/items/lpg_customer_lpg_sites?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg&filter=${encodeURIComponent(JSON.stringify(filterObj))}`
+        `${DIRECTUS_URL}/items/lpg_customer_lpg_sites?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg,billing_mode&filter=${encodeURIComponent(JSON.stringify(filterObj))}`
       );
       siteMap = Object.fromEntries((siteRes.data ?? []).map(s => [s.id, s]));
     } catch (e) {
@@ -118,7 +118,7 @@ export async function createTransactionHeader(payload: {
   }
 
   const siteRes = await directusFetch<{ data: CustomerSite }>(
-    `${DIRECTUS_URL}/items/lpg_customer_lpg_sites/${payload.siteId}?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg`
+    `${DIRECTUS_URL}/items/lpg_customer_lpg_sites/${payload.siteId}?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg,billing_mode`
   );
   const site = siteRes.data;
   if (!site?.customer_code) throw new Error("Customer site not found.");
@@ -187,7 +187,7 @@ async function hydrateTransactions(txs: MeteredWiwoTransaction[]): Promise<Meter
     try {
       const filterObj = { id: { _in: siteIds } };
       const siteRes = await directusFetch<{ data: CustomerSite[] }>(
-        `${DIRECTUS_URL}/items/lpg_customer_lpg_sites?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg&filter=${encodeURIComponent(JSON.stringify(filterObj))}`
+        `${DIRECTUS_URL}/items/lpg_customer_lpg_sites?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg,billing_mode&filter=${encodeURIComponent(JSON.stringify(filterObj))}`
       );
       siteMap = Object.fromEntries((siteRes.data ?? []).map(s => [s.id, s]));
     } catch (e) {
@@ -286,7 +286,7 @@ export async function fetchCustomers(): Promise<{ customer_code: string; custome
 }
 
 export async function fetchSites(customerCode?: string): Promise<CustomerSite[]> {
-  let qs = "fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg&filter[is_active][_eq]=1&sort=site_name&limit=-1";
+  let qs = "fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg,billing_mode&filter[is_active][_eq]=1&sort=site_name&limit=-1";
   if (customerCode) qs += `&filter[customer_code][_eq]=${encodeURIComponent(customerCode)}`;
   const res = await directusFetch<{ data: CustomerSite[] }>(`${DIRECTUS_URL}/items/lpg_customer_lpg_sites?${qs}`);
   return res.data ?? [];
@@ -648,6 +648,12 @@ export async function processOnboardingBaseline(payload: {
   salesInvoiceNo?: string | null;
   userId?: number;
 }): Promise<MeteredWiwoTransaction> {
+  // Fetch site details to check the billing mode
+  const siteRes = await directusFetch<{ data: CustomerSite }>(
+    `${DIRECTUS_URL}/items/lpg_customer_lpg_sites/${payload.siteId}?fields=id,billing_mode`
+  );
+  const isKiloMode = siteRes.data?.billing_mode === "KILO";
+
   // 1. Monogamy validation
   // DEV-CHANGE: Only serial (cylinder asset selection/verification) is required for onboarding. Photo evidence is not enforced.
   for (const cyl of payload.cylinders) {
@@ -739,7 +745,7 @@ export async function processOnboardingBaseline(payload: {
         total_returned_cylinders: 0,
         total_deployed_cylinders: assets.length,
         total_billable_kg: 0.000,
-        wiwo_status: "DRAFT",
+        wiwo_status: isKiloMode ? "POSTED" : "DRAFT",
         sales_invoice_id: invoiceId,
         sales_invoice_no: invoiceNo,
         remarks: "Onboarding baseline initial setup",
@@ -810,8 +816,8 @@ export async function processOnboardingBaseline(payload: {
         variance_kg: 0,
         billable_source: "NONE",
         billable_kg: 0,
-        status: "DRAFT",
-        remarks: "Onboarding baseline initial setup draft.",
+        status: isKiloMode ? "POSTED" : "DRAFT",
+        remarks: isKiloMode ? "Onboarding baseline initial setup posted." : "Onboarding baseline initial setup draft.",
         ...withUser(payload.userId, ["created_by", "posted_by"]),
         posted_date: new Date().toISOString(),
       }),
@@ -946,9 +952,18 @@ export async function processRegularSwap(payload: {
       }
     }
   }
+  // Fetch site details to check the billing mode
+  const siteRes = await directusFetch<{ data: CustomerSite }>(
+    `${DIRECTUS_URL}/items/lpg_customer_lpg_sites/${payload.siteId}?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg,billing_mode`
+  );
+  const site = siteRes.data;
+  const isKiloMode = site?.billing_mode === "KILO";
+
   // Input validations:
   // Completeness Checks & Negative Boundaries
-  const meteredKg = payload.meteredKg !== undefined ? payload.meteredKg : Math.max(0, payload.currentMeterReading - payload.previousMeterReading);
+  const meteredKg = isKiloMode
+    ? 0
+    : (payload.meteredKg !== undefined ? payload.meteredKg : Math.max(0, payload.currentMeterReading - payload.previousMeterReading));
 
   // Gather returned cylinder records
   const returnedDetails: {
@@ -1041,10 +1056,10 @@ export async function processRegularSwap(payload: {
   // Sum WIWO Consumed KG
   const totalWiwoKg = returnedDetails.reduce((sum, item) => sum + item.consumed, 0);
 
-  // Exec MAX Rule
-  const billableKg = Math.max(meteredKg, totalWiwoKg);
-  const varianceKg = Math.abs(meteredKg - totalWiwoKg);
-  const billableSource = meteredKg >= totalWiwoKg ? "METERED" : "WIWO";
+  // Exec MAX Rule (Or force WIWO for Kilo mode)
+  const billableKg = isKiloMode ? totalWiwoKg : Math.max(meteredKg, totalWiwoKg);
+  const varianceKg = isKiloMode ? 0 : Math.abs(meteredKg - totalWiwoKg);
+  const billableSource = isKiloMode ? "WIWO" : (meteredKg >= totalWiwoKg ? "METERED" : "WIWO");
 
   // IDS-CHANGE: Compute final transaction amounts based on the consolidated billableKg
   // VAT is absorbed / inclusive: gross = vatable amount, net = vatable sales, vat = gross - net.
@@ -1052,13 +1067,15 @@ export async function processRegularSwap(payload: {
   const txNetAmount = Number((txGrossAmount / 1.12).toFixed(2));
   const txVatAmount = Number((txGrossAmount - txNetAmount).toFixed(2));
 
-  // Mismatch remarks requirement (2% Tolerance)
-  const referenceKg = Math.max(meteredKg, totalWiwoKg, 0.0001);
-  const diffPercentage = varianceKg / referenceKg;
-  if (diffPercentage > 0.02 && !payload.remarks?.trim()) {
-    throw new Error(
-      `Metered KG (${meteredKg}) differs from WIWO KG (${totalWiwoKg}) by more than 2%. An explanation is required in the remarks field.`
-    );
+  // Mismatch remarks requirement (2% Tolerance) - only check if NOT Kilo mode
+  if (!isKiloMode) {
+    const referenceKg = Math.max(meteredKg, totalWiwoKg, 0.0001);
+    const diffPercentage = varianceKg / referenceKg;
+    if (diffPercentage > 0.02 && !payload.remarks?.trim()) {
+      throw new Error(
+        `Metered KG (${meteredKg}) differs from WIWO KG (${totalWiwoKg}) by more than 2%. An explanation is required in the remarks field.`
+      );
+    }
   }
 
   // Create zero-amount Sales Order for logistical cylinder actions
@@ -1162,7 +1179,7 @@ export async function processRegularSwap(payload: {
     }
   }
 
-  if (!meterReadingId) {
+  if (!meterReadingId && !isKiloMode) {
     // Create Meter reading
     const meterReadingRes = await directusFetch<{ data: { id: number } }>(
       `${DIRECTUS_URL}/items/lpg_meter_readings`,
@@ -1290,12 +1307,15 @@ export async function processRegularSwap(payload: {
   }
 
   // Update site reading status
+  const sitePatchBody: Record<string, unknown> = {
+    last_reading_date: payload.transactionDate,
+  };
+  if (!isKiloMode) {
+    sitePatchBody.last_meter_reading = payload.currentMeterReading;
+  }
   await directusFetch(`${DIRECTUS_URL}/items/lpg_customer_lpg_sites/${payload.siteId}`, {
     method: "PATCH",
-    body: JSON.stringify({
-      last_meter_reading: payload.currentMeterReading,
-      last_reading_date: payload.transactionDate,
-    }),
+    body: JSON.stringify(sitePatchBody),
   });
 
   let parentTxData: MeteredWiwoTransaction;

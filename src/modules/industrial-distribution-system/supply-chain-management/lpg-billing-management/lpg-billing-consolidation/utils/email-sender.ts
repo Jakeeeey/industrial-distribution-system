@@ -14,6 +14,7 @@ export interface SendInvoiceEmailParams {
   companyContact?: string | null;
   companyEmail?: string | null;
   companyTin?: string | null;
+  companyLogoBase64?: string | null;
 }
 
 /**
@@ -35,6 +36,7 @@ export async function sendInvoiceEmail(params: SendInvoiceEmailParams): Promise<
     companyContact,
     companyEmail,
     companyTin,
+    companyLogoBase64,
   } = params;
 
   const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
@@ -73,8 +75,22 @@ export async function sendInvoiceEmail(params: SendInvoiceEmailParams): Promise<
       <body style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 40px 20px; -webkit-font-smoothing: antialiased;">
         <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); border: 1px solid #e2e8f0; padding: 40px;">
           
-          <!-- Company Header Name -->
-          <h2 style="margin: 0 0 24px 0; font-size: 20px; font-weight: 800; color: #1e3a8a; text-transform: uppercase; letter-spacing: -0.01em;">${companyName}</h2>
+          <!-- Company Header Logo & Name Layout -->
+          <!-- DEV-CHANGE: Position logo and company name side-by-side using a clean, email-safe table layout -->
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
+            <tr>
+              ${companyLogoBase64 
+                ? `<td style="vertical-align: middle; padding-right: 16px; width: 1%;">
+                     <!-- DEV-CHANGE: Increased logo height from 48px to 64px -->
+                     <img src="cid:company_logo" alt="${companyName} Logo" style="height: 64px; max-height: 64px; width: auto; object-fit: contain; display: block;" />
+                   </td>` 
+                : ""
+              }
+              <td style="vertical-align: middle; text-align: left;">
+                <h2 style="margin: 0; font-size: 16px; font-weight: 800; color: #1e3a8a; text-transform: uppercase; letter-spacing: -0.01em; line-height: 1.3;">${companyName}</h2>
+              </td>
+            </tr>
+          </table>
           
           <p style="font-size: 15px; line-height: 1.6; color: #0f172a; margin-top: 0;">Dear <strong>${customerName}</strong>,</p>
           
@@ -123,22 +139,43 @@ export async function sendInvoiceEmail(params: SendInvoiceEmailParams): Promise<
     </html>
   `;
 
+  const attachments: nodemailer.SendMailOptions["attachments"] = [];
+
+  // DEV-CHANGE: Attach generated sales invoice PDF as file attachment
+  if (pdfBase64) {
+    attachments.push({
+      filename: `${invoiceNo}.pdf`,
+      content: Buffer.from(pdfBase64, "base64"),
+      contentType: "application/pdf",
+    });
+  }
+
+  // DEV-CHANGE: Embed company logo as inline attachment using Content-ID (CID) to display offline safely in mail clients
+  if (companyLogoBase64) {
+    let cleanBase64 = companyLogoBase64;
+    let contentType = "image/png";
+    if (companyLogoBase64.startsWith("data:")) {
+      const parts = companyLogoBase64.split(";base64,");
+      if (parts.length === 2) {
+        contentType = parts[0].replace("data:", "");
+        cleanBase64 = parts[1];
+      }
+    }
+    attachments.push({
+      filename: "company_logo",
+      content: Buffer.from(cleanBase64, "base64"),
+      contentType,
+      cid: "company_logo",
+    });
+  }
+
   const mailOptions: nodemailer.SendMailOptions = {
     from: `"${companyName.toUpperCase()}" <${emailFrom}>`,
     to,
     subject: `${companyName} - Sales Invoice Notice (${invoiceNo})`,
     html: htmlContent,
+    attachments,
   };
-
-  if (pdfBase64) {
-    mailOptions.attachments = [
-      {
-        filename: `${invoiceNo}.pdf`,
-        content: Buffer.from(pdfBase64, "base64"),
-        contentType: "application/pdf",
-      },
-    ];
-  }
 
   await transporter.sendMail(mailOptions);
 }

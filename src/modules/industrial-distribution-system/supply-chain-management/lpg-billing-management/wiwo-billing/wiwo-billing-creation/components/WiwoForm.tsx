@@ -765,10 +765,15 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
     }
   };
 
+  const selectedSite = sites.find((s) => String(s.id) === siteId) || null;
+  const isKiloMode = (selectedSite?.billing_mode ?? transactionHeader.site?.billing_mode) === "KILO";
+
   // ─── Mathematical Calculations (Flow B) ─────────────────────────────────────
-  const meteredKg = draftMeteredKg !== null
-    ? draftMeteredKg
-    : Math.max(0, currentReading - previousReading);
+  const meteredKg = isKiloMode
+    ? 0
+    : (draftMeteredKg !== null
+      ? draftMeteredKg
+      : Math.max(0, currentReading - previousReading));
 
   // Map and calculate returned cylinders
   const calculatedReturnedCylinders = activeSiteCylinders.map((sc) => {
@@ -796,9 +801,9 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   });
 
   const totalWiwoKg = calculatedReturnedCylinders.reduce((sum, c) => sum + c.consumed, 0);
-  const billableKg = Math.max(meteredKg, totalWiwoKg);
-  const varianceKg = Math.abs(meteredKg - totalWiwoKg);
-  const mismatchExists = meteredKg !== totalWiwoKg;
+  const billableKg = isKiloMode ? totalWiwoKg : Math.max(meteredKg, totalWiwoKg);
+  const varianceKg = isKiloMode ? 0 : Math.abs(meteredKg - totalWiwoKg);
+  const mismatchExists = isKiloMode ? false : meteredKg !== totalWiwoKg;
 
   // Validation boundary: block if weight entries are completely illogical
   const hasNegativeWeightErrors = calculatedReturnedCylinders.some(
@@ -958,9 +963,9 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
           customer_code: customerCode,
           lpg_site_id: Number(siteId),
           transaction_date: transactionDate,
-          previous_reading: previousReading,
-          current_reading: currentReading,
-          metered_kg: meteredKg,
+          previous_reading: isKiloMode ? 0 : previousReading,
+          current_reading: isKiloMode ? 0 : currentReading,
+          metered_kg: isKiloMode ? 0 : meteredKg,
           price_per_kg: pricePerKg,
           returned_cylinders: returnedCylindersPayload,
           new_cylinders: selectedReplacementCylinders.map(c => ({
@@ -1063,7 +1068,6 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
     }
   };
 
-  const selectedSite = sites.find(s => String(s.id) === siteId) || null;
 
   if (loading) {
     return (
@@ -1240,7 +1244,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 border-b border-border">
-              {flowType === "ROUTINE" && !isViewMode && (
+              {flowType === "ROUTINE" && !isViewMode && !isKiloMode && (
                 <div className="space-y-1.5 md:col-span-2">
                   <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
                     Draft Metered Transaction
@@ -1401,64 +1405,66 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
           {flowType === "ROUTINE" && (
             <>
               {/* Meter Sync panel */}
-              <div className="bg-card/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="h-8 w-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-primary">
-                    <Gauge className="h-4 w-4" />
-                  </div>
-                  <h2 className="font-semibold text-sm">Meter Reading Details</h2>
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground h-4 flex items-center">Previous Reading</Label>
-                    <Input
-                      type="number"
-                      value={isViewMode ? txDetail?.meter_reading_id ? (txDetail.meter_reading_id as unknown as MeterReading).previous_reading : 0 : previousReading}
-                      readOnly
-                      className="bg-accent font-mono"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground h-4 flex items-center">Current Reading</Label>
-                    <Input
-                      type="number"
-                      step="0.001"
-                      value={isViewMode ? txDetail?.meter_reading_id ? (txDetail.meter_reading_id as unknown as MeterReading).current_reading : 0 : currentReading}
-                      onChange={(e) => setCurrentReading(parseFloat(e.target.value) || 0)}
-                      readOnly={isReadOnly || isViewMode}
-                      className="font-mono"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-1.5 h-4">
-                      <Label className="text-xs text-muted-foreground">Metered KG</Label>
-                      {draftMeteredKg !== null && !isViewMode && (
-                        <span className="text-[8px] leading-none font-bold bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded uppercase shrink-0">
-                          From Metered Tx
-                        </span>
-                      )}
+              {!isKiloMode && (
+                <div className="bg-card/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="h-8 w-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-primary">
+                      <Gauge className="h-4 w-4" />
                     </div>
-                    <Input
-                      value={isViewMode
-                        ? txDetail.metered_kg
-                        : draftMeteredKg !== null
-                          ? draftMeteredKg.toFixed(3)
-                          : meteredKg.toFixed(3)}
-                      readOnly
-                      className="font-mono bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 font-bold"
-                    />
+                    <h2 className="font-semibold text-sm">Meter Reading Details</h2>
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground h-4 flex items-center">WIWO KG (computed)</Label>
-                    <Input
-                      value={isViewMode ? txDetail.wiwo_kg : totalWiwoKg.toFixed(3)}
-                      readOnly
-                      className="font-mono bg-emerald-50 dark:bg-emerald-900/20 text-primary font-bold"
-                    />
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground h-4 flex items-center">Previous Reading</Label>
+                      <Input
+                        type="number"
+                        value={isViewMode ? txDetail?.meter_reading_id ? (txDetail.meter_reading_id as unknown as MeterReading).previous_reading : 0 : previousReading}
+                        readOnly
+                        className="bg-accent font-mono"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground h-4 flex items-center">Current Reading</Label>
+                      <Input
+                        type="number"
+                        step="0.001"
+                        value={isViewMode ? txDetail?.meter_reading_id ? (txDetail.meter_reading_id as unknown as MeterReading).current_reading : 0 : currentReading}
+                        onChange={(e) => setCurrentReading(parseFloat(e.target.value) || 0)}
+                        readOnly={isReadOnly || isViewMode}
+                        className="font-mono"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-1.5 h-4">
+                        <Label className="text-xs text-muted-foreground">Metered KG</Label>
+                        {draftMeteredKg !== null && !isViewMode && (
+                          <span className="text-[8px] leading-none font-bold bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded uppercase shrink-0">
+                            From Metered Tx
+                          </span>
+                        )}
+                      </div>
+                      <Input
+                        value={isViewMode
+                          ? txDetail.metered_kg
+                          : draftMeteredKg !== null
+                            ? draftMeteredKg.toFixed(3)
+                            : meteredKg.toFixed(3)}
+                        readOnly
+                        className="font-mono bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 font-bold"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground h-4 flex items-center">WIWO KG (computed)</Label>
+                      <Input
+                        value={isViewMode ? txDetail.wiwo_kg : totalWiwoKg.toFixed(3)}
+                        readOnly
+                        className="font-mono bg-emerald-50 dark:bg-emerald-900/20 text-primary font-bold"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Connected cylinders returns weights table */}
               {(isViewMode || flowType === "ROUTINE") && (
