@@ -1151,13 +1151,15 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
           vatRate: form.vatRate,
           // status: form.status,
           isOnboarding: isOnboarding,
-          // Map active site cylinders to the printable format
-          siteCylinders: activeSiteCylinders.map(sc => ({
-            serialNumber: sc.cylinder_asset?.serial_number || "—",
-            tareWeight: Number(sc.cylinder_asset?.tare_weight || sc.previous_lpg_kg || 0),
-            capacity: Number(sc.cylinder_asset?.product?.unit_of_measurement_count || 50),
-            status: sc.site_cylinder_status || "CONNECTED",
-          })),
+          // Map active site cylinders to the printable format (only CONNECTED cylinders for onboarding print receipt)
+          siteCylinders: activeSiteCylinders
+            .filter(sc => !sc.site_cylinder_status || sc.site_cylinder_status === "CONNECTED")
+            .map(sc => ({
+              serialNumber: sc.cylinder_asset?.serial_number || "—",
+              tareWeight: Number(sc.cylinder_asset?.tare_weight || sc.previous_lpg_kg || 0),
+              capacity: Number(sc.cylinder_asset?.product?.unit_of_measurement_count || 50),
+              status: sc.site_cylinder_status || "CONNECTED",
+            })),
         } satisfies ThermalReceiptData}
       />
     </div>
