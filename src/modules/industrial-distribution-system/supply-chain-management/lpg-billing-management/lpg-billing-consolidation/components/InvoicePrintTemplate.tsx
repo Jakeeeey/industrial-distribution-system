@@ -40,7 +40,7 @@ export function InvoicePrintTemplate({ header, transactions, company }: InvoiceP
     ? [company.company_contact, company.company_email].filter(Boolean).join(" | ")
     : null;
 
-  const totalDiscount = transactions.reduce((s, tx) => s + tx.discount_amount, 0);
+
 
   // Date calculation: Due Date is 10 days after the invoice date
   const invoiceDateObj = new Date();
@@ -62,6 +62,37 @@ export function InvoicePrintTemplate({ header, transactions, company }: InvoiceP
   // DEV-CHANGE: Removed unused today variable to resolve eslint warning
   // Pick the first generated SI No if available
   const invoiceNo = transactions.find((t) => t.sales_invoice_no)?.sales_invoice_no || "N/A";
+
+  // DEV-CHANGE: Sort transactions by date and id to compute chronological start and end readings
+  const meteredTxs = [...transactions]
+    .filter((tx) => tx.meter_reading && tx.status !== "CANCELLED")
+    .sort((a, b) => {
+      if (a.transaction_date !== b.transaction_date) {
+        return a.transaction_date.localeCompare(b.transaction_date);
+      }
+      return a.id - b.id;
+    });
+
+  const hasMetered = meteredTxs.length > 0;
+  const firstTx = hasMetered ? meteredTxs[0] : null;
+  const lastTx = hasMetered ? meteredTxs[meteredTxs.length - 1] : null;
+
+  // On onboarding baseline transactions, the start of the billing consumption starts at the baseline current_reading
+  const startReading = firstTx
+    ? firstTx.transaction_type === "ONBOARDING_BASELINE"
+      ? firstTx.meter_reading?.current_reading ?? 0
+      : firstTx.meter_reading?.previous_reading ?? 0
+    : 0;
+
+  const endReading = lastTx ? lastTx.meter_reading?.current_reading ?? 0 : 0;
+
+
+
+
+
+  const totalBillableKg = transactions
+    .filter((tx) => tx.transaction_type !== "ONBOARDING_BASELINE" && tx.status !== "CANCELLED")
+    .reduce((sum, tx) => sum + tx.billable_kg, 0);
 
   return (
     <div className="w-full flex-1 flex flex-col justify-between text-black font-sans text-xs select-none">
@@ -115,31 +146,44 @@ export function InvoicePrintTemplate({ header, transactions, company }: InvoiceP
               </div>
             </div>
 
-            {/* Box Column 2: Balances */}
-            <div className="p-2 space-y-1">
-              <div className="flex justify-between text-gray-500">
-                <span>Previous Balance</span>
-                <span className="font-mono">₱ 0.00</span>
+            {/* Box Column 2: Conversions & Consolidation */}
+            {/* DEV-CHANGE: Unified Computation requested by management to hide WIWO vs Meter source. 
+                WIWO kg is converted back to M3 equivalent and summed with Metered M3. */}
+            <div className="p-2 space-y-1 text-[9px] leading-tight">
+              <div className="border-b border-gray-300 pb-1 mb-1">
+                <span className="font-bold text-gray-900 block uppercase text-[8px] tracking-wider mb-0.5">Consumption Summary</span>
+                
+                {hasMetered && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Previous Meter Reading</span>
+                      <span className="font-mono text-gray-900">{startReading.toFixed(3)} M3</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Current Meter Reading</span>
+                      <span className="font-mono text-gray-900">{endReading.toFixed(3)} M3</span>
+                    </div>
+                  </>
+                )}
+                
+                {/* Unified M3 computation: sum of metered M3 and WIWO M3 equivalent. 
+                    Since M3 to kg conversion is essentially 1:1 or derived from total, we use totalBillableKg as the unified volume. */}
+                <div className="flex justify-between mt-1 pt-1 border-t border-gray-100">
+                  <span className="text-gray-700 font-semibold">Total Equivalent Volume</span>
+                  <span className="font-mono text-gray-900 font-bold">{totalBillableKg.toFixed(3)} M3</span>
+                </div>
+
+                <div className="flex justify-between font-bold text-gray-700 mt-1 pt-1 border-t border-gray-200">
+                  <span>Total Billable Qty (Converted)</span>
+                  <span className="font-mono">{totalBillableKg.toFixed(3)} kg</span>
+                </div>
               </div>
-              <div className="flex justify-between text-gray-500">
-                <span>Payments</span>
-                <span className="font-mono">₱ 0.00</span>
-              </div>
-              <div className="flex justify-between text-gray-500">
-                <span>Balance Forward</span>
-                <span className="font-mono">₱ 0.00</span>
-              </div>
-              <div className="flex justify-between text-gray-500">
-                <span>Adjustments / Disc</span>
-                <span className="font-mono text-rose-600">
-                  {totalDiscount > 0 ? `-₱ ${totalDiscount.toFixed(2)}` : "₱ 0.00"}
-                </span>
-              </div>
-              <div className="flex justify-between text-gray-700 font-semibold">
+
+              <div className="flex justify-between text-gray-700 font-semibold pt-0.5">
                 <span>Current Charges</span>
                 <span className="font-mono">₱ {totalNet.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
-              <div className="flex justify-between border-t border-gray-300 pt-1 mt-1 text-gray-900 font-bold text-[11px] bg-zinc-55">
+              <div className="flex justify-between border-t border-gray-300 pt-1 mt-1 text-gray-900 font-bold text-[10px]">
                 <span>Total Amount Due</span>
                 <span className="font-mono">₱ {totalNet.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
@@ -163,6 +207,68 @@ export function InvoicePrintTemplate({ header, transactions, company }: InvoiceP
           </div>
         </div>
 
+        {/* ── DEV-CHANGE: Period-over-Period Consumption Summary ──
+            Displayed when previous posted header data is available.
+            Shows prior period KG/M3 vs current period KG/M3 with delta change. */}
+        <div className="mb-3 border border-gray-300 rounded text-[9px]">
+          <div className="bg-gray-100 px-2 py-0.5 border-b border-gray-300">
+            <span className="font-black uppercase tracking-wider text-[8px] text-gray-700">Consumption Summary</span>
+          </div>
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="text-gray-500 uppercase text-[8px] font-semibold border-b border-gray-200">
+                <th className="py-0.5 px-2 text-left">Period</th>
+                <th className="py-0.5 px-2 text-right">Billed KG</th>
+                <th className="py-0.5 px-2 text-right">Billed M3 (Metered)</th>
+                <th className="py-0.5 px-2 text-right">Change (KG)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {/* Previous period row — hidden if no prior data */}
+              {(header.prev_total_billed_kg != null || header.prev_total_billed_m3 != null) ? (
+                <tr className="text-gray-600 border-b border-gray-100">
+                  <td className="py-0.5 px-2">
+                    <span className="text-gray-400">Previous Period</span>
+                  </td>
+                  <td className="py-0.5 px-2 text-right font-mono">
+                    {header.prev_total_billed_kg != null ? header.prev_total_billed_kg.toFixed(3) : "—"} kg
+                  </td>
+                  <td className="py-0.5 px-2 text-right font-mono">
+                    {header.prev_total_billed_m3 != null ? header.prev_total_billed_m3.toFixed(3) : "—"} M3
+                  </td>
+                  <td className="py-0.5 px-2 text-right font-mono text-gray-400">—</td>
+                </tr>
+              ) : (
+                <tr className="text-gray-400 border-b border-gray-100">
+                  <td className="py-0.5 px-2">Previous Period</td>
+                  <td colSpan={3} className="py-0.5 px-2 text-right italic">No prior period data</td>
+                </tr>
+              )}
+              {/* Current period row */}
+              <tr className="text-gray-800 font-semibold">
+                <td className="py-0.5 px-2">
+                  <span className="font-black">Current Period</span>
+                  <span className="text-gray-400 font-normal ml-1">({header.period_from} → {header.period_to})</span>
+                </td>
+                <td className="py-0.5 px-2 text-right font-mono font-black">{totalBillableKg.toFixed(3)} kg</td>
+                <td className="py-0.5 px-2 text-right font-mono">{totalBillableKg.toFixed(3)} M3</td>
+                <td className="py-0.5 px-2 text-right font-mono">
+                  {header.prev_total_billed_kg != null ? (
+                    (() => {
+                      const delta = totalBillableKg - header.prev_total_billed_kg;
+                      return (
+                        <span className={delta >= 0 ? "text-emerald-700" : "text-red-600"}>
+                          {delta >= 0 ? "+" : ""}{delta.toFixed(3)} kg
+                        </span>
+                      );
+                    })()
+                  ) : "—"}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
         {/* Service Type Line */}
         <p className="text-[10px] font-semibold text-gray-700 mb-2">
           Service Type: <span className="text-gray-900">LPG Monthly Metered & Bulk Supply</span>
@@ -184,15 +290,24 @@ export function InvoicePrintTemplate({ header, transactions, company }: InvoiceP
                   <th className="py-1 text-right">Amount</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              {/* DEV-CHANGE: Group transactions by sales_invoice_no. Each group renders a SI header row,
+                  followed by transaction rows showing transaction_no as sub-description.
+                  Meter reading detail line removed per user request. */}
+              <tbody>
                 {transactions.map((tx) => (
-                  <tr key={tx.id} className="text-gray-800">
-                    <td className="py-1 text-left">
-                      LPG Delivery/Metered (No. <span className="font-mono font-semibold">{tx.transaction_no}</span>)
+                  <tr key={tx.id} className="text-gray-800 border-b border-gray-100 last:border-0">
+                    <td className="py-1.5 pl-1 text-left">
+                      <div className="font-mono font-semibold text-[10px] text-gray-800">{tx.transaction_no}</div>
+                      <div className="text-[8.5px] text-gray-500 mt-0.5 font-medium">
+                        <span className="text-gray-700 font-bold mr-1">
+                          {tx.sales_invoice_no ? `SI: ${tx.sales_invoice_no}` : "No SI"}
+                        </span>
+                        · LPG Delivery · {tx.transaction_date}
+                      </div>
                     </td>
-                    <td className="py-1 text-right font-mono">{tx.billable_kg.toFixed(3)}</td>
-                    <td className="py-1 text-right font-mono">₱ {tx.price_per_kg.toFixed(2)}</td>
-                    <td className="py-1 text-right font-mono font-semibold">₱ {tx.gross_amount.toFixed(2)}</td>
+                    <td className="py-1.5 text-right font-mono">{tx.billable_kg.toFixed(3)}</td>
+                    <td className="py-1.5 text-right font-mono">₱ {tx.price_per_kg.toFixed(2)}</td>
+                    <td className="py-1.5 text-right font-mono font-semibold">₱ {tx.gross_amount.toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -257,15 +372,8 @@ export function InvoicePrintTemplate({ header, transactions, company }: InvoiceP
           </div>
 
           {/* Coupon Middle Balances & Due Date */}
+          {/* DEV-CHANGE: Cleaned up coupon balances list to only show current charges & due date for consistency */}
           <div className="col-span-1 border-r border-gray-200 pr-2 space-y-1">
-            <div className="flex justify-between text-gray-500">
-              <span>Previous Balance</span>
-              <span>₱ 0.00</span>
-            </div>
-            <div className="flex justify-between text-gray-500">
-              <span>Finance Charges</span>
-              <span>₱ 0.00</span>
-            </div>
             <div className="flex justify-between text-gray-500">
               <span>Current Charge</span>
               <span>₱ {totalNet.toFixed(2)}</span>

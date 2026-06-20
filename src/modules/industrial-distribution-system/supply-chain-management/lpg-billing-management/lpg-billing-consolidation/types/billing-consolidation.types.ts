@@ -38,6 +38,17 @@ export interface ConsolidationHeader {
   created_at: string;
   updated_at: string;
 
+  // DEV-CHANGE: New columns added to lpg_transaction_headers for billing history tracking
+  /** Total billed kilograms persisted at the time of posting (for inter-period reference) */
+  total_billed_kg?: number | null;
+  /** Total billed cubic meters (metered M3 only) persisted at the time of posting */
+  total_billed_m3?: number | null;
+
+  // DEV-CHANGE: Previous period snapshot — populated at workspace fetch time from the most recent
+  // prior POSTED header for this customer_site_id. NOT stored in DB; injected by service layer.
+  prev_total_billed_kg?: number | null;
+  prev_total_billed_m3?: number | null;
+
   // --- Expanded relations (joined by repo) ---
   customer?: { customer_name: string; store_name?: string | null };
   site?: {

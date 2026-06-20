@@ -46,6 +46,9 @@ const HEADER_FIELDS = [
   "cancelled_reason",
   "created_at",
   "updated_at",
+  // DEV-CHANGE: New columns for billing history tracking
+  "total_billed_kg",
+  "total_billed_m3",
   // Expanded relations
   "customer_site_id.id",
   "customer_site_id.site_name",
@@ -113,6 +116,9 @@ function mapHeader(raw: Record<string, unknown>): ConsolidationHeader {
     cancelled_reason: raw["cancelled_reason"] ? String(raw["cancelled_reason"]) : null,
     created_at: String(raw["created_at"] ?? ""),
     updated_at: String(raw["updated_at"] ?? ""),
+    // DEV-CHANGE: Map new billing-history columns; nullish when not yet persisted
+    total_billed_kg: raw["total_billed_kg"] != null ? Number(raw["total_billed_kg"]) : null,
+    total_billed_m3: raw["total_billed_m3"] != null ? Number(raw["total_billed_m3"]) : null,
     site: siteObj
       ? {
           id: Number(siteObj["id"]),
@@ -260,7 +266,31 @@ export async function repoFetchHeaderById(headerId: number): Promise<Consolidati
   return hydrated;
 }
 
-// ─── Transaction Queries ──────────────────────────────────────────────────────
+/**
+ * Fetches the most recent POSTED billing header for the same customer site
+ * that precedes the given header (by period_from desc, header_id desc).
+ * Used to populate the prev_total_billed_kg / prev_total_billed_m3 snapshot
+ * on the current workspace header for period-over-period invoice comparison.
+ * DEV-CHANGE: Added for inter-period consumption tracking feature.
+ */
+export async function repoFetchPreviousPostedHeader(
+  siteId: number,
+  excludeHeaderId: number
+): Promise<ConsolidationHeader | null> {
+  const filter = encodeURIComponent(
+    JSON.stringify({
+      customer_site_id: { _eq: siteId },
+      status: { _eq: "POSTED" },
+      header_id: { _neq: excludeHeaderId },
+    })
+  );
+  const res = await directusFetch<{ data: Record<string, unknown>[] }>(
+    `${DIRECTUS_URL}/items/lpg_transaction_headers?fields=${HEADER_FIELDS}&filter=${filter}&sort=-period_from,-header_id&limit=1`
+  );
+  if (!res.data || res.data.length === 0) return null;
+  return mapHeader(res.data[0]);
+}
+
 
 /**
  * Fetches all child transactions for a given billing header.
