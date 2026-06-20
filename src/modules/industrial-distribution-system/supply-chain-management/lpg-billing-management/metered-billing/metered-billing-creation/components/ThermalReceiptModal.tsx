@@ -77,7 +77,7 @@ export interface ThermalReceiptData {
     serialNumber: string;
     tareWeight: number;
     capacity: number;
-    status: string;
+    // status: string;
   }>;
 }
 
@@ -290,7 +290,7 @@ function buildReceiptText(company: CompanyProfile, data: ThermalReceiptData): st
     lines.push(formatCenter("--- CONNECTED CYLINDERS ---"));
     data.siteCylinders.forEach((cyl) => {
       lines.push(`SN: ${cyl.serialNumber}`);
-      lines.push(formatLine("  Status:", cyl.status));
+      // lines.push(formatLine("  Status:", cyl.status));
       lines.push(formatLine("  Tare | Capacity:", `${cyl.tareWeight.toFixed(1)}kg | ${cyl.capacity}kg`));
     });
     lines.push(dashes);
