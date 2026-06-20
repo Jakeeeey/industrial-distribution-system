@@ -46,7 +46,8 @@ export async function fetchTransactionHeaders(params: {
   let qs =
     `fields=*,customer_site_id.id,customer_site_id.site_name,` +
     `customer_site_id.customer_code,customer_site_id.default_price_per_kg,` +
-    `customer_site_id.last_meter_reading,customer_site_id.default_target_lpg_kg` +
+    `customer_site_id.last_meter_reading,customer_site_id.default_target_lpg_kg,` +
+    `customer_site_id.billing_mode` +
     `&sort=-period_from,-header_id&limit=${limit}`;
   if (Object.keys(filters).length) {
     qs += `&filter=${encodeURIComponent(JSON.stringify(filters))}`;
@@ -83,7 +84,7 @@ export async function fetchTransactionHeaders(params: {
     try {
       const filterObj = { id: { _in: siteIds } };
       const siteRes = await directusFetch<{ data: CustomerSite[] }>(
-        `${DIRECTUS_URL}/items/lpg_customer_lpg_sites?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg&filter=${encodeURIComponent(JSON.stringify(filterObj))}`
+        `${DIRECTUS_URL}/items/lpg_customer_lpg_sites?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg,billing_mode&filter=${encodeURIComponent(JSON.stringify(filterObj))}`
       );
       siteMap = Object.fromEntries((siteRes.data ?? []).map(s => [s.id, s]));
     } catch (e) {
