@@ -41,30 +41,38 @@ export const ActivePickingService = {
     },
 
     async processSerialPick(consolidatorId: number, serialNumber: string, userId: number | null, branchId: number, sessionToken: string | null = null): Promise<{ success: boolean; message: string; newQuantity: number; detailId: number }> {
-        // 1. Verify if serial is on hand for this branch and identify its productId
-        let onhandInfo;
-        try {
-            onhandInfo = await ActivePickingRepo.verifySerialOnhand(serialNumber, branchId, sessionToken);
-        } catch (err) {
-            const error = err as Error;
+        // Concurrently verify if serial is on hand and check mapping uniqueness
+        const [onhandInfoResult, serialScanned] = await Promise.allSettled([
+            ActivePickingRepo.verifySerialOnhand(serialNumber, branchId, sessionToken),
+            ActivePickingRepo.checkSerialExists(serialNumber)
+        ]);
+
+        if (serialScanned.status === "rejected" || (serialScanned.status === "fulfilled" && serialScanned.value)) {
+            throw new Error("This serial number has already been scanned.");
+        }
+
+        if (onhandInfoResult.status === "rejected") {
+            const error = onhandInfoResult.reason as Error;
             if (error.message === "NETWORK_FAILURE") {
                 throw new Error("Unable to reach the warehouse server. Please check your connection.");
             }
             throw new Error(error.message || "Failed to verify serial number.");
         }
-        
+
+        const onhandInfo = onhandInfoResult.value;
         if (!onhandInfo) {
             throw new Error(`Serial ${serialNumber} is not currently available in this branch.`);
         }
-        
-        // Ensure productId is a number for comparison
+
         const productId = Number(onhandInfo.productId);
 
-        // 2. Find the matching detail row in this consolidator for the product
-        const details = await ActivePickingRepo.fetchPickingDetails(consolidatorId);
-        
+        // Concurrently fetch the details and the inventory check for the matched product
+        const [details, inventory] = await Promise.all([
+            ActivePickingRepo.fetchPickingDetails(consolidatorId),
+            ActivePickingRepo.fetchInventoryForProducts([productId], branchId, sessionToken)
+        ]);
+
         const detail = details.find(d => Number(d.product_id) === productId);
-        
         if (!detail) {
             throw new Error("This item is not required for this picking order.");
         }
@@ -72,7 +80,7 @@ export const ActivePickingService = {
         const detailId = detail.id;
         const userIdNum = userId ? Number(userId) : null;
 
-        // --- NEW VALIDATION CHECKERS ---
+        // --- VALIDATION CHECKERS ---
         
         // 1. Check if Picked >= Ordered
         if (detail.picked_quantity >= detail.ordered_quantity) {
@@ -80,7 +88,6 @@ export const ActivePickingService = {
         }
 
         // 2. Check if Picked >= Available Stock
-        const inventory = await ActivePickingRepo.fetchInventoryForProducts([productId], branchId, sessionToken);
         const stockInfo = inventory.find(inv => Number(inv.product_id) === productId);
         const availableStock = stockInfo?.running_inventory_unit || 0;
 
@@ -88,28 +95,23 @@ export const ActivePickingService = {
             throw new Error("Cannot pick more than the available physical stock.");
         }
 
-        // -------------------------------
+        // ---------------------------
 
         // PH Manila Time (+08:00)
-        // Note: Using ISO string and manually adjusting for Manila offset if needed, 
-        // or just using a helper that ensures UTC+8.
         const now = new Date();
         const manilaOffset = 8 * 60; // minutes
         const manilaTime = new Date(now.getTime() + (manilaOffset + now.getTimezoneOffset()) * 60000);
         const timestamp = manilaTime.toISOString().replace('Z', '+08:00');
 
-        // 3. Check uniqueness in picking mappings
-        const exists = await ActivePickingRepo.checkSerialExists(serialNumber);
-        if (exists) {
-            throw new Error("This serial number has already been scanned.");
-        }
+        // Calculate quantity directly to avoid internal GET in updatePickedQuantity
+        const targetNewQty = detail.picked_quantity + 1;
 
-        // 4. Update picked quantity
-        const newQty = await ActivePickingRepo.updatePickedQuantity(detailId, 1, userIdNum, timestamp);
-        
-        // 5. Save serial mapping
-        await ActivePickingRepo.saveSerialMapping(detailId, serialNumber, userIdNum, timestamp);
-        
+        // Concurrently execute database updates
+        const [newQty] = await Promise.all([
+            ActivePickingRepo.updatePickedQuantity(detailId, 1, userIdNum, timestamp, targetNewQty),
+            ActivePickingRepo.saveSerialMapping(detailId, serialNumber, userIdNum, timestamp)
+        ]);
+
         return {
             success: true,
             message: "Serial processed and matched to product successfully",

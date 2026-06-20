@@ -20,11 +20,14 @@ import {
   Search,
   Filter,
   X,
-  Building2,
-  ChevronRight,
   CheckCircle2,
   Clock,
   AlertCircle,
+  ArrowUpDown,
+  ChevronUp,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -95,10 +98,25 @@ export function TransactionHeaderWorkspace({ selectedHeader, onSelect }: Props) 
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
 
+  const [activeTab, setActiveTab] = useState<"ALL" | "BOTH" | "KILO">("ALL");
+
   // Date range filter
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+
+  // Sorting state
+  const [sortField, setSortField] = useState<"period_from" | "site" | "customer" | "status" | "billing_mode">("period_from");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
+
+  // Reset pagination on filter or sort change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filterFrom, filterTo, activeTab, sortField, sortDir]);
 
   // Create form
   const [siteId, setSiteId] = useState("");
@@ -144,6 +162,14 @@ export function TransactionHeaderWorkspace({ selectedHeader, onSelect }: Props) 
   const filtered = useMemo(() => {
     let result = headers;
 
+    // Billing Mode Tab Filter
+    if (activeTab !== "ALL") {
+      result = result.filter((h) => {
+        const mode = h.site?.billing_mode || "KILO";
+        return mode === activeTab;
+      });
+    }
+
     // Text search
     const query = search.trim().toLowerCase();
     if (query) {
@@ -163,7 +189,57 @@ export function TransactionHeaderWorkspace({ selectedHeader, onSelect }: Props) 
     }
 
     return result;
-  }, [headers, search, filterFrom, filterTo]);
+  }, [headers, search, filterFrom, filterTo, activeTab]);
+
+  // ─── Sorting ──────────────────────────────────────────────────────────────
+  const sorted = useMemo(() => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      if (sortField === "period_from") {
+        return dir * ((a.period_from ?? "").localeCompare(b.period_from ?? ""));
+      }
+      if (sortField === "site") {
+        return dir * ((a.site?.site_name ?? "").localeCompare(b.site?.site_name ?? ""));
+      }
+      if (sortField === "customer") {
+        const aN = customers.find(c => c.customer_code === a.customer_id)?.customer_name ?? a.customer_id ?? "";
+        const bN = customers.find(c => c.customer_code === b.customer_id)?.customer_name ?? b.customer_id ?? "";
+        return dir * aN.localeCompare(bN);
+      }
+      if (sortField === "status") {
+        return dir * ((a.status ?? "").localeCompare(b.status ?? ""));
+      }
+      if (sortField === "billing_mode") {
+        return dir * ((a.site?.billing_mode ?? "").localeCompare(b.site?.billing_mode ?? ""));
+      }
+      return 0;
+    });
+  }, [filtered, sortField, sortDir, customers]);
+
+  // Paginated data
+  const totalItems = sorted.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  
+  const paginatedHeaders = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return sorted.slice(startIndex, startIndex + pageSize);
+  }, [sorted, currentPage, pageSize]);
+
+  const toggleSort = (field: typeof sortField) => {
+    if (sortField === field) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  };
+
+  const SortIcon = ({ field }: { field: typeof sortField }) => {
+    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 opacity-30 group-hover:opacity-70 transition-opacity" />;
+    return sortDir === "asc"
+      ? <ChevronUp className="h-3 w-3 text-primary" />
+      : <ChevronDown className="h-3 w-3 text-primary" />;
+  };
 
   const hasActiveFilters = !!filterFrom || !!filterTo;
 
@@ -300,6 +376,43 @@ export function TransactionHeaderWorkspace({ selectedHeader, onSelect }: Props) 
             </button>
           </div>
 
+          {/* Billing Mode Segmented Tabs */}
+          <div className="flex p-1 bg-muted/60 dark:bg-zinc-800/40 rounded-xl border border-border/80 max-w-md w-full">
+            <button
+              type="button"
+              onClick={() => setActiveTab("ALL")}
+              className={`flex-1 py-1.5 px-3 text-xs font-bold rounded-lg transition-all ${
+                activeTab === "ALL"
+                  ? "bg-card text-foreground shadow-sm border border-border/50"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              All Sites
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("BOTH")}
+              className={`flex-1 py-1.5 px-3 text-xs font-bold rounded-lg transition-all ${
+                activeTab === "BOTH"
+                  ? "bg-card text-foreground shadow-sm border border-border/50"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Metered-WIWO
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("KILO")}
+              className={`flex-1 py-1.5 px-3 text-xs font-bold rounded-lg transition-all ${
+                activeTab === "KILO"
+                  ? "bg-card text-foreground shadow-sm border border-border/50"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Kilo Only (KILO)
+            </button>
+          </div>
+
           {/* Date Range Filters (collapsible) */}
           {showFilters && (
             <div className="flex flex-col sm:flex-row gap-3 p-4 bg-muted/40 rounded-2xl border border-border animate-in fade-in slide-in-from-top-2 duration-200">
@@ -348,8 +461,9 @@ export function TransactionHeaderWorkspace({ selectedHeader, onSelect }: Props) 
           </p>
         </div>
 
-        {/* AG-CHANGE: Replaced maxHeight with flex-1 on mobile to utilize full height, scaling back to sm:max-h-[540px] and sm:flex-initial on desktop */}
-        <div className="flex-1 sm:flex-initial overflow-y-auto p-3 sm:p-4 lg:p-6 custom-scrollbar sm:max-h-[540px]" style={{ minHeight: 250 }}>
+        {/* ── Table List ─────────────────────────────────────────────────── */}
+        {/* AG-CHANGE: Revamped from card grid to sticky-header table for better data density and scan speed */}
+        <div className="flex-1 sm:flex-initial overflow-auto custom-scrollbar sm:max-h-[500px]" style={{ minHeight: 250 }}>
           {loading && headers.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 gap-3 text-muted-foreground">
               <Loader2 className="h-7 w-7 animate-spin" />
@@ -377,99 +491,227 @@ export function TransactionHeaderWorkspace({ selectedHeader, onSelect }: Props) 
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3">
-              {filtered.map((header) => {
-                const customerName =
-                  customers.find((c) => c.customer_code === header.customer_id)?.customer_name ||
-                  header.customer_name ||
-                  header.customer_id;
-                const isSelected = selectedHeader?.header_id === header.header_id;
+            <table className="w-full border-collapse text-sm">
+              {/* Sticky column headers */}
+              <thead className="sticky top-0 z-10 bg-card border-b border-border">
+                <tr>
+                  <th className="text-left px-4 py-2.5">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("period_from")}
+                      className="group inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Period
+                      <SortIcon field="period_from" />
+                    </button>
+                  </th>
+                  <th className="text-left px-4 py-2.5">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("site")}
+                      className="group inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Site
+                      <SortIcon field="site" />
+                    </button>
+                  </th>
+                  <th className="text-left px-4 py-2.5 hidden md:table-cell">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("customer")}
+                      className="group inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Customer
+                      <SortIcon field="customer" />
+                    </button>
+                  </th>
+                  <th className="text-left px-4 py-2.5 hidden sm:table-cell">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("billing_mode")}
+                      className="group inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Mode
+                      <SortIcon field="billing_mode" />
+                    </button>
+                  </th>
+                  <th className="text-left px-4 py-2.5">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort("status")}
+                      className="group inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Status
+                      <SortIcon field="status" />
+                    </button>
+                  </th>
+                  {/* Header No — not sortable, just for reference */}
+                  <th className="text-left px-4 py-2.5 hidden lg:table-cell">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Header #</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/50">
+                {paginatedHeaders.map((header) => {
+                  const customerName =
+                    customers.find((c) => c.customer_code === header.customer_id)?.customer_name ||
+                    header.customer_name ||
+                    header.customer_id;
+                  const isSelected = selectedHeader?.header_id === header.header_id;
+                  const billingMode = header.site?.billing_mode;
 
-                return (
-                  <button
-                    type="button"
-                    key={header.header_id}
-                    onClick={() => onSelect(header)}
-                    className={`group relative w-full text-left rounded-2xl border-2 overflow-hidden transition-all duration-200 flex flex-col ${
-                      isSelected
-                        ? "border-primary ring-2 ring-primary/20 shadow-lg shadow-primary/10"
-                        : "border-border hover:border-primary/40 hover:shadow-md"
-                    }`}
-                  >
-                    {/* ── Hero: Date Range ──────────────────── */}
-                    <div className={`px-3 pt-3 pb-2.5 sm:px-4 sm:pt-4 sm:pb-3 flex flex-col gap-1 transition-colors ${
-                      isSelected
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-primary/10 group-hover:bg-primary/15 text-primary"
-                    }`}>
-                      <div className="flex items-center justify-between gap-1">
-                        <div className="flex items-center gap-1">
-                          <CalendarRange className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0 opacity-80" />
-                          <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest opacity-70">
-                            Period
-                          </span>
-                        </div>
-                        {isSelected && (
-                          <CheckCircle2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
-                        )}
-                      </div>
-                      {/* Date range — single inline row (AG-CHANGE: prevent stacking on mobile) */}
-                      <div className="flex items-center flex-nowrap gap-x-1 mt-1">
-                        <span className="text-[11px] xs:text-xs sm:text-sm font-black leading-tight whitespace-nowrap">
-                          {formatDateShort(header.period_from)}
-                        </span>
-                        <span className="text-[10px] font-bold opacity-45 shrink-0">→</span>
-                        <span className="text-[11px] xs:text-xs sm:text-sm font-black leading-tight whitespace-nowrap">
-                          {formatDateShort(header.period_to)}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* ── Body: Site + Status ──────────────────── */}
-                    <div className={`px-3 py-2.5 sm:px-4 sm:py-3 flex flex-col gap-2 flex-1 transition-colors ${
-                      isSelected ? "bg-primary/10" : "bg-card group-hover:bg-accent/40"
-                    }`}>
-                      {/* Site info */}
-                      <div className="flex items-start gap-1.5 sm:gap-2">
-                        {/* Icon hidden on xs to save space in 2-col */}
-                        <div className={`h-6 w-6 rounded-lg flex items-center justify-center shrink-0 transition-colors hidden sm:flex ${
+                  return (
+                    <tr
+                      key={header.header_id}
+                      onClick={() => onSelect(header)}
+                      className={`group cursor-pointer transition-all duration-150 ${
+                        isSelected
+                          ? "bg-primary/8 border-l-2 border-l-primary"
+                          : "hover:bg-accent/50 border-l-2 border-l-transparent"
+                      }`}
+                    >
+                      {/* Period */}
+                      <td className="px-4 py-3 whitespace-nowrap min-w-[240px]">
+                        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold border transition-all ${
                           isSelected
-                            ? "bg-primary/20 text-primary"
-                            : "bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary"
+                            ? "bg-primary/10 border-primary/20 text-primary"
+                            : "bg-muted/40 border-border/40 text-foreground"
                         }`}>
-                          <Building2 className="h-3 w-3" />
+                          <CalendarRange className={`h-3.5 w-3.5 shrink-0 ${ isSelected ? "text-primary" : "text-muted-foreground" }`} />
+                          <span>{formatDateShort(header.period_from)}</span>
+                          <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/50 px-0.5">to</span>
+                          <span>{formatDateShort(header.period_to)}</span>
                         </div>
-                        <div className="min-w-0">
-                          <p className={`text-xs sm:text-sm font-bold line-clamp-1 leading-tight ${
-                            isSelected ? "text-primary" : "text-foreground"
-                          }`}>
-                            {header.site?.site_name || `Site #${header.customer_site_id}`}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">
-                            {customerName}
-                          </p>
-                        </div>
-                      </div>
+                      </td>
 
-                      {/* Footer: header no + status */}
-                      <div className="flex items-center justify-between pt-1 border-t border-border/60 gap-1">
-                        <span className="font-mono text-[9px] sm:text-[10px] text-muted-foreground truncate">
+                      {/* Site */}
+                      <td className="px-4 py-3 whitespace-nowrap min-w-[150px]">
+                        <p className={`text-xs font-bold leading-tight truncate max-w-[150px] ${ isSelected ? "text-primary" : "text-foreground" }`}>
+                          {header.site?.site_name || `Site #${header.customer_site_id}`}
+                        </p>
+                      </td>
+
+                      {/* Customer (hidden on mobile) */}
+                      <td className="px-4 py-3 hidden md:table-cell whitespace-nowrap min-w-[150px]">
+                        <p className="text-xs text-muted-foreground truncate max-w-[150px]">{customerName}</p>
+                      </td>
+
+                      {/* Billing Mode (hidden on mobile) */}
+                      <td className="px-4 py-3 hidden sm:table-cell whitespace-nowrap min-w-[120px]">
+                        {billingMode ? (
+                          <span className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider whitespace-nowrap border shrink-0 ${
+                            billingMode === "KILO"
+                              ? "bg-cyan-50 dark:bg-cyan-950/30 border-cyan-200/50 dark:border-cyan-800/30 text-cyan-700 dark:text-cyan-400"
+                              : "bg-indigo-50 dark:bg-indigo-950/30 border-indigo-200/50 dark:border-indigo-800/30 text-indigo-700 dark:text-indigo-400"
+                          }`}>
+                            {billingMode === "BOTH" ? "Metered-WIWO" : billingMode}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+
+                      {/* Status */}
+                      <td className="px-4 py-3 whitespace-nowrap min-w-[100px]">
+                        <StatusBadge status={header.status} />
+                      </td>
+
+                      {/* Header No (hidden on sm and below) */}
+                      <td className="px-4 py-3 hidden lg:table-cell">
+                        <span className="font-mono text-[10px] text-muted-foreground">
                           {header.header_no || `#${header.header_id}`}
                         </span>
-                        <StatusBadge status={header.status} />
-                      </div>
-                    </div>
-
-                    {/* Arrow indicator on hover */}
-                    <ChevronRight className={`absolute bottom-3.5 right-3 h-4 w-4 transition-all duration-200 ${
-                      isSelected ? "text-primary opacity-0" : "text-muted-foreground opacity-0 group-hover:opacity-60 group-hover:translate-x-0.5"
-                    }`} />
-                  </button>
-                );
-              })}
-            </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           )}
         </div>
+
+        {/* ── Pagination ─────────────────────────────────────────────────── */}
+        {totalItems > 0 && (
+          <div className="px-4 py-3 sm:px-6 border-t border-border bg-muted/20 dark:bg-zinc-900/10 flex flex-col xs:flex-row items-center justify-between gap-3 shrink-0">
+            {/* Info */}
+            <div className="text-xs text-muted-foreground">
+              Showing <span className="font-semibold text-foreground">{Math.min(totalItems, (currentPage - 1) * pageSize + 1)}</span> to{" "}
+              <span className="font-semibold text-foreground">{Math.min(totalItems, currentPage * pageSize)}</span> of{" "}
+              <span className="font-semibold text-foreground">{totalItems}</span> headers
+            </div>
+
+            <div className="flex items-center gap-4">
+              {/* Page Size Selector */}
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span>Show</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="h-8 px-2 rounded-lg border border-border bg-background text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary cursor-pointer font-bold"
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                </select>
+                <span>entries</span>
+              </div>
+
+              {/* Buttons */}
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  className="h-8 w-8 rounded-lg border border-border bg-card flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-40 disabled:hover:bg-card disabled:hover:text-muted-foreground transition-all duration-150"
+                  title="Previous Page"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                
+                {/* Compact Page indicators */}
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                    .map((p, idx, arr) => {
+                      const isAct = p === currentPage;
+                      const showEllipsis = idx > 0 && p - arr[idx - 1] > 1;
+
+                      return (
+                        <div key={p} className="flex items-center">
+                          {showEllipsis && <span className="px-1 text-xs text-muted-foreground">...</span>}
+                          <button
+                            type="button"
+                            onClick={() => setCurrentPage(p)}
+                            className={`h-8 min-w-[32px] px-2 rounded-lg text-xs font-bold transition-all duration-150 ${
+                              isAct
+                                ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
+                                : "border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-accent"
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        </div>
+                      );
+                    })}
+                </div>
+
+                <button
+                  type="button"
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  className="h-8 w-8 rounded-lg border border-border bg-card flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-40 disabled:hover:bg-card disabled:hover:text-muted-foreground transition-all duration-150"
+                  title="Next Page"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Create Header Dialog ───────────────────────────────────────────────── */}
@@ -500,7 +742,8 @@ export function TransactionHeaderWorkspace({ selectedHeader, onSelect }: Props) 
                 onValueChange={(val: CustomerSite | null) => {
                   setSiteId(val ? String(val.id) : "");
                   if (val) {
-                    setSiteSearch(val.site_name ? `${val.site_name} (${val.customer_code})` : `Site #${val.id} (${val.customer_code})`);
+                    const custName = customers.find(c => c.customer_code === val.customer_code)?.customer_name || val.customer_code;
+                    setSiteSearch(val.site_name ? `${val.site_name} (${custName})` : `Site #${val.id} (${custName})`);
                   } else {
                     setSiteSearch("");
                   }
@@ -516,15 +759,22 @@ export function TransactionHeaderWorkspace({ selectedHeader, onSelect }: Props) 
                   <ComboboxList>
                     {sites.length === 0 && <ComboboxEmpty>No sites.</ComboboxEmpty>}
                     {sites
-                      .filter((s) =>
-                        (s.site_name || "").toLowerCase().includes(siteSearch.toLowerCase()) ||
-                        s.customer_code.toLowerCase().includes(siteSearch.toLowerCase())
-                      )
-                      .map((s) => (
-                        <ComboboxItem key={String(s.id)} value={s}>
-                          {s.site_name ? `${s.site_name} (${s.customer_code})` : `Site #${s.id} (${s.customer_code})`}
-                        </ComboboxItem>
-                      ))}
+                      .filter((s) => {
+                        const custName = customers.find(c => c.customer_code === s.customer_code)?.customer_name || s.customer_code;
+                        return (
+                          (s.site_name || "").toLowerCase().includes(siteSearch.toLowerCase()) ||
+                          s.customer_code.toLowerCase().includes(siteSearch.toLowerCase()) ||
+                          custName.toLowerCase().includes(siteSearch.toLowerCase())
+                        );
+                      })
+                      .map((s) => {
+                        const custName = customers.find(c => c.customer_code === s.customer_code)?.customer_name || s.customer_code;
+                        return (
+                          <ComboboxItem key={String(s.id)} value={s}>
+                            {s.site_name ? `${s.site_name} (${custName})` : `Site #${s.id} (${custName})`}
+                          </ComboboxItem>
+                        );
+                      })}
                   </ComboboxList>
                 </ComboboxContent>
               </Combobox>
