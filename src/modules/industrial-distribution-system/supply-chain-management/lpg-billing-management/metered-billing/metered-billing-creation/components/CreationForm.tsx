@@ -365,7 +365,7 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
                 </strong>{" "}
                 Prefix:{" "}
                 <code className="bg-amber-200/50 dark:bg-amber-900/50 px-1.5 py-0.5 rounded font-mono text-xs">
-                  TXORB-
+                  TX-ORB-XXXXXX
                 </code>
               </span>
             </div>
@@ -570,6 +570,7 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
                   </Label>
                   <Input
                     value={form.transactionNo}
+                    placeholder={isOnboarding ? "TX-ONB-XXXXXX" : "TX-REG-XXXXXX"}
                     readOnly
                     className="bg-zinc-50 dark:bg-zinc-950/50 border-dashed text-zinc-600 dark:text-zinc-400 font-mono"
                   />
