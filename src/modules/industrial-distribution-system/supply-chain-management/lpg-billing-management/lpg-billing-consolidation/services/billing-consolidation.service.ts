@@ -45,6 +45,8 @@ import {
   repoFetchCompanyProfile,
   repoGetOrCreateFolderId,
   repoUploadInvoicePdf,
+  // DEV-CHANGE: Import previous-header lookup for inter-period consumption snapshot
+  repoFetchPreviousPostedHeader,
 } from "./billing-consolidation.repo";
 
 import { sendInvoiceEmail } from "../utils/email-sender";
@@ -342,7 +344,27 @@ export async function fetchConsolidationWorkspace(headerId: number): Promise<{
     }
   }
 
-  return { header, transactions: enriched };
+  // DEV-CHANGE: Look up the previous POSTED billing header for this site to populate
+  // prev_total_billed_kg / prev_total_billed_m3 for the period-over-period invoice comparison.
+  let prevHeader: ConsolidationHeader | null = null;
+  if (header && header.customer_site_id) {
+    try {
+      prevHeader = await repoFetchPreviousPostedHeader(header.customer_site_id, headerId);
+    } catch (err) {
+      console.warn("[fetchConsolidationWorkspace] Failed to load previous posted header:", err);
+    }
+  }
+
+  // Inject prev snapshot onto the current header (not persisted — service-layer only)
+  const headerWithPrev = header
+    ? {
+        ...header,
+        prev_total_billed_kg: prevHeader?.total_billed_kg ?? null,
+        prev_total_billed_m3: prevHeader?.total_billed_m3 ?? null,
+      }
+    : null;
+
+  return { header: headerWithPrev, transactions: enriched };
 }
 
 /**
@@ -405,7 +427,15 @@ export async function adjustMeterReading(payload: MeterReadingAdjustPayload): Pr
       ? Math.max(0, prevReading - new_current_reading)
       : Math.max(0, new_current_reading - prevReading);
 
-  const kgConsumed = parseFloat((rawConsumption * existing.conversion_factor).toFixed(3));
+  // DEV-CHANGE: Fixed kgConsumed calculation to correctly multiply by conversion_factor, pressure_line, and lpg_vapor_factor
+  const kgConsumed = parseFloat(
+    (
+      rawConsumption *
+      existing.conversion_factor *
+      (existing.pressure_line ?? 1) *
+      (existing.lpg_vapor_factor ?? 1)
+    ).toFixed(3)
+  );
   const grossAmount = parseFloat((kgConsumed * existing.price_per_kg).toFixed(2));
 
   // 3. Patch the meter reading row
@@ -854,7 +884,36 @@ export async function approveConsolidationHeader(payload: ApproveHeaderPayload):
     }
   }
 
-  // 8. Update header status to POSTED, mark as billed, and link the PDF UUID
+  // DEV-CHANGE: Compute billing history snapshot values to persist on the header.
+  // total_billed_kg — billable kg excluding onboarding baseline (mirrors Consolidation by Source total)
+  // total_billed_m3 — raw M3 consumed only by METERED-source transactions (mirrors Meter Conversion display)
+  const billedKg = parseFloat(
+    transactions
+      .filter((tx) => tx.transaction_type !== "ONBOARDING_BASELINE" && tx.status !== "CANCELLED")
+      .reduce((sum, tx) => sum + tx.billable_kg, 0)
+      .toFixed(3)
+  );
+
+  // Fetch meter readings for METERED-source transactions to sum raw M3
+  const meteredTxs = transactions.filter(
+    (tx) => tx.billable_source === "METERED" &&
+      tx.transaction_type !== "ONBOARDING_BASELINE" &&
+      tx.status !== "CANCELLED" &&
+      tx.meter_reading_id
+  );
+
+  let billedM3 = 0;
+  for (const tx of meteredTxs) {
+    if (tx.meter_reading_id) {
+      const reading = await repoFetchMeterReading(tx.meter_reading_id);
+      if (reading) {
+        billedM3 += reading.raw_consumption;
+      }
+    }
+  }
+  billedM3 = parseFloat(billedM3.toFixed(3));
+
+  // 8. Update header status to POSTED, mark as billed, link the PDF UUID, and persist billing snapshot
   await repoPatchHeader(headerId, {
     status: "POSTED",
     is_billed: 1,
@@ -862,6 +921,9 @@ export async function approveConsolidationHeader(payload: ApproveHeaderPayload):
     posted_by: approved_by,
     posted_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
+    // DEV-CHANGE: Persist billing snapshot for inter-period reference
+    total_billed_kg: billedKg,
+    total_billed_m3: billedM3,
   });
 
   // 9. Fetch company profile, customer email, and send email notification with PDF attachment (non-blocking)
@@ -870,6 +932,31 @@ export async function approveConsolidationHeader(payload: ApproveHeaderPayload):
     if (custInfo && custInfo.customer_email) {
       const company = await repoFetchCompanyProfile();
       const companyName = company?.company_name || "";
+
+      // DEV-CHANGE: Fetch and convert company logo to Base64 data URI if UUID exists in company profile
+      let logoBase64: string | null = null;
+      if (company && company.company_logo) {
+        const logoUuid = company.company_logo;
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(logoUuid);
+        if (isUuid) {
+          try {
+            const staticToken = process.env.DIRECTUS_STATIC_TOKEN;
+            const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8055";
+            const assetUrl = `${apiBaseUrl}/assets/${logoUuid}${staticToken ? `?access_token=${staticToken}` : ""}`;
+            const imgRes = await fetch(assetUrl);
+            if (imgRes.ok) {
+              const contentType = imgRes.headers.get("content-type") || "image/png";
+              const buffer = await imgRes.arrayBuffer();
+              const base64 = Buffer.from(buffer).toString("base64");
+              logoBase64 = `data:${contentType};base64,${base64}`;
+            }
+          } catch (imgErr) {
+            console.error("[Email Service] Failed to proxy company logo for email:", imgErr);
+          }
+        } else if (company.company_logo.startsWith("data:")) {
+          logoBase64 = company.company_logo;
+        }
+      }
 
       // Calculate due date (10 days in the future)
       const invDate = new Date();
@@ -894,6 +981,7 @@ export async function approveConsolidationHeader(payload: ApproveHeaderPayload):
         companyContact: company?.company_contact,
         companyEmail: company?.company_email,
         companyTin: company?.company_tin,
+        companyLogoBase64: logoBase64,
       });
       console.log(`[Email Service] Successfully sent invoice notification for ${invoice.invoice_no} to ${custInfo.customer_email}`);
     } else {
@@ -918,7 +1006,6 @@ async function fetchTransactionRaw(transactionId: number): Promise<Consolidation
     directusFetch,
     getDirectusBase,
   } = await import(
-    // Updated import path from stock-adjustment to stock-adjustment-serial-posting
     "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment-serial-posting/utils/directus"
   );
   const DIRECTUS_URL = getDirectusBase();
