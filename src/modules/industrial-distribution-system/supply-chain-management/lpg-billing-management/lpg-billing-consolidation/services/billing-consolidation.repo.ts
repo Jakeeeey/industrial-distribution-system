@@ -4,7 +4,6 @@
 // All recompute logic lives in billing-consolidation.service.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Updated import path from stock-adjustment to stock-adjustment-serial-posting
 import {
   directusFetch,
   getDirectusBase,
@@ -47,6 +46,9 @@ const HEADER_FIELDS = [
   "cancelled_reason",
   "created_at",
   "updated_at",
+  // DEV-CHANGE: New columns for billing history tracking
+  "total_billed_kg",
+  "total_billed_m3",
   // Expanded relations
   "customer_site_id.id",
   "customer_site_id.site_name",
@@ -114,6 +116,9 @@ function mapHeader(raw: Record<string, unknown>): ConsolidationHeader {
     cancelled_reason: raw["cancelled_reason"] ? String(raw["cancelled_reason"]) : null,
     created_at: String(raw["created_at"] ?? ""),
     updated_at: String(raw["updated_at"] ?? ""),
+    // DEV-CHANGE: Map new billing-history columns; nullish when not yet persisted
+    total_billed_kg: raw["total_billed_kg"] != null ? Number(raw["total_billed_kg"]) : null,
+    total_billed_m3: raw["total_billed_m3"] != null ? Number(raw["total_billed_m3"]) : null,
     site: siteObj
       ? {
           id: Number(siteObj["id"]),
@@ -137,7 +142,6 @@ async function hydrateCustomerNamesForHeaders(headers: ConsolidationHeader[]): P
     const custRes = await directusFetch<{ data: { customer_code: string; customer_name: string; store_name?: string | null }[] }>(
       `${DIRECTUS_URL}/items/customer?fields=customer_code,customer_name,store_name&filter=${encodeURIComponent(JSON.stringify(filterObj))}`
     );
-    // Added concrete type annotation to customer record parameter c to resolve ESLint no-explicit-any error
     customerMap = Object.fromEntries(
       (custRes.data ?? []).map((c: { customer_code: string; customer_name: string; store_name?: string | null }) => [
         c.customer_code,
@@ -262,7 +266,31 @@ export async function repoFetchHeaderById(headerId: number): Promise<Consolidati
   return hydrated;
 }
 
-// ─── Transaction Queries ──────────────────────────────────────────────────────
+/**
+ * Fetches the most recent POSTED billing header for the same customer site
+ * that precedes the given header (by period_from desc, header_id desc).
+ * Used to populate the prev_total_billed_kg / prev_total_billed_m3 snapshot
+ * on the current workspace header for period-over-period invoice comparison.
+ * DEV-CHANGE: Added for inter-period consumption tracking feature.
+ */
+export async function repoFetchPreviousPostedHeader(
+  siteId: number,
+  excludeHeaderId: number
+): Promise<ConsolidationHeader | null> {
+  const filter = encodeURIComponent(
+    JSON.stringify({
+      customer_site_id: { _eq: siteId },
+      status: { _eq: "POSTED" },
+      header_id: { _neq: excludeHeaderId },
+    })
+  );
+  const res = await directusFetch<{ data: Record<string, unknown>[] }>(
+    `${DIRECTUS_URL}/items/lpg_transaction_headers?fields=${HEADER_FIELDS}&filter=${filter}&sort=-period_from,-header_id&limit=1`
+  );
+  if (!res.data || res.data.length === 0) return null;
+  return mapHeader(res.data[0]);
+}
+
 
 /**
  * Fetches all child transactions for a given billing header.
@@ -352,7 +380,6 @@ export async function repoFetchWiwoWithDetails(wiwoHeaderId: number): Promise<Co
   if (!headerRes.data) return null;
   const h = headerRes.data;
 
-  // Added Record<string, unknown> type annotation to closure parameter d to resolve ESLint no-explicit-any error
   const details: ConsolidationWiwoDetail[] = (detailRes.data ?? []).map((d: Record<string, unknown>) => {
     const productObj =
       d["product_id"] && typeof d["product_id"] === "object"
@@ -473,7 +500,6 @@ export async function repoFetchAttachments(transactionId: number): Promise<Conso
   const res = await directusFetch<{ data: Record<string, unknown>[] }>(
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments?filter[transaction_id][_eq]=${transactionId}&limit=-1`
   );
-  // Added Record<string, unknown> type annotation to closure parameter a to resolve ESLint no-explicit-any error
   return (res.data ?? []).map((a: Record<string, unknown>) => ({
     id: Number(a["id"]),
     transaction_id: Number(a["transaction_id"]),
@@ -500,7 +526,6 @@ export async function repoFetchAuditTrail(transactionId: number): Promise<Consol
   const userIds = Array.from(
     new Set(
       rawEntries
-        // Added Record<string, unknown> and number | null type annotations to closure parameters to resolve ESLint no-explicit-any errors
         .map((a: Record<string, unknown>) => (a["modified_by"] ? Number(a["modified_by"]) : null))
         .filter((id: number | null): id is number => id !== null && !isNaN(id) && id > 0)
     )
@@ -527,7 +552,6 @@ export async function repoFetchAuditTrail(transactionId: number): Promise<Consol
     }
   }
 
-  // Added Record<string, unknown> type annotation to closure parameter a to resolve ESLint no-explicit-any error
   return rawEntries.map((a: Record<string, unknown>) => {
     const modifiedBy = a["modified_by"] ? Number(a["modified_by"]) : null;
     return {
@@ -689,7 +713,6 @@ export async function repoFetchOnboardingAttachmentsForCylinders(
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments?filter=${filter}&limit=-1`
   );
 
-  // Added Record<string, unknown> type annotation to closure parameter a to resolve ESLint no-explicit-any error
   return (res.data ?? []).map((a: Record<string, unknown>) => ({
     id: Number(a["id"]),
     transaction_id: Number(a["transaction_id"]),
