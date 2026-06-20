@@ -12,7 +12,7 @@ import {
   MapPin,
   ChevronLeft,
   ChevronRight,
-  Filter,
+
   Eye
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
