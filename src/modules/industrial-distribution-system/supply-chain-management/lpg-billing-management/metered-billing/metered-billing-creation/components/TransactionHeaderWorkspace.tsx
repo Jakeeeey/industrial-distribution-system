@@ -164,6 +164,9 @@ export function TransactionHeaderWorkspace({
       result = result.filter((h) => !h.period_from || h.period_from <= filterTo);
     }
 
+    // AG-CHANGE: New condition in metered — don't show LPG transaction header if that LPG site billing mode is KILO
+    result = result.filter((h) => h.site?.billing_mode !== "KILO");
+
     return result;
   }, [headers, search, filterFrom, filterTo]);
 
