@@ -211,7 +211,8 @@ export async function repoFetchHeaders(params: ConsolidationHeaderListParams): P
   total: number;
 }> {
   const page = params.page ?? 1;
-  const limit = params.limit ?? 15;
+  // IDS-CHANGE: Default fallback limit changed from 15 to 5 to align pagination
+  const limit = params.limit ?? 5;
   const offset = (page - 1) * limit;
 
   const filterList: Record<string, unknown>[] = [];

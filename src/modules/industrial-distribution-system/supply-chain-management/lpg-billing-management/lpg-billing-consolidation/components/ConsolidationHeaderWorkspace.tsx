@@ -424,8 +424,8 @@ export function ConsolidationHeaderWorkspace({ hook, onSelect }: ConsolidationHe
         <div className="px-4 py-3 border-t border-border bg-muted/20 dark:bg-zinc-900/10 flex flex-col items-center justify-center gap-3 shrink-0">
           {/* Info */}
           <div className="text-xs text-muted-foreground text-center">
-            Showing <span className="font-semibold text-foreground">{Math.min(totalHeaders, ((headerParams.page ?? 1) - 1) * (headerParams.limit ?? 15) + 1)}</span> to{" "}
-            <span className="font-semibold text-foreground">{Math.min(totalHeaders, (headerParams.page ?? 1) * (headerParams.limit ?? 15))}</span> of{" "}
+            Showing <span className="font-semibold text-foreground">{Math.min(totalHeaders, ((headerParams.page ?? 1) - 1) * (headerParams.limit ?? 5) + 1)}</span> to{" "}
+            <span className="font-semibold text-foreground">{Math.min(totalHeaders, (headerParams.page ?? 1) * (headerParams.limit ?? 5))}</span> of{" "}
             <span className="font-semibold text-foreground">{totalHeaders}</span> headers
           </div>
 
@@ -433,8 +433,9 @@ export function ConsolidationHeaderWorkspace({ hook, onSelect }: ConsolidationHe
             {/* Page Size Selector */}
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <span>Show</span>
+              {/* IDS-CHANGE: Default limit fallback changed from 15 to 5 to prevent desync */}
               <select
-                value={headerParams.limit ?? 15}
+                value={headerParams.limit ?? 5}
                 onChange={(e) => {
                   setHeaderParams({ limit: Number(e.target.value), page: 1 });
                 }}
@@ -462,7 +463,7 @@ export function ConsolidationHeaderWorkspace({ hook, onSelect }: ConsolidationHe
               
               {/* Compact Page indicators */}
               <div className="flex items-center gap-1">
-                {Array.from({ length: Math.max(1, Math.ceil(totalHeaders / (headerParams.limit ?? 15))) }, (_, i) => i + 1)
+                {Array.from({ length: Math.max(1, Math.ceil(totalHeaders / (headerParams.limit ?? 5))) }, (_, i) => i + 1)
                   .filter((p, _, arr) => p === 1 || p === arr.length || Math.abs(p - (headerParams.page ?? 1)) <= 1)
                   .map((p, idx, arr) => {
                     const isAct = p === (headerParams.page ?? 1);
@@ -489,8 +490,8 @@ export function ConsolidationHeaderWorkspace({ hook, onSelect }: ConsolidationHe
 
               <button
                 type="button"
-                disabled={(headerParams.page ?? 1) >= Math.max(1, Math.ceil(totalHeaders / (headerParams.limit ?? 15))) || isLoadingHeaders}
-                onClick={() => setHeaderParams({ page: Math.min(Math.max(1, Math.ceil(totalHeaders / (headerParams.limit ?? 15))), (headerParams.page ?? 1) + 1) })}
+                disabled={(headerParams.page ?? 1) >= Math.max(1, Math.ceil(totalHeaders / (headerParams.limit ?? 5))) || isLoadingHeaders}
+                onClick={() => setHeaderParams({ page: Math.min(Math.max(1, Math.ceil(totalHeaders / (headerParams.limit ?? 5))), (headerParams.page ?? 1) + 1) })}
                 className="h-8 w-8 rounded-lg border border-border bg-card flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-40 disabled:hover:bg-card disabled:hover:text-muted-foreground transition-all duration-150"
                 title="Next Page"
               >

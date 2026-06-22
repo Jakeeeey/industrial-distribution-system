@@ -86,7 +86,7 @@ export function useBillingConsolidation(): UseBillingConsolidationReturn {
     sortField: "period_from",
     sortDir: "desc",
     page: 1,
-    limit: 15,
+    limit: 5,
   });
 
   // ── Workspace State ───────────────────────────────────────────────────────
@@ -130,7 +130,7 @@ export function useBillingConsolidation(): UseBillingConsolidationReturn {
         ...(headerParams.sortDir ? { sortDir: headerParams.sortDir } : {}),
         ...(headerParams.search ? { search: headerParams.search } : {}),
         page: String(headerParams.page ?? 1),
-        limit: String(headerParams.limit ?? 15),
+        limit: String(headerParams.limit ?? 5),
       });
 
       const res = await fetch(`${BASE_URL}?${qs}`);

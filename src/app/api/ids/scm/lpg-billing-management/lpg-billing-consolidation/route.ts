@@ -55,7 +55,8 @@ export async function GET(request: NextRequest) {
       const sortDir = (searchParams.get("sortDir") || undefined) as ConsolidationHeaderListParams["sortDir"];
       const search = searchParams.get("search") || undefined;
       const page = searchParams.get("page") ? Number(searchParams.get("page")) : 1;
-      const limit = searchParams.get("limit") ? Number(searchParams.get("limit")) : 15;
+      // IDS-CHANGE: Default limit changed from 15 to 5 to prevent desync with frontend selector
+      const limit = searchParams.get("limit") ? Number(searchParams.get("limit")) : 5;
 
       const result = await fetchConsolidationHeaders({
         status,
