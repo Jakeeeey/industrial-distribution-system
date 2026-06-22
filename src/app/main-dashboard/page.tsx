@@ -90,15 +90,31 @@ export default async function ERPMainDashboardPage() {
     const cookieStore = await cookies();
     const token = cookieStore.get(COOKIE_NAME)?.value;
 
-    if (!token) return null;
+    const isAuthDisabled = process.env.NEXT_PUBLIC_AUTH_DISABLED === "true";
 
-    const payload = decodeJwt(token);
-    if (!payload) return null;
+    // IDS-CHANGE: If auth is disabled, allow loading the dashboard even if token is missing
+    if (!token && !isAuthDisabled) return null;
 
-    const isAdmin = payload.role === "ADMIN";
-    const allowedSubsystems = new Set(payload.subsystems || []);
+    let payload = token ? decodeJwt(token) : null;
+    if (!payload && !isAuthDisabled) return null;
+
+    // Mock admin payload if auth is disabled and no token is present
+    if (isAuthDisabled && !payload) {
+        payload = {
+            id: 1,
+            user_id: 1,
+            sub: 1,
+            role: "ADMIN",
+            subsystems: [],
+            FirstName: "Developer",
+            LastName: "Mode",
+            email: "dev@vos.local"
+        };
+    }
+
+    const isAdmin = payload!.role === "ADMIN";
+    const allowedSubsystems = new Set(payload!.subsystems || []);
     const directusBase = process.env.NEXT_PUBLIC_API_BASE_URL;
-
 
     let subsystems: MappedSubsystem[] = [];
 
@@ -136,8 +152,10 @@ export default async function ERPMainDashboardPage() {
         console.error("[Dashboard Server] Fetch Error:", err);
     }
 
-    const userFullName = [payload.FirstName, payload.LastName].filter(Boolean).join(" ") || "User";
-    const userEmail = payload.email || "";
+    // IDS-CHANGE: Assert payload is non-null since it is guaranteed to be set or mocked above
+    const activePayload = payload!;
+    const userFullName = [activePayload.FirstName, activePayload.LastName].filter(Boolean).join(" ") || "User";
+    const userEmail = activePayload.email || "";
 
     return (
         <MainDashboardClient 

@@ -79,8 +79,12 @@ export function useBillingConsolidation(): UseBillingConsolidationReturn {
   const [totalHeaders, setTotalHeaders] = useState(0);
   const [isLoadingHeaders, setIsLoadingHeaders] = useState(false);
   const [headerError, setHeaderError] = useState<string | null>(null);
+  // DEV-CHANGE: Add default sorting and billing mode filtering to header params
   const [headerParams, setHeaderParamsState] = useState<ConsolidationHeaderListParams>({
     status: "ALL",
+    billing_mode: "ALL",
+    sortField: "period_from",
+    sortDir: "desc",
     page: 1,
     limit: 15,
   });
@@ -120,6 +124,10 @@ export function useBillingConsolidation(): UseBillingConsolidationReturn {
       const qs = new URLSearchParams({
         type: "headers",
         ...(headerParams.status && headerParams.status !== "ALL" ? { status: headerParams.status } : {}),
+        // DEV-CHANGE: Forward billing_mode, sortField, and sortDir to API
+        ...(headerParams.billing_mode && headerParams.billing_mode !== "ALL" ? { billing_mode: headerParams.billing_mode } : {}),
+        ...(headerParams.sortField ? { sortField: headerParams.sortField } : {}),
+        ...(headerParams.sortDir ? { sortDir: headerParams.sortDir } : {}),
         ...(headerParams.search ? { search: headerParams.search } : {}),
         page: String(headerParams.page ?? 1),
         limit: String(headerParams.limit ?? 15),

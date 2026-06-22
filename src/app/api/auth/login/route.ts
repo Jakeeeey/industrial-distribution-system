@@ -164,7 +164,8 @@ export async function POST(req: NextRequest) {
 
     let springRes: Response;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12_000);
+    // IDS-CHANGE: Increased timeout from 12s to 30s to prevent premature aborts on slow tailscale networks
+    const timeout = setTimeout(() => controller.abort(), 30_000);
 
     try {
         springRes = await fetch(loginUrl, {

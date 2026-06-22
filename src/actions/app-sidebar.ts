@@ -57,11 +57,19 @@ export async function getSidebarNavigation(subsystemSlug: string): Promise<NavIt
         const cookieStore = await cookies();
         const token = cookieStore.get(COOKIE_NAME)?.value;
 
-        if (!token) return [];
+        const isAuthDisabled = process.env.NEXT_PUBLIC_AUTH_DISABLED === "true";
 
-        const payload = decodeJwtPayload(token);
-        const userId = payload?.id || payload?.user_id || payload?.sub;
-        const role = payload?.role; 
+        if (!token && !isAuthDisabled) return [];
+
+        const payload = token ? decodeJwtPayload(token) : null;
+        let userId = payload?.id || payload?.user_id || payload?.sub;
+        let role = payload?.role;
+
+        // IDS-CHANGE: Support fallback admin identity for sidebar navigation when auth is disabled in dev/build server testing
+        if (isAuthDisabled && !payload) {
+            userId = 1;
+            role = "ADMIN";
+        }
 
         if (!userId) return [];
 

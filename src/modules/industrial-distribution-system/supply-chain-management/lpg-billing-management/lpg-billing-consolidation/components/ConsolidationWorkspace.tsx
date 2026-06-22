@@ -542,10 +542,10 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
                     </Button>
                   </div>
 
-                  {/* Detail Panel Content: Split Layout */}
-                  <div className="flex-1 flex min-h-0 overflow-hidden">
+                  {/* Detail Panel Content: Split Layout (responsive stacking below lg to prevent data clumping) */}
+                  <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-y-auto lg:overflow-hidden">
                     {/* Left Side: Scrollable adjustment panels */}
-                    <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
+                    <div className="flex-1 p-5 space-y-4 custom-scrollbar lg:overflow-y-auto">
                       {/* Meter Reading Panel */}
                       {!!activeTx.meter_reading && (
                         <MeterReadingReviewPanel
@@ -580,7 +580,7 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
 
                     {/* Right Side: Static WIWO Billing Summary Card */}
                     {(!!activeTx.meter_reading || !!activeTx.wiwo_header) && (
-                      <div className="w-[340px] border-l border-border bg-zinc-50/10 dark:bg-zinc-950/5 p-4 overflow-y-auto shrink-0 custom-scrollbar flex flex-col justify-start">
+                      <div className="w-full lg:w-[340px] border-t lg:border-t-0 lg:border-l border-border bg-zinc-50/10 dark:bg-zinc-950/5 p-4 shrink-0 lg:overflow-y-auto custom-scrollbar flex flex-col justify-start">
                         <div className="bg-gradient-to-br from-violet-600 via-purple-700 to-indigo-800 rounded-2xl p-4 sm:p-5 text-white shadow-xl space-y-4 w-full">
                           <div className="flex items-center gap-2 mb-1">
                             <div className="h-8 w-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">

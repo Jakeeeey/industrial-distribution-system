@@ -54,6 +54,8 @@ const HEADER_FIELDS = [
   "customer_site_id.id",
   "customer_site_id.site_name",
   "customer_site_id.site_address",
+  // DEV-CHANGE: Pull site billing_mode for filtering/sorting
+  "customer_site_id.billing_mode",
 ].join(",");
 
 /** Fields to pull for child transactions under a header */
@@ -125,6 +127,8 @@ function mapHeader(raw: Record<string, unknown>): ConsolidationHeader {
           id: Number(siteObj["id"]),
           site_name: siteObj["site_name"] ? String(siteObj["site_name"]) : null,
           site_address: siteObj["site_address"] ? String(siteObj["site_address"]) : null,
+          // DEV-CHANGE: Map site billing_mode property
+          billing_mode: siteObj["billing_mode"] ? (String(siteObj["billing_mode"]) as "BOTH" | "KILO" | "METERED") : null,
         }
       : undefined,
   };
@@ -219,11 +223,21 @@ export async function repoFetchHeaders(params: ConsolidationHeaderListParams): P
     filterList.push({ status: { _neq: "CANCELLED" } });
   }
 
+  // DEV-CHANGE: Filter by site billing mode if specified
+  if (params.billing_mode && params.billing_mode !== "ALL") {
+    filterList.push({
+      customer_site_id: {
+        billing_mode: { _eq: params.billing_mode },
+      },
+    });
+  }
+
   if (params.search) {
     filterList.push({
       _or: [
         { header_no: { _icontains: params.search } },
         { customer_id: { _icontains: params.search } },
+        { customer_site_id: { site_name: { _icontains: params.search } } },
       ],
     });
   }
@@ -232,9 +246,26 @@ export async function repoFetchHeaders(params: ConsolidationHeaderListParams): P
     ? encodeURIComponent(JSON.stringify(filterList.length === 1 ? filterList[0] : { _and: filterList }))
     : "";
 
+  // DEV-CHANGE: Dynamic sorting based on parameter
+  let sortParam = "-created_at";
+  if (params.sortField) {
+    const dirSign = params.sortDir === "desc" ? "-" : "";
+    if (params.sortField === "period_from") {
+      sortParam = `${dirSign}period_from`;
+    } else if (params.sortField === "site") {
+      sortParam = `${dirSign}customer_site_id.site_name`;
+    } else if (params.sortField === "customer") {
+      sortParam = `${dirSign}customer_id`;
+    } else if (params.sortField === "status") {
+      sortParam = `${dirSign}status`;
+    } else if (params.sortField === "billing_mode") {
+      sortParam = `${dirSign}customer_site_id.billing_mode`;
+    }
+  }
+
   const qs = [
     `fields=${HEADER_FIELDS}`,
-    `sort=-created_at`,
+    `sort=${sortParam}`,
     `limit=${limit}`,
     `offset=${offset}`,
     `meta=total_count`,
