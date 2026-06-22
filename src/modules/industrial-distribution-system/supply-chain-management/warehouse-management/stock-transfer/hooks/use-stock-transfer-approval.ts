@@ -64,7 +64,7 @@ export function useStockTransferApproval() {
             current: '0'
           });
 
-          const proxyUrl = `/api/ids/scm/warehouse-management/stock-transfer/inventory-proxy?${params.toString()}`;
+          const proxyUrl = `/api/ids/scm/warehouse-management/inventory-proxy?${params.toString()}`;
 
           const res = await fetch(proxyUrl);
           if (res.ok) {
