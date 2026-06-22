@@ -4,6 +4,7 @@
 // All recompute logic lives in billing-consolidation.service.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Updated import path from stock-adjustment to stock-adjustment-serial-posting
 import {
   directusFetch,
   getDirectusBase,
@@ -142,6 +143,7 @@ async function hydrateCustomerNamesForHeaders(headers: ConsolidationHeader[]): P
     const custRes = await directusFetch<{ data: { customer_code: string; customer_name: string; store_name?: string | null }[] }>(
       `${DIRECTUS_URL}/items/customer?fields=customer_code,customer_name,store_name&filter=${encodeURIComponent(JSON.stringify(filterObj))}`
     );
+    // Added concrete type annotation to customer record parameter c to resolve ESLint no-explicit-any error
     customerMap = Object.fromEntries(
       (custRes.data ?? []).map((c: { customer_code: string; customer_name: string; store_name?: string | null }) => [
         c.customer_code,
@@ -380,6 +382,7 @@ export async function repoFetchWiwoWithDetails(wiwoHeaderId: number): Promise<Co
   if (!headerRes.data) return null;
   const h = headerRes.data;
 
+  // Added Record<string, unknown> type annotation to closure parameter d to resolve ESLint no-explicit-any error
   const details: ConsolidationWiwoDetail[] = (detailRes.data ?? []).map((d: Record<string, unknown>) => {
     const productObj =
       d["product_id"] && typeof d["product_id"] === "object"
@@ -500,6 +503,7 @@ export async function repoFetchAttachments(transactionId: number): Promise<Conso
   const res = await directusFetch<{ data: Record<string, unknown>[] }>(
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments?filter[transaction_id][_eq]=${transactionId}&limit=-1`
   );
+  // Added Record<string, unknown> type annotation to closure parameter a to resolve ESLint no-explicit-any error
   return (res.data ?? []).map((a: Record<string, unknown>) => ({
     id: Number(a["id"]),
     transaction_id: Number(a["transaction_id"]),
@@ -526,6 +530,7 @@ export async function repoFetchAuditTrail(transactionId: number): Promise<Consol
   const userIds = Array.from(
     new Set(
       rawEntries
+        // Added Record<string, unknown> and number | null type annotations to closure parameters to resolve ESLint no-explicit-any errors
         .map((a: Record<string, unknown>) => (a["modified_by"] ? Number(a["modified_by"]) : null))
         .filter((id: number | null): id is number => id !== null && !isNaN(id) && id > 0)
     )
@@ -552,6 +557,7 @@ export async function repoFetchAuditTrail(transactionId: number): Promise<Consol
     }
   }
 
+  // Added Record<string, unknown> type annotation to closure parameter a to resolve ESLint no-explicit-any error
   return rawEntries.map((a: Record<string, unknown>) => {
     const modifiedBy = a["modified_by"] ? Number(a["modified_by"]) : null;
     return {
@@ -713,6 +719,7 @@ export async function repoFetchOnboardingAttachmentsForCylinders(
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments?filter=${filter}&limit=-1`
   );
 
+  // Added Record<string, unknown> type annotation to closure parameter a to resolve ESLint no-explicit-any error
   return (res.data ?? []).map((a: Record<string, unknown>) => ({
     id: Number(a["id"]),
     transaction_id: Number(a["transaction_id"]),

@@ -146,7 +146,8 @@ export const StockAdjustmentFormSchema = z.object({
   isPosted: z.boolean(),
   postedAt: z.string().optional(),
   posted_by: z.any().optional(),
-  stock_adjustment_attachment: z.array(StockAdjustmentAttachmentSchema).min(1, "At least one attachment is required"),
+  // Added comments per dev-rule.md: Made optional because the form does not have an attachment field in its UI
+  stock_adjustment_attachment: z.array(StockAdjustmentAttachmentSchema).optional(),
 }).refine(
   (data) => {
     if (data.type === "IN") {

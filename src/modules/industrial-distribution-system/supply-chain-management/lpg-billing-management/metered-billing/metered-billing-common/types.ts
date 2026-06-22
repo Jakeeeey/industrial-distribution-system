@@ -167,6 +167,7 @@ export interface MeteredWiwoTransaction {
     default_pressure_line?: number | null;
     default_psi?: number | null;
     default_atmospheric_pressure?: number | null;
+    billing_mode?: string | null;
   };
   meter_reading?: MeterReading;
   wiwo_header?: WiwoHeaderRef;
