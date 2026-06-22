@@ -7,7 +7,7 @@ import {
   type UpdateSalesReturnPayload
 } from "../types/sales-return.schema";
 import type { API_SalesReturnType } from "../types/sales-return.types";
-import { formatDateForAPI, cleanId, getManilaTimestamp } from "./sales-return.helpers";
+import { cleanId, getManilaTimestamp } from "./sales-return.helpers";
 import * as transactionRepo from "./sales-return-transaction.repo";
 import * as lookupRepo from "./sales-return-lookup.repo";
 import { fetchReturnDetails } from "./sales-return-query.service";
