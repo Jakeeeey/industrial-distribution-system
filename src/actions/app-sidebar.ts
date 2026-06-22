@@ -31,7 +31,7 @@ const SpringModuleSchema = z.object({
     basePath: z.string().nullable().optional(),
     parentModuleId: z.number().nullable().optional(),
     sort: z.number().nullable().optional(),
-    status: z.string().optional().default("active"), 
+    status: z.string().optional().default("active"),
     subsystemSlug: z.string(),
 });
 
@@ -57,19 +57,11 @@ export async function getSidebarNavigation(subsystemSlug: string): Promise<NavIt
         const cookieStore = await cookies();
         const token = cookieStore.get(COOKIE_NAME)?.value;
 
-        const isAuthDisabled = process.env.NEXT_PUBLIC_AUTH_DISABLED === "true";
+        if (!token) return [];
 
-        if (!token && !isAuthDisabled) return [];
-
-        const payload = token ? decodeJwtPayload(token) : null;
-        let userId = payload?.id || payload?.user_id || payload?.sub;
-        let role = payload?.role;
-
-        // IDS-CHANGE: Support fallback admin identity for sidebar navigation when auth is disabled in dev/build server testing
-        if (isAuthDisabled && !payload) {
-            userId = 1;
-            role = "ADMIN";
-        }
+        const payload = decodeJwtPayload(token);
+        const userId = payload?.id || payload?.user_id || payload?.sub;
+        const role = payload?.role;
 
         if (!userId) return [];
 
@@ -77,20 +69,20 @@ export async function getSidebarNavigation(subsystemSlug: string): Promise<NavIt
 
         if (role === "ADMIN") {
             const directusBase = process.env.NEXT_PUBLIC_API_BASE_URL;
-            const filter = encodeURIComponent(JSON.stringify({ 
-                subsystem_id: { slug: { _eq: subsystemSlug } } 
+            const filter = encodeURIComponent(JSON.stringify({
+                subsystem_id: { slug: { _eq: subsystemSlug } }
             }));
             const url = `${directusBase?.replace(/\/+$/, "")}/items/modules?filter=${filter}&sort=sort&limit=-1`;
-            
+
             const res = await fetch(url, {
                 headers: { "Authorization": `Bearer ${process.env.DIRECTUS_STATIC_TOKEN}` },
-                next: { revalidate: 0 } 
+                next: { revalidate: 0 }
             });
 
             if (res.ok) {
                 const jsonResponse = await res.json();
                 const validatedData = z.array(DirectusModuleSchema).parse(jsonResponse.data || []);
-                
+
                 modulesToProcess = validatedData.map((m: DirectusModule) => ({
                     moduleId: m.id,
                     title: m.title,
@@ -108,21 +100,21 @@ export async function getSidebarNavigation(subsystemSlug: string): Promise<NavIt
         } else {
             const springBase = process.env.SPRING_API_BASE_URL;
             if (!springBase) return [];
-            
+
             const url = `${springBase.replace(/\/+$/, "")}/api/view-user-authorized-module/all?subsystem_slug=${subsystemSlug}`;
-            
+
             const res = await fetch(url, {
                 headers: {
                     "Authorization": `Bearer ${token}`,
                     "Content-Type": "application/json"
                 },
-                next: { revalidate: 0 } 
+                next: { revalidate: 0 }
             });
 
             if (res.ok) {
                 const jsonResponse = await res.json();
                 const validatedData = z.array(SpringModuleSchema).parse(jsonResponse || []);
-                
+
                 modulesToProcess = validatedData
                     .filter((m: SpringModule) => m.userId === Number(userId) && m.subsystemSlug === subsystemSlug)
                     .map((m: SpringModule) => ({
@@ -166,7 +158,7 @@ export async function getSidebarNavigation(subsystemSlug: string): Promise<NavIt
                     url: item.url,
                     slug: item.slug,
                     status: item.status,
-                    iconName: item.iconName ?? "Folder", 
+                    iconName: item.iconName ?? "Folder",
                     items: item.items && item.items.length > 0 ? sortTree(item.items) : undefined
                 }));
         };
