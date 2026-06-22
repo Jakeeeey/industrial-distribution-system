@@ -44,6 +44,15 @@ export async function fetchReturns(
 ): Promise<{ data: SalesReturn[]; total: number }> {
   const result = await queryRepo.getRawReturns(page, limit, filters);
 
+  const formatManilaDate = (dateStr: string | null | undefined): string => {
+    if (!dateStr) return "-";
+    try {
+      return new Date(dateStr).toLocaleDateString("en-PH", { timeZone: "Asia/Manila" });
+    } catch {
+      return "-";
+    }
+  };
+
   const mappedData: SalesReturn[] = (result.data || []).map((item: any) => ({
     id: item.return_id,
     returnNo: item.return_number,
@@ -51,7 +60,7 @@ export async function fetchReturns(
     customerCode: item.customer_code,
     salesmanId: item.salesman_id,
     returnDate: item.return_date
-      ? new Date(item.return_date).toLocaleDateString()
+      ? formatManilaDate(item.return_date)
       : "N/A",
     totalAmount: parseFloat(item.total_amount) || 0,
     status: item.status || "Pending",
@@ -59,12 +68,8 @@ export async function fetchReturns(
     orderNo: item.order_id || "",
     isThirdParty: parseBoolean(item.isThirdParty),
     priceType: item.price_type || "-",
-    createdAt: item.created_at
-      ? new Date(item.created_at).toLocaleDateString()
-      : "-",
-    receivedAt: item.received_at
-      ? new Date(item.received_at).toLocaleDateString()
-      : "-",
+    createdAt: formatManilaDate(item.created_at),
+    receivedAt: formatManilaDate(item.received_at),
   }));
 
   return { data: mappedData, total: result.meta?.filter_count || 0 };

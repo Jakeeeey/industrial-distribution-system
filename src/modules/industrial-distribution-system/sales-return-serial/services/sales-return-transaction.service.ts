@@ -70,9 +70,8 @@ export async function submitReturn(rawPayload: any, userId: number): Promise<any
   const totalNet = Math.round((totalGross - totalDiscount) * 100) / 100;
   const phNow = getManilaTimestamp();
 
-  // We rely on current date if not provided in payload (CreateSalesReturnSchema doesn't have returnDate currently)
-  // Or we can just use new Date() if returnDate is removed from payload. Assuming new Date() for now.
-  const formattedDate = formatDateForAPI(new Date());
+  // Derive the return date from the Manila timestamp to avoid UTC day-boundary shift.
+  const formattedDate = phNow.split(" ")[0];
   const uniqueSuffix = Math.floor(1000 + Math.random() * 9000);
   const shortTimestamp = Math.floor(Date.now() / 1000).toString().slice(-4);
   const generatedReturnNo = `SR-${shortTimestamp}-${uniqueSuffix}`;

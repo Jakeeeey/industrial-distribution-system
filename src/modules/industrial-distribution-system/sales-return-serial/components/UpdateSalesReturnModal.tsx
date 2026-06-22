@@ -564,7 +564,8 @@ export function UpdateSalesReturnModal({
         appliedInvoiceId: appliedInvoiceId,
         isThirdParty: headerData.isThirdParty,
       });
-      const now = new Date().toISOString();
+      // Use Manila timezone to match the convention of created_at/updated_at
+      const now = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Manila" });
       await SalesReturnProvider.updateStatus(headerData.id, "Received", true, now);
       toast.success("Return Received", { description: "Sales return has been successfully received and posted to inventory." });
       onSuccess();
