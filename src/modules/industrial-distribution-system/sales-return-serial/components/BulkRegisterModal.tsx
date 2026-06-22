@@ -71,6 +71,9 @@ export function BulkRegisterModal({
           tare: "",
         }))
       );
+      setBulkCondition("GOOD");
+      setBulkExpiration("");
+      setBulkTare("");
     }
   }, [open, serials]);
 

@@ -204,7 +204,7 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
 
   // --- SERIAL STATE ---
   const [isValidatingSerial, setIsValidatingSerial] = useState(false);
-  const [unregisteredSerials, setUnregisteredSerials] = useState<string[]>([]);
+  const [unregisteredSerialsMap, setUnregisteredSerialsMap] = useState<Record<string, string[]>>({});
   const [isBulkRegisterOpen, setIsBulkRegisterOpen] = useState(false);
 
   // --- 3. CART STATE ---
@@ -372,7 +372,7 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
     // 1. Session Check (Global within Modal)
     const isGlobalSessionDuplicate = items.some((item) => 
       item.serialNumbers?.some(sn => (typeof sn === "string" ? sn.toUpperCase() : sn.serialNumber.toUpperCase()) === serial)
-    ) || unregisteredSerials.some(sn => sn.toUpperCase() === serial);
+    ) || Object.values(unregisteredSerialsMap).some(serials => serials.some(sn => sn.toUpperCase() === serial));
     if (isGlobalSessionDuplicate) {
       toast.error("Duplicate Serial", { description: `Serial "${serial}" is already added to this return session.` });
       return;
@@ -399,10 +399,17 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
       }
 
       if (result && result.isUnregistered) {
-        setUnregisteredSerials((prev) => {
-          if (prev.includes(serial)) return prev;
-          return [...prev, serial];
-        });
+        const rowTempId = selectedRow.tempId;
+        if (rowTempId) {
+          setUnregisteredSerialsMap((prev) => {
+            const currentSerials = prev[rowTempId] || [];
+            if (currentSerials.includes(serial)) return prev;
+            return {
+              ...prev,
+              [rowTempId]: [...currentSerials, serial],
+            };
+          });
+        }
         toast.info(`Serial ${serial} is unregistered. Please register it.`);
         return;
       }
@@ -495,6 +502,12 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
         }
       };
       loadData();
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      resetForm();
     }
   }, [isOpen]);
 
@@ -620,6 +633,12 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
     setRemarks("");
     setOrderNo("");
     setInvoiceOptions([]);
+    setUnregisteredSerialsMap({});
+    setSelectedRowIndex(null);
+    setProductSearch("");
+    setSerialSearch("");
+    setInvoiceSearch("");
+    setOrderSearch("");
   };
 
   const handleClose = () => {
@@ -826,6 +845,10 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
   const totalGross = Math.round(items.reduce((sum, i) => sum + (i.grossAmount || 0), 0) * 100) / 100;
   const totalDiscount = Math.round(items.reduce((sum, i) => sum + (i.discountAmount || 0), 0) * 100) / 100;
   const totalNet = Math.round(items.reduce((sum, i) => sum + i.totalAmount, 0) * 100) / 100;
+
+  const currentUnregisteredSerials = (selectedRowIndex !== null && items[selectedRowIndex])
+    ? (unregisteredSerialsMap[items[selectedRowIndex].tempId] || [])
+    : [];
 
   if (!isOpen) return null;
 
@@ -1110,19 +1133,30 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
             <div className="bg-background rounded-lg border-2 border-primary/20 shadow-md p-5 mb-6 animate-in slide-in-from-bottom-4 duration-300">
               
               {/* Unregistered Serials Alert Banner */}
-              {unregisteredSerials.length > 0 && (
+              {currentUnregisteredSerials.length > 0 && (
                 <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-5">
                   <div className="flex items-start gap-3">
                     <div className="p-2 bg-amber-500 rounded-lg text-white font-bold text-xs shrink-0">
                       ⚠️
                     </div>
                     <div>
-                      <h5 className="font-bold text-sm text-amber-900 dark:text-amber-400">{unregisteredSerials.length} UNREGISTERED SERIALS</h5>
+                      <h5 className="font-bold text-sm text-amber-900 dark:text-amber-400">{currentUnregisteredSerials.length} UNREGISTERED SERIALS</h5>
                       <div className="flex flex-wrap gap-1 mt-1.5">
-                        {unregisteredSerials.map(sn => (
+                        {currentUnregisteredSerials.map(sn => (
                           <Badge key={sn} variant="outline" className="bg-amber-100/80 border-amber-300 text-amber-800 flex items-center gap-1 py-0.5 px-2 font-mono text-[10px]">
                             {sn}
-                            <X className="h-3 w-3 cursor-pointer text-amber-600 hover:text-amber-900" onClick={() => setUnregisteredSerials(prev => prev.filter(s => s !== sn))} />
+                            <X className="h-3 w-3 cursor-pointer text-amber-600 hover:text-amber-900" onClick={() => {
+                              const rowTempId = items[selectedRowIndex]?.tempId;
+                              if (rowTempId) {
+                                setUnregisteredSerialsMap(prev => {
+                                  const currentSerials = prev[rowTempId] || [];
+                                  return {
+                                    ...prev,
+                                    [rowTempId]: currentSerials.filter(s => s !== sn)
+                                  };
+                                });
+                              }
+                            }} />
                           </Badge>
                         ))}
                       </div>
@@ -1276,7 +1310,7 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
       <BulkRegisterModal
         open={isBulkRegisterOpen}
         onOpenChange={setIsBulkRegisterOpen}
-        serials={unregisteredSerials}
+        serials={currentUnregisteredSerials}
         productId={selectedRowIndex !== null ? Number(items[selectedRowIndex]?.productId || items[selectedRowIndex]?.product_id || 0) : 0}
         branchId={Number(currentBranchId || lockedBranchId || 0)}
         onSuccess={(registeredSerials) => {
@@ -1308,7 +1342,14 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
             };
             return next;
           });
-          setUnregisteredSerials([]);
+          const rowTempId = selectedRowIndex !== null ? items[selectedRowIndex]?.tempId : null;
+          if (rowTempId) {
+            setUnregisteredSerialsMap((prev) => {
+              const nextMap = { ...prev };
+              delete nextMap[rowTempId];
+              return nextMap;
+            });
+          }
           toast.success("All cylinders registered and added to list");
         }}
       />
