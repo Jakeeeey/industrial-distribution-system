@@ -55,6 +55,8 @@ export interface ConsolidationHeader {
     id: number;
     site_name: string | null;
     site_address: string | null;
+    // DEV-CHANGE: Added billing_mode field to site relation for sorting/filtering
+    billing_mode?: "BOTH" | "KILO" | "METERED" | null;
   };
   /** Computed from child transactions by the service layer */
   total_metered_kg?: number;
@@ -240,6 +242,10 @@ export interface ConsolidationAuditEntry {
 export interface ConsolidationHeaderListParams {
   search?: string;
   status?: HeaderStatus | "ALL";
+  // DEV-CHANGE: Added filter and sort properties to mirror wiwo billing creation parameters
+  billing_mode?: "ALL" | "BOTH" | "KILO";
+  sortField?: "period_from" | "site" | "customer" | "status" | "billing_mode";
+  sortDir?: "asc" | "desc";
   page?: number;
   limit?: number;
 }
