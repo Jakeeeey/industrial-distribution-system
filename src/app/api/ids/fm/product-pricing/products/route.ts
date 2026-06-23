@@ -37,6 +37,7 @@ type ProductRow = {
     priceD?: number | string | null;
     priceE?: number | string | null;
     __group_id?: number | null;
+    is_serialized?: number | string | boolean | null;
 };
 
 type SupplierRow = {
@@ -265,8 +266,9 @@ function applyCommonFilters(args: {
     activeOnly: boolean;
     missingTier: boolean;
     productIdsIn?: number[];
+    isSerialized?: number | null;
 }) {
-    const { params, q, categoryIds, brandIds, unitIds, activeOnly, missingTier, productIdsIn } = args;
+    const { params, q, categoryIds, brandIds, unitIds, activeOnly, missingTier, productIdsIn, isSerialized } = args;
 
     let andIdx = 0;
     const addAnd = (suffix: string, value: string) => {
@@ -275,6 +277,10 @@ function applyCommonFilters(args: {
     };
 
     if (activeOnly) addAnd("[isActive][_eq]", "1");
+
+    if (isSerialized !== undefined && isSerialized !== null) {
+        addAnd("[is_serialized][_eq]", String(isSerialized));
+    }
 
     if (categoryIds.length > 0) addAnd("[product_category][_in]", categoryIds.join(","));
     if (brandIds.length > 0) addAnd("[product_brand][_in]", brandIds.join(","));
@@ -352,6 +358,8 @@ export async function GET(req: NextRequest) {
 
         const activeOnly = norm(searchParams.get("active_only") || "1") === "1";
         const missingTier = norm(searchParams.get("missing_tier") || "0") === "1";
+        const isSerializedParam = searchParams.get("is_serialized");
+        const isSerialized = isSerializedParam !== null && isSerializedParam !== "" ? Number(isSerializedParam) : null;
 
         const page = Math.max(1, toInt(searchParams.get("page"), 1));
         const groupPageSize = Math.min(200, Math.max(10, toInt(searchParams.get("page_size"), 50)));
@@ -373,6 +381,7 @@ export async function GET(req: NextRequest) {
             "priceD",
             "priceE",
             "cost_per_unit",
+            "is_serialized",
         ].join(",");
 
         let supplierProductIds: number[] | null = null;
@@ -421,7 +430,7 @@ export async function GET(req: NextRequest) {
                 params.set("fields", fields);
                 params.set("sort", "product_name");
 
-                applyCommonFilters({ params, q, categoryIds, brandIds, unitIds, activeOnly, missingTier });
+                applyCommonFilters({ params, q, categoryIds, brandIds, unitIds, activeOnly, missingTier, isSerialized });
 
                 const directusUrl = `${DIRECTUS_URL}/items/${PRODUCTS}?${params.toString()}`;
                 const { ok, status, text } = await fetchDirectusRaw(directusUrl);
@@ -459,6 +468,7 @@ export async function GET(req: NextRequest) {
                         activeOnly,
                         missingTier,
                         productIdsIn: ids,
+                        isSerialized,
                     });
 
                     const directusUrl = `${DIRECTUS_URL}/items/${PRODUCTS}?${params.toString()}`;
