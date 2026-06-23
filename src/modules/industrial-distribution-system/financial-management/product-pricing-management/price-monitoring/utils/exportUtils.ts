@@ -5,6 +5,7 @@
 
 import * as XLSX from "xlsx";
 import type { ViewPriceMonitoringRow } from "../types";
+import { mapPriceTypeName } from "../../product-pricing/utils/constants";
 
 // ---------------------------------------------------------------------------
 // CSV column definition
@@ -30,7 +31,7 @@ const CSV_COLUMNS: CsvColumn[] = [
   { header: "Product Code",       getValue: (r) => r.productCode },
   { header: "Product Name",       getValue: (r) => r.productName },
   { header: "Price Type ID",      getValue: (r) => r.priceTypeId },
-  { header: "Price Type Name",    getValue: (r) => r.priceTypeName },
+  { header: "Price Type Name",    getValue: (r) => mapPriceTypeName(r.priceTypeName) },
   { header: "Price Type Sort",    getValue: (r) => r.priceTypeSort },
   { header: "Request Status",     getValue: (r) => r.requestStatus },
   { header: "Old Price",          getValue: (r) => r.oldPrice },
@@ -161,7 +162,7 @@ export function exportToExcel(
       formattedDate,
       r.supplierShortcut ?? (r.supplierId !== null && r.supplierId !== undefined && String(r.supplierId) !== "null" && String(r.supplierId) !== "" ? `Supplier #${r.supplierId}` : "Unspecified Supplier"),
       r.supplierName ?? "Unmapped Supplier",
-      r.priceTypeName ?? "—",
+      mapPriceTypeName(r.priceTypeName) || "—",
       r.oldPrice !== null ? r.oldPrice : "—",
       r.newPrice !== null ? r.newPrice : "—",
       r.priceDifference !== null ? r.priceDifference : "—",

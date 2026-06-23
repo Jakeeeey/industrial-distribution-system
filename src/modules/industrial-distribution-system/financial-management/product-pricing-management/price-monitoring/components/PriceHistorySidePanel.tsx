@@ -19,6 +19,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import type { ViewPriceMonitoringRow, PriceTypeGroup } from "../types";
 import { formatCurrency, getPriceTypeColor } from "../utils/matrixUtils";
+import { mapPriceTypeName } from "../../product-pricing/utils/constants";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -324,7 +325,7 @@ export function PriceHistorySidePanel({
                         style={{ backgroundColor: color }}
                       />
                       <span className="text-xs text-muted-foreground">
-                        {group.priceTypeName}
+                        {mapPriceTypeName(group.priceTypeName)}
                       </span>
                     </div>
                     <span
