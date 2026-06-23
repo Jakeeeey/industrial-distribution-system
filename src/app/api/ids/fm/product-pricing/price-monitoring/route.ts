@@ -346,7 +346,7 @@ export async function GET(req: NextRequest) {
     pcrUrl.searchParams.set("filter[status][_eq]", "APPROVED");
     pcrUrl.searchParams.set(
       "fields",
-      "request_id,product_id,product_id.product_id,product_id.product_code,product_id.product_name,price_type_id,price_type_id.price_type_id,price_type_id.price_type_name,price_type_id.sort,price_type_id.order,proposed_price,status,requested_by,requested_at,approved_by,approved_at,rejected_by,rejected_at,reject_reason",
+      "request_id,product_id,product_id.product_id,product_id.product_code,product_id.product_name,price_type_id,price_type_id.price_type_id,price_type_id.price_type_name,price_type_id.sort,proposed_price,status,requested_by,requested_at,approved_by,approved_at,rejected_by,rejected_at,reject_reason",
     );
     pcrUrl.searchParams.set("limit", "-1");
     pcrUrl.searchParams.set("sort", "approved_at,request_id");
@@ -457,7 +457,7 @@ export async function GET(req: NextRequest) {
           : null;
       const ptSort =
         typeof r.price_type_id === "object" && r.price_type_id
-          ? Number(r.price_type_id.sort ?? r.price_type_id.order ?? 0)
+          ? Number(r.price_type_id.sort ?? 0)
           : 0;
 
       const live = pptMap.get(ptId);
