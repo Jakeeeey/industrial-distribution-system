@@ -430,6 +430,13 @@ export function UpdateSalesReturnModal({
   const handleDeleteRow = (index: number) => setDetails((prev) => prev.filter((_, i) => i !== index));
 
   const handleUpdateClick = () => {
+    if (unregisteredSerials.length > 0) {
+      toast.error("Submission Blocked", {
+        description: "You cannot update or receive this sales return because one or more products contain unregistered serial numbers. Please complete registration before proceeding.",
+        duration: 8000,
+      });
+      return;
+    }
     if (!headerData.orderNo?.trim()) {
       orderWrapperRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       toast.error("Order No. is required");
@@ -619,6 +626,20 @@ export function UpdateSalesReturnModal({
         </div>
 
         <div className="flex-1 overflow-y-auto p-8 space-y-8 bg-muted/50">
+          {unregisteredSerials.length > 0 && (
+            <div className="bg-destructive/10 border border-destructive/20 text-destructive rounded-xl p-4 flex items-start gap-3 shadow-sm animate-in fade-in slide-in-from-top-4 duration-300">
+              <div className="p-2 bg-destructive text-white rounded-lg font-bold text-xs shrink-0">
+                ⚠️
+              </div>
+              <div>
+                <h5 className="font-bold text-sm">Submission Blocked</h5>
+                <p className="text-xs text-muted-foreground mt-1">
+                  You cannot update or receive this sales return because one or more products contain unregistered serial numbers. Please complete registration before proceeding.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-5 gap-y-4 bg-background p-5 rounded-xl border border-border shadow-sm relative">
             <div className="absolute top-0 left-0 w-1 h-full bg-primary rounded-l-xl"></div>
             <ReadOnlyField label="Salesman" value={salesmenOptions.find(s => String(s.value) === String(headerData.salesmanId))?.label} isLoading={loading} />
@@ -960,7 +981,16 @@ export function UpdateSalesReturnModal({
         <div className="border-t border-border p-5 bg-background flex justify-end gap-3 shrink-0">
           <Button variant="outline" onClick={handlePrintInNewTab}><Printer className="h-4 w-4 mr-2" /> Print Slip</Button>
           <Button variant="outline" onClick={onClose}>Close</Button>
-          <Button onClick={() => setIsReceiveConfirmOpen(true)} disabled={!isPending}>Receive</Button>
+          <Button onClick={() => {
+            if (unregisteredSerials.length > 0) {
+              toast.error("Submission Blocked", {
+                description: "You cannot update or receive this sales return because one or more products contain unregistered serial numbers. Please complete registration before proceeding.",
+                duration: 8000,
+              });
+              return;
+            }
+            setIsReceiveConfirmOpen(true);
+          }} disabled={!isPending}>Receive</Button>
           <Button className="bg-primary hover:bg-primary text-white min-w-40 flex items-center gap-2" onClick={handleUpdateClick} disabled={!canEditLimited || isUpdating}>
             {isUpdating ? <><Loader2 className="h-4 w-4 animate-spin" /> Submitting...</> : "Update Sales Return"}
           </Button>

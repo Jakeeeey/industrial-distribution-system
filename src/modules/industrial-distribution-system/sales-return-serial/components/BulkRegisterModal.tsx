@@ -34,6 +34,7 @@ interface BulkRegisterModalProps {
     tareWeight: number;
     expirationDate: string;
     cylinderCondition: string;
+    remarks: string;
   }>) => void;
 }
 
@@ -42,6 +43,7 @@ interface RegisterData {
   condition: string;
   expiration: string;
   tare: string;
+  remarks: string;
 }
 
 export function BulkRegisterModal({
@@ -60,6 +62,7 @@ export function BulkRegisterModal({
   const [bulkCondition, setBulkCondition] = useState("GOOD");
   const [bulkExpiration, setBulkExpiration] = useState("");
   const [bulkTare, setBulkTare] = useState("");
+  const [bulkRemarks, setBulkRemarks] = useState("");
 
   useEffect(() => {
     if (open) {
@@ -69,21 +72,24 @@ export function BulkRegisterModal({
           condition: "GOOD",
           expiration: "",
           tare: "",
+          remarks: "",
         }))
       );
       setBulkCondition("GOOD");
       setBulkExpiration("");
       setBulkTare("");
+      setBulkRemarks("");
     }
   }, [open, serials]);
 
-  const applyBulk = (type: "condition" | "expiration" | "tare") => {
+  const applyBulk = (type: "condition" | "expiration" | "tare" | "remarks") => {
     setData((prev) =>
       prev.map((item) => ({
         ...item,
         ...(type === "condition" && { condition: bulkCondition }),
         ...(type === "expiration" && { expiration: bulkExpiration }),
         ...(type === "tare" && { tare: bulkTare }),
+        ...(type === "remarks" && { remarks: bulkRemarks }),
       }))
     );
     toast.success(`Applied bulk ${type} to all rows`);
@@ -120,6 +126,7 @@ export function BulkRegisterModal({
         current_branch_id: parsedBranchId,
         expiration_date: item.expiration || null,
         tare_weight: item.tare ? parseFloat(item.tare) : 0.00,
+        remarks: item.remarks || null,
       }));
 
       // Call the SalesReturnProvider's registerAssets method
@@ -134,6 +141,7 @@ export function BulkRegisterModal({
           tareWeight: item.tare ? parseFloat(item.tare) : 0.00,
           expirationDate: item.expiration || "",
           cylinderCondition: item.condition,
+          remarks: item.remarks || "",
         }))
       );
       setIsConfirmOpen(false);
@@ -214,26 +222,41 @@ export function BulkRegisterModal({
                 className="h-10 bg-background"
               />
             </div>
+
+            <div className="flex-1 space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Bulk Remarks</Label>
+                <button onClick={() => applyBulk("remarks")} className="text-[10px] font-bold text-primary hover:underline">Apply to All</button>
+              </div>
+              <Input
+                type="text"
+                value={bulkRemarks}
+                onChange={(e) => setBulkRemarks(e.target.value)}
+                placeholder="Remarks..."
+                className="h-10 bg-background"
+              />
+            </div>
           </div>
 
           {/* Table Header */}
-          <div className="flex items-center gap-4 px-6 py-2 bg-slate-100 dark:bg-slate-800/50 rounded-lg text-[10px] font-black uppercase tracking-widest text-muted-foreground border border-border/50">
-            <div className="w-[25%]">Serial Number</div>
-            <div className="w-[25%]">Cylinder Condition</div>
-            <div className="w-[25%]">Expiration Date</div>
-            <div className="w-[25%]">Tare Weight (KG)</div>
+          <div className="grid grid-cols-5 gap-4 px-6 py-2 bg-slate-100 dark:bg-slate-800/50 rounded-lg text-[10px] font-black uppercase tracking-widest text-muted-foreground border border-border/50">
+            <div>Serial Number</div>
+            <div>Cylinder Condition</div>
+            <div>Expiration Date</div>
+            <div>Tare Weight (KG)</div>
+            <div>Remarks</div>
           </div>
 
           {/* Table Body */}
           <ScrollArea className="h-[300px] pr-4">
             <div className="space-y-3">
               {data.map((item, idx) => (
-                <div key={idx} className="flex items-center gap-4 px-6 py-3 border border-border/50 rounded-xl hover:bg-muted/30 transition-colors bg-white dark:bg-slate-900/40">
-                  <div className="w-[25%]">
+                <div key={idx} className="grid grid-cols-5 gap-4 px-6 py-3 border border-border/50 rounded-xl hover:bg-muted/30 transition-colors bg-white dark:bg-slate-900/40 items-center">
+                  <div>
                     <span className="font-mono text-sm font-bold truncate text-primary block">{item.serial}</span>
                   </div>
 
-                  <div className="w-[25%]">
+                  <div>
                     <Select
                       value={item.condition}
                       onValueChange={(val) => setData(prev => prev.map((d, i) => i === idx ? { ...d, condition: val } : d))}
@@ -250,7 +273,7 @@ export function BulkRegisterModal({
                     </Select>
                   </div>
 
-                  <div className="w-[25%]">
+                  <div>
                     <Input
                       type="date"
                       value={item.expiration}
@@ -259,12 +282,22 @@ export function BulkRegisterModal({
                     />
                   </div>
 
-                  <div className="w-[25%]">
+                  <div>
                     <Input
                       type="number"
                       value={item.tare}
                       onChange={(e) => setData(prev => prev.map((d, i) => i === idx ? { ...d, tare: e.target.value } : d))}
                       placeholder="0.00"
+                      className="h-9"
+                    />
+                  </div>
+
+                  <div>
+                    <Input
+                      type="text"
+                      value={item.remarks}
+                      onChange={(e) => setData(prev => prev.map((d, i) => i === idx ? { ...d, remarks: e.target.value } : d))}
+                      placeholder="Remarks"
                       className="h-9"
                     />
                   </div>

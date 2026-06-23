@@ -433,6 +433,7 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
           cylinderCondition: "GOOD",
           tareWeight: 0,
           expirationDate: "",
+          remarks: "",
         };
 
         const newSerials = [...(row.serialNumbers || []), serialObj];
@@ -846,9 +847,8 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
   const totalDiscount = Math.round(items.reduce((sum, i) => sum + (i.discountAmount || 0), 0) * 100) / 100;
   const totalNet = Math.round(items.reduce((sum, i) => sum + i.totalAmount, 0) * 100) / 100;
 
-  const currentUnregisteredSerials = (selectedRowIndex !== null && items[selectedRowIndex])
-    ? (unregisteredSerialsMap[items[selectedRowIndex].tempId] || [])
-    : [];
+  const activeTempId = (selectedRowIndex !== null && items[selectedRowIndex]?.tempId) || "";
+  const currentUnregisteredSerials = activeTempId ? (unregisteredSerialsMap[activeTempId] || []) : [];
 
   if (!isOpen) return null;
 
@@ -1142,17 +1142,18 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
                     <div>
                       <h5 className="font-bold text-sm text-amber-900 dark:text-amber-400">{currentUnregisteredSerials.length} UNREGISTERED SERIALS</h5>
                       <div className="flex flex-wrap gap-1 mt-1.5">
-                        {currentUnregisteredSerials.map(sn => (
+                        {currentUnregisteredSerials.map((sn: string) => (
                           <Badge key={sn} variant="outline" className="bg-amber-100/80 border-amber-300 text-amber-800 flex items-center gap-1 py-0.5 px-2 font-mono text-[10px]">
                             {sn}
                             <X className="h-3 w-3 cursor-pointer text-amber-600 hover:text-amber-900" onClick={() => {
                               const rowTempId = items[selectedRowIndex]?.tempId;
                               if (rowTempId) {
+                                const key = rowTempId;
                                 setUnregisteredSerialsMap(prev => {
-                                  const currentSerials = prev[rowTempId] || [];
+                                  const currentSerials = prev[key] || [];
                                   return {
                                     ...prev,
-                                    [rowTempId]: currentSerials.filter(s => s !== sn)
+                                    [key]: currentSerials.filter(s => s !== sn)
                                   };
                                 });
                               }

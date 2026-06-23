@@ -25,6 +25,7 @@ export interface SalesReturnItem {
     tareWeight?: number | string | null;
     expirationDate?: string | null;
     cylinderCondition?: string | null;
+    remarks?: string | null;
   })[];
   // 🟢 Fields for Price Type Recalculation
   priceA?: number;
