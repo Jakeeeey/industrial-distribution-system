@@ -303,7 +303,11 @@ export async function GET(req: NextRequest) {
             );
             details = rawRes?.data || (rawRes as unknown as SupplierDetail);
           } catch {
-            details = null;
+            details = {
+              supplier_name: "",
+              supplier_shortcut: "",
+              supplier_type: "",
+            };
           }
         }
         if (details) {
