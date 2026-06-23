@@ -524,7 +524,7 @@ export function PriceTrendChart({
 
   return (
     <div className="w-full flex flex-col gap-4">
-      {/* Chart area — shorter on mobile */}
+      {/* Chart area — shorter on moGbile */}
       <div className="w-full h-[220px] sm:h-[300px]">
         <ResponsiveContainer width="100%" height="100%">
           {chartType === "bar" ? (

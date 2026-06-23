@@ -5,8 +5,7 @@
 
 import * as XLSX from "xlsx";
 import type { ViewPriceMonitoringRow } from "../types";
-import { mapPriceTypeName } from "../../product-pricing/utils/constants";
-
+import { mapPriceTypeName } from "../../product-pricing/utils/constants"
 // ---------------------------------------------------------------------------
 // CSV column definition
 // ---------------------------------------------------------------------------
@@ -18,42 +17,42 @@ interface CsvColumn {
 
 /** Ordered column list matching spec */
 const CSV_COLUMNS: CsvColumn[] = [
-  { header: "Request ID",         getValue: (r) => r.requestId },
-  { header: "Header ID",          getValue: (r) => r.headerId },
-  { header: "Reference No",       getValue: (r) => r.referenceNo },
-  { header: "Header Remarks",     getValue: (r) => r.headerRemarks },
-  { header: "Header Status",      getValue: (r) => r.headerStatus },
-  { header: "Supplier ID",        getValue: (r) => r.supplierId },
-  { header: "Supplier Name",      getValue: (r) => r.supplierName },
-  { header: "Supplier Shortcut",  getValue: (r) => r.supplierShortcut },
-  { header: "Supplier Type",      getValue: (r) => r.supplierType },
-  { header: "Product ID",         getValue: (r) => r.productId },
-  { header: "Product Code",       getValue: (r) => r.productCode },
-  { header: "Product Name",       getValue: (r) => r.productName },
-  { header: "Price Type ID",      getValue: (r) => r.priceTypeId },
-  { header: "Price Type Name",    getValue: (r) => mapPriceTypeName(r.priceTypeName) },
-  { header: "Price Type Sort",    getValue: (r) => r.priceTypeSort },
-  { header: "Request Status",     getValue: (r) => r.requestStatus },
-  { header: "Old Price",          getValue: (r) => r.oldPrice },
-  { header: "New Price",          getValue: (r) => r.newPrice },
-  { header: "Price Difference",   getValue: (r) => r.priceDifference },
-  { header: "Price Movement",     getValue: (r) => r.priceMovement },
-  { header: "Price Change %",     getValue: (r) => r.priceChangePercentage },
+  { header: "Request ID", getValue: (r) => r.requestId },
+  { header: "Header ID", getValue: (r) => r.headerId },
+  { header: "Reference No", getValue: (r) => r.referenceNo },
+  { header: "Header Remarks", getValue: (r) => r.headerRemarks },
+  { header: "Header Status", getValue: (r) => r.headerStatus },
+  { header: "Supplier ID", getValue: (r) => r.supplierId },
+  { header: "Supplier Name", getValue: (r) => r.supplierName },
+  { header: "Supplier Shortcut", getValue: (r) => r.supplierShortcut },
+  { header: "Supplier Type", getValue: (r) => r.supplierType },
+  { header: "Product ID", getValue: (r) => r.productId },
+  { header: "Product Code", getValue: (r) => r.productCode },
+  { header: "Product Name", getValue: (r) => r.productName },
+  { header: "Price Type ID", getValue: (r) => r.priceTypeId },
+  { header: "Price Type Name", getValue: (r) => mapPriceTypeName(r.priceTypeName) },
+  { header: "Price Type Sort", getValue: (r) => r.priceTypeSort },
+  { header: "Request Status", getValue: (r) => r.requestStatus },
+  { header: "Old Price", getValue: (r) => r.oldPrice },
+  { header: "New Price", getValue: (r) => r.newPrice },
+  { header: "Price Difference", getValue: (r) => r.priceDifference },
+  { header: "Price Movement", getValue: (r) => r.priceMovement },
+  { header: "Price Change %", getValue: (r) => r.priceChangePercentage },
   { header: "Current Live Price", getValue: (r) => r.currentLivePrice },
   { header: "Current Price Status", getValue: (r) => r.currentPriceStatus },
-  { header: "Requested At",       getValue: (r) => r.requestedAt },
-  { header: "Approved At",        getValue: (r) => r.approvedAt },
+  { header: "Requested At", getValue: (r) => r.requestedAt },
+  { header: "Approved At", getValue: (r) => r.approvedAt },
   { header: "Price Change Datetime", getValue: (r) => r.priceChangeDatetime },
-  { header: "Rejected At",        getValue: (r) => r.rejectedAt },
-  { header: "Reject Reason",      getValue: (r) => r.rejectReason },
+  { header: "Rejected At", getValue: (r) => r.rejectedAt },
+  { header: "Reject Reason", getValue: (r) => r.rejectReason },
   { header: "Supplier-Product Mapping ID", getValue: (r) => r.productSupplierMappingId },
   { header: "Supplier Product Validation", getValue: (r) => r.supplierProductValidation },
-  { header: "Requested By ID",    getValue: (r) => r.requestedBy },
-  { header: "Requested By",       getValue: (r) => r.requestedByName },
-  { header: "Approved By ID",     getValue: (r) => r.approvedBy },
-  { header: "Approved By",        getValue: (r) => r.approvedByName },
-  { header: "Rejected By ID",     getValue: (r) => r.rejectedBy },
-  { header: "Rejected By",        getValue: (r) => r.rejectedByName },
+  { header: "Requested By ID", getValue: (r) => r.requestedBy },
+  { header: "Requested By", getValue: (r) => r.requestedByName },
+  { header: "Approved By ID", getValue: (r) => r.approvedBy },
+  { header: "Approved By", getValue: (r) => r.approvedByName },
+  { header: "Rejected By ID", getValue: (r) => r.rejectedBy },
+  { header: "Rejected By", getValue: (r) => r.rejectedByName },
 ];
 
 // ---------------------------------------------------------------------------
@@ -105,10 +104,11 @@ export function exportToExcel(
   rows: ViewPriceMonitoringRow[],
   filename = "price-monitoring-export",
   query?: { productLabel?: string | null; supplierLabel?: string | null },
+  userName?: string,
 ): void {
   if (rows.length === 0) return;
 
-  const generatedBy = "System";
+  const generatedBy = userName || "System";
   const generatedDate = new Date().toLocaleString("en-US", {
     year: "numeric",
     month: "long",
@@ -118,15 +118,18 @@ export function exportToExcel(
   });
 
   const rowsAoA: Array<Array<unknown>> = [];
-  rowsAoA.push(["Generated By:", generatedBy]);
-  rowsAoA.push(["Generated Date:", generatedDate]);
 
   if (query) {
-    rowsAoA.push(["Filters:"]);
-    if (query.productLabel) rowsAoA.push([`Product = ${query.productLabel}`]);
-    if (query.supplierLabel) rowsAoA.push([`Supplier = ${query.supplierLabel}`]);
-    rowsAoA.push([]); // blank spacer
+    // rowsAoA.push(["Filters:"]);
+    if (query.productLabel) rowsAoA.push([`Product:`, `${query.productLabel}`]);
+    if (query.supplierLabel) rowsAoA.push([`Supplier:`, `${query.supplierLabel}`]);
+
   }
+
+  rowsAoA.push(["Generated By:", generatedBy]);
+  rowsAoA.push(["Generated Date:", generatedDate]);
+  rowsAoA.push([]); // blank spacer
+  rowsAoA.push([]); // blank spacer
 
   // Header row
   const headers = [
@@ -150,12 +153,12 @@ export function exportToExcel(
     const dt = r.priceChangeDatetime ?? r.approvedAt;
     const formattedDate = dt
       ? new Date(dt).toLocaleString("en-PH", {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        })
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
       : "—";
 
     rowsAoA.push([

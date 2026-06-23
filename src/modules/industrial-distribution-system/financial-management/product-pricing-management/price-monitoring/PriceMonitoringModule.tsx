@@ -63,7 +63,7 @@ import type { ViewPriceMonitoringRow } from "./types";
  * Architecture: thin orchestration layer — delegates all logic to hooks/utils,
  * and all UI to components. This component only wires them together.
  */
-export default function PriceMonitoringModule() {
+export default function PriceMonitoringModule({userName}: {userName?: string}) {
   // ── Supplier options (loaded once on mount for the filter bar) ─────────
   const [suppliers, setSuppliers] = React.useState<SupplierOption[]>([]);
   const serializedAndDiv1Only = true;
@@ -226,6 +226,7 @@ export default function PriceMonitoringModule() {
         productLabel: query.productLabel,
         supplierLabel: query.supplierLabel,
       },
+      userName,
     );
     toast.success(`Exported ${filteredEnrichedRows.length} record(s) to Excel.`);
   }, [
@@ -233,6 +234,7 @@ export default function PriceMonitoringModule() {
     query.productCode,
     query.productLabel,
     query.supplierLabel,
+    userName,
   ]);
 
   // ── Derived data for the selected year ──────────────────────────────────
@@ -475,7 +477,7 @@ export default function PriceMonitoringModule() {
                               title={`${g.charAt(0).toUpperCase() + g.slice(1)} View`}
                             >
                               {/* Abbreviate on very small screens */}
-                              <span className="sm:hidden">
+                              {/* <span className="sm:hidden">
                                 {g === "daily"
                                   ? "D"
                                   : g === "weekly"
@@ -483,8 +485,8 @@ export default function PriceMonitoringModule() {
                                     : g === "monthly"
                                       ? "M"
                                       : "Y"}
-                              </span>
-                              <span className="hidden sm:inline capitalize">{g}</span>
+                              </span> */}
+                              <span>{g}</span>
                             </Button>
                           ))}
                         </div>
