@@ -72,10 +72,10 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
         if (isOpen && reconciliation?.invoiceId) {
             setIsLoading(true);
             const invoiceNo = reconciliation.invoiceNo;
-            
+
             Promise.all([
                 fetchInvoiceDetails(reconciliation.invoiceId),
-                reconciliation.status === 'Fulfilled with Returns' 
+                reconciliation.status === 'Fulfilled with Returns'
                     ? import('../providers/fetchProviders').then(m => m.fetchSalesReturnsByInvoice(invoiceNo))
                     : Promise.resolve([])
             ])
@@ -86,12 +86,12 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                     setScannedQtys(reconciliation.scannedQtys || {});
                     setScannedSerials(reconciliation.scannedSerials || {});
                     setRemarks(reconciliation.remarks || '');
-                    
+
                     // Initialize selected lines if they exist in the previous data
                     const initialSelected = new Set<string | number>();
                     const currentScanned = reconciliation.scannedQtys || {};
                     const currentMissing = reconciliation.missingQtys || {};
-                    
+
                     data.lines.forEach(line => {
                         if (currentScanned[line.id] !== undefined || currentMissing[line.id] !== undefined) {
                             initialSelected.add(line.id);
@@ -236,18 +236,16 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                     </p>
 
                     <div className="space-y-3">
-                        <div 
-                            className={`p-4 rounded-xl border-2 transition-all cursor-pointer ${
-                                returnMode === 'create' 
-                                ? 'border-primary bg-primary/5' 
+                        <div
+                            className={`p-4 rounded-xl border-2 transition-all cursor-pointer ${returnMode === 'create'
+                                ? 'border-primary bg-primary/5'
                                 : 'border-border bg-background hover:border-primary/30'
-                            }`}
+                                }`}
                             onClick={() => setReturnMode('create')}
                         >
                             <div className="flex items-center gap-4">
-                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                                    returnMode === 'create' ? 'border-primary' : 'border-muted-foreground/30'
-                                }`}>
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${returnMode === 'create' ? 'border-primary' : 'border-muted-foreground/30'
+                                    }`}>
                                     {returnMode === 'create' && <div className="w-2.5 h-2.5 rounded-full bg-primary"></div>}
                                 </div>
                                 <div className="space-y-1">
@@ -259,18 +257,16 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                             </div>
                         </div>
 
-                        <div 
-                            className={`p-4 rounded-xl border-2 transition-all cursor-pointer ${
-                                returnMode === 'link' 
-                                ? 'border-primary bg-primary/5' 
+                        <div
+                            className={`p-4 rounded-xl border-2 transition-all cursor-pointer ${returnMode === 'link'
+                                ? 'border-primary bg-primary/5'
                                 : 'border-border bg-background hover:border-primary/30'
-                            }`}
+                                }`}
                             onClick={() => setReturnMode('link')}
                         >
                             <div className="items-start flex gap-4">
-                                <div className={`mt-1 w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                                    returnMode === 'link' ? 'border-primary' : 'border-muted-foreground/30'
-                                }`}>
+                                <div className={`mt-1 w-5 h-5 rounded-full border-2 flex items-center justify-center ${returnMode === 'link' ? 'border-primary' : 'border-muted-foreground/30'
+                                    }`}>
                                     {returnMode === 'link' && <div className="w-2.5 h-2.5 rounded-full bg-primary"></div>}
                                 </div>
                                 <div className="space-y-3 flex-1">
@@ -280,7 +276,7 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                                             Attach this invoice to an existing Sales Return record
                                         </p>
                                     </div>
-                                    
+
                                     {returnMode === 'link' && (
                                         <div className="pt-2 animate-in fade-in slide-in-from-top-2 duration-300">
                                             {existingReturns.length > 0 ? (
@@ -331,7 +327,7 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-border">
                         <Button variant="outline" onClick={onClose} className="rounded-xl px-6 border-border">Cancel</Button>
-                        <Button 
+                        <Button
                             onClick={() => {
                                 const returnData = {
                                     invoiceNo: reconciliation.invoiceNo,
@@ -348,9 +344,9 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                                     editReturnNo: returnMode === 'link' ? selectedReturnNo : undefined
                                 };
                                 localStorage.setItem('scm_dispatch_return_data', JSON.stringify(returnData));
-                                window.open('/scm/inventories/sales-return-serial?fromClearance=true', '_blank');
+                                window.open('/ids/scm/sales-return-serial?fromClearance=true', '_blank');
                                 handleSave();
-                            }} 
+                            }}
                             disabled={(returnMode === 'link' && !selectedReturnNo) || !remarks.trim()}
                             className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl px-8 font-bold shadow-lg shadow-primary/20 transition-all active:scale-95"
                         >
@@ -386,7 +382,7 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                                 <TableRow className="bg-muted/50 hover:bg-muted/50 border-border">
                                     {reconciliation.status === 'Fulfilled with Concerns' && (
                                         <TableHead className="w-12 text-center">
-                                            <Checkbox 
+                                            <Checkbox
                                                 checked={detail.lines.length > 0 && selectedLineIds.size === detail.lines.length}
                                                 onCheckedChange={toggleSelectAll}
                                                 className="translate-y-0.5"
@@ -407,17 +403,16 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                             </TableHeader>
                             <TableBody>
                                 {detail.lines.map((line) => (
-                                    <TableRow 
-                                        key={line.id} 
-                                        className={`hover:bg-muted/30 transition-colors border-border ${
-                                            reconciliation.status === 'Fulfilled with Concerns' && !selectedLineIds.has(line.id) 
-                                            ? 'opacity-40 grayscale-[0.5]' 
+                                    <TableRow
+                                        key={line.id}
+                                        className={`hover:bg-muted/30 transition-colors border-border ${reconciliation.status === 'Fulfilled with Concerns' && !selectedLineIds.has(line.id)
+                                            ? 'opacity-40 grayscale-[0.5]'
                                             : ''
-                                        }`}
+                                            }`}
                                     >
                                         {reconciliation.status === 'Fulfilled with Concerns' && (
                                             <TableCell className="text-center">
-                                                <Checkbox 
+                                                <Checkbox
                                                     checked={selectedLineIds.has(line.id)}
                                                     onCheckedChange={() => toggleLineSelection(line.id)}
                                                 />
@@ -432,19 +427,19 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                                         <TableCell className="text-sm font-bold text-foreground text-center tabular-nums">{line.qty}</TableCell>
                                         {reconciliation.status !== 'Fulfilled' && (
                                             <>
-                                                 <TableCell className="text-center w-24">
-                                                     <div className="h-9 w-16 flex items-center justify-center font-bold rounded-lg border bg-muted/50 border-border tabular-nums">
-                                                         {(reconciliation.status !== 'Fulfilled with Concerns' || selectedLineIds.has(line.id)) ? (scannedQtys[line.id] || 0) : "-"}
-                                                     </div>
-                                                 </TableCell>
-                                                 <TableCell className="text-center w-24">
-                                                     <div className="h-9 w-16 flex items-center justify-center font-bold rounded-lg border bg-muted/50 border-border tabular-nums">
-                                                         {(reconciliation.status !== 'Fulfilled with Concerns' || selectedLineIds.has(line.id)) ? (missingQtys[line.id] || 0) : "-"}
-                                                     </div>
-                                                 </TableCell>
-                                                 <TableCell className="text-right text-sm font-bold text-rose-500 tabular-nums">
-                                                     ₱{(reconciliation.status !== 'Fulfilled with Concerns' || selectedLineIds.has(line.id)) ? (((line.net_total || 0) / (line.qty || 1)) * (missingQtys[line.id] || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
-                                                 </TableCell>
+                                                <TableCell className="text-center w-24">
+                                                    <div className="h-9 w-16 flex items-center justify-center font-bold rounded-lg border bg-muted/50 border-border tabular-nums">
+                                                        {(reconciliation.status !== 'Fulfilled with Concerns' || selectedLineIds.has(line.id)) ? (scannedQtys[line.id] || 0) : "-"}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-center w-24">
+                                                    <div className="h-9 w-16 flex items-center justify-center font-bold rounded-lg border bg-muted/50 border-border tabular-nums">
+                                                        {(reconciliation.status !== 'Fulfilled with Concerns' || selectedLineIds.has(line.id)) ? (missingQtys[line.id] || 0) : "-"}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-right text-sm font-bold text-rose-500 tabular-nums">
+                                                    ₱{(reconciliation.status !== 'Fulfilled with Concerns' || selectedLineIds.has(line.id)) ? (((line.net_total || 0) / (line.qty || 1)) * (missingQtys[line.id] || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
+                                                </TableCell>
                                             </>
                                         )}
                                         <TableCell className="text-right text-sm font-bold text-foreground pr-6 tabular-nums">
@@ -493,19 +488,18 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                             onClick={handleSave}
                             disabled={
                                 reconciliation.status !== 'Fulfilled' && (
-                                    !remarks.trim() || 
-                                    !detail || 
-                                    (reconciliation.status === 'Fulfilled with Concerns' && selectedLineIds.size === 0) || 
-                                    (reconciliation.status === 'Fulfilled with Concerns' 
-                                        ? Array.from(selectedLineIds).some(id => scannedQtys[id] === undefined) 
+                                    !remarks.trim() ||
+                                    !detail ||
+                                    (reconciliation.status === 'Fulfilled with Concerns' && selectedLineIds.size === 0) ||
+                                    (reconciliation.status === 'Fulfilled with Concerns'
+                                        ? Array.from(selectedLineIds).some(id => scannedQtys[id] === undefined)
                                         : detail.lines.some(line => scannedQtys[line.id] === undefined))
                                 )
                             }
-                            className={`flex-1 md:flex-none rounded-xl px-8 font-bold text-primary-foreground shadow-lg transition-all active:scale-95 h-10 ${
-                                reconciliation.status === 'Fulfilled' 
-                                ? 'bg-emerald-600 hover:bg-emerald-700' 
+                            className={`flex-1 md:flex-none rounded-xl px-8 font-bold text-primary-foreground shadow-lg transition-all active:scale-95 h-10 ${reconciliation.status === 'Fulfilled'
+                                ? 'bg-emerald-600 hover:bg-emerald-700'
                                 : 'bg-primary hover:bg-primary/90'
-                            }`}
+                                }`}
                         >
                             Save & Mark Cleared
                         </Button>
