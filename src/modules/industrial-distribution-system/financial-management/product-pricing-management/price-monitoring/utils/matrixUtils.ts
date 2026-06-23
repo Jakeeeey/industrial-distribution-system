@@ -109,6 +109,7 @@ export function buildMonthlyMatrix(
       (r) =>
         r.priceTypeId === group.priceTypeId &&
         r.priceChangeDatetime !== null &&
+        r.requestStatus === "APPROVED" &&
         new Date(r.priceChangeDatetime!).getFullYear() < year,
     )
     .sort(
@@ -122,27 +123,28 @@ export function buildMonthlyMatrix(
       ? (priorRows[priorRows.length - 1].newPrice ?? null)
       : null;
 
-  // Build a map of month-index → last row for this year
+  // Build a map of month-index → list of rows for this year (chronological order)
   // month-index: 0 = Jan, 11 = Dec
-  const monthMap = new Map<number, number | null>();
-  const rowMap = new Map<number, ViewPriceMonitoringRow>();
+  const monthlyEventsMap = new Map<number, ViewPriceMonitoringRow[]>();
 
   for (const row of group.rows) {
+    if (row.requestStatus !== "APPROVED") continue;
     const dt = row.priceChangeDatetime ?? row.approvedAt;
     if (!dt) continue;
     const date = new Date(dt);
     if (date.getFullYear() !== year) continue;
 
     const monthIdx = date.getMonth(); // 0-based
-    // Later events override earlier ones (last event per month wins)
-    rowMap.set(monthIdx, row);
-    monthMap.set(monthIdx, row.newPrice ?? null);
+    if (!monthlyEventsMap.has(monthIdx)) {
+      monthlyEventsMap.set(monthIdx, []);
+    }
+    monthlyEventsMap.get(monthIdx)!.push(row);
   }
 
   // Build the 12-month carry-forward series
   const monthlyPrices: (number | null)[] = new Array(12).fill(null);
   const changedMonths: boolean[] = new Array(12).fill(false);
-  const changeEvents: (ViewPriceMonitoringRow | null)[] = new Array(12).fill(null);
+  const changeEvents: (ViewPriceMonitoringRow[] | null)[] = new Array(12).fill(null);
 
   const isWithinRange = (dtStr: string | null) => {
     if (!dtStr) return false;
@@ -163,6 +165,8 @@ export function buildMonthlyMatrix(
     seedPrice !== null && priorRows.length > 0
       ? priorRows[priorRows.length - 1]
       : null;
+  let activeEventsList: ViewPriceMonitoringRow[] | null =
+    activeEvent !== null ? [activeEvent] : null;
 
   const currentYear = new Date().getFullYear();
   const currentMonthIdx = new Date().getMonth(); // 0 = Jan, 11 = Dec
@@ -175,24 +179,52 @@ export function buildMonthlyMatrix(
       continue;
     }
 
-    if (monthMap.has(m)) {
-      carry = monthMap.get(m) ?? carry;
-      const row = rowMap.get(m) ?? null;
-      if (row) {
-        activeEvent = row;
-      }
-      const dt = row?.priceChangeDatetime ?? row?.approvedAt ?? null;
-      if (isWithinRange(dt)) {
+    const monthStart = new Date(year, m, 1, 0, 0, 0, 0);
+    const monthEnd = new Date(year, m + 1, 0, 23, 59, 59, 999);
+
+    // If this month is completely outside the user's selected date range, show null (dash)
+    if (dateFrom && monthEnd < dateFrom) {
+      monthlyPrices[m] = null;
+      changeEvents[m] = null;
+      continue;
+    }
+    if (dateTo && monthStart > dateTo) {
+      monthlyPrices[m] = null;
+      changeEvents[m] = null;
+      continue;
+    }
+
+    if (monthlyEventsMap.has(m)) {
+      const eventsInMonth = monthlyEventsMap.get(m) || [];
+      const validEvents = eventsInMonth.filter((row) => {
+        const dt = row.priceChangeDatetime ?? row.approvedAt ?? null;
+        return isWithinRange(dt);
+      });
+
+      if (validEvents.length > 0) {
         changedMonths[m] = true;
+        const lastEvent = validEvents[validEvents.length - 1];
+        carry = lastEvent.newPrice ?? carry;
+        activeEvent = lastEvent;
+        activeEventsList = validEvents;
+      } else {
+        // If there were changes in this month but they are outside the custom date filter range:
+        // We still carry forward the last actual change in this month (since they happened),
+        // but we don't highlight the month as changed in the current filter window.
+        const lastEvent = eventsInMonth[eventsInMonth.length - 1];
+        carry = lastEvent.newPrice ?? carry;
+        activeEvent = lastEvent;
+        activeEventsList = [lastEvent];
       }
     }
 
     monthlyPrices[m] = carry;
-    changeEvents[m] = activeEvent;
+    changeEvents[m] = activeEventsList;
   }
 
   // currentLivePrice: from the latest row for this price type overall
-  const latestRow = group.rows[group.rows.length - 1] ?? null;
+  const approvedRows = group.rows.filter((r) => r.requestStatus === "APPROVED");
+  const latestRow = approvedRows[approvedRows.length - 1] ?? null;
   const currentLivePrice = latestRow?.currentLivePrice ?? null;
 
   return {
@@ -249,7 +281,9 @@ export function computeAnnualSummary(
  * Calculates current price, last updated date, and overall min/max with year of occurrence.
  */
 export function computeOverallSummary(rows: ViewPriceMonitoringRow[]): OverallSummary {
-  if (rows.length === 0) {
+  const approvedRows = rows.filter((r) => r.requestStatus === "APPROVED");
+
+  if (approvedRows.length === 0) {
     return {
       currentPrice: null,
       lastUpdated: null,
@@ -263,7 +297,7 @@ export function computeOverallSummary(rows: ViewPriceMonitoringRow[]): OverallSu
   }
 
   // Sort by date ASC to find the latest update
-  const sorted = [...rows].sort((a, b) => {
+  const sorted = [...approvedRows].sort((a, b) => {
     const tA = new Date(a.priceChangeDatetime ?? a.approvedAt ?? 0).getTime();
     const tB = new Date(b.priceChangeDatetime ?? b.approvedAt ?? 0).getTime();
     return tA - tB;
@@ -273,7 +307,7 @@ export function computeOverallSummary(rows: ViewPriceMonitoringRow[]): OverallSu
   const currentPrice = latestRow.newPrice;
   const lastUpdated = latestRow.priceChangeDatetime ?? latestRow.approvedAt;
 
-  const validPrices = rows
+  const validPrices = approvedRows
     .map((r) => {
       const dt = r.priceChangeDatetime ?? r.approvedAt;
       return {
@@ -284,6 +318,7 @@ export function computeOverallSummary(rows: ViewPriceMonitoringRow[]): OverallSu
     .filter(
       (item): item is { price: number; year: number } =>
         item.price !== null &&
+        item.price > 0 &&           // exclude zero-value rows (NEW PRICE with no prior price)
         Number.isFinite(item.price) &&
         item.year !== null &&
         Number.isFinite(item.year),
@@ -298,19 +333,48 @@ export function computeOverallSummary(rows: ViewPriceMonitoringRow[]): OverallSu
       lowestPrice: null,
       lowestPriceYear: null,
       averagePrice: null,
-      totalChanges: rows.length,
+      totalChanges: approvedRows.length,
     };
   }
 
   let highest = validPrices[0];
   let lowest = validPrices[0];
-  let sum = 0;
 
   for (const item of validPrices) {
     if (item.price > highest.price) highest = item;
     if (item.price < lowest.price) lowest = item;
-    sum += item.price;
   }
+
+  // Calculate the average of the current (most recent/live) price for each distinct price type.
+  // We sum the latest valid prices of Price Types A, B, C, D, and E, and divide by 5.
+  const sortedForLatest = [...approvedRows].sort((a, b) => {
+    const tA = new Date(a.priceChangeDatetime ?? a.approvedAt ?? 0).getTime();
+    const tB = new Date(b.priceChangeDatetime ?? b.approvedAt ?? 0).getTime();
+    if (tA !== tB) return tA - tB;
+    return a.requestId - b.requestId;
+  });
+
+  const tierPrices = { A: 0, B: 0, C: 0, D: 0, E: 0 };
+  for (const r of sortedForLatest) {
+    if (r.newPrice === null || r.newPrice <= 0 || !Number.isFinite(r.newPrice)) {
+      continue;
+    }
+    const cleanName = r.priceTypeName?.trim().toUpperCase() ?? "";
+    if (cleanName === "A" || cleanName.includes("PRICE A") || cleanName.includes("TIER A") || cleanName.includes("DEALER")) {
+      tierPrices.A = r.newPrice;
+    } else if (cleanName === "B" || cleanName.includes("PRICE B") || cleanName.includes("TIER B") || cleanName.includes("SUB-DEALER")) {
+      tierPrices.B = r.newPrice;
+    } else if (cleanName === "C" || cleanName.includes("PRICE C") || cleanName.includes("TIER C") || cleanName.includes("RTO")) {
+      tierPrices.C = r.newPrice;
+    } else if (cleanName === "D" || cleanName.includes("PRICE D") || cleanName.includes("TIER D") || cleanName.includes("COMMERCIAL")) {
+      tierPrices.D = r.newPrice;
+    } else if (cleanName === "E" || cleanName.includes("PRICE E") || cleanName.includes("TIER E") || cleanName.includes("WALK-IN")) {
+      tierPrices.E = r.newPrice;
+    }
+  }
+
+  const sumOfTiers = tierPrices.A + tierPrices.B + tierPrices.C + tierPrices.D + tierPrices.E;
+  const averagePrice = Math.round((sumOfTiers / 5) * 100) / 100;
 
   return {
     currentPrice,
@@ -319,7 +383,7 @@ export function computeOverallSummary(rows: ViewPriceMonitoringRow[]): OverallSu
     highestPriceYear: highest.year,
     lowestPrice: lowest.price,
     lowestPriceYear: lowest.year,
-    averagePrice: Math.round((sum / validPrices.length) * 100) / 100,
+    averagePrice,
     totalChanges: rows.length,
   };
 }
