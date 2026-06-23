@@ -196,7 +196,6 @@ export function PhysicalInventoryTable(props: Props) {
                                     <TableHeader>
                                         <TableRow className="bg-background">
                                             <TableHead className="w-[100px]">UOM</TableHead>
-                                            <TableHead className="text-right">UOM Count</TableHead>
                                             <TableHead className="text-right">System</TableHead>
                                             <TableHead className="text-right">Physical</TableHead>
                                             <TableHead className="text-right">Variance</TableHead>
@@ -224,10 +223,6 @@ export function PhysicalInventoryTable(props: Props) {
                                                 <TableRow key={row.product_id} className="hover:bg-muted/20">
                                                     <TableCell className="px-3 py-3 font-medium lg:px-4">
                                                         {row.unit_name ?? row.unit_shortcut ?? "—"}
-                                                    </TableCell>
-
-                                                    <TableCell className="text-right px-3 py-3 font-medium tabular-nums lg:px-4">
-                                                        {fmtQty(row.unit_count)}
                                                     </TableCell>
 
                                                     <TableCell className="px-3 py-3 text-right tabular-nums lg:px-4">
