@@ -24,7 +24,7 @@ import {
 // Updated import paths from stock-adjustment to stock-adjustment-serial-posting
 import { handleApiError } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment-serial-posting/utils/error-handler";
 import { getUserIdFromToken } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment-serial-posting/utils/auth-utils";
-import type { HeaderStatus } from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/lpg-billing-consolidation/types/billing-consolidation.types";
+import type { HeaderStatus, ConsolidationHeaderListParams } from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/lpg-billing-consolidation/types/billing-consolidation.types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET
@@ -48,11 +48,25 @@ export async function GET(request: NextRequest) {
     // ── Headers List ──────────────────────────────────────────────────────────
     if (type === "headers" || !type) {
       const status = (searchParams.get("status") || "ALL") as HeaderStatus | "ALL";
+      // DEV-CHANGE: Extract billing_mode, sortField, and sortDir for database-level sorting & filtering
+      const billing_mode = (searchParams.get("billing_mode") || "ALL") as "ALL" | "BOTH" | "KILO";
+      // IDS-CHANGE: Cast to ConsolidationHeaderListParams fields instead of any to fix no-explicit-any lint error
+      const sortField = (searchParams.get("sortField") || undefined) as ConsolidationHeaderListParams["sortField"];
+      const sortDir = (searchParams.get("sortDir") || undefined) as ConsolidationHeaderListParams["sortDir"];
       const search = searchParams.get("search") || undefined;
       const page = searchParams.get("page") ? Number(searchParams.get("page")) : 1;
-      const limit = searchParams.get("limit") ? Number(searchParams.get("limit")) : 15;
+      // IDS-CHANGE: Default limit changed from 15 to 5 to prevent desync with frontend selector
+      const limit = searchParams.get("limit") ? Number(searchParams.get("limit")) : 5;
 
-      const result = await fetchConsolidationHeaders({ status, search, page, limit });
+      const result = await fetchConsolidationHeaders({
+        status,
+        billing_mode,
+        sortField,
+        sortDir,
+        search,
+        page,
+        limit,
+      });
       return NextResponse.json(result);
     }
 

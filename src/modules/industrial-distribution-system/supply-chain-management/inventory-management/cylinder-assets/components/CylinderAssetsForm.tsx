@@ -94,6 +94,7 @@ export function CylinderAssetsForm({
   const [editData, setEditData] = useState<Partial<Omit<CylinderAsset, 'tare_weight'>> & { tare_weight?: string | number | null }>({});
 
   const [apiDuplicateSerials, setApiDuplicateSerials] = useState<string[]>([]);
+  const [showValidation, setShowValidation] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -150,6 +151,7 @@ export function CylinderAssetsForm({
   // Reset or load edit data when modal opens
   useEffect(() => {
     if (!open) return;
+    setShowValidation(false);
     if (id && asset) {
       // Edit mode: pre-populate all fields from the asset
       const productIdVal = asset.product_id
@@ -225,6 +227,7 @@ export function CylinderAssetsForm({
 
         const hasEmptyFields = activeRows.some((r) => !r.expiration_date || !r.tare_weight || isNaN(Number(r.tare_weight)));
         if (hasEmptyFields) {
+          setShowValidation(true);
           toast.error("Please fill in the expiration date and tare weight for all entered serial numbers.");
           setLoading(false);
           return;
@@ -242,34 +245,7 @@ export function CylinderAssetsForm({
           return;
         }
 
-        // Validate if they are transacted in v-serial-onhand
-        const serialsArr = activeRows.map((r) => ({
-          serialNumber: r.serial_number.trim(),
-          branchId: branchId ? Number(branchId) : undefined
-        }));
-        try {
-          const onhandRes = await fetch(`/api/ids/scm/inventory-management/cylinder-assets/validate-onhand`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ serials: serialsArr })
-          });
-          const onhandJson = await onhandRes.json();
-          if (onhandJson.invalidSerials && onhandJson.invalidSerials.length > 0) {
-            setApiDuplicateSerials((prev) => [...prev, ...onhandJson.invalidSerials]);
-            toast.error(
-              `Validation Failed: The following serial(s) have not yet been processed or physically received: ${onhandJson.invalidSerials.join(
-                ", "
-              )}`
-            );
-            setLoading(false);
-            return;
-          }
-        } catch (err) {
-          console.error("Failed to validate on-hand serials", err);
-          toast.error("Failed to validate serials against transacted inventory.");
-          setLoading(false);
-          return;
-        }
+
 
         const payloads = activeRows
           .map((r) => ({
@@ -461,7 +437,7 @@ export function CylinderAssetsForm({
                               type="date"
                               value={row.expiration_date}
                               onChange={(e) => updateRow(row.id, "expiration_date", e.target.value)}
-                              className="h-8 text-[11px] px-2 flex-1 min-w-0"
+                              className={`h-8 text-[11px] px-2 flex-1 min-w-0 ${showValidation && !row.expiration_date ? 'border-red-500 bg-red-50/50 text-red-900 focus-visible:ring-red-500 dark:border-red-500/50 dark:bg-red-500/10 dark:text-red-200' : ''}`}
                               disabled={!productId}
                             />
                           </div>
@@ -478,7 +454,7 @@ export function CylinderAssetsForm({
                                   updateRow(row.id, "tare_weight", val.toFixed(2));
                                 }
                               }}
-                              className="h-8 text-xs flex-1"
+                              className={`h-8 text-xs flex-1 ${showValidation && (!row.tare_weight || isNaN(Number(row.tare_weight))) ? 'border-red-500 bg-red-50/50 text-red-900 focus-visible:ring-red-500 dark:border-red-500/50 dark:bg-red-500/10 dark:text-red-200' : ''}`}
                               disabled={!productId}
                             />
                           </div>
