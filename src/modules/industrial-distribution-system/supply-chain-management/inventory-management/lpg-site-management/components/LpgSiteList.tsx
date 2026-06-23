@@ -12,7 +12,8 @@ import {
   MapPin,
   ChevronLeft,
   ChevronRight,
-  Filter
+
+  Eye
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,9 +39,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 interface LpgSiteListProps {
   onEdit: (id: number) => void;
   onCreate: () => void;
+  onView: (id: number) => void;
 }
 
-export function LpgSiteList({ onEdit, onCreate }: LpgSiteListProps) {
+export function LpgSiteList({ onEdit, onCreate, onView }: LpgSiteListProps) {
   const [sites, setSites] = useState<LpgSite[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -56,6 +58,7 @@ export function LpgSiteList({ onEdit, onCreate }: LpgSiteListProps) {
         page,
         limit
       });
+      console.log("Fetched sites data in LpgSiteList:", data);
       setSites(data);
       setTotal(total);
     } catch (error) {
@@ -90,7 +93,7 @@ export function LpgSiteList({ onEdit, onCreate }: LpgSiteListProps) {
     <div className="space-y-4">
       <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
         <div className="relative w-full md:w-96">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-5" />
           <Input
             placeholder="Search sites or customers..."
             value={search}
@@ -99,10 +102,10 @@ export function LpgSiteList({ onEdit, onCreate }: LpgSiteListProps) {
           />
         </div>
         <div className="flex items-center gap-2 w-full md:w-auto">
-          <Button variant="outline" className="rounded-xl gap-2 h-10 border-zinc-200 dark:border-zinc-800">
+          {/* <Button variant="outline" className="rounded-xl gap-2 h-10 border-zinc-200 dark:border-zinc-800">
             <Filter className="h-4 w-4" />
             Filters
-          </Button>
+          </Button> */}
           <Button onClick={onCreate} className="rounded-xl gap-2 h-10 bg-orange-600 hover:bg-orange-700 text-white shadow-lg shadow-orange-600/20 transition-all">
             <Plus className="h-4 w-4" />
             Add New Site
@@ -151,8 +154,8 @@ export function LpgSiteList({ onEdit, onCreate }: LpgSiteListProps) {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
-                        <span className="text-sm font-medium">{site.customer?.customer_name}</span>
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{site.customer_code}</span>
+                        <span className="text-sm font-medium">{site.customer_code}</span>
+                        <span className="text-xs text-muted-foreground">{site.customer?.customer_name}</span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -168,6 +171,10 @@ export function LpgSiteList({ onEdit, onCreate }: LpgSiteListProps) {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-40 rounded-xl border-zinc-200 dark:border-zinc-800">
+                          <DropdownMenuItem onClick={() => onView(site.id)} className="gap-2 cursor-pointer">
+                            <Eye className="h-3.5 w-3.5" />
+                            View Details
+                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => onEdit(site.id)} className="gap-2 cursor-pointer">
                             <Edit2 className="h-3.5 w-3.5" />
                             Edit Details

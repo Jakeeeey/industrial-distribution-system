@@ -185,7 +185,8 @@ export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, 
         }
       });
 
-    fetch("/api/ids/scm/inventory-management/stock-adjustment/branches")
+    // Updated fetch path to stock-adjustment-serial-posting/branches to reference the correct endpoint
+    fetch("/api/ids/scm/inventory-management/stock-adjustment-serial-posting/branches")
       .then((r) => r.json())
       .then((d) => {
         if (d.data) setBranches(d.data.map((b: { id: number; branch_name: string }) => ({ id: b.id, name: b.branch_name })));

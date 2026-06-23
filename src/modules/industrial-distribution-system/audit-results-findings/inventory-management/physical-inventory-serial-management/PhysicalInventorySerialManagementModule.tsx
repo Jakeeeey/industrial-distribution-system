@@ -1455,7 +1455,7 @@ export function PhysicalInventorySerialManagementModule(props: Props) {
                             className="cursor-pointer border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300 dark:hover:bg-blue-900/40"
                             onClick={() =>
                                 router.push(
-                                    `/scm/inventory-management/physical-inventory/offsetting?id=${header.id}`,
+                                    `/ids/scm/inventory-management/physical-inventory/offsetting?id=${header.id}`,
                                 )
                             }
                             disabled={!header.id}

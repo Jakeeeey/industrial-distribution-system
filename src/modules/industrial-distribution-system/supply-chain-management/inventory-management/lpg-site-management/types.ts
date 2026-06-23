@@ -55,8 +55,10 @@ export interface SiteCylinder {
   installed_date: string;
   removed_date: string | null;
   site_cylinder_status: SiteCylinderStatus;
-  opening_lpg_kg: number | null;
-  current_estimated_lpg_kg: number | null;
+  previous_lpg_kg: number | null;
+  current_lpg_kg: number | null;
+  current_estimated_lpg_kg?: number | null;
+  opening_lpg_kg?: number | null;
   remarks: string | null;
   created_by: number | null;
   created_date: string | null;

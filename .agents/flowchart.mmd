@@ -1,0 +1,55 @@
+flowchart TD
+    %% Actors
+    UI[Frontend UI Components]
+    Directus[(Directus DB/API)]
+
+    %% WIWO Flow
+    subgraph WIWO [WIWO Billing Flow]
+        UI_WIWO[Submit Regular Swap / Onboard]
+        updateCyl[PATCH cylinder_assets\nstatus: CONNECTED/RETURNED]
+        insertSiteCyl[POST lpg_customer_site_cylinders\ntrack inventory at site]
+        insertWiwoHeader[POST lpg_wiwo_headers\naggregate transaction]
+        insertWiwoDetail[POST lpg_wiwo_details\nline item consumption/deployment]
+    end
+
+    %% Metered Flow
+    subgraph METER [Metered Billing Flow]
+        UI_Meter[Submit Meter Reading]
+        insertMeterRead[POST lpg_meter_readings\nlog dial, calc kg_consumed]
+        insertMeterTrans[POST lpg_metered_wiwo_transactions\nbridge table for variance]
+    end
+
+    %% Financial / Core
+    subgraph FINANCE [Financial Consolidation]
+        SO[POST sales_order & details]
+        SI[POST sales_invoice]
+        THI[POST lpg_transaction_header_invoices\ngroup for statements]
+    end
+
+    %% Connections WIWO
+    UI --> UI_WIWO
+    UI_WIWO --> updateCyl
+    UI_WIWO --> insertSiteCyl
+    UI_WIWO --> insertWiwoHeader
+    insertWiwoHeader --> insertWiwoDetail
+    insertWiwoDetail --> SO
+
+    %% Connections Meter
+    UI --> UI_Meter
+    UI_Meter --> insertMeterRead
+    insertMeterRead --> insertMeterTrans
+    
+    %% Bridge WIWO to Meter
+    insertWiwoHeader -. "Linked if Variance check needed" .-> insertMeterTrans
+    insertMeterTrans --> SO
+
+    %% Finance routing
+    SO --> SI
+    SI --> THI
+    THI --> Directus
+
+    updateCyl --> Directus
+    insertSiteCyl --> Directus
+    insertWiwoDetail --> Directus
+    insertMeterRead --> Directus
+    insertMeterTrans --> Directus
