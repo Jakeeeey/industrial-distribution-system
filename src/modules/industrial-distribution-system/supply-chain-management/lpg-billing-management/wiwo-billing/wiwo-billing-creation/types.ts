@@ -197,8 +197,7 @@ export interface CustomerSite {
   default_price_per_kg: number;
   last_meter_reading?: number | null;
   default_target_lpg_kg?: number | null;
-  // AG-CHANGE: Added billing_mode to identify KILO sites and support metered transaction filtering
-  billing_mode?: string | null;
+  billing_mode?: 'BOTH' | 'KILO' | 'METERED' | null;
 }
 
 export interface MeterReading {
