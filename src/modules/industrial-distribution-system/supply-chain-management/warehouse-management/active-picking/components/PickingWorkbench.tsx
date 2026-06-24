@@ -94,6 +94,15 @@ export function PickingWorkbench() {
         if (!serialInput.trim() || isProcessingSerial || !activePicking) return;
 
         const currentSerial = serialInput.trim();
+
+        // Check if all expected items in this picking order are already fulfilled
+        const hasPendingItems = details.some(d => d.picked_quantity < d.ordered_quantity);
+        if (!hasPendingItems) {
+            toast.error("Order limit reached for all items. Cannot pick or register any more serial numbers.");
+            inputRef.current?.select();
+            return;
+        }
+
         const result = await processSerial(activePickingId, currentSerial, activePicking.branch_id || 0);
 
         if (result === "UNREGISTERED_SERIAL") {

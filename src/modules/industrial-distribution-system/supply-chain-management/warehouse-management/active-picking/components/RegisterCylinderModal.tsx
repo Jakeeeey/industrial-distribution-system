@@ -64,6 +64,12 @@ export function RegisterCylinderModal({
             return;
         }
 
+        const selectedDetail = details.find(d => Number(d.product_id) === Number(productId));
+        if (selectedDetail && selectedDetail.picked_quantity >= selectedDetail.ordered_quantity) {
+            toast.error("Cannot register serial number for an already fulfilled product row.");
+            return;
+        }
+
         setIsSubmitting(true);
         try {
             const res = await fetch("/api/ids/scm/warehouse-management/active-picking/register", {
@@ -125,11 +131,18 @@ export function RegisterCylinderModal({
                                 <SelectValue placeholder="Select expected product..." />
                             </SelectTrigger>
                             <SelectContent>
-                                {details.map((detail) => (
-                                    <SelectItem key={detail.id} value={String(detail.product_id)}>
-                                        {detail.product?.product_name || `Product ID: ${detail.product_id}`} ({detail.picked_quantity} / {detail.ordered_quantity})
-                                    </SelectItem>
-                                ))}
+                                {details.map((detail) => {
+                                    const isFulfilled = detail.picked_quantity >= detail.ordered_quantity;
+                                    return (
+                                        <SelectItem 
+                                            key={detail.id} 
+                                            value={String(detail.product_id)}
+                                            disabled={isFulfilled}
+                                        >
+                                            {detail.product?.product_name || `Product ID: ${detail.product_id}`} ({detail.picked_quantity} / {detail.ordered_quantity}) {isFulfilled ? "[FULFILLED]" : ""}
+                                        </SelectItem>
+                                    );
+                                })}
                             </SelectContent>
                         </Select>
                     </div>
