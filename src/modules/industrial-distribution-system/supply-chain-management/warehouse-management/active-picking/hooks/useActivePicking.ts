@@ -120,6 +120,9 @@ export function useActivePicking(userId: number | null = null) {
             const data = await res.json();
 
             if (!res.ok) {
+                if (data.details === "UNREGISTERED_SERIAL") {
+                    return "UNREGISTERED_SERIAL";
+                }
                 toast.error(data.details || data.error || "Failed to process serial");
                 return false;
             }

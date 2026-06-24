@@ -42,12 +42,17 @@ export const ActivePickingService = {
             throw new Error(error.message || "Failed to verify serial number.");
         }
 
+        let productId: number;
         const onhandInfo = onhandInfoResult.value;
         if (!onhandInfo) {
-            throw new Error(`Serial ${serialNumber} is not currently available in this branch.`);
+            const asset = await ActivePickingRepo.fetchCylinderAssetBySerial(serialNumber);
+            if (!asset) {
+                throw new Error("UNREGISTERED_SERIAL");
+            }
+            productId = Number(asset.product_id);
+        } else {
+            productId = Number(onhandInfo.productId);
         }
-
-        const productId = Number(onhandInfo.productId);
 
         // Concurrently fetch the details and the inventory check for the matched product
         const [details, inventory] = await Promise.all([

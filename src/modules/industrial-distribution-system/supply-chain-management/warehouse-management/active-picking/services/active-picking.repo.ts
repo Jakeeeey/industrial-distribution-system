@@ -342,6 +342,41 @@ export const ActivePickingRepo = {
             }
             throw new Error("NETWORK_FAILURE");
         }
+    },
+
+    async checkCylinderAssetExists(serialNumber: string): Promise<boolean> {
+        const encoded = encodeURIComponent(serialNumber.trim().toUpperCase());
+        const url = `${DIRECTUS_BASE}/items/cylinder_assets?filter[serial_number][_eq]=${encoded}&limit=1`;
+        const response = await fetch(url, { headers: getHeaders(), cache: "no-store" });
+        if (!response.ok) {
+            throw new Error("Failed to check cylinder asset");
+        }
+        const data = await response.json();
+        return data.data.length > 0;
+    },
+
+    async fetchCylinderAssetBySerial(serialNumber: string): Promise<any | null> {
+        const encoded = encodeURIComponent(serialNumber.trim().toUpperCase());
+        const url = `${DIRECTUS_BASE}/items/cylinder_assets?filter[serial_number][_eq]=${encoded}&fields=product_id&limit=1`;
+        const response = await fetch(url, { headers: getHeaders(), cache: "no-store" });
+        if (!response.ok) return null;
+        const data = await response.json();
+        return data.data[0] || null;
+    },
+
+    async createCylinderAsset(payload: any): Promise<any> {
+        const url = `${DIRECTUS_BASE}/items/cylinder_assets`;
+        const response = await fetch(url, {
+            method: "POST",
+            headers: getHeaders(),
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.error?.message || "Failed to register cylinder asset");
+        }
+        const data = await response.json();
+        return data.data;
     }
 };
 

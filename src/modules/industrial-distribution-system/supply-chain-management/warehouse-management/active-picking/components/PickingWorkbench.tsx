@@ -31,6 +31,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { RegisterCylinderModal } from "./RegisterCylinderModal";
 
 export function PickingWorkbench() {
     const {
@@ -52,6 +53,8 @@ export function PickingWorkbench() {
     const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({});
     const [showSaveConfirm, setShowSaveConfirm] = useState(false);
     const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
+    const [isRegisterOpen, setIsRegisterOpen] = useState(false);
+    const [unregisteredSerial, setUnregisteredSerial] = useState("");
     const inputRef = useRef<HTMLInputElement>(null);
 
     const activePicking = pickings.find(p => p.id === activePickingId);
@@ -91,11 +94,12 @@ export function PickingWorkbench() {
         if (!serialInput.trim() || isProcessingSerial || !activePicking) return;
 
         const currentSerial = serialInput.trim();
-        const success = await processSerial(activePickingId, currentSerial, activePicking.branch_id || 0);
+        const result = await processSerial(activePickingId, currentSerial, activePicking.branch_id || 0);
 
-        // OPTIMIZATION: If the scan is successful, clear the input. If it fails, select/highlight the text
-        // so the picker can immediately scan the next barcode without manual intervention.
-        if (success) {
+        if (result === "UNREGISTERED_SERIAL") {
+            setUnregisteredSerial(currentSerial);
+            setIsRegisterOpen(true);
+        } else if (result) {
             setSerialInput("");
             inputRef.current?.focus();
         } else {
@@ -390,6 +394,23 @@ export function PickingWorkbench() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            <RegisterCylinderModal
+                open={isRegisterOpen}
+                onOpenChange={setIsRegisterOpen}
+                serialNumber={unregisteredSerial}
+                branchId={activePicking?.branch_id || 0}
+                details={details}
+                onSuccess={async (prodId, serial) => {
+                    const success = await processSerial(activePickingId, serial, activePicking?.branch_id || 0);
+                    if (success === true) {
+                        setSerialInput("");
+                        inputRef.current?.focus();
+                        return true;
+                    }
+                    return false;
+                }}
+            />
         </div>
     );
 }
