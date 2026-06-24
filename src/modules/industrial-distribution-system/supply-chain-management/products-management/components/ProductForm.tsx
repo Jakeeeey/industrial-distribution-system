@@ -109,7 +109,7 @@ export function ProductForm({
       cost_per_unit: initialValues?.cost_per_unit || 0,
       price_per_unit: initialValues?.price_per_unit || 0,
       isActive: initialValues?.isActive ?? 1,
-      is_serialized: initialValues?.is_serialized ?? 1,
+      is_serialized: 1,
       status: initialValues?.status || "Active",
       product_image: initialValues?.product_image || null,
     },
@@ -159,7 +159,7 @@ export function ProductForm({
 
       const uomId = Number(values.unit_of_measurement) || (units && units.length > 0 ? Number(units[0].unit_id) : 1);
 
-      onSubmit({ ...values, product_image: imageId, unit_of_measurement: uomId });
+      onSubmit({ ...values, product_image: imageId, unit_of_measurement: uomId, is_serialized: 1 });
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to save product",
@@ -273,21 +273,44 @@ export function ProductForm({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <FormField
               control={form.control}
-              name="is_serialized"
+              name="isActive"
               render={({ field }) => (
-                <FormItem className="flex items-center space-x-3 space-y-0 p-4 rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-slate-50/30 dark:bg-slate-900/30 shadow-sm md:col-span-2">
+                <FormItem>
+                  <FormLabel>Status</FormLabel>
                   <FormControl>
-                    <Checkbox
-                      checked={field.value === 1}
-                      onCheckedChange={(checked) =>
-                        field.onChange(checked ? 1 : 0)
-                      }
+                    <SearchableSelect
+                      options={[
+                        { value: "1", label: "Active" },
+                        { value: "0", label: "Inactive" },
+                      ]}
+                      value={field.value?.toString() ?? "1"}
+                      onValueChange={(v) => {
+                        field.onChange(parseInt(v));
+                        form.setValue("status", parseInt(v) === 1 ? "Active" : "Inactive");
+                      }}
+                      placeholder="Select status"
+                      className="bg-slate-50/50 dark:bg-slate-900/50"
                       disabled={readOnly}
                     />
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="is_serialized"
+              render={() => (
+                <FormItem className="flex items-center space-x-3 space-y-0 p-4 rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-slate-50/30 dark:bg-slate-900/30 shadow-sm">
+                  <FormControl>
+                    <Checkbox
+                      checked={true}
+                      disabled={true}
+                    />
+                  </FormControl>
                   <div className="space-y-1 leading-none">
-                    <FormLabel className="text-sm font-semibold cursor-pointer select-none">
-                      Is Serialized Product
+                    <FormLabel className="text-sm font-semibold cursor-not-allowed select-none text-muted-foreground">
+                      Is Serialized Product (Default for Serial Management)
                     </FormLabel>
                   </div>
                 </FormItem>
