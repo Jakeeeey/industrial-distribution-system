@@ -51,27 +51,34 @@ export function formatDaysWithCustomer(days: number | null): string {
 
 /**
  * Maps RecommendedAction enum to a human-readable label.
+ * Values match the SQL CASE thresholds exactly.
  */
 export function formatRecommendedAction(action: RecommendedAction | null): string {
   if (!action) return "—";
   const MAP: Record<RecommendedAction, string> = {
-    OK: "OK",
-    FOLLOW_UP: "Follow Up",
-    RETRIEVE: "Retrieve",
-    VERIFY_CUSTOMER: "Verify Customer",
+    NO_ACTION_REQUIRED:  "No Action Required",
+    MONITOR_CUSTOMER:    "Monitor Customer",
+    FOLLOW_UP_CUSTOMER:  "Follow Up Customer",
+    FOR_PULL_OUT_REVIEW: "For Pull-Out Review",
+    VERIFY_CUSTOMER:     "Verify Customer",
   };
   return MAP[action] ?? action;
 }
 
 /**
  * Maps CustomerActivityStatus to a human-readable label.
+ * Values match the SQL CASE thresholds exactly.
  */
 export function formatActivityStatus(status: CustomerActivityStatus | null): string {
   if (!status) return "—";
   const MAP: Record<CustomerActivityStatus, string> = {
-    ACTIVE: "Active",
-    INACTIVE: "Inactive",
+    ACTIVE:                "Active",
+    MONITORING:            "Monitoring",
+    WARNING:               "Warning",
+    INACTIVE:              "Inactive",
+    CRITICAL:              "Critical",
     NO_TRANSACTION_RECORD: "No Transaction",
+    UNKNOWN:               "Unknown",
   };
   return MAP[status] ?? status;
 }
@@ -83,9 +90,10 @@ export function formatActivityStatus(status: CustomerActivityStatus | null): str
 export function formatAgingBasisSource(source: AgingBasisSource | null): string {
   if (!source) return "—";
   const MAP: Record<AgingBasisSource, string> = {
-    DEPLOYED_DATE: "Deploy Date",
-    LAST_TRANSACTION_DATE: "Last Transaction",
+    DEPLOYED_DATE:                   "Deploy Date",
+    LAST_TRANSACTION_DATE:           "Last Transaction",
     CYLINDER_MODIFIED_DATE_FALLBACK: "Modified Date (Fallback)",
+    CYLINDER_CREATED_DATE_FALLBACK:  "Created Date (Fallback)",
   };
   return MAP[source] ?? source;
 }
@@ -109,24 +117,95 @@ export function formatDate(dateStr: string | null | undefined): string {
 
 /**
  * Returns badge variant for CustomerActivityStatus.
+ * ACTIVE = green (default), MONITORING/WARNING = amber (secondary),
+ * INACTIVE/CRITICAL/NO_TRANSACTION_RECORD = red (destructive).
  */
 export function resolveActivityStatusVariant(
   status: CustomerActivityStatus | null
 ): "default" | "secondary" | "destructive" {
   if (!status) return "secondary";
   if (status === "ACTIVE") return "default";
-  if (status === "NO_TRANSACTION_RECORD") return "destructive";
-  return "secondary";
+  if (status === "MONITORING" || status === "WARNING") return "secondary";
+  return "destructive"; // INACTIVE, CRITICAL, NO_TRANSACTION_RECORD, UNKNOWN
 }
 
 /**
  * Returns badge variant for RecommendedAction.
+ * NO_ACTION_REQUIRED = green, MONITOR_CUSTOMER/FOLLOW_UP_CUSTOMER = amber,
+ * FOR_PULL_OUT_REVIEW/VERIFY_CUSTOMER = red.
  */
 export function resolveActionVariant(
   action: RecommendedAction | null
 ): "default" | "secondary" | "destructive" {
   if (!action) return "secondary";
-  if (action === "OK") return "default";
-  if (action === "RETRIEVE" || action === "VERIFY_CUSTOMER") return "destructive";
-  return "secondary";
+  if (action === "NO_ACTION_REQUIRED") return "default";
+  if (action === "FOR_PULL_OUT_REVIEW" || action === "VERIFY_CUSTOMER") return "destructive";
+  return "secondary"; // MONITOR_CUSTOMER, FOLLOW_UP_CUSTOMER
+}
+
+export type CustomerSegment = "COMMERCIAL" | "RETAIL" | "RESIDENTIAL";
+
+export interface SegmentInfo {
+  segment: CustomerSegment;
+  limitDays: number;
+  label: string;
+  badgeColor: string;
+}
+
+export function resolveCustomerSegment(
+  name: string | null,
+  store: string | null
+): SegmentInfo {
+  const haystack = `${name || ""} ${store || ""}`.toLowerCase();
+
+  if (
+    haystack.includes("restaurant") ||
+    haystack.includes("industrial") ||
+    haystack.includes("corp") ||
+    haystack.includes("inc") ||
+    haystack.includes("co") ||
+    haystack.includes("hotel") ||
+    haystack.includes("kitchen") ||
+    haystack.includes("cafe") ||
+    haystack.includes("grill") ||
+    haystack.includes("food") ||
+    haystack.includes("lpg") ||
+    haystack.includes("distributor") ||
+    haystack.includes("factory") ||
+    haystack.includes("plant") ||
+    haystack.includes("engineering")
+  ) {
+    return {
+      segment: "COMMERCIAL",
+      limitDays: 15,
+      label: "Commercial",
+      badgeColor: "bg-blue-500/10 text-blue-500 border-blue-500/20 hover:bg-blue-500/20 font-bold tracking-wider",
+    };
+  }
+
+  if (
+    haystack.includes("store") ||
+    haystack.includes("sari-sari") ||
+    haystack.includes("retail") ||
+    haystack.includes("mart") ||
+    haystack.includes("market") ||
+    haystack.includes("shop") ||
+    haystack.includes("gas") ||
+    haystack.includes("bakery") ||
+    haystack.includes("grocery")
+  ) {
+    return {
+      segment: "RETAIL",
+      limitDays: 20,
+      label: "Retail",
+      badgeColor: "bg-indigo-500/10 text-indigo-500 border-indigo-500/20 hover:bg-indigo-500/20 font-bold tracking-wider",
+    };
+  }
+
+  return {
+    segment: "RESIDENTIAL",
+    limitDays: 40,
+    label: "Residential",
+    badgeColor: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20 font-bold tracking-wider",
+  };
 }

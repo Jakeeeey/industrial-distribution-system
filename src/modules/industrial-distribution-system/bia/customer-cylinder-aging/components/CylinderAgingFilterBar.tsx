@@ -1,8 +1,9 @@
 // components/CylinderAgingFilterBar.tsx
 // ──────────────────────────────────────────────────────────────────────────────
-// Filter bar for the Customer Cylinder Aging module.
-// Exposes all 4 Spring filter params: productId, customerCode, startDate, endDate.
+// Filter bar for the Customer Cylinder Aging module (Directus-backed).
+// Exposes 5 filter params: productId, customerCode, branchId, startDate, endDate.
 // Apply button triggers the BFF fetch via the provider context.
+// Revamped: branchId added, Spring mandatory-filter constraint removed.
 // ──────────────────────────────────────────────────────────────────────────────
 
 "use client";
@@ -22,6 +23,7 @@ export function CylinderAgingFilterBar() {
   const [local, setLocal] = React.useState({
     productId: filters.productId !== undefined ? String(filters.productId) : "",
     customerCode: filters.customerCode ?? "",
+    branchId: filters.branchId !== undefined ? String(filters.branchId) : "",
     startDate: filters.startDate ?? "",
     endDate: filters.endDate ?? "",
   });
@@ -35,17 +37,16 @@ export function CylinderAgingFilterBar() {
     setFilters({
       productId: local.productId !== "" ? Number(local.productId) : undefined,
       customerCode: local.customerCode || undefined,
+      branchId: local.branchId !== "" ? Number(local.branchId) : undefined,
       startDate: local.startDate || undefined,
       endDate: local.endDate || undefined,
     });
-    // Small defer to let setFilters propagate before applyFilters reads it.
-    // applyFilters is wrapped in useCallback so it uses the committed value.
     await applyFilters();
   };
 
   /** Resets all filters to empty and re-fetches. */
   const handleReset = async () => {
-    const empty = { productId: "", customerCode: "", startDate: "", endDate: "" };
+    const empty = { productId: "", customerCode: "", branchId: "", startDate: "", endDate: "" };
     setLocal(empty);
     setFilters({});
     await applyFilters();
@@ -60,7 +61,7 @@ export function CylinderAgingFilterBar() {
         </span>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {/* Product ID */}
         <div className="space-y-1.5">
           <Label
@@ -101,6 +102,26 @@ export function CylinderAgingFilterBar() {
               onKeyDown={(e) => e.key === "Enter" && handleApply()}
             />
           </div>
+        </div>
+
+        {/* Branch ID */}
+        <div className="space-y-1.5">
+          <Label
+            htmlFor="cca-filter-branch-id"
+            className="text-xs font-medium text-muted-foreground uppercase tracking-wider"
+          >
+            Branch ID
+          </Label>
+          <Input
+            id="cca-filter-branch-id"
+            type="number"
+            placeholder="e.g. 196"
+            value={local.branchId}
+            onChange={(e) => handleChange("branchId", e.target.value)}
+            className="h-9 text-sm"
+            min={1}
+            onKeyDown={(e) => e.key === "Enter" && handleApply()}
+          />
         </div>
 
         {/* Start Date */}
