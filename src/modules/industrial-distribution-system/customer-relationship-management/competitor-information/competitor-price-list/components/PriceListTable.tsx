@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 import type { CompetitorPriceEntry } from "../types";
 import { priceListColumns } from "./columns";
@@ -419,6 +420,7 @@ function RawTable({
 	data: CompetitorPriceEntry[];
 	onRowClick?: (competitorId: string, productName: string, groupMode?: GroupMode) => void;
 }) {
+	const isMobile = useIsMobile();
 	const [sorting, setSorting] = React.useState<SortingState>([{ id: "created_at", desc: true }]);
 	const [expanded, setExpanded] = React.useState<ExpandedState>({});
 
@@ -497,8 +499,12 @@ function RawTable({
 		getRowCanExpand: () => true,
 		getRowId: (row) => String(row.id),
 		autoResetExpanded: false,
-		initialState: { pagination: { pageSize: 20 } },
+		initialState: { pagination: { pageSize: 15 } },
 	});
+
+	React.useEffect(() => {
+		table.setPageSize(isMobile ? 10 : 15);
+	}, [isMobile, table]);
 
 	return (
 		<div className="space-y-3">
@@ -590,7 +596,7 @@ function RawTable({
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent side="top">
-								{[10, 20, 30, 50, 100].map((s) => (
+								{[10, 15, 20, 30, 50, 100].map((s) => (
 									<SelectItem key={s} value={`${s}`}>
 										{s}
 									</SelectItem>
