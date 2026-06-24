@@ -198,8 +198,7 @@ export default function InventoryControlModule() {
           <InventoryCategoryAccordion
             categoryGroups={filteredCategoryGroups}
             onProductClick={(product, filter) => {
-              // preserve the current inventory search as the modal's search filter
-              setSearchQuery(inventorySearch);
+              // Dev-rule: Exclude the search bar from main to modals. Modal search bar is serials only and starts clean.
               openModal(product, filter);
             }}
           />
