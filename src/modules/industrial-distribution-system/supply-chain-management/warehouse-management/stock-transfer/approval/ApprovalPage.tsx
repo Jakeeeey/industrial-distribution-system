@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Search, ClipboardCheck, Loader2, RefreshCcw, ServerCrash } from 'lucide-react';
+import { Search, ClipboardCheck, Loader2, RefreshCcw, ServerCrash, ArrowRight } from 'lucide-react';
 import { useStockTransferApproval } from './hooks/use-stock-transfer-approval';
 import type { OrderGroupItem, ProductRow } from '../types/stock-transfer.types';
 import {
@@ -163,22 +163,25 @@ export default function StockTransferApprovalView() {
 
         <CardContent className="mt-4 space-y-6">
           {loading && (
-            <div className="space-y-3 py-4">
-              <div className="flex items-center gap-3 text-muted-foreground text-sm">
-                <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                <span className="font-medium">Fetching orders...</span>
+            <div className="flex flex-col items-center justify-center h-48 border border-border rounded-xl bg-card gap-3 py-6">
+              <div className="relative flex h-10 w-10 items-center justify-center">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/20 opacity-75"></span>
+                <div className="relative flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                </div>
               </div>
+              <p className="text-xs text-muted-foreground animate-pulse font-medium">Loading pending transfer requests...</p>
             </div>
           )}
 
           {!loading && fetchError && (
-            <div className="flex flex-col items-center justify-center gap-4 py-12 text-center">
+            <div className="flex flex-col items-center justify-center gap-4 py-12 text-center border border-border rounded-xl bg-destructive/5">
               <ServerCrash className="w-12 h-12 text-destructive/50" />
               <div>
                 <p className="font-bold text-destructive">Connection Error</p>
                 <p className="text-xs text-muted-foreground mt-1">{fetchError}</p>
               </div>
-              <Button variant="outline" onClick={() => refresh()} className="gap-2">
+              <Button variant="outline" onClick={() => refresh()} className="gap-2 border-border">
                 <RefreshCcw className="w-4 h-4" /> Try Again
               </Button>
             </div>
@@ -186,51 +189,94 @@ export default function StockTransferApprovalView() {
 
           {!loading && !fetchError && (
           <>
-          <div className="space-y-2 max-w-sm">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-              Request Order Number
-            </label>
-            <OrderSelectionModal 
-              orderGroups={orderGroups}
-              selectedOrderNo={selectedOrderNo}
-              onSelect={setSelectedOrderNo}
-              getBranchName={getBranchName}
-              title="Select Pending Approval"
-              description="Review stock transfer requests."
-              placeholder="Search request number..."
-            />
+          {/* Select order dropdown bar */}
+          <div className="flex items-center justify-between border border-border rounded-xl p-4 bg-muted/10">
+            <div className="space-y-1.5 flex-1 max-w-sm">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block">
+                Request Order Number
+              </label>
+              <OrderSelectionModal 
+                orderGroups={orderGroups}
+                selectedOrderNo={selectedOrderNo}
+                onSelect={setSelectedOrderNo}
+                getBranchName={getBranchName}
+                title="Select Pending Approval"
+                description="Review stock transfer requests."
+                placeholder="Search request number..."
+              />
+            </div>
+            
+            <div className="hidden sm:block text-right">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block mb-0.5">Pending Count</span>
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
+                {orderGroups.length} requests
+              </span>
+            </div>
           </div>
 
+          {/* Empty State placeholder */}
+          {!selectedGroup && (
+            <div className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-xl bg-muted/5 py-16 px-4 text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary mb-4 animate-pulse">
+                <ClipboardCheck className="h-6 w-6" />
+              </div>
+              <h3 className="text-sm font-semibold text-foreground">No Request Selected</h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-sm">
+                Search or select a pending stock transfer request order number above to view details, inspect item stock levels, and authorize releasing inventory.
+              </p>
+            </div>
+          )}
+
           {selectedGroup && (
-            <div className="space-y-6 border border-border rounded-xl overflow-hidden bg-card/50">
-              <div className="bg-muted/30 p-4 border-b border-border">
-                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 flex-1">
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Source</p>
-                      <p className="font-medium text-sm truncate">{getBranchName(selectedGroup.sourceBranch)}</p>
+            <div className="space-y-6 border border-border rounded-xl overflow-hidden bg-card shadow-sm">
+              <div className="bg-muted/20 p-5 border-b border-border">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+                  
+                  {/* Visual branch route indicator badges */}
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 flex-1 min-w-0">
+                    <div className="min-w-0">
+                      <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider block mb-0.5">Source</span>
+                      <span className="font-semibold text-sm text-foreground block truncate max-w-[180px] bg-background border border-border rounded-md px-2.5 py-1">
+                        {getBranchName(selectedGroup.sourceBranch)}
+                      </span>
                     </div>
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Target</p>
-                      <p className="font-medium text-sm truncate">{getBranchName(selectedGroup.targetBranch)}</p>
+                    
+                    {/* Flow arrow */}
+                    <div className="hidden sm:flex items-center justify-center pt-4">
+                      <ArrowRight className="h-4 w-4 text-primary animate-pulse" />
                     </div>
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Lead Date</p>
-                      <p className="font-medium text-sm whitespace-nowrap">{formatDate(selectedGroup.leadDate)}</p>
+                    
+                    <div className="min-w-0">
+                      <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider block mb-0.5">Target</span>
+                      <span className="font-semibold text-sm text-foreground block truncate max-w-[180px] bg-background border border-border rounded-md px-2.5 py-1">
+                        {getBranchName(selectedGroup.targetBranch)}
+                      </span>
                     </div>
+
+                    <div className="h-8 w-px bg-border hidden lg:block" />
+
                     <div>
-                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Requested At</p>
-                      <p className="font-medium text-sm whitespace-nowrap">{formatDate(selectedGroup.dateRequested)}</p>
+                      <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider block mb-0.5">Lead Date</span>
+                      <span className="font-semibold text-sm text-foreground block bg-background border border-border rounded-md px-2.5 py-1 font-mono">
+                        {formatDate(selectedGroup.leadDate)}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider block mb-0.5">Requested At</span>
+                      <span className="font-semibold text-sm text-foreground block bg-background border border-border rounded-md px-2.5 py-1 font-mono">
+                        {formatDate(selectedGroup.dateRequested)}
+                      </span>
                     </div>
                   </div>
                   
-                  <div className="w-full md:w-64 relative">
+                  <div className="w-full lg:w-64 relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                       placeholder="Filter products..."
                       value={productSearch}
                       onChange={(e) => setProductSearch(e.target.value)}
-                      className="pl-9 h-9 text-xs bg-background border-border"
+                      className="pl-9 h-9 text-xs bg-background border-border shadow-sm focus-visible:ring-primary/20"
                     />
                   </div>
                 </div>
