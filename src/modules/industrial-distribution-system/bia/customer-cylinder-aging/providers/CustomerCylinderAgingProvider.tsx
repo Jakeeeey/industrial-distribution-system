@@ -3,29 +3,39 @@
 // Single Context + Provider + consumer hook for the Customer Cylinder Aging module.
 // Pattern mirrors: PostingOfPoProvider.tsx
 //
-// Design decisions:
-// - Fetch does NOT auto-fire on every filter change — user must click "Apply"
-//   to avoid hammering the Spring endpoint on every keystroke.
-// - Client-side search (debounced) operates on the already-fetched records array.
-// - Pagination is handled client-side on the filtered result set.
+// Revamped: Data now sourced from Directus (via BFF) instead of Spring Boot.
+// Auto-fetch on mount is restored — Directus has no mandatory-param restriction.
+// Fetch is triggered on mount AND when user clicks Apply.
 // ──────────────────────────────────────────────────────────────────────────────
 
 "use client";
 
 import * as React from "react";
 import { toast } from "sonner";
-import { fetchCylinderAging } from "../services";
+import { fetchCustomerCylinderAgingSummary, fetchCustomerCylinderDetail } from "../services";
 import type {
   CustomerCylinderAgingRecord,
   CustomerCylinderAgingFilters,
+  CustomerCylinderAgingSummary,
+  CustomerCylinderDetail,
 } from "../types/customer-cylinder-aging.types";
 
 // ── Context shape ─────────────────────────────────────────────────────────────
 type Ctx = {
   // Data
   records: CustomerCylinderAgingRecord[];
+  summaries: CustomerCylinderAgingSummary[];
   isLoading: boolean;
   error: string;
+
+  // View state
+  viewMode: "summary" | "detail";
+  selectedCustomerCode: string | null;
+  customerDetail: CustomerCylinderDetail | null;
+
+  // Actions
+  selectCustomer: (customerCode: string) => Promise<void>;
+  backToSummary: () => void;
 
   // Filters — staged (not yet applied)
   filters: CustomerCylinderAgingFilters;
@@ -55,8 +65,14 @@ export function CustomerCylinderAgingProvider({
 }) {
   // Data state
   const [records, setRecords] = React.useState<CustomerCylinderAgingRecord[]>([]);
+  const [summaries, setSummaries] = React.useState<CustomerCylinderAgingSummary[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState("");
+
+  // View state
+  const [viewMode, setViewMode] = React.useState<"summary" | "detail">("summary");
+  const [selectedCustomerCode, setSelectedCustomerCode] = React.useState<string | null>(null);
+  const [customerDetail, setCustomerDetail] = React.useState<CustomerCylinderDetail | null>(null);
 
   // Filter state (staged — not applied until user clicks Apply)
   const [filters, setFilters] = React.useState<CustomerCylinderAgingFilters>({});
@@ -78,11 +94,16 @@ export function CustomerCylinderAgingProvider({
     setPage(1);
 
     try {
-      const data = await fetchCylinderAging(filters);
-      setRecords(data);
-
-      if (data.length === 0) {
-        toast.info("No records found for the selected filters.");
+      if (viewMode === "summary") {
+        const data = await fetchCustomerCylinderAgingSummary(filters);
+        setSummaries(data);
+        if (data.length === 0) {
+          toast.info("No records found for the selected filters.");
+        }
+      } else if (viewMode === "detail" && selectedCustomerCode) {
+        const data = await fetchCustomerCylinderDetail(selectedCustomerCode, filters);
+        setCustomerDetail(data);
+        setRecords(data.connectedCylinders);
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -91,22 +112,67 @@ export function CustomerCylinderAgingProvider({
         setError(msg);
         toast.error("Failed to fetch cylinder aging data", { description: msg });
       }
+      if (viewMode === "summary") {
+        setSummaries([]);
+      } else {
+        setCustomerDetail(null);
+        setRecords([]);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [filters, viewMode, selectedCustomerCode]);
+
+  const selectCustomer = React.useCallback(async (customerCode: string) => {
+    setIsLoading(true);
+    setError("");
+    setSelectedCustomerCode(customerCode);
+    setViewMode("detail");
+    setPage(1);
+    setSearch("");
+
+    try {
+      const data = await fetchCustomerCylinderDetail(customerCode, filters);
+      setCustomerDetail(data);
+      setRecords(data.connectedCylinders);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      toast.error("Failed to fetch customer details", { description: msg });
+      setCustomerDetail(null);
       setRecords([]);
     } finally {
       setIsLoading(false);
     }
   }, [filters]);
 
-  // Initial load — fetch with empty filters on mount
-  React.useEffect(() => {
-    applyFilters();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const backToSummary = React.useCallback(() => {
+    setViewMode("summary");
+    setSelectedCustomerCode(null);
+    setCustomerDetail(null);
+    setRecords([]);
+    setPage(1);
+    setSearch("");
   }, []);
+
+  // Initial load — auto-fetch summaries on mount or view mode change.
+  React.useEffect(() => {
+    if (viewMode === "summary") {
+      applyFilters();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode]);
 
   const value: Ctx = {
     records,
+    summaries,
     isLoading,
     error,
+    viewMode,
+    selectedCustomerCode,
+    customerDetail,
+    selectCustomer,
+    backToSummary,
     filters,
     setFilters,
     applyFilters,

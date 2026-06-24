@@ -28,6 +28,17 @@ export function DatePickerWithRange({
   onDateChange,
   className,
 }: DatePickerWithRangeProps) {
+  // Detect mobile to show single-month calendar
+  const [isMobile, setIsMobile] = React.useState(false);
+
+  React.useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    setIsMobile(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
   return (
     <div className={cn("grid gap-2", className)}>
       <Popover>
@@ -36,14 +47,15 @@ export function DatePickerWithRange({
             id="date"
             variant="outline"
             className={cn(
-              "w-[260px] justify-start text-left font-normal",
-              !date && "text-muted-foreground"
+              // Full width on mobile, fixed width on sm+
+              "w-full sm:w-[260px] justify-start text-left font-normal",
+              !date && "text-muted-foreground",
             )}
           >
-            <CalendarIcon className="mr-2 h-4 w-4" />
+            <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
             {date?.from ? (
               date.to ? (
-                <>
+                <span className="truncate">
                   {date.from.toLocaleDateString("en-US", {
                     month: "short",
                     day: "numeric",
@@ -55,27 +67,35 @@ export function DatePickerWithRange({
                     day: "numeric",
                     year: "numeric",
                   })}
-                </>
+                </span>
               ) : (
-                date.from.toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                })
+                <span className="truncate">
+                  {date.from.toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </span>
               )
             ) : (
               <span>Pick a date range</span>
             )}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
+        <PopoverContent
+          className="w-auto p-0"
+          align="start"
+          // On mobile keep it within the viewport
+          style={{ maxWidth: "calc(100vw - 32px)" }}
+        >
           <Calendar
             initialFocus
             mode="range"
             defaultMonth={date?.from}
             selected={date}
             onSelect={onDateChange}
-            numberOfMonths={2}
+            // Single month on mobile, two months on tablet+
+            numberOfMonths={isMobile ? 1 : 2}
           />
         </PopoverContent>
       </Popover>

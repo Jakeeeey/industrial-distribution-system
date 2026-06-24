@@ -50,24 +50,15 @@ export interface UsePriceMonitoringReturn {
 // Initial query state
 // ---------------------------------------------------------------------------
 
-const getStartOfCurrentMonth = () => {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0);
-};
-
-const getEndOfCurrentMonth = () => {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
-};
-
 const INITIAL_QUERY: PriceMonitoringQuery = {
   productId: "",
   productCode: null,
   productLabel: null,
   supplierId: "",
   supplierLabel: null,
-  dateFrom: getStartOfCurrentMonth(),
-  dateTo: getEndOfCurrentMonth(),
+  // Default to the current calendar year range
+  dateFrom: `${new Date().getFullYear()}-01-01`,
+  dateTo: `${new Date().getFullYear()}-12-31`,
 };
 
 // ---------------------------------------------------------------------------

@@ -67,34 +67,30 @@ export default async function CustomerCylinderAgingPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* ── Header ────────────────────────────────────────────────────────── */}
-      <header
-        className="
-          sticky top-2 z-50 relative
-          flex h-16 shrink-0 items-center justify-between
-          border-b bg-background shadow-sm
-          before:content-[''] before:absolute before:inset-x-0
-          before:-top-2 before:h-2 before:bg-background
-        "
-      >
-        <div className="flex h-full items-center gap-2 px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem className="hidden md:block">
-                <BreadcrumbLink href="#">
-                  Business Intelligence & Analytics
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator className="hidden md:block" />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Customer Cylinder Aging</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
+      {/* ── Standard IDS Page Header ── */}
+      <header className="relative z-10 flex h-14 shrink-0 items-center justify-between border-b shadow-sm bg-background sm:h-16 overflow-hidden">
+        <div className="flex h-full min-w-0 items-center gap-2 px-3 sm:px-4 overflow-hidden">
+          <SidebarTrigger className="-ml-1 shrink-0" />
+          <Separator orientation="vertical" className="hidden sm:block mr-2 data-[orientation=vertical]:h-4 shrink-0" />
+          <div className="min-w-0 overflow-hidden">
+            <Breadcrumb>
+              <BreadcrumbList className="min-w-0 overflow-hidden">
+                <BreadcrumbItem className="hidden md:block shrink-0">
+                  <BreadcrumbLink href="#">
+                    Business Intelligence & Analytics
+                  </BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator className="hidden md:block shrink-0" />
+                <BreadcrumbItem className="min-w-0 overflow-hidden">
+                  <BreadcrumbPage className="truncate max-w-[56vw] sm:max-w-[60vw] md:max-w-none">
+                    Customer Cylinder Aging
+                  </BreadcrumbPage>
+                </BreadcrumbItem>
+              </BreadcrumbList>
+            </Breadcrumb>
+          </div>
         </div>
-        <div className="flex h-full items-center px-4">
+        <div className="flex h-full items-center px-2 sm:px-4 shrink-0 overflow-hidden">
           <NavUser user={headerUser} />
         </div>
       </header>
