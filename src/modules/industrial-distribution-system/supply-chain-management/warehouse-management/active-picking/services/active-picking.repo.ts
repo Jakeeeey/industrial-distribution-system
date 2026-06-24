@@ -268,65 +268,25 @@ export const ActivePickingRepo = {
             throw new Error("NETWORK_FAILURE");
         }
 
-        const extractData = (raw: Record<string, unknown> | unknown[] | null): Record<string, unknown>[] => {
-            if (Array.isArray(raw)) return raw as Record<string, unknown>[];
-            if (raw && typeof raw === 'object' && 'content' in raw && Array.isArray(raw.content)) return raw.content as Record<string, unknown>[];
-            if (raw && typeof raw === 'object' && 'data' in raw && Array.isArray(raw.data)) return raw.data as Record<string, unknown>[];
-            return [];
-        };
-
-        const tryFetch = async (endpoint: string, queryParams: string) => {
-            const urlWithAll = `${baseUrl}/api/${endpoint}/all?${queryParams}&size=10000`;
-            try {
-                const res = await fetch(urlWithAll, {
-                    cache: "no-store",
-                    headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }
-                });
-
-                if (res.ok) {
-                    const json = await res.json();
-                    return extractData(json);
-                }
-
-                // Fallback: try without /all
-                const urlWithoutAll = `${baseUrl}/api/${endpoint}?${queryParams}&size=10000`;
-                const res2 = await fetch(urlWithoutAll, {
-                    cache: "no-store",
-                    headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }
-                });
-
-                if (res2.ok) {
-                    const json2 = await res2.json();
-                    return extractData(json2);
-                }
-
-                return [];
-            } catch {
-                throw new Error("NETWORK_FAILURE");
-            }
-        };
+        // OPTIMIZATION: Query the standardized Spring Boot endpoint using the correct query parameters (serialNumber, branchId)
+        // and request size=1 since we only need to verify if the single serial number is on-hand.
+        // This eliminates the previous speculative blasting of 4-6 parallel requests to guess field names.
+        const url = `${baseUrl}/api/v-serial-onhand/all?serialNumber=${encodeURIComponent(inputSerial)}&branchId=${branchId}&size=1`;
 
         try {
-            // Optimize by querying all serial-based patterns concurrently
-            const serialQueries = [
-                tryFetch("v-serial-onhand", `serialNumber=${encodeURIComponent(inputSerial)}&branchId=${branchId}`),
-                tryFetch("v-serial-onhand", `serial_number=${encodeURIComponent(inputSerial)}&branch_id=${branchId}`),
-                tryFetch("v-serial-onhand", `serialNumber=${encodeURIComponent(inputSerial)}`),
-                tryFetch("v-serial-onhand", `serial_number=${encodeURIComponent(inputSerial)}`)
-            ];
+            const res = await fetch(url, {
+                cache: "no-store",
+                headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }
+            });
 
-            const results = await Promise.all(serialQueries);
-            let data = results.flat();
-
-            // Fallback to branch-only scan only if specific serial searches return nothing
-            if (data.length === 0) {
-                const branchQueries = [
-                    tryFetch("v-serial-onhand", `branchId=${branchId}`),
-                    tryFetch("v-serial-onhand", `branch_id=${branchId}`)
-                ];
-                const branchResults = await Promise.all(branchQueries);
-                data = branchResults.flat();
+            if (!res.ok) {
+                return null;
             }
+
+            const json = await res.json();
+            
+            // Handle Spring Boot response wrappers
+            const data = Array.isArray(json) ? json : (json.content || json.data || []);
 
             const onhand = data.find((item: Record<string, unknown>) => {
                 const dbVal = item.serialNumber ?? item.serial_number ?? item.serialNo ?? item.serial ?? item.sn ?? item.snCode;
@@ -343,9 +303,6 @@ export const ActivePickingRepo = {
             if (onhand) {
                 const product = onhand.product as ProductRef | undefined;
 
-                // Try all known field name patterns for the product ID
-                // Each access returns `unknown` (Record<string,unknown>), so cast each
-                // individually before chaining to satisfy strict TS typing.
                 type PrimId = string | number | null | undefined;
                 let pId: PrimId =
                     (onhand.productId as PrimId) ??
@@ -369,9 +326,14 @@ export const ActivePickingRepo = {
             }
 
             return null;
-        } catch {
+        } catch (error) {
+            const err = error as Error;
+            if (err.message === "NETWORK_FAILURE") {
+                throw err;
+            }
             throw new Error("NETWORK_FAILURE");
         }
     }
 };
+
 ;

@@ -106,18 +106,21 @@ export const ActivePickingService = {
         // Calculate quantity directly to avoid internal GET in updatePickedQuantity
         const targetNewQty = detail.picked_quantity + 1;
 
-        // Concurrently execute database updates
-        const [newQty] = await Promise.all([
-            ActivePickingRepo.updatePickedQuantity(detailId, 1, userIdNum, timestamp, targetNewQty),
-            ActivePickingRepo.saveSerialMapping(detailId, serialNumber, userIdNum, timestamp)
-        ]);
+        // OPTIMIZATION: Instead of concurrent Promise.all database updates which can cause partial success states,
+        // we execute sequentially. We first save the serial mapping (securing uniqueness). If it succeeds,
+        // we then increment the picked quantity. If the mapping fails, the quantity remains untouched.
+        const savedMapping = await ActivePickingRepo.saveSerialMapping(detailId, serialNumber, userIdNum, timestamp);
+        const newQty = await ActivePickingRepo.updatePickedQuantity(detailId, 1, userIdNum, timestamp, targetNewQty);
 
+        // OPTIMIZATION: Return the savedMapping object so that the front-end can immediately update its local state
+        // and avoid triggering an extra HTTP GET call to sync the details list.
         return {
             success: true,
             message: "Serial processed and matched to product successfully",
             newQuantity: newQty,
-            detailId
-        };
+            detailId,
+            serialMapping: savedMapping
+        } as any;
     },
 
     async getSerialsForDetail(detailId: number): Promise<ConsolidatorSerialMapping[]> {

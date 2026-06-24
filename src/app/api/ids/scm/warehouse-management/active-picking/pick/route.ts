@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Missing required fields (consolidatorId, serial_number, branchId)" }, { status: 400 });
         }
 
+        // The service layer now returns the complete serialMapping object to avoid extra frontend GET requests.
         const result = await ActivePickingService.processSerialPick(consolidatorId, serial_number, userId, branchId, sessionToken);
         
         return NextResponse.json(result);

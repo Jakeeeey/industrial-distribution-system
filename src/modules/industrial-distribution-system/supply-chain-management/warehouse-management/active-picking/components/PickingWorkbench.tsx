@@ -66,7 +66,8 @@ export function PickingWorkbench() {
     const toggleRow = (id: number) => {
         const isExpanding = !expandedRows[id];
         setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
-        if (isExpanding) {
+        // OPTIMIZATION: Only fetch serials if they are not already cached in serialsMap.
+        if (isExpanding && (!serialsMap[id] || serialsMap[id].length === 0)) {
             fetchSerials(id);
         }
     };
@@ -92,11 +93,13 @@ export function PickingWorkbench() {
         const currentSerial = serialInput.trim();
         const success = await processSerial(activePickingId, currentSerial, activePicking.branch_id || 0);
 
+        // OPTIMIZATION: If the scan is successful, clear the input. If it fails, select/highlight the text
+        // so the picker can immediately scan the next barcode without manual intervention.
         if (success) {
             setSerialInput("");
             inputRef.current?.focus();
-
-            // The success logic in the hook already refreshes the specific detail quantity and its serials
+        } else {
+            inputRef.current?.select();
         }
     };
 

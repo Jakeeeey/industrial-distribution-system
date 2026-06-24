@@ -134,8 +134,16 @@ export function useActivePicking(userId: number | null = null) {
                 return d;
             }));
 
-            // Refresh serials for this detail
-            fetchSerials(detailId);
+            // OPTIMIZATION: Update serials locally in React state using the returned serialMapping object
+            // to avoid triggering an extra fetch HTTP request. Fall back to fetchSerials only if serialMapping is missing.
+            if (data.serialMapping) {
+                setSerialsMap(prev => ({
+                    ...prev,
+                    [detailId]: [...(prev[detailId] || []), data.serialMapping]
+                }));
+            } else {
+                fetchSerials(detailId);
+            }
 
             toast.success("Serial matched and picked successfully");
             return true;
