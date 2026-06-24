@@ -37,6 +37,7 @@ import {
   formatDate,
   resolveCustomerSegment,
 } from "../services";
+import type { CustomerSegment } from "../services/customer-cylinder-aging.helpers";
 
 import {
   Table,
@@ -322,6 +323,9 @@ export function CylinderAgingSummaryTable() {
   const [sortKey, setSortKey] = React.useState<SortKey>("totalCylinders");
   const [sortDir, setSortDir] = React.useState<SortDir>("desc");
 
+  // Segment Filter state
+  const [segmentFilter, setSegmentFilter] = React.useState<"ALL" | CustomerSegment>("ALL");
+
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -334,9 +338,18 @@ export function CylinderAgingSummaryTable() {
 
   // Filter → Sort → Paginate pipeline
   const filtered = React.useMemo(() => {
-    if (!debouncedSearch) return summaries;
+    let result = summaries;
+
+    if (segmentFilter !== "ALL") {
+      result = result.filter((r) => {
+        const seg = resolveCustomerSegment(r.customerName, r.storeName);
+        return seg.segment === segmentFilter;
+      });
+    }
+
+    if (!debouncedSearch) return result;
     const tokens = debouncedSearch.split(/\s+/).filter(Boolean);
-    return summaries.filter((r) => {
+    return result.filter((r) => {
       const hay = [
         r.customerCode,
         r.customerName,
@@ -349,7 +362,7 @@ export function CylinderAgingSummaryTable() {
         .toLowerCase();
       return tokens.every((t) => hay.includes(t));
     });
-  }, [summaries, debouncedSearch]);
+  }, [summaries, debouncedSearch, segmentFilter]);
 
   const sorted = React.useMemo(
     () => sortSummaries(filtered, sortKey, sortDir),
@@ -380,19 +393,39 @@ export function CylinderAgingSummaryTable() {
     <div className="rounded-xl border border-border/80 bg-card shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
       {/* ── Toolbar ────────────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-2 p-3 border-b border-border/50 sm:flex-row sm:items-center sm:justify-between bg-muted/10">
-        {/* Search Input */}
-        <div className="relative w-full sm:max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-          <Input
-            id="cca-summary-search"
-            placeholder="Search customer name, code, store…"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
+        {/* Search & Segment Filter */}
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:max-w-md">
+          <div className="relative w-full sm:max-w-[200px]">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              id="cca-summary-search"
+              placeholder="Search customer…"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className="pl-8 h-8 text-xs rounded-lg w-full"
+            />
+          </div>
+
+          <Select
+            value={segmentFilter}
+            onValueChange={(v: "ALL" | CustomerSegment) => {
+              setSegmentFilter(v);
               setPage(1);
             }}
-            className="pl-8 h-8 text-xs rounded-lg"
-          />
+          >
+            <SelectTrigger className="h-8 text-xs rounded-lg w-full sm:w-[140px] font-medium bg-background">
+              <SelectValue placeholder="All Segments" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL" className="text-xs font-medium">All Segments</SelectItem>
+              <SelectItem value="COMMERCIAL" className="text-xs font-medium">Commercial</SelectItem>
+              <SelectItem value="RETAIL" className="text-xs font-medium">Retail</SelectItem>
+              <SelectItem value="RESIDENTIAL" className="text-xs font-medium">Residential</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
