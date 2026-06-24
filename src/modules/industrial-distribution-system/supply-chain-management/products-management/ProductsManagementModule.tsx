@@ -21,11 +21,20 @@ import {
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogDescription 
+  DialogDescription,
+  DialogFooter
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Plus, Package, Tags, Briefcase, Trash, List, LayoutGrid } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
+import { Plus, Package, Tags, Briefcase, Trash, List, LayoutGrid, Search, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 interface ProductsManagementModuleProps {
@@ -47,7 +56,18 @@ export default function ProductsManagementModule({
     page,
     setPage,
     limit,
-    totalItems
+    setLimit,
+    totalItems,
+    searchQuery,
+    setSearchQuery,
+    selectedCategory,
+    setSelectedCategory,
+    selectedBrand,
+    setSelectedBrand,
+    selectedStatus,
+    setSelectedStatus,
+    sortOrder,
+    setSortOrder
   } = useProductsManagement();
   
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -58,6 +78,13 @@ export default function ProductsManagementModule({
   const [isViewOnly, setIsViewOnly] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
   const [viewMode, setViewMode] = useState<"list" | "catalog">("list");
+
+  // Delete Confirmation State
+  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; id: number | null; isBulk: boolean }>({
+    isOpen: false,
+    id: null,
+    isBulk: false
+  });
 
   const handleCreate = () => {
     setEditingItem(null);
@@ -79,30 +106,30 @@ export default function ProductsManagementModule({
     setIsDialogOpen(true);
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this item?")) return;
-    
+  const confirmDelete = (id: number) => {
+    setDeleteConfirm({ isOpen: true, id, isBulk: false });
+  };
+
+  const confirmBulkDelete = () => {
+    if (!selectedProductIds.length) return;
+    setDeleteConfirm({ isOpen: true, id: null, isBulk: true });
+  };
+
+  const executeDelete = async () => {
     try {
-      if (activeTab === "products") await productsService.deleteProduct(id);
-      // Add delete for categories/brands if needed
-      toast.success("Item deleted successfully");
+      if (deleteConfirm.isBulk) {
+        await productsService.deleteProducts(selectedProductIds);
+        toast.success("Items deleted successfully");
+        setSelectedProductIds([]);
+      } else if (deleteConfirm.id !== null) {
+        if (activeTab === "products") await productsService.deleteProduct(deleteConfirm.id);
+        toast.success("Item deleted successfully");
+      }
       refresh();
     } catch (error) {
       toast.error("Delete failed: " + (error instanceof Error ? error.message : String(error)));
-    }
-  };
-
-  const handleBulkDelete = async () => {
-    if (!selectedProductIds.length) return;
-    if (!confirm(`Are you sure you want to delete ${selectedProductIds.length} items?`)) return;
-
-    try {
-      await productsService.deleteProducts(selectedProductIds);
-      toast.success("Items deleted successfully");
-      setSelectedProductIds([]);
-      refresh();
-    } catch (error) {
-      toast.error("Bulk delete failed: " + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      setDeleteConfirm({ isOpen: false, id: null, isBulk: false });
     }
   };
 
@@ -159,7 +186,7 @@ export default function ProductsManagementModule({
           </div>
           <Button 
             onClick={handleCreate} 
-            className="h-12 px-6 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 border-none text-white font-bold"
+            className="h-12 px-6 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 bg-primary text-primary-foreground hover:bg-primary/90 font-bold"
           >
             <Plus className="mr-2 h-5 w-5" /> 
             Create New {activeTab === "products" ? "Product" : activeTab === "categories" ? "Category" : "Brand"}
@@ -192,25 +219,81 @@ export default function ProductsManagementModule({
 
           <div className="glass-card rounded-2xl border border-white/20 dark:border-slate-800/50 shadow-2xl backdrop-blur-md bg-white/40 dark:bg-slate-900/40 p-1">
             <TabsContent value="products" className="m-0 focus-visible:outline-none">
-              <div className="flex justify-between items-center mb-4 px-2">
-                <div className="flex items-center gap-2">
-                  <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as "list" | "catalog")} className="bg-background border border-border/50 rounded-xl p-0.5 mr-2">
-                    <ToggleGroupItem value="list" aria-label="List View" className="rounded-lg px-3 data-[state=on]:bg-primary/10 data-[state=on]:text-primary h-8">
-                      <List className="w-4 h-4" />
-                    </ToggleGroupItem>
-                    <ToggleGroupItem value="catalog" aria-label="Catalog View" className="rounded-lg px-3 data-[state=on]:bg-primary/10 data-[state=on]:text-primary h-8">
-                      <LayoutGrid className="w-4 h-4" />
-                    </ToggleGroupItem>
-                  </ToggleGroup>
-                  {selectedProductIds.length > 0 && (
-                    <Button variant="destructive" size="sm" onClick={handleBulkDelete} className="animate-in fade-in slide-in-from-left-2">
-                      <Trash className="h-4 w-4 mr-2" />
-                      Delete Selected ({selectedProductIds.length})
-                    </Button>
-                  )}
+              <div className="flex flex-col gap-4 mb-4 px-2 mt-4">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                  <div className="flex flex-1 flex-wrap items-center gap-2">
+                    <div className="relative w-full md:w-64">
+                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="search"
+                        placeholder="Search products..."
+                        className="pl-8 bg-background"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                      />
+                    </div>
+                    <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                      <SelectTrigger className="w-[140px] bg-background">
+                        <SelectValue placeholder="Category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Categories</SelectItem>
+                        {categories.map(c => (
+                          <SelectItem key={c.category_id} value={String(c.category_id)}>{c.category_name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={selectedBrand} onValueChange={setSelectedBrand}>
+                      <SelectTrigger className="w-[140px] bg-background">
+                        <SelectValue placeholder="Brand" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Brands</SelectItem>
+                        {brands.map(b => (
+                          <SelectItem key={b.brand_id} value={String(b.brand_id)}>{b.brand_name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                      <SelectTrigger className="w-[120px] bg-background">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="Approved">Approved</SelectItem>
+                        <SelectItem value="Pending">Pending</SelectItem>
+                        <SelectItem value="Inactive">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={sortOrder} onValueChange={setSortOrder}>
+                      <SelectTrigger className="w-[160px] bg-background">
+                        <SelectValue placeholder="Sort By" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="-created_at">Newest First</SelectItem>
+                        <SelectItem value="created_at">Oldest First</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {selectedProductIds.length > 0 && (
+                      <Button variant="destructive" onClick={confirmBulkDelete} className="animate-in fade-in slide-in-from-left-2">
+                        <Trash className="h-4 w-4 mr-2" />
+                        Delete Selected ({selectedProductIds.length})
+                      </Button>
+                    )}
+                    <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as "list" | "catalog")} className="bg-background border border-border/50 rounded-xl p-0.5">
+                      <ToggleGroupItem value="list" aria-label="List View" className="rounded-lg px-3 data-[state=on]:bg-primary/10 data-[state=on]:text-primary h-9">
+                        <List className="w-4 h-4" />
+                      </ToggleGroupItem>
+                      <ToggleGroupItem value="catalog" aria-label="Catalog View" className="rounded-lg px-3 data-[state=on]:bg-primary/10 data-[state=on]:text-primary h-9">
+                        <LayoutGrid className="w-4 h-4" />
+                      </ToggleGroupItem>
+                    </ToggleGroup>
+                  </div>
                 </div>
-                <div className="text-sm text-muted-foreground">
-                  Total: {totalItems} items
+                <div className="text-sm text-muted-foreground flex justify-between items-center">
+                  <span>Total: {totalItems} items</span>
                 </div>
               </div>
 
@@ -222,7 +305,7 @@ export default function ProductsManagementModule({
                   selectedIds={selectedProductIds}
                   onSelectionChange={setSelectedProductIds}
                   onEdit={handleEdit} 
-                  onDelete={handleDelete} 
+                  onDelete={confirmDelete} 
                   onView={handleView} 
                 />
               ) : (
@@ -233,31 +316,49 @@ export default function ProductsManagementModule({
                   selectedIds={selectedProductIds}
                   onSelectionChange={setSelectedProductIds}
                   onEdit={handleEdit} 
-                  onDelete={handleDelete} 
+                  onDelete={confirmDelete} 
                   onView={handleView} 
                 />
               )}
 
-              <div className="flex items-center justify-end space-x-2 py-4 px-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page === 1 || loading}
-                >
-                  Previous
-                </Button>
-                <div className="text-sm font-medium">
-                  Page {page} of {Math.ceil(totalItems / limit) || 1}
+              <div className="flex items-center justify-between py-4 px-2">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span>Show</span>
+                  <Select value={String(limit)} onValueChange={(v) => setLimit(Number(v))}>
+                    <SelectTrigger className="w-[70px] h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[10, 20, 30, 40, 50].map((size) => (
+                        <SelectItem key={size} value={String(size)}>
+                          {size}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span>per page</span>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage(p => p + 1)}
-                  disabled={page >= Math.ceil(totalItems / limit) || loading}
-                >
-                  Next
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={page === 1 || loading}
+                  >
+                    Previous
+                  </Button>
+                  <div className="text-sm font-medium mx-2">
+                    Page {page} of {Math.ceil(totalItems / limit) || 1}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage(p => p + 1)}
+                    disabled={page >= Math.ceil(totalItems / limit) || loading}
+                  >
+                    Next
+                  </Button>
+                </div>
               </div>
             </TabsContent>
 
@@ -265,7 +366,7 @@ export default function ProductsManagementModule({
               <CategoryTable 
                 categories={categories} 
                 onEdit={handleEdit} 
-                onDelete={handleDelete} 
+                onDelete={confirmDelete} 
               />
             </TabsContent>
 
@@ -273,7 +374,7 @@ export default function ProductsManagementModule({
               <BrandTable 
                 brands={brands} 
                 onEdit={handleEdit} 
-                onDelete={handleDelete} 
+                onDelete={confirmDelete} 
               />
             </TabsContent>
           </div>
@@ -321,6 +422,31 @@ export default function ProductsManagementModule({
               isLoading={isSaving}
             />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirm.isOpen} onOpenChange={(open) => !open && setDeleteConfirm({ isOpen: false, id: null, isBulk: false })}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Confirm Deletion
+            </DialogTitle>
+            <DialogDescription className="py-4 text-base">
+              {deleteConfirm.isBulk 
+                ? `Are you sure you want to delete ${selectedProductIds.length} items? This action cannot be undone.`
+                : "Are you sure you want to delete this item? This action cannot be undone."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setDeleteConfirm({ isOpen: false, id: null, isBulk: false })}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={executeDelete}>
+              Delete
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

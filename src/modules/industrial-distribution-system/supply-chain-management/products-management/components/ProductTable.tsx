@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Edit, Trash, Eye } from "lucide-react";
+import { Edit, Trash } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 
 interface ProductTableProps {
@@ -75,7 +75,6 @@ export function ProductTable({
             <TableHead>Name</TableHead>
             <TableHead>Category</TableHead>
             <TableHead>Brand</TableHead>
-            <TableHead>Price</TableHead>
             <TableHead>Status</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
@@ -83,14 +82,18 @@ export function ProductTable({
         <TableBody>
           {products.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
+              <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">
                 No products found
               </TableCell>
             </TableRow>
           ) : (
             products.map((product) => (
-              <TableRow key={product.product_id} className={selectedIds.includes(product.product_id) ? "bg-muted/50" : ""}>
-                <TableCell>
+              <TableRow 
+                key={product.product_id} 
+                className={`cursor-pointer transition-colors hover:bg-muted/50 ${selectedIds.includes(product.product_id) ? "bg-muted/50" : ""}`}
+                onClick={() => onView(product)}
+              >
+                <TableCell onClick={(e) => e.stopPropagation()}>
                   <Checkbox 
                     checked={selectedIds.includes(product.product_id)}
                     onCheckedChange={() => toggleOne(product.product_id)}
@@ -105,17 +108,11 @@ export function ProductTable({
                   {getBrandName(product.product_brand)}
                 </TableCell>
                 <TableCell>
-                  {new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(product.price_per_unit)}
-                </TableCell>
-                <TableCell>
                   <Badge variant={product.isActive ? "default" : "secondary"}>
                     {product.isActive ? "Active" : "Inactive"}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-right space-x-2">
-                  <Button variant="ghost" size="icon" onClick={() => onView(product)}>
-                    <Eye className="h-4 w-4" />
-                  </Button>
+                <TableCell className="text-right space-x-2" onClick={(e) => e.stopPropagation()}>
                   <Button variant="ghost" size="icon" onClick={() => onEdit(product)}>
                     <Edit className="h-4 w-4" />
                   </Button>
