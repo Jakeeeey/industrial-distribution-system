@@ -4,6 +4,7 @@ import * as React from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 import type { MonthlyMatrixEntry, ViewPriceMonitoringRow } from "../types";
 import {
   formatCurrency,
@@ -13,24 +14,7 @@ import {
 import { mapPriceTypeName } from "../../product-pricing/utils/constants";
 
 
-/**
- * Breakpoint hook (no dependency)
- */
-function useIsMobile() {
-  const [isMobile, setIsMobile] = React.useState(false);
-
-  React.useEffect(() => {
-    const mq = window.matchMedia("(max-width: 640px)");
-
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    setIsMobile(mq.matches);
-
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, []);
-
-  return isMobile;
-}
+// Breakpoint hook is imported from @/hooks/use-mobile
 
 /**
  * Props
@@ -59,16 +43,16 @@ function MobileMonthlyMatrix({
   return (
     <div className="space-y-3">
       {/* Month selector */}
-      <div className="flex gap-1 overflow-x-auto pb-1">
+      <div className="flex gap-1 overflow-x-auto pb-1.5 scrollbar-thin">
         {MONTH_LABELS.map((m, idx) => (
           <button
             key={m}
             onClick={() => setActiveMonth(idx)}
             className={cn(
-              "px-2 py-1 text-[10px] rounded border whitespace-nowrap transition",
+              "px-3 py-1.5 text-[11px] font-semibold rounded-md border whitespace-nowrap transition-all duration-200",
               activeMonth === idx
-                ? "bg-primary text-white"
-                : "bg-muted text-muted-foreground",
+                ? "bg-primary text-primary-foreground border-primary shadow-xs scale-105"
+                : "bg-muted/60 text-muted-foreground hover:bg-muted border-transparent hover:text-foreground",
             )}
           >
             {m}
@@ -77,7 +61,7 @@ function MobileMonthlyMatrix({
       </div>
 
       {/* Cards */}
-      <div className="space-y-2">
+      <div className="space-y-2 animate-in fade-in duration-200">
         {matrixEntries.map((entry) => {
           const color = getPriceTypeColor(entry.priceTypeSort);
           const price = entry.monthlyPrices[activeMonth];
@@ -87,7 +71,11 @@ function MobileMonthlyMatrix({
           return (
             <div
               key={entry.priceTypeId}
-              className="border rounded-lg p-3 bg-background"
+              className={cn(
+                "border rounded-lg p-3 bg-background transition-all duration-200 hover:shadow-xs",
+                changed && "border-l-4",
+              )}
+              style={changed ? { borderLeftColor: color } : undefined}
             >
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-2">
@@ -95,27 +83,27 @@ function MobileMonthlyMatrix({
                     className="h-2 w-2 rounded-full"
                     style={{ backgroundColor: color }}
                   />
-                  <span className="font-medium text-sm">
+                  <span className="font-semibold text-sm">
                     {mapPriceTypeName(entry.priceTypeName)}
                   </span>
                 </div>
 
-                <span className="font-mono text-sm">
+                <span className="font-mono text-sm font-bold">
                   {price !== null ? formatCurrency(price) : "—"}
                 </span>
               </div>
 
               {changed && events ? (
                 <button
-                  className="mt-2 text-xs text-primary underline "
+                  className="mt-2.5 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline hover:scale-102 active:scale-98 transition-all"
                   onClick={() => onSelectRow?.(events)}
                 >
-                  View price change details
+                  View price change details →
                 </button>
               ) : (
-                <span className="mt-2 text-xs text-muted-foreground">
+                <div className="mt-2 text-xs text-muted-foreground">
                   No price change this month
-                </span>
+                </div>
               )}
             </div>
           );
@@ -207,10 +195,10 @@ function DesktopMatrix({
                         {price !== null ? (
                           <span
                             className={cn(
-                              "inline-block px-1.5 py-0.5 rounded",
-                              changed && "text-white",
+                              "inline-block px-2 py-0.5 rounded text-[11px] font-semibold transition-all duration-200 ease-in-out",
+                              changed && "text-white shadow-xs",
                               clickable &&
-                              "cursor-pointer hover:scale-105 transition",
+                              "cursor-pointer hover:scale-110 active:scale-95 hover:brightness-110 hover:shadow-md",
                             )}
                             style={
                               changed ? { backgroundColor: color } : undefined
