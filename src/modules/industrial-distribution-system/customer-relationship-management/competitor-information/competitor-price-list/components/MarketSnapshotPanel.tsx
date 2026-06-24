@@ -235,7 +235,7 @@ export function MarketSnapshotPanel({
 				</CardContent>
 			</Card>
 
-			{/* ─── Geographic Distribution ──────────────────────────────────── */}
+			{/* ─── Geographic Distribution ───────────────────────────────── */}
 			{topProvinces.length > 0 && (
 				<Card className="border shadow-sm">
 					<CardHeader className="pb-2 pt-4 px-4">
@@ -245,11 +245,16 @@ export function MarketSnapshotPanel({
 						</CardTitle>
 					</CardHeader>
 					<CardContent className="px-4 pb-4">
-						<div className="flex flex-col gap-2">
+						{/*
+							 On mobile (full-width panel) use a 2-column grid so provinces
+							 don’t waste horizontal space. On lg+ (fixed sidebar) single column.
+						*/}
+						<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2">
 							{topProvinces.map(({ province, count }) => (
 								<div key={province}>
 									<div className="flex items-center justify-between mb-1">
-										<span className="text-xs font-medium truncate max-w-[160px]">
+										{/* Relaxed truncation: full available width minus the count badge */}
+										<span className="text-xs font-medium truncate max-w-[calc(100%-3rem)]">
 											{province}
 										</span>
 										<span className="text-xs text-muted-foreground font-mono ml-2 shrink-0">
@@ -271,7 +276,7 @@ export function MarketSnapshotPanel({
 				</Card>
 			)}
 
-			{/* ─── Source Breakdown ─────────────────────────────────────────── */}
+			{/* ─── Source Breakdown ─────────────────────────────────── */}
 			<Card className="border shadow-sm">
 				<CardHeader className="pb-2 pt-4 px-4">
 					<CardTitle className="text-sm font-bold flex items-center gap-2">
@@ -280,9 +285,10 @@ export function MarketSnapshotPanel({
 					</CardTitle>
 				</CardHeader>
 				<CardContent className="px-4 pb-4">
-					<div className="flex flex-col gap-2">
+					{/* Flex-wrap on mobile so source pills sit side-by-side on wide screens */}
+					<div className="flex flex-col sm:flex-row sm:flex-wrap lg:flex-col gap-2">
 						{sourceStats.map(({ sourceType, count }) => (
-							<div key={sourceType} className="flex items-center justify-between">
+							<div key={sourceType} className="flex items-center justify-between flex-1 min-w-[120px]">
 								<div className="flex items-center gap-2">
 									<div
 										className={cn(

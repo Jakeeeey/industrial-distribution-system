@@ -86,7 +86,8 @@ function PriceVsBadge({ value }: { value: string | null }) {
 function RowDetailPanel({ entry }: { entry: CompetitorPriceEntry }) {
 	const competitorName = resolveCompetitorName(entry);
 	return (
-		<div className="bg-muted/30 border-t px-6 py-4 grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-3">
+		// Mobile: 1-col → sm: 2-col → md: 4-col
+		<div className="bg-muted/30 border-t px-4 sm:px-6 py-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-3">
 			<div>
 				<p className="text-xs text-muted-foreground mb-0.5">Competitor</p>
 				<p className="text-sm font-semibold">{competitorName}</p>
@@ -568,16 +569,17 @@ function RawTable({
 				</Table>
 			</div>
 
-			{/* Pagination */}
-			<div className="flex items-center justify-between px-1">
-				<div className="flex-1 text-sm text-muted-foreground">
+			{/* Pagination — wraps gracefully on mobile */}
+			<div className="flex flex-wrap items-center justify-between gap-y-2 px-1">
+				{/* Entry count — hidden on xs to save space */}
+				<div className="hidden sm:block flex-1 text-sm text-muted-foreground">
 					Showing{" "}
 					<span className="font-semibold text-foreground">{table.getRowModel().rows.length}</span>{" "}
 					of{" "}
 					<span className="font-semibold text-foreground">{table.getFilteredRowModel().rows.length}</span>{" "}
 					entries
 				</div>
-				<div className="flex items-center gap-4">
+				<div className="flex items-center gap-3 flex-wrap">
 					<div className="flex items-center gap-2">
 						<p className="text-sm font-medium">Rows</p>
 						<Select
@@ -653,8 +655,8 @@ export function PriceListTable({ data, isLoading = false, onRowClick }: PriceLis
 
 	return (
 		<div className="space-y-3">
-			{/* ── Toolbar ── */}
-			<div className="flex items-center justify-between">
+		{/* Toolbar: wrap on mobile to prevent overflow */}
+			<div className="flex flex-wrap items-center justify-between gap-2">
 				<div className="flex items-center gap-2">
 					<span className="text-xs text-muted-foreground font-medium">Group by</span>
 					<GroupModeToggle mode={groupMode} onChange={setGroupMode} />
