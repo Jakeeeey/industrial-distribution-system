@@ -419,7 +419,7 @@ export default function PriceMonitoringModule({userName}: {userName?: string}) {
                 >
                   {/* Trend chart card */}
                   <Card className="border shadow-sm">
-                    <CardHeader className="flex flex-col gap-3 pb-3">
+                    <CardHeader className="flex justify-between gap-3 pb-3">
                       <div className="space-y-0.5">
                         <CardTitle className="text-sm sm:text-base font-bold">
                           Price Trend — {year}
@@ -438,7 +438,7 @@ export default function PriceMonitoringModule({userName}: {userName?: string}) {
                       </div>
 
                       {/* Controls — wrap on mobile */}
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2 ">
                         {/* Chart Type Toggle */}
                         <div className="flex items-center border rounded-md p-0.5 bg-muted/40 text-xs">
                           <Button
@@ -464,7 +464,7 @@ export default function PriceMonitoringModule({userName}: {userName?: string}) {
                         </div>
 
                         {/* Granularity Selector */}
-                        <div className="flex items-center border rounded-md p-0.5 bg-muted/40 text-xs">
+                        <div className="flex items-center border rounded-md p-0.5 bg-muted/40 text-xs ">
                           {(
                             ["daily", "weekly", "monthly", "yearly"] as const
                           ).map((g) => (
@@ -491,6 +491,7 @@ export default function PriceMonitoringModule({userName}: {userName?: string}) {
                           ))}
                         </div>
                       </div>
+
                     </CardHeader>
                     <CardContent className="pb-4">
                       <PriceTrendChart

@@ -29,6 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 import type { ViewPriceMonitoringRow } from "../types";
 import {
   formatCurrency,
@@ -155,7 +156,16 @@ export function AuditDetailGrid({
     dir: "desc",
   });
   const [page, setPage] = React.useState(1);
+  
+  // Responsive page size: default to 10 for desktop, 5 for mobile
+  // Added as per user request to use 5 on mobile and 10 on desktop.
+  const isMobile = useIsMobile();
   const [pageSize, setPageSize] = React.useState(10);
+
+  React.useEffect(() => {
+    setPageSize(isMobile ? 5 : 10);
+  }, [isMobile]);
+
   const useCalculation = true;
 
   // 1. Calculate previous prices for ALL rows if calculation is enabled
@@ -674,6 +684,7 @@ export function AuditDetailGrid({
               }}
               className="h-7 px-1.5 border border-input bg-background rounded-md text-xs font-semibold text-foreground/80 focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
             >
+              <option value={5}>5</option>
               <option value={10}>10</option>
               <option value={20}>20</option>
               <option value={30}>30</option>
