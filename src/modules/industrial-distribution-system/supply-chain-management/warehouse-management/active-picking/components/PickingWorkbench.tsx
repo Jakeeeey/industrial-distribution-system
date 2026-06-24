@@ -219,7 +219,7 @@ export function PickingWorkbench() {
                                 <TableRow>
                                     <TableHead className="w-[50px]"></TableHead>
                                     <TableHead>Product Details</TableHead>
-                                    <TableHead className="text-center">Stock</TableHead>
+                                    {/* OPTIMIZATION: Stock column removed per revised spec; validation is handled on backend scans */}
                                     <TableHead className="text-center">Order</TableHead>
                                     <TableHead className="text-center">Picked</TableHead>
                                     <TableHead className="text-right pr-6">Status</TableHead>
@@ -255,9 +255,7 @@ export function PickingWorkbench() {
                                                         SKU: {detail.product?.product_code || 'N/A'}
                                                     </div>
                                                 </TableCell>
-                                                <TableCell className="text-center">
-                                                    <Badge variant="secondary" className="opacity-40 font-normal text-[10px]">Hidden</Badge>
-                                                </TableCell>
+                                                {/* OPTIMIZATION: Removed redundant Stock cell */}
                                                 <TableCell className="text-center font-bold text-muted-foreground">
                                                     {detail.ordered_quantity}
                                                 </TableCell>
@@ -284,7 +282,8 @@ export function PickingWorkbench() {
 
                                             {isExpanded && (
                                                 <TableRow className="bg-muted/5 border-l-4 border-l-primary/30">
-                                                    <TableCell colSpan={6} className="p-0">
+                                                    {/* OPTIMIZATION: Adjusted colSpan to 5 (from 6) since the Stock column was removed */}
+                                                    <TableCell colSpan={5} className="p-0">
                                                         <div className="p-4 bg-background/40 border-y space-y-3">
                                                             <div className="flex items-center justify-between">
                                                                 <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Registered Serials ({serials.length})</span>

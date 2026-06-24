@@ -18,26 +18,9 @@ export const ActivePickingService = {
     },
 
     async getPickingDetails(consolidatorId: number, branchId: number, sessionToken: string | null = null): Promise<ConsolidatorDetail[]> {
-        const details = await ActivePickingRepo.fetchPickingDetails(consolidatorId);
-        
-        // Extract product IDs to fetch inventory
-        const productIds = details.map(d => d.product_id).filter(id => id != null);
-        
-        // Fetch inventory to get running_inventory_unit
-        const inventory = await ActivePickingRepo.fetchInventoryForProducts(productIds, branchId, sessionToken);
-        
-        // Map inventory back to details
-        const inventoryMap = new Map<number, number>();
-        inventory.forEach(inv => {
-            inventoryMap.set(inv.product_id, inv.running_inventory_unit);
-        });
-        
-        return details.map(d => {
-            if (d.product) {
-                d.product.running_inventory_unit = inventoryMap.get(d.product_id) || 0;
-            }
-            return d;
-        });
+        // OPTIMIZATION: Bypassed heavy database view calculations for available stocks.
+        // The Stock column has been removed from UI, and stock validation runs purely on the backend during scans.
+        return ActivePickingRepo.fetchPickingDetails(consolidatorId);
     },
 
     async processSerialPick(consolidatorId: number, serialNumber: string, userId: number | null, branchId: number, sessionToken: string | null = null): Promise<{ success: boolean; message: string; newQuantity: number; detailId: number }> {

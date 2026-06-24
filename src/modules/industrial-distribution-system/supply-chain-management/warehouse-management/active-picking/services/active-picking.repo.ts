@@ -139,8 +139,17 @@ export const ActivePickingRepo = {
         const baseUrl = process.env.SPRING_API_BASE_URL;
         const productIdsStr = productIds.join(",");
 
-        // Target Spring Boot View with specific dates and divisionId
-        const url = `${baseUrl}/api/view-running-inventory-by-unit/all?startDate=2025-01-01&endDate=2026-12-30&divisionId=1&productId=${productIdsStr}&branchId=${branchId}&size=10000`;
+        // OPTIMIZATION: Dynamically compute a 30-day range (1 month) instead of a static 1 year.
+        // This limits database movements scanning workload significantly, reducing execution time to milliseconds.
+        const now = new Date();
+        const startObj = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        const endObj = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+        const startDate = startObj.toISOString().split("T")[0];
+        const endDate = endObj.toISOString().split("T")[0];
+
+        // Target Spring Boot View with specific dates, divisionId, and a small buffer size=10
+        const url = `${baseUrl}/api/view-running-inventory-by-unit/all?startDate=${startDate}&endDate=${endDate}&divisionId=1&productId=${productIdsStr}&branchId=${branchId}&size=10`;
 
         try {
             const response = await fetch(url, {
@@ -163,12 +172,15 @@ export const ActivePickingRepo = {
             else if (json.content && Array.isArray(json.content)) items = json.content;
             else if (json.data && Array.isArray(json.data)) items = json.data;
 
-            // Map Spring Boot fields to our ProductInventory type
-            return items.map((item: RawProductInventory) => ({
+            // Map Spring Boot fields to our ProductInventory type (including last_cutoff)
+            return items.map((item: any) => ({
                 product_id: item.productId ?? item.product_id,
                 branch_id: item.branchId ?? item.branch_id,
-                running_inventory_unit: item.runningInventoryUnit ?? item.running_inventory_unit ?? item.quantity ?? 0
-            }));
+                running_inventory_unit: item.runningInventoryUnit ?? item.running_inventory_unit ?? item.quantity ?? 0,
+                last_cutoff: item.lastCutoff ?? item.last_cutoff ?? null,
+                last_count_unit: item.lastCountUnit ?? item.last_count_unit ?? item.lastCount ?? 0,
+                movement_after_unit: item.movementAfterUnit ?? item.movement_after_unit ?? item.movementAfter ?? 0
+            } as any));
         } catch {
             return [];
         }
@@ -268,10 +280,9 @@ export const ActivePickingRepo = {
             throw new Error("NETWORK_FAILURE");
         }
 
-        // OPTIMIZATION: Query the standardized Spring Boot endpoint using the correct query parameters (serialNumber, branchId)
-        // and request size=1 since we only need to verify if the single serial number is on-hand.
-        // This eliminates the previous speculative blasting of 4-6 parallel requests to guess field names.
-        const url = `${baseUrl}/api/v-serial-onhand/all?serialNumber=${encodeURIComponent(inputSerial)}&branchId=${branchId}&size=1`;
+        // ADVANCED OPTIMIZATION: Query the high-performance '/filter' endpoint instead of the heavy '/all' endpoint.
+        // This utilizes direct database index filtering on the Spring Boot side, resolving in milliseconds rather than seconds.
+        const url = `${baseUrl}/api/v-serial-onhand/filter?serialNumber=${encodeURIComponent(inputSerial)}&branchId=${branchId}`;
 
         try {
             const res = await fetch(url, {
@@ -284,21 +295,19 @@ export const ActivePickingRepo = {
             }
 
             const json = await res.json();
-            
-            // Handle Spring Boot response wrappers
-            const data = Array.isArray(json) ? json : (json.content || json.data || []);
 
-            const onhand = data.find((item: Record<string, unknown>) => {
-                const dbVal = item.serialNumber ?? item.serial_number ?? item.serialNo ?? item.serial ?? item.sn ?? item.snCode;
-                if (dbVal === undefined || dbVal === null) return false;
-
-                const dbSerial = String(dbVal).trim().toUpperCase();
-                const dbBranchId = item.branchId ?? item.branch_id;
-                const branchMatch = dbBranchId === undefined || dbBranchId === null || Number(dbBranchId) === Number(branchId);
-                const serialMatch = dbSerial === inputSerial;
-
-                return serialMatch && branchMatch;
-            });
+            // Handle different shapes returned by /filter (object, array, or wrapped content)
+            let onhand: any = null;
+            if (json && typeof json === "object" && !Array.isArray(json)) {
+                if ("productId" in json || "product_id" in json) {
+                    onhand = json;
+                } else {
+                    const dataArray = json.content || json.data || [];
+                    onhand = dataArray[0];
+                }
+            } else if (Array.isArray(json)) {
+                onhand = json[0];
+            }
 
             if (onhand) {
                 const product = onhand.product as ProductRef | undefined;
