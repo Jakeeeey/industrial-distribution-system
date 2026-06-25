@@ -420,7 +420,8 @@ export function InventoryDetailModal({
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Filter serial number or barcode..."
+                // Dev-rule: Modal searchbar is serials only
+                placeholder="Filter serial number..."
                 className="pl-9 pr-10"
               />
 

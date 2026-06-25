@@ -117,7 +117,8 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
                       </span>
                     </div>
                   )}
-                  {event.approvedByName && (
+                  {/* hide for now */}
+                  {/* {event.approvedByName && (
                     <div className="flex justify-between text-[9px] text-muted-foreground/80 mt-0.5">
                       <span>Approved By:</span>
                       <span
@@ -127,7 +128,7 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
                         {event.approvedByName}
                       </span>
                     </div>
-                  )}
+                  )} */}
                 </div>
               )}
             </div>
@@ -145,48 +146,32 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
 function getActivePriceForGroup(
   group: PriceTypeGroup,
   date: Date,
-  allRows: ViewPriceMonitoringRow[],
-  startOfChart: Date,
+  seedPrice: number | null,
+  seedEvent: ViewPriceMonitoringRow | null,
 ) {
-  const priorRows = allRows
-    .filter(
-      (r) =>
-        r.priceTypeId === group.priceTypeId &&
-        r.priceChangeDatetime !== null &&
-        r.requestStatus === "APPROVED" &&
-        new Date(r.priceChangeDatetime!).getTime() < startOfChart.getTime(),
-    )
-    .sort(
-      (a, b) =>
-        new Date(a.priceChangeDatetime!).getTime() -
-        new Date(b.priceChangeDatetime!).getTime(),
-    );
+  const dateTime = date.getTime();
 
-  const seedPrice =
-    priorRows.length > 0 ? priorRows[priorRows.length - 1].newPrice : null;
-  const seedEvent = priorRows.length > 0 ? priorRows[priorRows.length - 1] : null;
+  // Find the active row from group.rows (pre-sorted chronologically in groupByPriceType)
+  let activeRow: ViewPriceMonitoringRow | null = null;
+  for (let i = group.rows.length - 1; i >= 0; i--) {
+    const r = group.rows[i];
+    if (r.requestStatus !== "APPROVED") continue;
+    const dt = r.priceChangeDatetime ?? r.approvedAt;
+    if (!dt) continue;
+    const t = new Date(dt).getTime();
+    if (t <= dateTime) {
+      activeRow = r;
+      break;
+    }
+  }
 
-  const activeRows = group.rows
-    .filter((r) => {
-      if (r.requestStatus !== "APPROVED") return false;
-      const dt = r.priceChangeDatetime ?? r.approvedAt;
-      if (!dt) return false;
-      return new Date(dt).getTime() <= date.getTime();
-    })
-    .sort((a, b) => {
-      const tA = new Date(a.priceChangeDatetime ?? a.approvedAt ?? 0).getTime();
-      const tB = new Date(b.priceChangeDatetime ?? b.approvedAt ?? 0).getTime();
-      return tA - tB;
-    });
-
-  const activeRow = activeRows.length > 0 ? activeRows[activeRows.length - 1] : null;
   const activePrice = activeRow ? activeRow.newPrice : seedPrice;
   const activeEvent = activeRow || seedEvent;
 
   const changedOnThisDate = activeRow
     ? Math.abs(
         new Date(activeRow.priceChangeDatetime ?? activeRow.approvedAt ?? 0).getTime() -
-          date.getTime(),
+          dateTime,
       ) < 60000
     : false;
 
@@ -217,6 +202,42 @@ export function PriceTrendChart({
 
     const now = new Date();
     const currentYear = now.getFullYear();
+
+    const startOfChart = dateFrom
+      ? new Date(dateFrom)
+      : new Date(selectedYear, 0, 1, 0, 0, 0, 0);
+    let endOfChart = dateTo
+      ? new Date(dateTo)
+      : new Date(selectedYear, 11, 31, 23, 59, 59, 999);
+    if (endOfChart > now) {
+      endOfChart = now;
+    }
+
+    // Precompute seeds for non-yearly modes
+    const seedsMap = new Map<number, { seedPrice: number | null; seedEvent: ViewPriceMonitoringRow | null }>();
+    if (granularity !== "yearly") {
+      const startOfChartTime = startOfChart.getTime();
+      for (const group of priceTypeGroups) {
+        let maxSeedTime = -Infinity;
+        let seedPrice: number | null = null;
+        let seedEvent: ViewPriceMonitoringRow | null = null;
+        for (const r of allRows) {
+          if (
+            r.priceTypeId === group.priceTypeId &&
+            r.priceChangeDatetime !== null &&
+            r.requestStatus === "APPROVED"
+          ) {
+            const t = new Date(r.priceChangeDatetime).getTime();
+            if (t < startOfChartTime && t > maxSeedTime) {
+              maxSeedTime = t;
+              seedPrice = r.newPrice;
+              seedEvent = r;
+            }
+          }
+        }
+        seedsMap.set(group.priceTypeId, { seedPrice, seedEvent });
+      }
+    }
 
     // 1. YEARLY MODE
     if (granularity === "yearly") {
@@ -253,14 +274,34 @@ export function PriceTrendChart({
 
         const activeDate =
           y === currentYear ? now : new Date(y, 11, 31, 23, 59, 59, 999);
-        const startOfChart = new Date(y, 0, 1, 0, 0, 0, 0);
+        const loopStartOfChart = new Date(y, 0, 1, 0, 0, 0, 0);
 
         for (const group of priceTypeGroups) {
+          // Dynamic seed computation for yearly mode
+          let maxSeedTime = -Infinity;
+          let seedPrice: number | null = null;
+          let seedEvent: ViewPriceMonitoringRow | null = null;
+          const loopStartOfChartTime = loopStartOfChart.getTime();
+          for (const r of allRows) {
+            if (
+              r.priceTypeId === group.priceTypeId &&
+              r.priceChangeDatetime !== null &&
+              r.requestStatus === "APPROVED"
+            ) {
+              const t = new Date(r.priceChangeDatetime).getTime();
+              if (t < loopStartOfChartTime && t > maxSeedTime) {
+                maxSeedTime = t;
+                seedPrice = r.newPrice;
+                seedEvent = r;
+              }
+            }
+          }
+
           const { activePrice, activeEvent } = getActivePriceForGroup(
             group,
             activeDate,
-            allRows,
-            startOfChart,
+            seedPrice,
+            seedEvent,
           );
           point[`${group.priceTypeName}_prevPrice`] =
             prevPriceMap[group.priceTypeName] ?? null;
@@ -272,16 +313,6 @@ export function PriceTrendChart({
 
         return point;
       });
-    }
-
-    const startOfChart = dateFrom
-      ? new Date(dateFrom)
-      : new Date(selectedYear, 0, 1, 0, 0, 0, 0);
-    let endOfChart = dateTo
-      ? new Date(dateTo)
-      : new Date(selectedYear, 11, 31, 23, 59, 59, 999);
-    if (endOfChart > now) {
-      endOfChart = now;
     }
 
     // 2. MONTHLY MODE
@@ -315,11 +346,12 @@ export function PriceTrendChart({
         > = { dateLabel: label, displayDate, timestamp: activeDate.getTime() };
 
         for (const group of priceTypeGroups) {
+          const seeds = seedsMap.get(group.priceTypeId) || { seedPrice: null, seedEvent: null };
           const { activePrice, activeEvent } = getActivePriceForGroup(
             group,
             activeDate,
-            allRows,
-            startOfChart,
+            seeds.seedPrice,
+            seeds.seedEvent,
           );
           const monthEvents = group.rows.filter((r) => {
             const dt = r.priceChangeDatetime ?? r.approvedAt;
@@ -380,11 +412,12 @@ export function PriceTrendChart({
         };
 
         for (const group of priceTypeGroups) {
+          const seeds = seedsMap.get(group.priceTypeId) || { seedPrice: null, seedEvent: null };
           const { activePrice, activeEvent } = getActivePriceForGroup(
             group,
             activeCapped,
-            allRows,
-            startOfChart,
+            seeds.seedPrice,
+            seeds.seedEvent,
           );
           const weekEvents = group.rows.filter((r) => {
             const dt = r.priceChangeDatetime ?? r.approvedAt;
@@ -446,11 +479,12 @@ export function PriceTrendChart({
       > = { dateLabel: label, displayDate, timestamp: activeDate.getTime() };
 
       for (const group of priceTypeGroups) {
+        const seeds = seedsMap.get(group.priceTypeId) || { seedPrice: null, seedEvent: null };
         const { activePrice, activeEvent } = getActivePriceForGroup(
           group,
           activeDate,
-          allRows,
-          startOfChart,
+          seeds.seedPrice,
+          seeds.seedEvent,
         );
         const dayEvents = group.rows.filter((r) => {
           const dt = r.priceChangeDatetime ?? r.approvedAt;
@@ -560,6 +594,7 @@ export function PriceTrendChart({
                   fill={getPriceTypeColor(group.priceTypeSort)}
                   radius={[4, 4, 0, 0]}
                   maxBarSize={40}
+                  isAnimationActive={false}
                 />
               ))}
             </BarChart>
@@ -599,6 +634,7 @@ export function PriceTrendChart({
                   dot={{ r: 3, strokeWidth: 0 }}
                   activeDot={{ r: 5 }}
                   connectNulls={false}
+                  isAnimationActive={false}
                 />
               ))}
             </LineChart>
