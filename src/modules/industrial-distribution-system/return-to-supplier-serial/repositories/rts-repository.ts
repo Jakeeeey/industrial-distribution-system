@@ -402,3 +402,42 @@ export async function getExistingRelatedIds(id: string) {
 export async function deleteRecords(collection: "rts_items" | "rts_item_rfid" | "rts_item_serial", ids: number[]) {
   return directusMutate(`/items/${collection}`, "DELETE", ids);
 }
+
+/**
+ * Persistence: Get cylinder asset by serial.
+ */
+export async function getCylinderAssetBySerial(serial: string) {
+  const encoded = encodeURIComponent(serial.trim().toUpperCase());
+  return directusGet<{ data: Record<string, unknown>[] }>(
+    `/items/cylinder_assets?filter[serial_number][_eq]=${encoded}&limit=1`
+  );
+}
+
+/**
+ * Persistence: Create a new cylinder asset.
+ */
+export async function createCylinderAsset(payload: Record<string, unknown>) {
+  return directusMutate<{ data: Record<string, unknown> }>(
+    "/items/cylinder_assets",
+    "POST",
+    payload
+  );
+}
+
+/**
+ * Persistence: Delete a cylinder asset by serial.
+ */
+export async function deleteCylinderAssetBySerial(serial: string) {
+  const encoded = encodeURIComponent(serial.trim().toUpperCase());
+  const checkRes = await directusGet<{ data: { id: number }[] }>(
+    `/items/cylinder_assets?filter[serial_number][_eq]=${encoded}&fields=id&limit=1`
+  );
+  if (checkRes?.data && checkRes.data.length > 0) {
+    const assetId = checkRes.data[0].id;
+    return directusMutate<void>(
+      `/items/cylinder_assets/${assetId}`,
+      "DELETE"
+    );
+  }
+}
+

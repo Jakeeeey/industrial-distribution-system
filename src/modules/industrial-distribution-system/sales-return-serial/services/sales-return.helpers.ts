@@ -175,3 +175,11 @@ export function handleApiError(error: unknown, NextResponse: any) {
     { status: 500 }
   );
 }
+
+/**
+ * Returns the current date and time in Philippine Manila timezone formatted as 'YYYY-MM-DD HH:mm:ss'.
+ */
+export function getManilaTimestamp(): string {
+  return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Manila" });
+}
+

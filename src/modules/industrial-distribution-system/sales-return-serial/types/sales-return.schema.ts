@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+export const SerialItemSchema = z.object({
+  serialNumber: z.string().min(1),
+  tareWeight: z.union([z.number(), z.string()]).optional().nullable(),
+  expirationDate: z.string().optional().nullable(),
+  cylinderCondition: z.enum(["GOOD", "FOR_REPAIR", "DAMAGED", "SCRAP"]).optional().nullable(),
+});
+
 export const SalesReturnItemSchema = z.object({
   productId: z.number().int().positive("Product ID is required"),
   code: z.string().min(1, "Product code is required"),
@@ -13,7 +20,7 @@ export const SalesReturnItemSchema = z.object({
   totalAmount: z.number().min(0),
   reason: z.string().nullable().optional(),
   returnType: z.union([z.string(), z.number()]).nullable().optional(),
-  serialNumbers: z.array(z.string()).optional(),
+  serialNumbers: z.array(z.union([z.string(), SerialItemSchema])).optional(),
   isSerialized: z.union([z.number(), z.boolean()]).optional(),
 });
 
