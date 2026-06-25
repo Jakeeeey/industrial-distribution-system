@@ -484,14 +484,53 @@ export async function POST(req: NextRequest) {
     // 2b. Fetch Sales Order Details to map detail_id to product_id and product_name
     const detailToProductMap = new Map<number, { product_id: number; product_name: string }>();
     try {
-      const detailsRes = await fetchDirectus(`/items/sales_order_details?filter[order_id][_eq]=${orderId}&fields=detail_id,product_id.product_id,product_id.product_name`);
-      const detailsList = detailsRes.data || [];
-      for (const d of detailsList) {
-        const pObj = d.product_id;
-        const pId = typeof pObj === "object" && pObj !== null ? pObj.product_id : pObj;
-        const pName = typeof pObj === "object" && pObj !== null ? pObj.product_name : `Product ID: ${pId}`;
-        if (d.detail_id && pId) {
-          detailToProductMap.set(Number(d.detail_id), { product_id: Number(pId), product_name: pName });
+      const detailsRes = await fetchDirectus(
+        `/items/sales_order_details?filter[order_id][_eq]=${orderId}&fields=detail_id,product_id&limit=-1`
+      );
+      const rawItems = (detailsRes.data || []) as {
+        detail_id: number;
+        product_id: number | { product_id: number } | null;
+      }[];
+
+      // Extract unique product IDs
+      const productIds = Array.from(
+        new Set(
+          rawItems
+            .map((item) => {
+              const pid = typeof item.product_id === "object" && item.product_id !== null
+                ? item.product_id.product_id
+                : item.product_id;
+              return pid ? Number(pid) : null;
+            })
+            .filter((pid): pid is number => pid !== null)
+        )
+      );
+
+      // Fetch products info to get names
+      const productNamesMap = new Map<number, string>();
+      if (productIds.length > 0) {
+        interface DirectusProductInfo {
+          product_id: number | string;
+          product_name?: string;
+        }
+        const productsRes = await fetchDirectus(
+          `/items/products?filter[product_id][_in]=${productIds.join(",")}&fields=product_id,product_name&limit=-1`
+        );
+        const productsList = (productsRes.data || []) as DirectusProductInfo[];
+        for (const p of productsList) {
+          productNamesMap.set(Number(p.product_id), p.product_name || `Product ID: ${p.product_id}`);
+        }
+      }
+
+      // Populate detailToProductMap
+      for (const item of rawItems) {
+        const pid = typeof item.product_id === "object" && item.product_id !== null
+          ? Number(item.product_id.product_id)
+          : Number(item.product_id);
+        
+        if (item.detail_id && pid) {
+          const pName = productNamesMap.get(pid) || `Product ID: ${pid}`;
+          detailToProductMap.set(Number(item.detail_id), { product_id: pid, product_name: pName });
         }
       }
     } catch (detailsErr) {

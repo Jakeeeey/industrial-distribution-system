@@ -22,6 +22,85 @@ import {
   RefreshCcw,
 } from "lucide-react";
 
+interface LineItemSerialsListProps {
+  taggedSerials: string[];
+  sessionScans: ScannedItem[];
+  onRemove: (serial: string) => void;
+}
+
+function LineItemSerialsList({
+  taggedSerials,
+  sessionScans,
+  onRemove,
+}: LineItemSerialsListProps) {
+  const [filterQuery, setFilterQuery] = useState("");
+  
+  const filteredTagged = taggedSerials.filter((s) =>
+    s.toLowerCase().includes(filterQuery.toLowerCase())
+  );
+  
+  const filteredSession = sessionScans.filter((s) =>
+    s.serial_number.toLowerCase().includes(filterQuery.toLowerCase())
+  );
+
+  const totalSerials = taggedSerials.length + sessionScans.length;
+  const hasSerials = filteredTagged.length > 0 || filteredSession.length > 0;
+
+  return (
+    <div className="space-y-1.5 w-full">
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+          Tagged Serials ({totalSerials} total)
+        </span>
+        {totalSerials > 6 && (
+          <Input
+            type="text"
+            placeholder="Filter serials..."
+            value={filterQuery}
+            onChange={(e) => setFilterQuery(e.target.value)}
+            className="h-6 max-w-[160px] text-[10px] px-2 py-0.5 font-medium"
+          />
+        )}
+      </div>
+
+      <div className="max-h-24 overflow-y-auto pr-1">
+        {!hasSerials ? (
+          <p className="text-[10px] text-muted-foreground italic py-1">
+            {filterQuery ? "No serials match search." : "No serials tagged yet."}
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1">
+            {filteredTagged.map((serial) => (
+              <Badge
+                key={serial}
+                variant="outline"
+                className="bg-background/80 text-muted-foreground font-mono text-[9px] border border-border px-1.5 py-0.5 justify-between w-full truncate"
+                title={`${serial} (Tagged)`}
+              >
+                <span className="truncate">{serial}</span>
+                <span className="text-[8px] opacity-75 font-sans ml-1 shrink-0 select-none">(Tagged)</span>
+              </Badge>
+            ))}
+            {filteredSession.map((scan) => (
+              <Badge
+                key={scan.serial_number}
+                className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-mono text-[9px] flex items-center justify-between px-1.5 py-0.5 w-full truncate"
+                title={`${scan.serial_number} (New)`}
+              >
+                <span className="truncate">{scan.serial_number}</span>
+                <Trash2
+                  className="w-2.5 h-2.5 cursor-pointer hover:text-red-500 ml-1 shrink-0"
+                  onClick={() => onRemove(scan.serial_number)}
+                />
+              </Badge>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface CylinderTaggingDesktopProps {
   orderDetails: SalesOrderTaggingDetails;
   mappedSerials: MappedSerial[];
@@ -71,7 +150,7 @@ export default function CylinderTaggingDesktop({
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
       {/* LEFT COLUMN: Order Details & Products (lg:col-span-7) */}
-      <div className="lg:col-span-7 space-y-4">
+      <div className="lg:col-span-7 space-y-4 flex flex-col h-full">
         {/* Sales Order Card */}
         <Card className="border shadow-md backdrop-blur-md bg-card/60 relative overflow-hidden group py-3 gap-2">
           <div className="absolute top-0 left-0 w-1.5 h-full bg-primary" />
@@ -116,7 +195,7 @@ export default function CylinderTaggingDesktop({
         </Card>
 
         {/* Product Items & Progress List */}
-        <Card className="border shadow-md py-3 gap-2">
+        <Card className="border shadow-md py-3 gap-2 flex-1 flex flex-col overflow-hidden">
           <CardHeader className="p-0 px-4 pb-1.5">
             <CardTitle className="text-sm font-bold flex items-center gap-1.5">
               <Cylinder className="w-4 h-4 text-primary" />
@@ -126,7 +205,7 @@ export default function CylinderTaggingDesktop({
               Monitor the progress of tagged cylinders versus ordered and allocated quantity.
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="p-0 flex-1 overflow-y-auto">
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -199,30 +278,12 @@ export default function CylinderTaggingDesktop({
                         {/* Collapsible tags row */}
                         {(item.tagged_serials.length > 0 || sessionScans.length > 0) && (
                           <TableRow className="bg-secondary/5 border-b hover:bg-secondary/5">
-                            <TableCell colSpan={4} className="py-1.5 px-4">
-                              <div className="flex flex-wrap gap-1">
-                                {item.tagged_serials.map((serial) => (
-                                  <Badge
-                                    key={serial}
-                                    variant="outline"
-                                    className="bg-background/80 text-muted-foreground font-mono text-[9px] border border-border px-1 py-0"
-                                  >
-                                    {serial} (Delivered)
-                                  </Badge>
-                                ))}
-                                {sessionScans.map((scan) => (
-                                  <Badge
-                                    key={scan.serial_number}
-                                    className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-mono text-[9px] flex items-center gap-0.5 px-1 py-0"
-                                  >
-                                    {scan.serial_number}
-                                    <Trash2
-                                      className="w-2.5 h-2.5 cursor-pointer hover:text-red-500 ml-0.5"
-                                      onClick={() => onRemove(scan.serial_number)}
-                                    />
-                                  </Badge>
-                                ))}
-                              </div>
+                            <TableCell colSpan={4} className="py-2 px-4">
+                              <LineItemSerialsList
+                                taggedSerials={item.tagged_serials}
+                                sessionScans={sessionScans}
+                                onRemove={onRemove}
+                              />
                             </TableCell>
                           </TableRow>
                         )}
@@ -276,7 +337,7 @@ export default function CylinderTaggingDesktop({
             </form>
 
             {/* Session Scanned Queue */}
-            <div className="border rounded bg-secondary/20 overflow-hidden flex-1 flex flex-col min-h-[110px]">
+            <div className="border rounded bg-secondary/20 overflow-hidden flex flex-col h-[280px]">
               <div className="p-2 px-3 bg-secondary/35 border-b flex justify-between items-center shrink-0">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
                   <Cylinder className="w-3.5 h-3.5 text-primary" />

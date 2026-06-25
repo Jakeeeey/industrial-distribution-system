@@ -22,6 +22,85 @@ import {
   RefreshCcw,
 } from "lucide-react";
 
+interface LineItemSerialsListProps {
+  taggedSerials: string[];
+  sessionScans: ScannedItem[];
+  onRemove: (serial: string) => void;
+}
+
+function LineItemSerialsList({
+  taggedSerials,
+  sessionScans,
+  onRemove,
+}: LineItemSerialsListProps) {
+  const [filterQuery, setFilterQuery] = useState("");
+  
+  const filteredTagged = taggedSerials.filter((s) =>
+    s.toLowerCase().includes(filterQuery.toLowerCase())
+  );
+  
+  const filteredSession = sessionScans.filter((s) =>
+    s.serial_number.toLowerCase().includes(filterQuery.toLowerCase())
+  );
+
+  const totalSerials = taggedSerials.length + sessionScans.length;
+  const hasSerials = filteredTagged.length > 0 || filteredSession.length > 0;
+
+  return (
+    <div className="space-y-1.5 mt-1 pt-1 border-t w-full">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
+          Tagged Serials ({totalSerials})
+        </span>
+        {totalSerials > 5 && (
+          <Input
+            type="text"
+            placeholder="Filter..."
+            value={filterQuery}
+            onChange={(e) => setFilterQuery(e.target.value)}
+            className="h-5.5 max-w-[110px] text-[9px] px-1.5 py-0 font-medium"
+          />
+        )}
+      </div>
+
+      <div className="max-h-24 overflow-y-auto pr-1">
+        {!hasSerials ? (
+          <p className="text-[9px] text-muted-foreground italic py-1">
+            {filterQuery ? "No matches." : "None tagged."}
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 gap-1">
+            {filteredTagged.map((serial) => (
+              <Badge
+                key={serial}
+                variant="outline"
+                className="bg-background/80 text-muted-foreground font-mono text-[9px] border border-border px-1.5 py-0.5 justify-between w-full truncate"
+                title={`${serial} (Tagged)`}
+              >
+                <span className="truncate">{serial}</span>
+                <span className="text-[7px] opacity-75 font-sans ml-0.5 shrink-0 select-none">(Tagged)</span>
+              </Badge>
+            ))}
+            {filteredSession.map((scan) => (
+              <Badge
+                key={scan.serial_number}
+                className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-mono text-[9px] flex items-center justify-between px-1.5 py-0.5 w-full truncate"
+                title={`${scan.serial_number} (New)`}
+              >
+                <span className="truncate">{scan.serial_number}</span>
+                <Trash2
+                  className="w-2.5 h-2.5 cursor-pointer hover:text-red-500 ml-0.5 shrink-0"
+                  onClick={() => onRemove(scan.serial_number)}
+                />
+              </Badge>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface CylinderTaggingMobileProps {
   orderDetails: SalesOrderTaggingDetails;
   mappedSerials: MappedSerial[];
@@ -198,18 +277,11 @@ export default function CylinderTaggingMobile({
                     
                     {/* Tagged list */}
                     {(item.tagged_serials.length > 0 || sessionScans.length > 0) && (
-                      <div className="flex flex-wrap gap-1 pt-1 border-t">
-                        {item.tagged_serials.map((s) => (
-                          <span key={s} className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-secondary/80 text-muted-foreground border">
-                            {s}
-                          </span>
-                        ))}
-                        {sessionScans.map((s) => (
-                          <span key={s.serial_number} className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                            {s.serial_number}
-                          </span>
-                        ))}
-                      </div>
+                      <LineItemSerialsList
+                        taggedSerials={item.tagged_serials}
+                        sessionScans={sessionScans}
+                        onRemove={onRemove}
+                      />
                     )}
                   </Card>
                 );
