@@ -28,6 +28,7 @@ export interface ConsolidationHeader {
   status: HeaderStatus;
   is_billed: 0 | 1;
   remarks: string | null;
+  invoice_attachments_uuid?: string | null;
   created_by: number | null;
   posted_by: number | null;
   posted_at: string | null;
@@ -37,12 +38,25 @@ export interface ConsolidationHeader {
   created_at: string;
   updated_at: string;
 
+  // DEV-CHANGE: New columns added to lpg_transaction_headers for billing history tracking
+  /** Total billed kilograms persisted at the time of posting (for inter-period reference) */
+  total_billed_kg?: number | null;
+  /** Total billed cubic meters (metered M3 only) persisted at the time of posting */
+  total_billed_m3?: number | null;
+
+  // DEV-CHANGE: Previous period snapshot — populated at workspace fetch time from the most recent
+  // prior POSTED header for this customer_site_id. NOT stored in DB; injected by service layer.
+  prev_total_billed_kg?: number | null;
+  prev_total_billed_m3?: number | null;
+
   // --- Expanded relations (joined by repo) ---
   customer?: { customer_name: string; store_name?: string | null };
   site?: {
     id: number;
     site_name: string | null;
     site_address: string | null;
+    // DEV-CHANGE: Added billing_mode field to site relation for sorting/filtering
+    billing_mode?: "BOTH" | "KILO" | "METERED" | null;
   };
   /** Computed from child transactions by the service layer */
   total_metered_kg?: number;
@@ -132,6 +146,9 @@ export interface ConsolidationMeterReading {
   net_amount: number;
   reading_status: "DRAFT" | "POSTED" | "CANCELLED";
   remarks: string | null;
+  // AG-CHANGE: Track if the meter reading has been adjusted by the reviewer
+  is_adjusted?: boolean;
+  original_current_reading?: number;
 }
 
 // ─── WIWO Header (lpg_wiwo_headers) ──────────────────────────────────────────
@@ -183,6 +200,9 @@ export interface ConsolidationWiwoDetail {
   vat_amount: number;
   net_amount: number;
   is_billable: 0 | 1;
+  // AG-CHANGE: Track if this specific cylinder's weights were adjusted by the reviewer
+  is_adjusted?: boolean;
+  original_returned_gross_weight_kg?: number | null;
   remarks: string | null;
 
   // --- Expanded relations ---
@@ -222,6 +242,10 @@ export interface ConsolidationAuditEntry {
 export interface ConsolidationHeaderListParams {
   search?: string;
   status?: HeaderStatus | "ALL";
+  // DEV-CHANGE: Added filter and sort properties to mirror wiwo billing creation parameters
+  billing_mode?: "ALL" | "BOTH" | "KILO";
+  sortField?: "period_from" | "site" | "customer" | "status" | "billing_mode";
+  sortDir?: "asc" | "desc";
   page?: number;
   limit?: number;
 }
@@ -248,6 +272,7 @@ export interface WiwoDetailAdjustPayload {
 export interface ApproveHeaderPayload {
   headerId: number;
   approved_by: number;
+  pdfBase64?: string;
 }
 
 // ─── Active Cylinder Raw Response (lpg_customer_site_cylinders) ────────────────
@@ -267,5 +292,20 @@ export interface ActiveCylinderRaw {
       product_name: string | null;
     } | null;
   } | null;
+}
+
+// DEV-CHANGE: Added CompanyProfile interface for strong-typed company metadata
+export interface CompanyProfile {
+  company_id: number;
+  company_name: string;
+  company_address?: string | null;
+  company_brgy?: string | null;
+  company_city?: string | null;
+  company_province?: string | null;
+  company_zipCode?: string | null;
+  company_contact?: string | null;
+  company_email?: string | null;
+  company_tin?: string | null;
+  company_logo?: string | null;
 }
 

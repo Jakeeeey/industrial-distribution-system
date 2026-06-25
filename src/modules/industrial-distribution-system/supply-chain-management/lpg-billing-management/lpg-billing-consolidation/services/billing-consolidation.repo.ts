@@ -4,10 +4,12 @@
 // All recompute logic lives in billing-consolidation.service.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Updated import path from stock-adjustment to stock-adjustment-serial-posting
 import {
   directusFetch,
   getDirectusBase,
-} from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/directus";
+  getDirectusToken,
+} from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment-serial-posting/utils/directus";
 import type {
   ConsolidationHeader,
   ConsolidationTransaction,
@@ -18,6 +20,7 @@ import type {
   ConsolidationAuditEntry,
   ConsolidationHeaderListParams,
   ActiveCylinderRaw,
+  CompanyProfile,
 } from "../types/billing-consolidation.types";
 
 const DIRECTUS_URL = getDirectusBase();
@@ -35,6 +38,7 @@ const HEADER_FIELDS = [
   "status",
   "is_billed",
   "remarks",
+  "invoice_attachments_uuid",
   "created_by",
   "posted_by",
   "posted_at",
@@ -43,10 +47,15 @@ const HEADER_FIELDS = [
   "cancelled_reason",
   "created_at",
   "updated_at",
+  // DEV-CHANGE: New columns for billing history tracking
+  "total_billed_kg",
+  "total_billed_m3",
   // Expanded relations
   "customer_site_id.id",
   "customer_site_id.site_name",
   "customer_site_id.site_address",
+  // DEV-CHANGE: Pull site billing_mode for filtering/sorting
+  "customer_site_id.billing_mode",
 ].join(",");
 
 /** Fields to pull for child transactions under a header */
@@ -101,6 +110,7 @@ function mapHeader(raw: Record<string, unknown>): ConsolidationHeader {
     status: (raw["status"] as ConsolidationHeader["status"]) ?? "DRAFT",
     is_billed: (Number(raw["is_billed"] ?? 0)) as 0 | 1,
     remarks: raw["remarks"] ? String(raw["remarks"]) : null,
+    invoice_attachments_uuid: raw["invoice_attachments_uuid"] ? String(raw["invoice_attachments_uuid"]) : null,
     created_by: raw["created_by"] ? Number(raw["created_by"]) : null,
     posted_by: raw["posted_by"] ? Number(raw["posted_by"]) : null,
     posted_at: raw["posted_at"] ? String(raw["posted_at"]) : null,
@@ -109,14 +119,51 @@ function mapHeader(raw: Record<string, unknown>): ConsolidationHeader {
     cancelled_reason: raw["cancelled_reason"] ? String(raw["cancelled_reason"]) : null,
     created_at: String(raw["created_at"] ?? ""),
     updated_at: String(raw["updated_at"] ?? ""),
+    // DEV-CHANGE: Map new billing-history columns; nullish when not yet persisted
+    total_billed_kg: raw["total_billed_kg"] != null ? Number(raw["total_billed_kg"]) : null,
+    total_billed_m3: raw["total_billed_m3"] != null ? Number(raw["total_billed_m3"]) : null,
     site: siteObj
       ? {
           id: Number(siteObj["id"]),
           site_name: siteObj["site_name"] ? String(siteObj["site_name"]) : null,
           site_address: siteObj["site_address"] ? String(siteObj["site_address"]) : null,
+          // DEV-CHANGE: Map site billing_mode property
+          billing_mode: siteObj["billing_mode"] ? (String(siteObj["billing_mode"]) as "BOTH" | "KILO" | "METERED") : null,
         }
       : undefined,
   };
+}
+
+// AG-CHANGE: Helper to hydrate customer details (such as customer_name) using Directus customer items
+async function hydrateCustomerNamesForHeaders(headers: ConsolidationHeader[]): Promise<ConsolidationHeader[]> {
+  if (headers.length === 0) return headers;
+
+  const customerCodes = Array.from(new Set(headers.map((h) => h.customer_id).filter(Boolean)));
+  if (customerCodes.length === 0) return headers;
+
+  let customerMap: Record<string, { customer_name: string; store_name?: string | null }> = {};
+  try {
+    const filterObj = { customer_code: { _in: customerCodes } };
+    const custRes = await directusFetch<{ data: { customer_code: string; customer_name: string; store_name?: string | null }[] }>(
+      `${DIRECTUS_URL}/items/customer?fields=customer_code,customer_name,store_name&filter=${encodeURIComponent(JSON.stringify(filterObj))}`
+    );
+    // Added concrete type annotation to customer record parameter c to resolve ESLint no-explicit-any error
+    customerMap = Object.fromEntries(
+      (custRes.data ?? []).map((c: { customer_code: string; customer_name: string; store_name?: string | null }) => [
+        c.customer_code,
+        { customer_name: c.customer_name, store_name: c.store_name },
+      ])
+    );
+  } catch (e) {
+    console.warn("Failed to fetch customer names for headers", e);
+  }
+
+  return headers.map((h) => {
+    if (h.customer_id && customerMap[h.customer_id]) {
+      h.customer = customerMap[h.customer_id];
+    }
+    return h;
+  });
 }
 
 function mapTransaction(raw: Record<string, unknown>): ConsolidationTransaction {
@@ -164,7 +211,8 @@ export async function repoFetchHeaders(params: ConsolidationHeaderListParams): P
   total: number;
 }> {
   const page = params.page ?? 1;
-  const limit = params.limit ?? 15;
+  // IDS-CHANGE: Default fallback limit changed from 15 to 5 to align pagination
+  const limit = params.limit ?? 5;
   const offset = (page - 1) * limit;
 
   const filterList: Record<string, unknown>[] = [];
@@ -176,11 +224,21 @@ export async function repoFetchHeaders(params: ConsolidationHeaderListParams): P
     filterList.push({ status: { _neq: "CANCELLED" } });
   }
 
+  // DEV-CHANGE: Filter by site billing mode if specified
+  if (params.billing_mode && params.billing_mode !== "ALL") {
+    filterList.push({
+      customer_site_id: {
+        billing_mode: { _eq: params.billing_mode },
+      },
+    });
+  }
+
   if (params.search) {
     filterList.push({
       _or: [
         { header_no: { _icontains: params.search } },
         { customer_id: { _icontains: params.search } },
+        { customer_site_id: { site_name: { _icontains: params.search } } },
       ],
     });
   }
@@ -189,9 +247,26 @@ export async function repoFetchHeaders(params: ConsolidationHeaderListParams): P
     ? encodeURIComponent(JSON.stringify(filterList.length === 1 ? filterList[0] : { _and: filterList }))
     : "";
 
+  // DEV-CHANGE: Dynamic sorting based on parameter
+  let sortParam = "-created_at";
+  if (params.sortField) {
+    const dirSign = params.sortDir === "desc" ? "-" : "";
+    if (params.sortField === "period_from") {
+      sortParam = `${dirSign}period_from`;
+    } else if (params.sortField === "site") {
+      sortParam = `${dirSign}customer_site_id.site_name`;
+    } else if (params.sortField === "customer") {
+      sortParam = `${dirSign}customer_id`;
+    } else if (params.sortField === "status") {
+      sortParam = `${dirSign}status`;
+    } else if (params.sortField === "billing_mode") {
+      sortParam = `${dirSign}customer_site_id.billing_mode`;
+    }
+  }
+
   const qs = [
     `fields=${HEADER_FIELDS}`,
-    `sort=-created_at`,
+    `sort=${sortParam}`,
     `limit=${limit}`,
     `offset=${offset}`,
     `meta=total_count`,
@@ -203,8 +278,11 @@ export async function repoFetchHeaders(params: ConsolidationHeaderListParams): P
     meta?: { total_count: number };
   }>(`${DIRECTUS_URL}/items/lpg_transaction_headers?${qs}`);
 
+  const mapped = (res.data ?? []).map(mapHeader);
+  const hydrated = await hydrateCustomerNamesForHeaders(mapped);
+
   return {
-    data: (res.data ?? []).map(mapHeader),
+    data: hydrated,
     total: res.meta?.total_count ?? 0,
   };
 }
@@ -216,10 +294,37 @@ export async function repoFetchHeaderById(headerId: number): Promise<Consolidati
   const res = await directusFetch<{ data: Record<string, unknown> }>(
     `${DIRECTUS_URL}/items/lpg_transaction_headers/${headerId}?fields=${HEADER_FIELDS}`
   );
-  return res.data ? mapHeader(res.data) : null;
+  if (!res.data) return null;
+  const mapped = mapHeader(res.data);
+  const [hydrated] = await hydrateCustomerNamesForHeaders([mapped]);
+  return hydrated;
 }
 
-// ─── Transaction Queries ──────────────────────────────────────────────────────
+/**
+ * Fetches the most recent POSTED billing header for the same customer site
+ * that precedes the given header (by period_from desc, header_id desc).
+ * Used to populate the prev_total_billed_kg / prev_total_billed_m3 snapshot
+ * on the current workspace header for period-over-period invoice comparison.
+ * DEV-CHANGE: Added for inter-period consumption tracking feature.
+ */
+export async function repoFetchPreviousPostedHeader(
+  siteId: number,
+  excludeHeaderId: number
+): Promise<ConsolidationHeader | null> {
+  const filter = encodeURIComponent(
+    JSON.stringify({
+      customer_site_id: { _eq: siteId },
+      status: { _eq: "POSTED" },
+      header_id: { _neq: excludeHeaderId },
+    })
+  );
+  const res = await directusFetch<{ data: Record<string, unknown>[] }>(
+    `${DIRECTUS_URL}/items/lpg_transaction_headers?fields=${HEADER_FIELDS}&filter=${filter}&sort=-period_from,-header_id&limit=1`
+  );
+  if (!res.data || res.data.length === 0) return null;
+  return mapHeader(res.data[0]);
+}
+
 
 /**
  * Fetches all child transactions for a given billing header.
@@ -309,7 +414,8 @@ export async function repoFetchWiwoWithDetails(wiwoHeaderId: number): Promise<Co
   if (!headerRes.data) return null;
   const h = headerRes.data;
 
-  const details: ConsolidationWiwoDetail[] = (detailRes.data ?? []).map((d) => {
+  // Added Record<string, unknown> type annotation to closure parameter d to resolve ESLint no-explicit-any error
+  const details: ConsolidationWiwoDetail[] = (detailRes.data ?? []).map((d: Record<string, unknown>) => {
     const productObj =
       d["product_id"] && typeof d["product_id"] === "object"
         ? (d["product_id"] as Record<string, unknown>)
@@ -429,7 +535,8 @@ export async function repoFetchAttachments(transactionId: number): Promise<Conso
   const res = await directusFetch<{ data: Record<string, unknown>[] }>(
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments?filter[transaction_id][_eq]=${transactionId}&limit=-1`
   );
-  return (res.data ?? []).map((a) => ({
+  // Added Record<string, unknown> type annotation to closure parameter a to resolve ESLint no-explicit-any error
+  return (res.data ?? []).map((a: Record<string, unknown>) => ({
     id: Number(a["id"]),
     transaction_id: Number(a["transaction_id"]),
     site_cylinder_id: a["site_cylinder_id"] ? Number(a["site_cylinder_id"]) : null,
@@ -455,8 +562,9 @@ export async function repoFetchAuditTrail(transactionId: number): Promise<Consol
   const userIds = Array.from(
     new Set(
       rawEntries
-        .map((a) => (a["modified_by"] ? Number(a["modified_by"]) : null))
-        .filter((id): id is number => id !== null && !isNaN(id) && id > 0)
+        // Added Record<string, unknown> and number | null type annotations to closure parameters to resolve ESLint no-explicit-any errors
+        .map((a: Record<string, unknown>) => (a["modified_by"] ? Number(a["modified_by"]) : null))
+        .filter((id: number | null): id is number => id !== null && !isNaN(id) && id > 0)
     )
   );
 
@@ -481,7 +589,8 @@ export async function repoFetchAuditTrail(transactionId: number): Promise<Consol
     }
   }
 
-  return rawEntries.map((a) => {
+  // Added Record<string, unknown> type annotation to closure parameter a to resolve ESLint no-explicit-any error
+  return rawEntries.map((a: Record<string, unknown>) => {
     const modifiedBy = a["modified_by"] ? Number(a["modified_by"]) : null;
     return {
       audit_id: Number(a["audit_id"]),
@@ -642,7 +751,8 @@ export async function repoFetchOnboardingAttachmentsForCylinders(
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments?filter=${filter}&limit=-1`
   );
 
-  return (res.data ?? []).map((a) => ({
+  // Added Record<string, unknown> type annotation to closure parameter a to resolve ESLint no-explicit-any error
+  return (res.data ?? []).map((a: Record<string, unknown>) => ({
     id: Number(a["id"]),
     transaction_id: Number(a["transaction_id"]),
     site_cylinder_id: a["site_cylinder_id"] ? Number(a["site_cylinder_id"]) : null,
@@ -654,5 +764,150 @@ export async function repoFetchOnboardingAttachmentsForCylinders(
   }));
 }
 
+/**
+ * Fetches a specific customer site cylinder by id.
+ */
+export async function repoFetchCustomerSiteCylinder(id: number): Promise<ActiveCylinderRaw | null> {
+  const fields = [
+    "id",
+    "lpg_site_id",
+    "customer_code",
+    "previous_lpg_kg",
+    "current_lpg_kg",
+    "installed_date",
+    "cylinder_asset_id.id",
+    "cylinder_asset_id.serial_number",
+    "cylinder_asset_id.tare_weight",
+  ].join(",");
+
+  try {
+    const res = await directusFetch<{ data: ActiveCylinderRaw }>(
+      `${DIRECTUS_URL}/items/lpg_customer_site_cylinders/${id}?fields=${fields}`
+    );
+    return res.data ?? null;
+  } catch (err) {
+    console.error("Failed to fetch customer site cylinder:", err);
+    return null;
+  }
+}
+
+/**
+ * Patches a specific customer site cylinder by id.
+ */
+export async function repoPatchCustomerSiteCylinder(id: number, data: Record<string, unknown>): Promise<void> {
+  await directusFetch(
+    `${DIRECTUS_URL}/items/lpg_customer_site_cylinders/${id}`,
+    { method: "PATCH", body: JSON.stringify(data) }
+  );
+}
+
+// DEV-CHANGE: Added helper to fetch customer email and full name from Directus by customer code
+/**
+ * Fetches customer name and customer_email from Directus items by customer code.
+ * Used for sending transactional email notices to customers.
+ */
+export async function repoFetchCustomerEmailByCode(
+  customerCode: string
+): Promise<{ customer_name: string; customer_email?: string | null } | null> {
+  try {
+    const filterObj = { customer_code: { _eq: customerCode } };
+    const custRes = await directusFetch<{ data: { customer_code: string; customer_name: string; customer_email?: string | null }[] }>(
+      `${DIRECTUS_URL}/items/customer?fields=customer_code,customer_name,customer_email&filter=${encodeURIComponent(JSON.stringify(filterObj))}`
+    );
+    if (custRes.data && custRes.data.length > 0) {
+      return custRes.data[0];
+    }
+  } catch (e) {
+    console.warn(`Failed to fetch customer email by code ${customerCode}`, e);
+  }
+  return null;
+}
+
+// DEV-CHANGE: Added helper to fetch company profile from Directus for dynamically branding emails
+/**
+ * Fetches company profile details (name, email, phone, TIN, address) for company_id = 1.
+ * Used for dynamic signature/branding in email invoices.
+ */
+export async function repoFetchCompanyProfile(): Promise<CompanyProfile | null> {
+  try {
+    const res = await directusFetch<{ data: CompanyProfile[] }>(
+      `${DIRECTUS_URL}/items/company?filter[company_id][_eq]=1`
+    );
+    if (res.data && res.data.length > 0) {
+      return res.data[0];
+    }
+  } catch (err) {
+    console.error("Failed to fetch company details for email:", err);
+  }
+  return null;
+}
+
+// DEV-CHANGE: Added Directus folder resolution and base64 PDF upload repository helpers
+/**
+ * Resolves the folder ID for a given folder name in Directus.
+ * Creates it if it doesn't exist.
+ */
+export async function repoGetOrCreateFolderId(folderName: string): Promise<string | null> {
+  try {
+    const searchUrl = `${DIRECTUS_URL}/folders?filter[name][_eq]=${encodeURIComponent(folderName)}&fields=id`;
+    const searchRes = await directusFetch<{ data: { id: string }[] }>(searchUrl);
+    if (searchRes.data && searchRes.data.length > 0) {
+      return searchRes.data[0].id;
+    }
+
+    const createRes = await directusFetch<{ data: { id: string } }>(
+      `${DIRECTUS_URL}/folders`,
+      {
+        method: "POST",
+        body: JSON.stringify({ name: folderName }),
+      }
+    );
+    return createRes.data?.id || null;
+  } catch (err) {
+    console.error(`[Directus Folder] Failed to resolve folder '${folderName}':`, err);
+    return null;
+  }
+}
+
+/**
+ * Uploads a base64 encoded PDF file to Directus.
+ * Returns the uploaded file UUID.
+ */
+export async function repoUploadInvoicePdf(
+  pdfBase64: string,
+  filename: string,
+  folderId?: string | null
+): Promise<string | null> {
+  try {
+    const buffer = Buffer.from(pdfBase64, "base64");
+    const blob = new Blob([buffer], { type: "application/pdf" });
+
+    const formData = new FormData();
+    if (folderId) {
+      formData.append("folder", folderId);
+    }
+    formData.append("title", filename.replace(".pdf", ""));
+    formData.append("file", blob, filename);
+
+    const uploadRes = await fetch(`${DIRECTUS_URL}/files`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${getDirectusToken()}`,
+      },
+      body: formData,
+    });
+
+    if (!uploadRes.ok) {
+      const errText = await uploadRes.text();
+      throw new Error(`Directus upload responded ${uploadRes.status}: ${errText}`);
+    }
+
+    const json = (await uploadRes.json()) as { data: { id: string } };
+    return json.data?.id || null;
+  } catch (err) {
+    console.error(`[Directus Upload] Failed to upload PDF file '${filename}':`, err);
+    return null;
+  }
+}
 
 

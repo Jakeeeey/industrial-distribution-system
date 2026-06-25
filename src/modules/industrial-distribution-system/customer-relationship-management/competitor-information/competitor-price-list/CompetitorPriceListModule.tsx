@@ -176,33 +176,36 @@ function CompetitorPriceListContent() {
   if (!mounted) {
     return (
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6 animate-pulse">
+        {/* Skeleton header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between space-y-2 sm:space-y-0">
           <div className="h-8 w-64 bg-muted rounded" />
           <div className="h-9 w-24 bg-muted rounded" />
         </div>
         <div className="h-[1px] w-full bg-muted my-4" />
-        <div className="flex gap-5 items-start">
-          <div className="flex-1 min-w-0 space-y-4">
+        {/* Skeleton body — stacks on mobile, side-by-side on lg */}
+        <div className="flex flex-col lg:flex-row gap-5 items-start">
+          <div className="flex-1 min-w-0 space-y-4 w-full">
             <div className="h-32 bg-muted rounded" />
             <div className="h-96 bg-muted rounded" />
             <div className="h-64 bg-muted rounded" />
           </div>
-          <div className="w-72 shrink-0 h-[600px] bg-muted rounded" />
+          <div className="w-full lg:w-72 shrink-0 h-48 lg:h-[600px] bg-muted rounded" />
         </div>
       </div>
     );
   }
 
   return (
-    // 🚀 STANDARD SHADCN DASHBOARD LAYOUT
+    // 🚀 STANDARD SHADCN DASHBOARD LAYOUT — mobile-responsive
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6 animate-in fade-in duration-500">
       {/* HEADER SECTION */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between space-y-2 sm:space-y-0">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
+          {/* Smaller heading on mobile to avoid overflow */}
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
             Competitor Price Intelligence
           </h1>
-          <p className="text-muted-foreground mt-0.5">
+          <p className="text-muted-foreground mt-0.5 text-sm sm:text-base">
             Market pricing data by competitor, location, and source type.
           </p>
         </div>
@@ -212,6 +215,7 @@ function CompetitorPriceListContent() {
           size="sm"
           onClick={() => refetch()}
           disabled={isLoading}
+          className="self-start sm:self-auto"
         >
           <RefreshCw
             className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
@@ -222,9 +226,10 @@ function CompetitorPriceListContent() {
       <Separator className="my-4" />
 
       {/* ─── Main Layout: Table + Analytics ──────────────────────────── */}
-      <div className="flex gap-5 items-start">
-        {/* Left: Filters + Table */}
-        <div className="flex-1 min-w-0 space-y-4">
+      {/* On mobile: stacked (flex-col). On lg+: side-by-side (flex-row). */}
+      <div className="flex flex-col lg:flex-row gap-5 items-start">
+        {/* Left: Filters + Chart + Table — always full-width on mobile */}
+        <div className="flex-1 min-w-0 space-y-4 w-full">
           <PriceListFilters
             filters={filters}
             activeProductId={selectedProductName}
@@ -283,8 +288,8 @@ function CompetitorPriceListContent() {
           />
         </div>
 
-        {/* Right: Analytics Panel */}
-        <div className="w-72 shrink-0">
+        {/* Right: Analytics Panel — full-width on mobile, fixed on desktop */}
+        <div className="w-full lg:w-72 shrink-0">
           <MarketSnapshotPanel
             snapshot={scopedMarketSnapshot}
             provinceStats={scopedProvinceStats}

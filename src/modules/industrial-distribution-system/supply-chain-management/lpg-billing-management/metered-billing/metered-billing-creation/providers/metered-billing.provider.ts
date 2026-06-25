@@ -1,7 +1,7 @@
 import {
   directusFetch,
   getDirectusBase,
-} from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/directus";
+} from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment-serial-posting/utils/directus";
 import type {
   MeteredWiwoTransaction,
   MeteredListParams,
@@ -160,6 +160,7 @@ function mapTxRecord(raw: Record<string, unknown>): MeteredWiwoTransaction {
         default_atmospheric_pressure: siteObj.default_atmospheric_pressure
           ? Number(siteObj.default_atmospheric_pressure)
           : null,
+        billing_mode: siteObj.billing_mode ? String(siteObj.billing_mode) : null,
       }
       : undefined,
     meter_reading: mrObj
@@ -208,6 +209,7 @@ const TX_FIELDS = [
   "lpg_site_id.id",
   "lpg_site_id.site_name",
   "lpg_site_id.site_address",
+  "lpg_site_id.billing_mode",
   "lpg_site_id.default_pressure_line",
   "lpg_site_id.default_psi",
   "lpg_site_id.default_atmospheric_pressure",
@@ -315,6 +317,21 @@ export async function fetchMeteredTransactions(
   if (params.siteId) {
     filterList.push({ lpg_site_id: { _eq: params.siteId } });
   }
+
+  // AG-CHANGE: New condition in metered — don't show transactions if the LPG site billing mode is KILO
+  filterList.push({
+    _or: [
+      { lpg_site_id: { _null: true } },
+      {
+        lpg_site_id: {
+          _or: [
+            { billing_mode: { _neq: "KILO" } },
+            { billing_mode: { _null: true } }
+          ]
+        }
+      }
+    ]
+  });
 
   // 3. Search filter
   if (params.search) {

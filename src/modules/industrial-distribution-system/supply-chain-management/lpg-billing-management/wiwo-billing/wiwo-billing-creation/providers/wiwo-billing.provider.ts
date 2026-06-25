@@ -1,7 +1,7 @@
 import {
   directusFetch,
   getDirectusBase,
-} from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/directus";
+} from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment-serial-posting/utils/directus";
 import type {
   WiwoHeader,
   WiwoDetail,
@@ -46,7 +46,7 @@ export async function fetchTransactionHeaders(params: {
   let qs =
     `fields=*,customer_site_id.id,customer_site_id.site_name,` +
     `customer_site_id.customer_code,customer_site_id.default_price_per_kg,` +
-    `customer_site_id.last_meter_reading,customer_site_id.default_target_lpg_kg` +
+    `customer_site_id.last_meter_reading,customer_site_id.default_target_lpg_kg,customer_site_id.billing_mode` +
     `&sort=-period_from,-header_id&limit=${limit}`;
   if (Object.keys(filters).length) {
     qs += `&filter=${encodeURIComponent(JSON.stringify(filters))}`;
@@ -83,7 +83,7 @@ export async function fetchTransactionHeaders(params: {
     try {
       const filterObj = { id: { _in: siteIds } };
       const siteRes = await directusFetch<{ data: CustomerSite[] }>(
-        `${DIRECTUS_URL}/items/lpg_customer_lpg_sites?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg&filter=${encodeURIComponent(JSON.stringify(filterObj))}`
+        `${DIRECTUS_URL}/items/lpg_customer_lpg_sites?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg,billing_mode&filter=${encodeURIComponent(JSON.stringify(filterObj))}`
       );
       siteMap = Object.fromEntries((siteRes.data ?? []).map(s => [s.id, s]));
     } catch (e) {
@@ -118,7 +118,7 @@ export async function createTransactionHeader(payload: {
   }
 
   const siteRes = await directusFetch<{ data: CustomerSite }>(
-    `${DIRECTUS_URL}/items/lpg_customer_lpg_sites/${payload.siteId}?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg`
+    `${DIRECTUS_URL}/items/lpg_customer_lpg_sites/${payload.siteId}?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg,billing_mode`
   );
   const site = siteRes.data;
   if (!site?.customer_code) throw new Error("Customer site not found.");
@@ -136,7 +136,9 @@ export async function createTransactionHeader(payload: {
     throw new Error("This site already has an active transaction header overlapping the selected period.");
   }
 
-  const headerNo = `LPGH-${payload.periodFrom.replaceAll("-", "")}-${payload.siteId}-${Date.now().toString().slice(-4)}`;
+  // Developer Comment: Changed from sequential/date/site components to a random 6-digit identifier
+  const num = Math.floor(100000 + Math.random() * 900000);
+  const headerNo = `LPGH-${num}`;
   const res = await directusFetch<{ data: LpgTransactionHeader }>(
     `${DIRECTUS_URL}/items/lpg_transaction_headers`,
     {
@@ -185,7 +187,7 @@ async function hydrateTransactions(txs: MeteredWiwoTransaction[]): Promise<Meter
     try {
       const filterObj = { id: { _in: siteIds } };
       const siteRes = await directusFetch<{ data: CustomerSite[] }>(
-        `${DIRECTUS_URL}/items/lpg_customer_lpg_sites?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg&filter=${encodeURIComponent(JSON.stringify(filterObj))}`
+        `${DIRECTUS_URL}/items/lpg_customer_lpg_sites?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg,billing_mode&filter=${encodeURIComponent(JSON.stringify(filterObj))}`
       );
       siteMap = Object.fromEntries((siteRes.data ?? []).map(s => [s.id, s]));
     } catch (e) {
@@ -230,6 +232,9 @@ export async function fetchWiwoBillingTransactions(params: WiwoListParams): Prom
   // AG-CHANGE: Filter by transaction_header_id when viewing a POSTED header's linked transactions
   if (params.transactionHeaderId) filters.transaction_header_id = { _eq: params.transactionHeaderId };
   if (params.salesInvoiceId) filters.sales_invoice_id = { _eq: params.salesInvoiceId };
+  if (params.transactionType && params.transactionType !== "ALL") {
+    filters.transaction_type = { _eq: params.transactionType };
+  }
   if (params.search) {
     filters._or = [
       { transaction_no: { _icontains: params.search } },
@@ -281,7 +286,7 @@ export async function fetchCustomers(): Promise<{ customer_code: string; custome
 }
 
 export async function fetchSites(customerCode?: string): Promise<CustomerSite[]> {
-  let qs = "fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg&filter[is_active][_eq]=1&sort=site_name&limit=-1";
+  let qs = "fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg,billing_mode&filter[is_active][_eq]=1&sort=site_name&limit=-1";
   if (customerCode) qs += `&filter[customer_code][_eq]=${encodeURIComponent(customerCode)}`;
   const res = await directusFetch<{ data: CustomerSite[] }>(`${DIRECTUS_URL}/items/lpg_customer_lpg_sites?${qs}`);
   return res.data ?? [];
@@ -587,8 +592,10 @@ export async function createSalesInvoice(
   const ts = Date.now().toString().slice(-6);
   const invoiceNo = `SI-${ts.slice(0, 3)}-${ts.slice(3, 6)}`;
 
-  const vat = parseFloat((amount * 0.12).toFixed(2));
-  const net = parseFloat((amount + vat).toFixed(2));
+  // VAT is absorbed / inclusive: gross = amount, net = gross / 1.12, vat = gross - net.
+  const gross = amount;
+  const net = parseFloat((gross / 1.12).toFixed(2));
+  const vat = parseFloat((gross - net).toFixed(2));
 
   let salesmanId: number | null = null;
   if (userId) {
@@ -613,10 +620,10 @@ export async function createSalesInvoice(
         order_id: invoiceNo,
         customer_code: customerCode,
         invoice_date: today,
-        gross_amount: amount,
+        gross_amount: gross,
         vat_amount: vat,
-        net_amount: net,
-        total_amount: net,
+        net_amount: gross,
+        total_amount: gross,
         transaction_status: "POSTED",
         remarks: remarks,
         salesman_id: salesmanId,
@@ -641,12 +648,15 @@ export async function processOnboardingBaseline(payload: {
   salesInvoiceNo?: string | null;
   userId?: number;
 }): Promise<MeteredWiwoTransaction> {
-  // 1. Monogamy and Photo validation
-  // AG-CHANGE: Enforced serial and weight photo capture for onboarding baseline cylinders
+  // Fetch site details to check the billing mode
+  const siteRes = await directusFetch<{ data: CustomerSite }>(
+    `${DIRECTUS_URL}/items/lpg_customer_lpg_sites/${payload.siteId}?fields=id,billing_mode`
+  );
+  const isKiloMode = siteRes.data?.billing_mode === "KILO";
+
+  // 1. Monogamy validation
+  // DEV-CHANGE: Only serial (cylinder asset selection/verification) is required for onboarding. Photo evidence is not enforced.
   for (const cyl of payload.cylinders) {
-    if (!cyl.serialPhotoId || !cyl.weightPhotoId) {
-      throw new Error(`Serial and weight photos are required for onboarding cylinder asset ${cyl.cylinderAssetId}.`);
-    }
     // IDS-CHANGE: Pass siteId to allow idempotent retries if the cylinder is already connected at the same site
     const isSingle = await verifyCylinderMonogamy(cyl.cylinderAssetId, payload.siteId);
     if (!isSingle) {
@@ -735,7 +745,7 @@ export async function processOnboardingBaseline(payload: {
         total_returned_cylinders: 0,
         total_deployed_cylinders: assets.length,
         total_billable_kg: 0.000,
-        wiwo_status: "DRAFT",
+        wiwo_status: isKiloMode ? "POSTED" : "DRAFT",
         sales_invoice_id: invoiceId,
         sales_invoice_no: invoiceNo,
         remarks: "Onboarding baseline initial setup",
@@ -806,8 +816,8 @@ export async function processOnboardingBaseline(payload: {
         variance_kg: 0,
         billable_source: "NONE",
         billable_kg: 0,
-        status: "DRAFT",
-        remarks: "Onboarding baseline initial setup draft.",
+        status: isKiloMode ? "POSTED" : "DRAFT",
+        remarks: isKiloMode ? "Onboarding baseline initial setup posted." : "Onboarding baseline initial setup draft.",
         ...withUser(payload.userId, ["created_by", "posted_by"]),
         posted_date: new Date().toISOString(),
       }),
@@ -942,9 +952,18 @@ export async function processRegularSwap(payload: {
       }
     }
   }
+  // Fetch site details to check the billing mode
+  const siteRes = await directusFetch<{ data: CustomerSite }>(
+    `${DIRECTUS_URL}/items/lpg_customer_lpg_sites/${payload.siteId}?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg,billing_mode`
+  );
+  const site = siteRes.data;
+  const isKiloMode = site?.billing_mode === "KILO";
+
   // Input validations:
   // Completeness Checks & Negative Boundaries
-  const meteredKg = payload.meteredKg !== undefined ? payload.meteredKg : Math.max(0, payload.currentMeterReading - payload.previousMeterReading);
+  const meteredKg = isKiloMode
+    ? 0
+    : (payload.meteredKg !== undefined ? payload.meteredKg : Math.max(0, payload.currentMeterReading - payload.previousMeterReading));
 
   // Gather returned cylinder records
   const returnedDetails: {
@@ -1037,18 +1056,26 @@ export async function processRegularSwap(payload: {
   // Sum WIWO Consumed KG
   const totalWiwoKg = returnedDetails.reduce((sum, item) => sum + item.consumed, 0);
 
-  // Exec MAX Rule
-  const billableKg = Math.max(meteredKg, totalWiwoKg);
-  const varianceKg = Math.abs(meteredKg - totalWiwoKg);
-  const billableSource = meteredKg >= totalWiwoKg ? "METERED" : "WIWO";
+  // Exec MAX Rule (Or force WIWO for Kilo mode)
+  const billableKg = isKiloMode ? totalWiwoKg : Math.max(meteredKg, totalWiwoKg);
+  const varianceKg = isKiloMode ? 0 : Math.abs(meteredKg - totalWiwoKg);
+  const billableSource = isKiloMode ? "WIWO" : (meteredKg >= totalWiwoKg ? "METERED" : "WIWO");
 
-  // Mismatch remarks requirement (2% Tolerance)
-  const referenceKg = Math.max(meteredKg, totalWiwoKg, 0.0001);
-  const diffPercentage = varianceKg / referenceKg;
-  if (diffPercentage > 0.02 && !payload.remarks?.trim()) {
-    throw new Error(
-      `Metered KG (${meteredKg}) differs from WIWO KG (${totalWiwoKg}) by more than 2%. An explanation is required in the remarks field.`
-    );
+  // IDS-CHANGE: Compute final transaction amounts based on the consolidated billableKg
+  // VAT is absorbed / inclusive: gross = vatable amount, net = vatable sales, vat = gross - net.
+  const txGrossAmount = Number((billableKg * payload.pricePerKg).toFixed(2));
+  const txNetAmount = Number((txGrossAmount / 1.12).toFixed(2));
+  const txVatAmount = Number((txGrossAmount - txNetAmount).toFixed(2));
+
+  // Mismatch remarks requirement (2% Tolerance) - only check if NOT Kilo mode
+  if (!isKiloMode) {
+    const referenceKg = Math.max(meteredKg, totalWiwoKg, 0.0001);
+    const diffPercentage = varianceKg / referenceKg;
+    if (diffPercentage > 0.02 && !payload.remarks?.trim()) {
+      throw new Error(
+        `Metered KG (${meteredKg}) differs from WIWO KG (${totalWiwoKg}) by more than 2%. An explanation is required in the remarks field.`
+      );
+    }
   }
 
   // Create zero-amount Sales Order for logistical cylinder actions
@@ -1152,7 +1179,7 @@ export async function processRegularSwap(payload: {
     }
   }
 
-  if (!meterReadingId) {
+  if (!meterReadingId && !isKiloMode) {
     // Create Meter reading
     const meterReadingRes = await directusFetch<{ data: { id: number } }>(
       `${DIRECTUS_URL}/items/lpg_meter_readings`,
@@ -1177,6 +1204,7 @@ export async function processRegularSwap(payload: {
 
   // Create WIWO Header
   const wiwoNo = `WIWO-${Date.now().toString().slice(-6)}`;
+  // IDS-CHANGE: VAT is absorbed / inclusive: gross = vatable amount, net = vatable sales, vat = gross - net.
   const grossAmount = Number((totalWiwoKg * payload.pricePerKg).toFixed(2));
   const netAmount = Number((grossAmount / 1.12).toFixed(2));
   const vatAmount = Number((grossAmount - netAmount).toFixed(2));
@@ -1197,7 +1225,7 @@ export async function processRegularSwap(payload: {
         price_per_kg: payload.pricePerKg,
         gross_amount: grossAmount,
         vat_amount: vatAmount,
-        net_amount: netAmount,
+        net_amount: grossAmount,
         wiwo_status: "POSTED",
         sales_invoice_id: invoiceId,
         sales_invoice_no: invoiceNo,
@@ -1232,9 +1260,10 @@ export async function processRegularSwap(payload: {
         consumed_lpg_kg: retItem.consumed,
         billable_kg: retItem.consumed,
         price_per_kg: payload.pricePerKg,
+        // IDS-CHANGE: VAT is absorbed / inclusive: gross = vatable amount, net = gross = total, vat = gross - net (informative).
         gross_amount: parseFloat((retItem.consumed * payload.pricePerKg).toFixed(2)),
-        vat_amount: parseFloat((retItem.consumed * payload.pricePerKg * 0.12).toFixed(2)),
-        net_amount: parseFloat((retItem.consumed * payload.pricePerKg * 1.12).toFixed(2)),
+        vat_amount: parseFloat((parseFloat((retItem.consumed * payload.pricePerKg).toFixed(2)) - parseFloat((parseFloat((retItem.consumed * payload.pricePerKg).toFixed(2)) / 1.12).toFixed(2))).toFixed(2)),
+        net_amount: parseFloat((retItem.consumed * payload.pricePerKg).toFixed(2)),
         is_billable: 1,
         result_site_cylinder_status: retItem.isSwapped ? "REMOVED" : "CONNECTED",
         result_asset_status: retItem.isSwapped ? "EMPTY" : "WITH_CUSTOMER",
@@ -1278,12 +1307,15 @@ export async function processRegularSwap(payload: {
   }
 
   // Update site reading status
+  const sitePatchBody: Record<string, unknown> = {
+    last_reading_date: payload.transactionDate,
+  };
+  if (!isKiloMode) {
+    sitePatchBody.last_meter_reading = payload.currentMeterReading;
+  }
   await directusFetch(`${DIRECTUS_URL}/items/lpg_customer_lpg_sites/${payload.siteId}`, {
     method: "PATCH",
-    body: JSON.stringify({
-      last_meter_reading: payload.currentMeterReading,
-      last_reading_date: payload.transactionDate,
-    }),
+    body: JSON.stringify(sitePatchBody),
   });
 
   let parentTxData: MeteredWiwoTransaction;
@@ -1303,9 +1335,10 @@ export async function processRegularSwap(payload: {
           billable_source: billableSource,
           billable_kg: billableKg,
           price_per_kg: payload.pricePerKg,
-          gross_amount: grossAmount,
-          vat_amount: vatAmount,
-          net_amount: netAmount,
+          // IDS-CHANGE: Save arbitrated / billable values based on consolidated billableKg
+          gross_amount: txGrossAmount,
+          vat_amount: txVatAmount,
+          net_amount: txGrossAmount,
           sales_invoice_id: invoiceId,
           sales_invoice_no: invoiceNo,
           status: "POSTED",
@@ -1346,9 +1379,10 @@ export async function processRegularSwap(payload: {
           billable_source: billableSource,
           billable_kg: billableKg,
           price_per_kg: payload.pricePerKg,
-          gross_amount: grossAmount,
-          vat_amount: vatAmount,
-          net_amount: netAmount,
+          // IDS-CHANGE: Save arbitrated / billable values based on consolidated billableKg
+          gross_amount: txGrossAmount,
+          vat_amount: txVatAmount,
+          net_amount: txGrossAmount,
           sales_invoice_id: invoiceId,
           sales_invoice_no: invoiceNo,
           status: "POSTED",

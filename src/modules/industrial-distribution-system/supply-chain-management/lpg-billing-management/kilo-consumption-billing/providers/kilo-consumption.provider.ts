@@ -1,7 +1,8 @@
+// Updated import path from stock-adjustment to stock-adjustment-serial-posting
 import {
   directusFetch,
   getDirectusBase,
-} from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/directus";
+} from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment-serial-posting/utils/directus";
 import type {
   WiwoHeader,
   KiloBillingInvoice,
@@ -108,7 +109,8 @@ export async function fetchInvoices(params: KiloListParams): Promise<{
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions?${qs}`
   );
 
-  const mappedData = (res.data ?? []).map((invoice) => {
+  // Added Record<string, unknown> type annotation to prevent TS7006 and ESLint explicit-any warnings
+  const mappedData = (res.data ?? []).map((invoice: Record<string, unknown>) => {
     const mapped = {
       ...invoice,
       invoice_no: invoice.transaction_no as string,

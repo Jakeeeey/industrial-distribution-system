@@ -61,6 +61,8 @@ export interface CustomerSite {
   default_price_per_kg: number;
   last_meter_reading?: number | null;
   default_target_lpg_kg?: number | null;
+  // AG-CHANGE: Added billing_mode to identify KILO sites and support metered transaction filtering
+  billing_mode?: string | null;
 }
 
 // ─── LPG Transaction Header ───────────────────────────────────────────────────
@@ -165,6 +167,7 @@ export interface MeteredWiwoTransaction {
     default_pressure_line?: number | null;
     default_psi?: number | null;
     default_atmospheric_pressure?: number | null;
+    billing_mode?: string | null;
   };
   meter_reading?: MeterReading;
   wiwo_header?: WiwoHeaderRef;

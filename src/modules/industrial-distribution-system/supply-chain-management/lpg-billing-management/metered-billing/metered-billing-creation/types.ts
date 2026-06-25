@@ -80,7 +80,7 @@ export interface MeteredWiwoTransaction {
   id?: number;
   transaction_header_id: number | null;
 
-  /** Primary transaction identifier (TXORB-... or TXREG-... prefix) */
+  /** Primary transaction identifier (TX-ORB-... or TX-REG-... prefix) */
   transaction_no?: string;
   /** Legacy alias kept for backward compat — maps to transaction_no or reading_no */
   reading_no: string;
@@ -151,6 +151,7 @@ export interface MeteredWiwoTransaction {
     default_pressure_line?: number | null;
     default_psi?: number | null;
     default_atmospheric_pressure?: number | null;
+    billing_mode?: string | null;
   };
   meter_reading?: MeterReading;
   wiwo_header?: WiwoHeaderRef;

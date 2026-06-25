@@ -10,6 +10,7 @@ import type {
   CreateTransferPayload,
   UpdateTransferPayload
 } from "@/modules/industrial-distribution-system/supply-chain-management/warehouse-management/stock-transfer/types/stock-transfer.types";
+import { decodeJwtPayload } from "@/lib/auth-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -45,8 +46,9 @@ export async function GET(request: NextRequest) {
       if (cached) return NextResponse.json(cached);
 
       // Try Spring Boot lookup through repo
-      const springMatch = await repo.fetchBranchInventory(Number(branchId), token);
-      const match = Array.isArray(springMatch) ? springMatch.find((i: Record<string, unknown>) => i.rfid === rfid) : null;
+      const bypassCache = !!searchParams.get("_t");
+      const springMatch = await repo.fetchBranchInventory(Number(branchId), token, bypassCache);
+      const match = Array.isArray(springMatch) ? springMatch.find((i: Record<string, unknown>) => String(i.rfid || i.rfid_tag) === rfid) : null;
 
       let productId: number | null = null;
       let branchIdMatch = branchId;
@@ -64,9 +66,8 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "RFID not found" }, { status: 404 });
       }
 
-      // Fetch full product details
-      const products = await repo.fetchProducts(); // We can filter here if repo supported it, but fetching all for lookup is what original did
-      const product = products.find(p => p.product_id === productId);
+      // Fetch full product details directly by ID
+      const product = await repo.fetchProductById(productId);
 
       if (!product) {
         return NextResponse.json({ error: "Product details not found" }, { status: 404 });
@@ -130,7 +131,18 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = (await request.json()) as UpdateTransferPayload;
-    const result = await updateTransferStatus(body);
+
+    // Extract userId from token
+    const token = request.cookies.get("vos_access_token")?.value;
+    const decoded = token ? decodeJwtPayload(token) : null;
+    // Dev-mode fallback: when auth is disabled, no cookie exists so userId would be undefined
+    const userId = decoded?.sub ? Number(decoded.sub)
+      : (process.env.NEXT_PUBLIC_AUTH_DISABLED === "true" ? 1 : undefined);
+
+    console.log("[Stock Transfer PATCH Route] Incoming payload:", JSON.stringify(body));
+    console.log("[Stock Transfer PATCH Route] Extracted userId:", userId, "(token present:", !!token, ")");
+
+    const result = await updateTransferStatus({ ...body, userId });
     return NextResponse.json(result, { status: 200 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";

@@ -53,7 +53,7 @@ export interface UseBillingConsolidationReturn {
     new_returned_gross_weight_kg: number;
     adjustment_reason: string;
   }) => Promise<boolean>;
-  approveHeader: (headerId: number) => Promise<boolean>;
+  approveHeader: (headerId: number, pdfBase64?: string) => Promise<boolean>;
 
   // Audit trail
   auditEntries: ConsolidationAuditEntry[];
@@ -79,10 +79,14 @@ export function useBillingConsolidation(): UseBillingConsolidationReturn {
   const [totalHeaders, setTotalHeaders] = useState(0);
   const [isLoadingHeaders, setIsLoadingHeaders] = useState(false);
   const [headerError, setHeaderError] = useState<string | null>(null);
+  // DEV-CHANGE: Add default sorting and billing mode filtering to header params
   const [headerParams, setHeaderParamsState] = useState<ConsolidationHeaderListParams>({
     status: "ALL",
+    billing_mode: "ALL",
+    sortField: "period_from",
+    sortDir: "desc",
     page: 1,
-    limit: 15,
+    limit: 5,
   });
 
   // ── Workspace State ───────────────────────────────────────────────────────
@@ -120,9 +124,13 @@ export function useBillingConsolidation(): UseBillingConsolidationReturn {
       const qs = new URLSearchParams({
         type: "headers",
         ...(headerParams.status && headerParams.status !== "ALL" ? { status: headerParams.status } : {}),
+        // DEV-CHANGE: Forward billing_mode, sortField, and sortDir to API
+        ...(headerParams.billing_mode && headerParams.billing_mode !== "ALL" ? { billing_mode: headerParams.billing_mode } : {}),
+        ...(headerParams.sortField ? { sortField: headerParams.sortField } : {}),
+        ...(headerParams.sortDir ? { sortDir: headerParams.sortDir } : {}),
         ...(headerParams.search ? { search: headerParams.search } : {}),
         page: String(headerParams.page ?? 1),
-        limit: String(headerParams.limit ?? 15),
+        limit: String(headerParams.limit ?? 5),
       });
 
       const res = await fetch(`${BASE_URL}?${qs}`);
@@ -145,10 +153,12 @@ export function useBillingConsolidation(): UseBillingConsolidationReturn {
    * Fetches the full workspace for a selected header ID.
    * Stored in selectedHeader + transactions state.
    */
-  const loadWorkspace = useCallback(async (headerId: number) => {
-    setIsLoadingWorkspace(true);
+  const loadWorkspace = useCallback(async (headerId: number, silent = false) => {
+    if (!silent) {
+      setIsLoadingWorkspace(true);
+      setTransactions([]);
+    }
     setWorkspaceError(null);
-    setTransactions([]);
     try {
       const res = await fetch(`${BASE_URL}?type=workspace&headerId=${headerId}`);
       if (!res.ok) throw new Error(`Failed to load workspace (${res.status})`);
@@ -163,7 +173,9 @@ export function useBillingConsolidation(): UseBillingConsolidationReturn {
       setWorkspaceError(msg);
       toast.error("Workspace Error", { description: msg });
     } finally {
-      setIsLoadingWorkspace(false);
+      if (!silent) {
+        setIsLoadingWorkspace(false);
+      }
     }
   }, []);
 
@@ -192,7 +204,7 @@ export function useBillingConsolidation(): UseBillingConsolidationReturn {
   const refreshWorkspace = useCallback(async () => {
     const id = selectedHeaderIdRef.current;
     if (!id) return;
-    await loadWorkspace(id);
+    await loadWorkspace(id, true);
   }, [loadWorkspace]);
 
   // ── Reviewer Actions ──────────────────────────────────────────────────────
@@ -272,13 +284,13 @@ export function useBillingConsolidation(): UseBillingConsolidationReturn {
    * Approves the selected billing header (sets status → POSTED).
    * Returns true on success, false on failure.
    */
-  const approveHeader = useCallback(async (headerId: number): Promise<boolean> => {
+  const approveHeader = useCallback(async (headerId: number, pdfBase64?: string): Promise<boolean> => {
     setIsSubmitting(true);
     try {
       const res = await fetch(`${BASE_URL}?action=approve-header`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ headerId }),
+        body: JSON.stringify({ headerId, pdfBase64 }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({})) as { error?: string };

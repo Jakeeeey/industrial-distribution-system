@@ -11,7 +11,8 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { NavUser } from "@/components/shared/app-sidebar/nav-user";
 
 import { cookies } from "next/headers";
-import StockAdjustmentModule from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/StockAdjustmentModule";
+// Updated import to point to the renamed module StockAdjustmentSerialPostingModule
+import StockAdjustmentSerialPostingModule from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment-serial-posting/StockAdjustmentSerialPostingModule";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -116,7 +117,8 @@ export default async function Page(props: {
             </header>
 
             <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4">
-                <StockAdjustmentModule />
+                {/* Render the updated serial posting module */}
+                <StockAdjustmentSerialPostingModule />
             </main>
         </div>
     );

@@ -301,6 +301,12 @@ function CylinderDetailModal({
                     {detail.returned_gross_weight_kg != null ? `${detail.returned_gross_weight_kg.toFixed(3)} ` : "—"}
                     {detail.returned_gross_weight_kg != null && <span className="text-xs font-medium text-muted-foreground">kg</span>}
                   </p>
+                  {/* AG-CHANGE: Show true original (pre-audit) gross when the cylinder has been adjusted */}
+                  {detail.is_adjusted && detail.original_returned_gross_weight_kg != null && (
+                    <p className="text-[9px] text-rose-500 dark:text-rose-400 font-semibold mt-0.5 line-through">
+                      Original: {detail.original_returned_gross_weight_kg.toFixed(3)} kg
+                    </p>
+                  )}
                 </div>
 
                 {/* LPG / Previous */}
@@ -438,8 +444,14 @@ function CylinderDetailModal({
                       <Label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
                         Original Gross (kg)
                       </Label>
+                      {/* AG-CHANGE: Show the true pre-audit original gross weight from the audit trail.
+                          Falls back to the current returned_gross_weight_kg if no prior adjustment exists. */}
                       <Input
-                        value={detail.returned_gross_weight_kg?.toFixed(3) ?? ""}
+                        value={
+                          detail.is_adjusted && detail.original_returned_gross_weight_kg != null
+                            ? detail.original_returned_gross_weight_kg.toFixed(3)
+                            : detail.returned_gross_weight_kg?.toFixed(3) ?? ""
+                        }
                         disabled
                         className="h-8 text-xs bg-zinc-100 dark:bg-zinc-800 text-muted-foreground"
                       />
@@ -553,54 +565,82 @@ function CylinderRowCard({
 
   return (
     <>
-      {/* Compact row */}
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-3 py-2.5 hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-sm transition-all group">
-        {/* Left: identity */}
-        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-          <div className="h-7 w-7 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/30 flex items-center justify-center shrink-0">
-            <Cylinder className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+      {/* Compact card layout - responsive two-row container to avoid horizontal squishing */}
+      <div className="flex flex-col gap-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-3 hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-sm transition-all group">
+        {/* Upper Row: Identity (left) & Actions/Badges (right) */}
+        <div className="flex items-center justify-between gap-2 w-full min-w-0">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <div className="h-7 w-7 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/30 flex items-center justify-center shrink-0">
+              <Cylinder className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <p className="text-xs font-black text-foreground truncate">{detail.serial_number}</p>
+                {detail.is_adjusted && (
+                  <span className="text-[8px] font-bold uppercase tracking-wider text-amber-700 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 px-1.5 py-0.5 rounded shrink-0 select-none">
+                    Adjusted
+                  </span>
+                )}
+              </div>
+              <p className="text-[9px] text-muted-foreground truncate">
+                {detail.product?.product_name ?? `Product #${detail.product_id}`}
+              </p>
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="text-xs font-black text-foreground truncate">{detail.serial_number}</p>
-            <p className="text-[9px] text-muted-foreground truncate">
-              {detail.product?.product_name ?? `Product #${detail.product_id}`}
-            </p>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            {cylinderAttachmentCount > 0 && (
+              <span className="flex items-center gap-1 text-[9px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/40 rounded-full px-2 py-0.5">
+                <Camera className="h-3 w-3" />
+                {cylinderAttachmentCount}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => setModalOpen(true)}
+              className="flex items-center gap-1 text-[10px] font-bold text-primary hover:text-primary/80 bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-lg px-2.5 py-1 transition h-7 shrink-0"
+            >
+              View Details
+              <ChevronRight className="h-3 w-3" />
+            </button>
           </div>
         </div>
 
-        {/* Weight stats */}
-        <div className="hidden sm:flex items-center gap-3.5 text-xs font-mono shrink-0 mr-2 text-right">
-          <div>
-            <span className="text-[8px] text-muted-foreground uppercase block font-bold tracking-wider leading-none mb-0.5">Gross</span>
-            <span className="font-bold text-foreground text-[11px]">
-              {detail.returned_gross_weight_kg != null ? `${detail.returned_gross_weight_kg.toFixed(1)} kg` : "—"}
-            </span>
+        {/* Lower Row: Weight Metrics & Billable status */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-900 w-full text-xs">
+          {/* Detailed Weight Stats */}
+          <div className="flex items-center gap-3 text-xs font-mono">
+            <div>
+              <span className="text-[8px] text-muted-foreground uppercase block font-bold tracking-wider leading-none mb-0.5">Gross</span>
+              <div className="flex items-baseline gap-1">
+                <span className="font-bold text-foreground text-[10px]">
+                  {detail.returned_gross_weight_kg != null ? `${detail.returned_gross_weight_kg.toFixed(1)} kg` : "—"}
+                </span>
+                {detail.is_adjusted && detail.original_returned_gross_weight_kg != null && (
+                  <span className="text-[8px] font-medium text-amber-600 dark:text-amber-400 line-through">
+                    ({detail.original_returned_gross_weight_kg.toFixed(1)})
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="border-l border-zinc-200 dark:border-zinc-800 pl-2">
+              <span className="text-[8px] text-muted-foreground uppercase block font-bold tracking-wider leading-none mb-0.5">Tare</span>
+              <span className="font-medium text-muted-foreground text-[10px]">
+                {detail.tare_weight_kg.toFixed(1)} kg
+              </span>
+            </div>
+            <div className="border-l border-zinc-200 dark:border-zinc-800 pl-2">
+              <span className="text-[8px] text-muted-foreground uppercase block font-bold tracking-wider leading-none mb-0.5">Net</span>
+              <span className="font-black text-violet-600 dark:text-violet-400 text-[10px]">
+                {detail.returned_gross_weight_kg != null ? `${Math.max(0, detail.returned_gross_weight_kg - detail.tare_weight_kg).toFixed(1)} kg` : "—"}
+              </span>
+            </div>
           </div>
-          <div>
-            <span className="text-[8px] text-muted-foreground uppercase block font-bold tracking-wider leading-none mb-0.5">Tare</span>
-            <span className="font-medium text-muted-foreground text-[11px]">
-              {detail.tare_weight_kg.toFixed(1)} kg
-            </span>
-          </div>
-          <div>
-            <span className="text-[8px] text-muted-foreground uppercase block font-bold tracking-wider leading-none mb-0.5">Net</span>
-            <span className="font-black text-violet-600 dark:text-violet-400 text-[11px]">
-              {detail.returned_gross_weight_kg != null ? `${Math.max(0, detail.returned_gross_weight_kg - detail.tare_weight_kg).toFixed(1)} kg` : "—"}
-            </span>
-          </div>
-        </div>
 
-        {/* Right: badges + view btn */}
-        <div className="flex items-center gap-2 shrink-0">
-          {cylinderAttachmentCount > 0 && (
-            <span className="flex items-center gap-1 text-[9px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/40 rounded-full px-2 py-0.5">
-              <Camera className="h-3 w-3" />
-              {cylinderAttachmentCount}
-            </span>
-          )}
+          {/* Billable status tag */}
           <Badge
             className={cn(
-              "text-[9px] font-black uppercase px-2 py-0.5 border hidden md:flex",
+              "text-[8px] font-black uppercase px-2 py-0.5 border shrink-0 h-5",
               detail.is_billable === 1
                 ? "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400"
                 : "bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400"
@@ -608,14 +648,6 @@ function CylinderRowCard({
           >
             {detail.is_billable === 1 ? "Billable" : "Non-Billable"}
           </Badge>
-          <button
-            type="button"
-            onClick={() => setModalOpen(true)}
-            className="flex items-center gap-1 text-[10px] font-bold text-primary hover:text-primary/80 bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-lg px-2.5 py-1 transition"
-          >
-            View Details
-            <ChevronRight className="h-3 w-3" />
-          </button>
         </div>
       </div>
 

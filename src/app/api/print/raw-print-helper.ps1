@@ -13,16 +13,8 @@ try {
     # This preserves all ESC/POS binary commands (like cut, align, bold).
     $contentBytes = [System.IO.File]::ReadAllBytes($FilePath)
 
-    # Debug logging
-    $logDir = Split-Path $FilePath -Parent
-    $logPath = Join-Path $logDir "print-debug.log"
-    "----- $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') -----" | Out-File -FilePath $logPath -Append
-    "File Path: $FilePath" | Out-File -FilePath $logPath -Append
-    "Payload Size: $($contentBytes.Length) bytes" | Out-File -FilePath $logPath -Append
-    if ($LogoPath) {
-        "Logo Path: $LogoPath" | Out-File -FilePath $logPath -Append
-    }
-    "----------------------" | Out-File -FilePath $logPath -Append
+    # Removed debug logging to print-debug.log to avoid file size bloat and improve raw print speed
+
 
     # PROCESS LOGO IF SPECIFIED
     $logoBytes = $null
@@ -84,10 +76,12 @@ try {
             [System.Buffer]::BlockCopy($data, 0, $logoBytes, $header.Length, $data.Length)
             [System.Buffer]::BlockCopy($footer, 0, $logoBytes, ($header.Length + $data.Length), $footer.Length)
             
-            "Logo processed successfully. Target size: $TargetWidth x $targetHeight ($($logoBytes.Length) ESC/POS bytes)" | Out-File -FilePath $logPath -Append
+            # Developer Comment: Replaced Out-File redirect with stdout message to avoid dependency on removed debug logPath
+            Write-Output "Logo processed successfully. Target size: $TargetWidth x $targetHeight ($($logoBytes.Length) ESC/POS bytes)"
         }
         catch {
-            "Error converting logo: $_" | Out-File -FilePath $logPath -Append
+            # Developer Comment: Log converting errors to warnings standard stream to keep process transparent
+            Write-Warning "Error converting logo: $_"
             $logoBytes = $null
         }
     }
@@ -186,6 +180,28 @@ public class RawPrinterHelper {
     $success = [RawPrinterHelper]::SendBytesToPrinter($PrinterName, $contentBytes)
     if (-not $success) {
         throw "Failed to spool raw bytes to printer '$PrinterName' via winspool API."
+    }
+
+    # WAIT AND CHECK QUEUE STATUS FOR OFFLINE / ERRORS
+    Start-Sleep -Milliseconds 800
+    $jobs = Get-PrintJob -PrinterName $PrinterName -ErrorAction SilentlyContinue
+    if ($jobs) {
+        # Check if any job is in an Error state
+        foreach ($job in $jobs) {
+            $status = $job.JobStatus
+            if ($status -like "*Error*" -or $status -like "*Offline*" -or $status -like "*Paper-out*") {
+                # Cancel/remove the print job so it doesn't print later when turned on
+                Remove-PrintJob -PrinterName $PrinterName -ID $job.Id -ErrorAction SilentlyContinue
+                throw "Printing failed: Printer '$PrinterName' is offline or in error state (Status: $status)."
+            }
+        }
+        
+        # If there are still jobs in the queue after 800ms, even if status is not explicitly marked as Error yet,
+        # it is stuck (meaning printer port is offline/timed out). Cancel and throw error.
+        foreach ($job in $jobs) {
+            Remove-PrintJob -PrinterName $PrinterName -ID $job.Id -ErrorAction SilentlyContinue
+        }
+        throw "Printing timed out: Printer '$PrinterName' did not respond. Please make sure it is turned on and connected."
     }
 
     Write-Output "Successfully sent to printer $PrinterName."

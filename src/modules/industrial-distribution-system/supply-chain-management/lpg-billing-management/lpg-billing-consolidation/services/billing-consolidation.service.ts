@@ -15,6 +15,7 @@ import type {
   MeterReadingAdjustPayload,
   WiwoDetailAdjustPayload,
   ApproveHeaderPayload,
+  WiwoLineType,
 } from "../types/billing-consolidation.types";
 
 import {
@@ -37,7 +38,18 @@ import {
   repoFetchActiveCylindersBySite,
   repoFetchFirstBranchId,
   repoFetchOnboardingAttachmentsForCylinders,
+  // AG-CHANGE: Import cylinder helpers to adjust onboarding baseline cylinders directly in the database
+  repoFetchCustomerSiteCylinder,
+  repoPatchCustomerSiteCylinder,
+  repoFetchCustomerEmailByCode,
+  repoFetchCompanyProfile,
+  repoGetOrCreateFolderId,
+  repoUploadInvoicePdf,
+  // DEV-CHANGE: Import previous-header lookup for inter-period consumption snapshot
+  repoFetchPreviousPostedHeader,
 } from "./billing-consolidation.repo";
+
+import { sendInvoiceEmail } from "../utils/email-sender";
 
 // ─── Header Listing ───────────────────────────────────────────────────────────
 
@@ -83,6 +95,47 @@ export async function fetchConsolidationWorkspace(headerId: number): Promise<{
         try {
           const activeCylinders = await repoFetchActiveCylindersBySite(tx.lpg_site_id);
           if (activeCylinders && activeCylinders.length > 0) {
+            // AG-CHANGE: Calculate billable_kg per cylinder based on initial LPG weight (gross - tare)
+            const details = activeCylinders.map((cyl, idx) => {
+              const tare = Number(cyl.cylinder_asset_id?.tare_weight ?? 0);
+              const gross = Number(cyl.current_lpg_kg ?? 0);
+              const prodName = cyl.cylinder_asset_id?.product_id?.product_name || null;
+              const remaining = Math.max(0, parseFloat((gross - tare).toFixed(3)));
+              const lineGross = parseFloat((remaining * tx.price_per_kg).toFixed(2));
+              const lineVat = parseFloat((lineGross - (lineGross / 1.12)).toFixed(2));
+
+              return {
+                id: cyl.id,
+                wiwo_header_id: 0,
+                line_no: idx + 1,
+                lpg_site_id: tx.lpg_site_id,
+                customer_code: tx.customer_code,
+                line_type: "NEW_DEPLOYMENT" as WiwoLineType,
+                site_cylinder_id: cyl.id,
+                cylinder_asset_id: cyl.cylinder_asset_id?.id ?? 0,
+                product_id: 0,
+                serial_number: cyl.cylinder_asset_id?.serial_number ?? "UNKNOWN",
+                tare_weight_kg: tare,
+                previous_lpg_kg: Number(cyl.previous_lpg_kg ?? 0),
+                returned_gross_weight_kg: gross,
+                remaining_lpg_kg: remaining,
+                consumed_lpg_kg: remaining,
+                billable_kg: remaining,
+                price_per_kg: tx.price_per_kg,
+                gross_amount: lineGross,
+                discount_amount: 0,
+                vat_amount: lineVat,
+                net_amount: lineGross,
+                is_billable: 1 as 0 | 1,
+                remarks: null,
+                product: prodName ? { product_name: prodName } : undefined,
+              };
+            });
+
+            const totalLpgKg = parseFloat(details.reduce((sum, d) => sum + d.billable_kg, 0).toFixed(3));
+            const headerGross = parseFloat((totalLpgKg * tx.price_per_kg).toFixed(2));
+            const headerVat = parseFloat((headerGross - (headerGross / 1.12)).toFixed(2));
+
             finalWiwoHeader = {
               id: 0,
               wiwo_no: "WIWO-ONB-BASELINE",
@@ -92,57 +145,155 @@ export async function fetchConsolidationWorkspace(headerId: number): Promise<{
               wiwo_type: "DEPLOYMENT_ONLY",
               total_returned_cylinders: 0,
               total_deployed_cylinders: activeCylinders.length,
-              total_billable_kg: 0,
+              total_billable_kg: totalLpgKg,
               price_per_kg: tx.price_per_kg,
-              gross_amount: 0,
+              gross_amount: headerGross,
               discount_amount: 0,
-              vat_amount: 0,
-              net_amount: 0,
+              vat_amount: headerVat,
+              net_amount: headerGross,
               wiwo_status: "POSTED", // Renders table as read-only
               remarks: "Synthesized baseline cylinders list",
-              details: activeCylinders.map((cyl, idx) => {
-                const tare = Number(cyl.cylinder_asset_id?.tare_weight ?? 0);
-                const gross = Number(cyl.current_lpg_kg ?? 0);
-                const prodName = cyl.cylinder_asset_id?.product_id?.product_name || null;
-
-                return {
-                  id: cyl.id,
-                  wiwo_header_id: 0,
-                  line_no: idx + 1,
-                  lpg_site_id: tx.lpg_site_id,
-                  customer_code: tx.customer_code,
-                  line_type: "NEW_DEPLOYMENT",
-                  site_cylinder_id: cyl.id,
-                  cylinder_asset_id: cyl.cylinder_asset_id?.id ?? 0,
-                  product_id: 0,
-                  serial_number: cyl.cylinder_asset_id?.serial_number ?? "UNKNOWN",
-                  tare_weight_kg: tare,
-                  previous_lpg_kg: Number(cyl.previous_lpg_kg ?? 0),
-                  returned_gross_weight_kg: gross,
-                  remaining_lpg_kg: Math.max(0, gross - tare),
-                  consumed_lpg_kg: 0,
-                  billable_kg: 0,
-                  price_per_kg: tx.price_per_kg,
-                  gross_amount: 0,
-                  discount_amount: 0,
-                  vat_amount: 0,
-                  net_amount: 0,
-                  is_billable: 0,
-                  remarks: null,
-                  product: prodName ? { product_name: prodName } : undefined,
-                };
-              }),
+              details,
             };
+
+            // AG-CHANGE: Update the parent transaction values to match the computed baseline cylinder totals
+            tx.wiwo_kg = totalLpgKg;
+            tx.billable_kg = totalLpgKg;
+            tx.billable_source = "WIWO";
+            tx.gross_amount = headerGross;
+            tx.net_amount = headerGross;
+            tx.vat_amount = headerVat;
           }
         } catch (err) {
           console.error("Failed to fetch active cylinders for onboarding baseline transaction:", err);
         }
       }
 
+      // AG-CHANGE: Query the audit trail for this transaction to mark adjusted meter readings and cylinder weights
+      const audits = await repoFetchAuditTrail(tx.id);
+      const isMeterAdjusted = audits.some(
+        (a) =>
+          a.action_type === "REVIEWER_ADJUSTMENT" &&
+          a.changes_payload &&
+          "current_reading" in a.changes_payload
+      );
+
+      // --- Pass 1: Collect cylinder IDs from audits that carry explicit identifier fields ---
+      const adjustedCylinderIds = new Set<number>();
+      audits.forEach((a) => {
+        if (a.action_type === "REVIEWER_ADJUSTMENT" && a.changes_payload) {
+          if (a.changes_payload.wiwo_detail_id) {
+            adjustedCylinderIds.add(Number(a.changes_payload.wiwo_detail_id.new));
+          }
+          if (a.changes_payload.site_cylinder_id) {
+            adjustedCylinderIds.add(Number(a.changes_payload.site_cylinder_id.new));
+          }
+        }
+      });
+
+      // AG-CHANGE: Parse chronological audits (oldest to newest) to find the original values before any reviewer adjustments
+      const chronologicalAudits = [...audits].reverse();
+      
+      let originalCurrentReading: number | undefined = undefined;
+      if (isMeterAdjusted) {
+        const oldestMeterAudit = chronologicalAudits.find(
+          (a) =>
+            a.action_type === "REVIEWER_ADJUSTMENT" &&
+            a.changes_payload &&
+            "current_reading" in a.changes_payload
+        );
+        if (oldestMeterAudit) {
+          originalCurrentReading = Number(oldestMeterAudit.changes_payload.current_reading.old);
+        }
+      }
+
+      // --- Pass 2: Map detail IDs and serial numbers to their original gross weights before the first adjustment ---
+      // Also build a value-keyed fallback for legacy audits that have returned_gross_weight_kg but no identifier fields.
+      // For those, we match later by comparing a cylinder's current returned_gross_weight_kg to the audit's .new value.
+      const originalCylGrossWeights = new Map<number, number>();
+      const originalCylGrossWeightsBySerial = new Map<string, number>();
+
+      // Legacy fallback: keyed by the POST-adjustment gross weight (.new) → original gross weight (.old)
+      // Only populated for audits that have no wiwo_detail_id, site_cylinder_id, or serial_number.
+      const legacyGrossWeightFallback = new Map<number, number>();
+
+      chronologicalAudits.forEach((a) => {
+        if (
+          a.action_type === "REVIEWER_ADJUSTMENT" &&
+          a.changes_payload &&
+          "returned_gross_weight_kg" in a.changes_payload
+        ) {
+          const detailId = a.changes_payload.wiwo_detail_id
+            ? Number(a.changes_payload.wiwo_detail_id.new)
+            : a.changes_payload.site_cylinder_id
+              ? Number(a.changes_payload.site_cylinder_id.new)
+              : null;
+          const serialNo = a.changes_payload.serial_number
+            ? String(a.changes_payload.serial_number.new)
+            : null;
+
+          const oldGross = Number(a.changes_payload.returned_gross_weight_kg.old);
+          const newGross = Number(a.changes_payload.returned_gross_weight_kg.new);
+
+          if (detailId !== null) {
+            // Explicit ID — standard path: record only the FIRST (oldest) audit entry per cylinder
+            if (!originalCylGrossWeights.has(detailId)) {
+              originalCylGrossWeights.set(detailId, oldGross);
+            }
+          }
+          if (serialNo !== null) {
+            if (!originalCylGrossWeightsBySerial.has(serialNo)) {
+              originalCylGrossWeightsBySerial.set(serialNo, oldGross);
+            }
+          }
+          if (detailId === null && serialNo === null) {
+            // AG-CHANGE: Legacy audit with no identifier — store old value keyed by the post-adjustment gross weight.
+            // At render time we check if a cylinder's current returned_gross_weight_kg matches any .new value here.
+            // Only keep the FIRST (oldest) entry for each unique .new value so we always get the true original.
+            if (!legacyGrossWeightFallback.has(newGross)) {
+              legacyGrossWeightFallback.set(newGross, oldGross);
+            }
+          }
+        }
+      });
+
+      const finalMeterReading = meterReading
+        ? { 
+            ...meterReading, 
+            is_adjusted: isMeterAdjusted,
+            original_current_reading: originalCurrentReading,
+          }
+        : undefined;
+
+      const finalWiwoHeaderWithFlags = finalWiwoHeader
+        ? {
+            ...finalWiwoHeader,
+            details: finalWiwoHeader.details?.map((d) => {
+              // Explicit ID / serial lookup first, then legacy value-keyed fallback
+              const origGross =
+                originalCylGrossWeights.get(d.id) ??
+                originalCylGrossWeightsBySerial.get(d.serial_number) ??
+                // AG-CHANGE: Legacy fallback — match by current returned_gross_weight_kg matching audit's .new value
+                legacyGrossWeightFallback.get(Number(d.returned_gross_weight_kg)) ??
+                null;
+
+              // A cylinder is adjusted if: it has an explicit audit ID match, OR the legacy fallback resolved an original value,
+              // OR serial number matched an audit entry.
+              const isAdjustedByLegacy = origGross !== null && !adjustedCylinderIds.has(d.id);
+
+              return {
+                ...d,
+                is_adjusted: adjustedCylinderIds.has(d.id) || isAdjustedByLegacy,
+                original_returned_gross_weight_kg: origGross,
+              };
+            }),
+          }
+        : undefined;
+
       return {
         ...tx,
-        meter_reading: meterReading ?? undefined,
-        wiwo_header: finalWiwoHeader ?? undefined,
+        meter_reading: finalMeterReading,
+        wiwo_header: finalWiwoHeaderWithFlags,
         attachments,
       } as ConsolidationTransaction;
     })
@@ -193,7 +344,27 @@ export async function fetchConsolidationWorkspace(headerId: number): Promise<{
     }
   }
 
-  return { header, transactions: enriched };
+  // DEV-CHANGE: Look up the previous POSTED billing header for this site to populate
+  // prev_total_billed_kg / prev_total_billed_m3 for the period-over-period invoice comparison.
+  let prevHeader: ConsolidationHeader | null = null;
+  if (header && header.customer_site_id) {
+    try {
+      prevHeader = await repoFetchPreviousPostedHeader(header.customer_site_id, headerId);
+    } catch (err) {
+      console.warn("[fetchConsolidationWorkspace] Failed to load previous posted header:", err);
+    }
+  }
+
+  // Inject prev snapshot onto the current header (not persisted — service-layer only)
+  const headerWithPrev = header
+    ? {
+        ...header,
+        prev_total_billed_kg: prevHeader?.total_billed_kg ?? null,
+        prev_total_billed_m3: prevHeader?.total_billed_m3 ?? null,
+      }
+    : null;
+
+  return { header: headerWithPrev, transactions: enriched };
 }
 
 /**
@@ -256,7 +427,15 @@ export async function adjustMeterReading(payload: MeterReadingAdjustPayload): Pr
       ? Math.max(0, prevReading - new_current_reading)
       : Math.max(0, new_current_reading - prevReading);
 
-  const kgConsumed = parseFloat((rawConsumption * existing.conversion_factor).toFixed(3));
+  // DEV-CHANGE: Fixed kgConsumed calculation to correctly multiply by conversion_factor, pressure_line, and lpg_vapor_factor
+  const kgConsumed = parseFloat(
+    (
+      rawConsumption *
+      existing.conversion_factor *
+      (existing.pressure_line ?? 1) *
+      (existing.lpg_vapor_factor ?? 1)
+    ).toFixed(3)
+  );
   const grossAmount = parseFloat((kgConsumed * existing.price_per_kg).toFixed(2));
 
   // 3. Patch the meter reading row
@@ -375,6 +554,96 @@ export async function adjustWiwoDetail(payload: WiwoDetailAdjustPayload): Promis
     modified_by,
   } = payload;
 
+  // AG-CHANGE: Support adjusting onboarding baseline cylinder weights directly.
+  // When wiwoHeaderId is 0, no wiwo_header exists, so we fetch and update the customer site cylinder table instead.
+  if (wiwoHeaderId === 0) {
+    const cylinder = await repoFetchCustomerSiteCylinder(wiwoDetailId);
+    if (!cylinder) throw new Error(`Customer site cylinder ${wiwoDetailId} not found.`);
+
+    const oldGrossWeight = cylinder.current_lpg_kg ?? 0;
+    const tareWeight = cylinder.cylinder_asset_id?.tare_weight ?? 0;
+
+    const remainingLpgKg = Math.max(0, parseFloat(
+      (new_returned_gross_weight_kg - tareWeight).toFixed(3)
+    ));
+    // AG-CHANGE: On onboarding baseline transactions, the cylinder's billable kg is its LPG weight (remaining LPG weight)
+    const consumedLpgKg = remainingLpgKg;
+    const billableKg = remainingLpgKg;
+    
+    const txBefore = await fetchTransactionRaw(transactionId);
+    if (!txBefore) throw new Error(`Transaction ${transactionId} not found.`);
+
+    // AG-CHANGE: Calculate only grossAmount for the detail return as net/vat are not stored on the customer site cylinder detail level
+    const grossAmount = parseFloat((billableKg * txBefore.price_per_kg).toFixed(2));
+
+    // Direct update of the cylinder asset's current weight in customer site cylinders database
+    await repoPatchCustomerSiteCylinder(wiwoDetailId, {
+      current_lpg_kg: new_returned_gross_weight_kg,
+    });
+
+    // Fetch all active cylinders at this site to compute the updated transaction-level totals
+    const activeCylinders = await repoFetchActiveCylindersBySite(txBefore.lpg_site_id);
+    const newTotalBillableKg = parseFloat(
+      activeCylinders.reduce((sum, cyl) => {
+        const tare = Number(cyl.cylinder_asset_id?.tare_weight ?? 0);
+        // Use the newly adjusted weight for this cylinder, fallback to database weight for others
+        const gross = cyl.id === wiwoDetailId ? new_returned_gross_weight_kg : Number(cyl.current_lpg_kg ?? 0);
+        return sum + Math.max(0, gross - tare);
+      }, 0).toFixed(3)
+    );
+
+    const newTxGross = parseFloat((newTotalBillableKg * txBefore.price_per_kg).toFixed(2));
+    const newTxNet = newTxGross;
+    const newTxVat = parseFloat((newTxNet - (newTxNet / 1.12)).toFixed(2));
+
+    // Patch the baseline transaction in the database with updated totals
+    await repoPatchTransaction(transactionId, {
+      wiwo_kg: newTotalBillableKg,
+      billable_source: "WIWO",
+      billable_kg: newTotalBillableKg,
+      gross_amount: newTxGross,
+      vat_amount: newTxVat,
+      net_amount: newTxNet,
+      modified_by,
+      modified_date: new Date().toISOString(),
+    });
+
+    await refreshHeaderTotals(txBefore.transaction_header_id, modified_by);
+
+    await repoInsertAuditEntry({
+      transaction_id: transactionId,
+      transaction_no: txBefore.transaction_no,
+      action_type: "REVIEWER_ADJUSTMENT",
+      changes_payload: {
+        site_cylinder_id: { old: null, new: wiwoDetailId },
+        serial_number: { old: null, new: cylinder.cylinder_asset_id?.serial_number ?? "" },
+        returned_gross_weight_kg: { old: oldGrossWeight, new: new_returned_gross_weight_kg },
+        remaining_lpg_kg: { old: Math.max(0, oldGrossWeight - tareWeight), new: remainingLpgKg },
+        consumed_lpg_kg: { old: Math.max(0, oldGrossWeight - tareWeight), new: consumedLpgKg },
+        detail_billable_kg: { old: Math.max(0, oldGrossWeight - tareWeight), new: billableKg },
+        wiwo_total_billable_kg: { old: txBefore.wiwo_kg, new: newTotalBillableKg },
+        wiwo_kg: { old: txBefore.wiwo_kg, new: newTotalBillableKg },
+        variance_kg: { old: txBefore.variance_kg, new: txBefore.variance_kg },
+        billable_source: { old: txBefore.billable_source, new: "WIWO" },
+        billable_kg: { old: txBefore.billable_kg, new: newTotalBillableKg },
+        gross_amount: { old: txBefore.gross_amount, new: newTxGross },
+        vat_amount: { old: txBefore.vat_amount, new: newTxVat },
+        net_amount: { old: txBefore.net_amount, new: newTxNet },
+        adjustment_reason: { old: null, new: adjustment_reason },
+      },
+      modified_by,
+    });
+
+    return {
+      updated_detail: {
+        remaining_lpg_kg: remainingLpgKg,
+        consumed_lpg_kg: consumedLpgKg,
+        billable_kg: billableKg,
+        gross_amount: grossAmount,
+      },
+    };
+  }
+
   // 1. Fetch all current details to get the full context for this line
   const wiwoHeader = await repoFetchWiwoWithDetails(wiwoHeaderId);
   if (!wiwoHeader) throw new Error(`WIWO header ${wiwoHeaderId} not found.`);
@@ -471,6 +740,8 @@ export async function adjustWiwoDetail(payload: WiwoDetailAdjustPayload): Promis
     transaction_no: txBefore.transaction_no,
     action_type: "REVIEWER_ADJUSTMENT",
     changes_payload: {
+      wiwo_detail_id: { old: null, new: wiwoDetailId },
+      serial_number: { old: null, new: detail.serial_number },
       returned_gross_weight_kg: { old: oldGrossWeight, new: new_returned_gross_weight_kg },
       remaining_lpg_kg: { old: detail.remaining_lpg_kg, new: remainingLpgKg },
       consumed_lpg_kg: { old: detail.consumed_lpg_kg, new: consumedLpgKg },
@@ -527,14 +798,13 @@ export async function approveConsolidationHeader(payload: ApproveHeaderPayload):
   // 2. Consolidate child transaction totals
   let totalGross = 0;
   let totalVat = 0;
-  let totalNet = 0;
+  // DEV-CHANGE: Removed unused totalNet variable to resolve eslint warning
   let totalDiscount = 0;
 
   for (const tx of transactions) {
     if (tx.status !== "CANCELLED") {
       totalGross += tx.gross_amount;
       totalVat += tx.vat_amount;
-      totalNet += tx.net_amount;
       totalDiscount += tx.discount_amount;
     }
   }
@@ -549,6 +819,7 @@ export async function approveConsolidationHeader(payload: ApproveHeaderPayload):
   const branchId = await repoFetchFirstBranchId();
 
   // 5. Create Sales Invoice
+  // DEV-CHANGE: Align net_amount and total_amount with the VAT-inclusive totalGross to resolve discrepancy with PDF invoice
   const invoice = await repoCreateSalesInvoice({
     invoice_no: invoiceNo,
     order_id: invoiceNo,
@@ -556,9 +827,9 @@ export async function approveConsolidationHeader(payload: ApproveHeaderPayload):
     invoice_date: today,
     gross_amount: parseFloat(totalGross.toFixed(2)),
     vat_amount: parseFloat(totalVat.toFixed(2)),
-    // AG-CHANGE: In a VAT-inclusive system, total_amount is equal to the sum of transaction net_amounts
-    net_amount: parseFloat(totalNet.toFixed(2)),
-    total_amount: parseFloat(totalNet.toFixed(2)),
+    // AG-CHANGE: In a VAT-inclusive system, total_amount is equal to the sum of transaction gross_amounts (totalGross)
+    net_amount: parseFloat(totalGross.toFixed(2)),
+    total_amount: parseFloat(totalGross.toFixed(2)),
     transaction_status: "unpaid",
     remarks: `Consolidated Invoice for Billing Header ${header.header_no || headerId}`,
     salesman_id: salesmanId,
@@ -594,14 +865,132 @@ export async function approveConsolidationHeader(payload: ApproveHeaderPayload):
     status: "POSTED",
   });
 
-  // 8. Update header status to POSTED and mark as billed (read-only)
+  // 7.5 Upload PDF to Directus if pdfBase64 is provided
+  let pdfAttachmentUuid: string | null = null;
+  if (payload.pdfBase64) {
+    try {
+      const folderId = await repoGetOrCreateFolderId("ids_invoice_pdf");
+      const fileId = await repoUploadInvoicePdf(
+        payload.pdfBase64,
+        `Consolidated_Invoice_${invoiceNo}.pdf`,
+        folderId
+      );
+      if (fileId) {
+        pdfAttachmentUuid = fileId;
+        console.log(`[Directus File Upload] Successfully uploaded consolidated PDF. UUID: ${fileId}`);
+      }
+    } catch (uploadErr) {
+      console.error("[Directus File Upload] Failed to upload PDF attachment:", uploadErr);
+    }
+  }
+
+  // DEV-CHANGE: Compute billing history snapshot values to persist on the header.
+  // total_billed_kg — billable kg excluding onboarding baseline (mirrors Consolidation by Source total)
+  // total_billed_m3 — raw M3 consumed only by METERED-source transactions (mirrors Meter Conversion display)
+  const billedKg = parseFloat(
+    transactions
+      .filter((tx) => tx.transaction_type !== "ONBOARDING_BASELINE" && tx.status !== "CANCELLED")
+      .reduce((sum, tx) => sum + tx.billable_kg, 0)
+      .toFixed(3)
+  );
+
+  // Fetch meter readings for METERED-source transactions to sum raw M3
+  const meteredTxs = transactions.filter(
+    (tx) => tx.billable_source === "METERED" &&
+      tx.transaction_type !== "ONBOARDING_BASELINE" &&
+      tx.status !== "CANCELLED" &&
+      tx.meter_reading_id
+  );
+
+  let billedM3 = 0;
+  for (const tx of meteredTxs) {
+    if (tx.meter_reading_id) {
+      const reading = await repoFetchMeterReading(tx.meter_reading_id);
+      if (reading) {
+        billedM3 += reading.raw_consumption;
+      }
+    }
+  }
+  billedM3 = parseFloat(billedM3.toFixed(3));
+
+  // 8. Update header status to POSTED, mark as billed, link the PDF UUID, and persist billing snapshot
   await repoPatchHeader(headerId, {
     status: "POSTED",
     is_billed: 1,
+    invoice_attachments_uuid: pdfAttachmentUuid,
     posted_by: approved_by,
     posted_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
+    // DEV-CHANGE: Persist billing snapshot for inter-period reference
+    total_billed_kg: billedKg,
+    total_billed_m3: billedM3,
   });
+
+  // 9. Fetch company profile, customer email, and send email notification with PDF attachment (non-blocking)
+  try {
+    const custInfo = await repoFetchCustomerEmailByCode(header.customer_id);
+    if (custInfo && custInfo.customer_email) {
+      const company = await repoFetchCompanyProfile();
+      const companyName = company?.company_name || "";
+
+      // DEV-CHANGE: Fetch and convert company logo to Base64 data URI if UUID exists in company profile
+      let logoBase64: string | null = null;
+      if (company && company.company_logo) {
+        const logoUuid = company.company_logo;
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(logoUuid);
+        if (isUuid) {
+          try {
+            const staticToken = process.env.DIRECTUS_STATIC_TOKEN;
+            const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8055";
+            const assetUrl = `${apiBaseUrl}/assets/${logoUuid}${staticToken ? `?access_token=${staticToken}` : ""}`;
+            const imgRes = await fetch(assetUrl);
+            if (imgRes.ok) {
+              const contentType = imgRes.headers.get("content-type") || "image/png";
+              const buffer = await imgRes.arrayBuffer();
+              const base64 = Buffer.from(buffer).toString("base64");
+              logoBase64 = `data:${contentType};base64,${base64}`;
+            }
+          } catch (imgErr) {
+            console.error("[Email Service] Failed to proxy company logo for email:", imgErr);
+          }
+        } else if (company.company_logo.startsWith("data:")) {
+          logoBase64 = company.company_logo;
+        }
+      }
+
+      // Calculate due date (10 days in the future)
+      const invDate = new Date();
+      const dueDateObj = new Date();
+      dueDateObj.setDate(dueDateObj.getDate() + 10);
+
+      const formatDate = (d: Date) => d.toISOString().split("T")[0];
+
+      // DEV-CHANGE: Send clean informational billing notification to customer attaching the PDF invoice.
+      // Align netAmount with the VAT-inclusive totalGross to match the PDF invoice amount.
+      await sendInvoiceEmail({
+        to: custInfo.customer_email,
+        customerName: custInfo.customer_name || header.customer_id,
+        invoiceNo: invoice.invoice_no,
+        invoiceDate: formatDate(invDate),
+        dueDate: formatDate(dueDateObj),
+        netAmount: totalGross,
+        periodFrom: header.period_from,
+        periodTo: header.period_to,
+        pdfBase64: payload.pdfBase64,
+        companyName,
+        companyContact: company?.company_contact,
+        companyEmail: company?.company_email,
+        companyTin: company?.company_tin,
+        companyLogoBase64: logoBase64,
+      });
+      console.log(`[Email Service] Successfully sent invoice notification for ${invoice.invoice_no} to ${custInfo.customer_email}`);
+    } else {
+      console.warn(`[Email Service] Customer ${header.customer_id} has no customer_email set. Skipping notification.`);
+    }
+  } catch (err) {
+    // DEV-CHANGE: Catch and log email errors to ensure transaction posting success is NOT interrupted by SMTP delivery failures
+    console.error(`[Email Service] Failed to send email for invoice ${invoice.invoice_no}:`, err);
+  }
 }
 
 
@@ -617,7 +1006,8 @@ async function fetchTransactionRaw(transactionId: number): Promise<Consolidation
     directusFetch,
     getDirectusBase,
   } = await import(
-    "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/directus"
+    // Updated import path from stock-adjustment to stock-adjustment-serial-posting
+    "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment-serial-posting/utils/directus"
   );
   const DIRECTUS_URL = getDirectusBase();
 

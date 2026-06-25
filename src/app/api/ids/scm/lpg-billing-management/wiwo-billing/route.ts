@@ -13,8 +13,9 @@ import {
   fetchInvoicesForCustomer,
 
 } from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/wiwo-billing/wiwo-billing-creation/providers/wiwo-billing.provider";
-import { handleApiError } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/error-handler";
-import { getUserIdFromToken } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment/utils/auth-utils";
+// Updated import paths from stock-adjustment to stock-adjustment-serial-posting
+import { handleApiError } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment-serial-posting/utils/error-handler";
+import { getUserIdFromToken } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment-serial-posting/utils/auth-utils";
 
 /**
  * GET /api/ids/scm/lpg-billing-management/wiwo-billing
@@ -96,6 +97,7 @@ export async function GET(request: NextRequest) {
     const params = {
       search: searchParams.get("search") || undefined,
       status: searchParams.get("status") || undefined,
+      transactionType: searchParams.get("transactionType") || undefined,
       salesInvoiceId: searchParams.get("salesInvoiceId") ? Number(searchParams.get("salesInvoiceId")) : undefined,
       page: searchParams.get("page") ? Number(searchParams.get("page")) : 1,
       limit: searchParams.get("limit") ? Number(searchParams.get("limit")) : 10,

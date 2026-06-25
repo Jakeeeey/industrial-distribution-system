@@ -178,6 +178,7 @@ export interface WiwoListParams {
   // AG-CHANGE: Optional filter to scope transactions to a specific transaction header
   transactionHeaderId?: number;
   salesInvoiceId?: number;
+  transactionType?: string;
 }
 
 export interface OnboardCylinderInput {
@@ -196,6 +197,7 @@ export interface CustomerSite {
   default_price_per_kg: number;
   last_meter_reading?: number | null;
   default_target_lpg_kg?: number | null;
+  billing_mode?: 'BOTH' | 'KILO' | 'METERED' | null;
 }
 
 export interface MeterReading {

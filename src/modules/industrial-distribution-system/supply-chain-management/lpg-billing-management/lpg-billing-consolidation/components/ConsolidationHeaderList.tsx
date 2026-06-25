@@ -224,7 +224,8 @@ export function ConsolidationHeaderList({ hook }: ConsolidationHeaderListProps) 
       </div>
 
       {/* ── Pagination ────────────────────────────────────────────────────── */}
-      {totalHeaders > (headerParams.limit ?? 15) && (
+      {/* IDS-CHANGE: Changed fallback limit from 15 to 5 to align pagination */}
+      {totalHeaders > (headerParams.limit ?? 5) && (
         <div className="px-3 py-2 border-t border-zinc-100 dark:border-zinc-800/40 flex items-center justify-between shrink-0">
           <Button
             variant="ghost"
@@ -243,7 +244,7 @@ export function ConsolidationHeaderList({ hook }: ConsolidationHeaderListProps) 
             size="sm"
             className="h-6 text-[10px]"
             disabled={
-              (headerParams.page ?? 1) * (headerParams.limit ?? 15) >= totalHeaders ||
+              (headerParams.page ?? 1) * (headerParams.limit ?? 5) >= totalHeaders ||
               isLoadingHeaders
             }
             onClick={() => setHeaderParams({ page: (headerParams.page ?? 1) + 1 })}
