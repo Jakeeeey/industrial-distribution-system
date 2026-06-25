@@ -56,6 +56,7 @@ import {
   SalesReturnStatusCard,
 } from "../types/sales-return.types";
 import { ProductLookupModal } from "./ProductLookupModal";
+import { BulkRegisterModal } from "./BulkRegisterModal";
 import { SalesReturnPrintSlip } from "./SalesReturnPrintSlip";
 import { createRoot } from "react-dom/client";
 
@@ -265,6 +266,8 @@ export function UpdateSalesReturnModal({
 
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
   const [isValidatingSerial, setIsValidatingSerial] = useState(false);
+  const [unregisteredSerials, setUnregisteredSerials] = useState<string[]>([]);
+  const [isBulkRegisterOpen, setIsBulkRegisterOpen] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [serialSearch, setSerialSearch] = useState("");
   const [returnTypeError, setReturnTypeError] = useState(false);
@@ -343,12 +346,18 @@ export function UpdateSalesReturnModal({
       
       if (updates.newSerial) {
         const serial = updates.newSerial.toUpperCase();
-        const alreadyHas = next.some(row => row.serialNumbers?.some(sn => sn.toUpperCase() === serial));
+        const alreadyHas = next.some(row => row.serialNumbers?.some(sn => (typeof sn === "string" ? sn.toUpperCase() : sn.serialNumber.toUpperCase()) === serial));
         if (alreadyHas) {
           toast.warning("Serial Number already added");
           return prev;
         }
-        updatedItem.serialNumbers = [...(current.serialNumbers || []), updates.newSerial];
+        const serialObj = {
+          serialNumber: updates.newSerial,
+          cylinderCondition: "GOOD",
+          tareWeight: 0,
+          expirationDate: "",
+        };
+        updatedItem.serialNumbers = [...(current.serialNumbers || []), serialObj];
       }
       
       updatedItem.quantity = (updatedItem.serialNumbers || []).length;
@@ -375,8 +384,8 @@ export function UpdateSalesReturnModal({
     if (!selectedRow) return;
 
     const isGlobalSessionDuplicate = details.some((item) => 
-      item.serialNumbers?.some(sn => sn.toUpperCase() === serial)
-    );
+      item.serialNumbers?.some(sn => (typeof sn === "string" ? sn.toUpperCase() : sn.serialNumber.toUpperCase()) === serial)
+    ) || unregisteredSerials.some(sn => sn.toUpperCase() === serial);
     if (isGlobalSessionDuplicate) {
       toast.error("Duplicate Serial", { description: `Serial "${serial}" is already added to this return session.` });
       return;
@@ -393,9 +402,18 @@ export function UpdateSalesReturnModal({
         return;
       }
 
-      const result = await SalesReturnProvider.checkSerialOnHand(serial, Number(branchId) || 0); 
+      const result = await SalesReturnProvider.checkSerialOnHand(serial, Number(branchId) || 0, Number(selectedRow.productId || selectedRow.product_id)); 
       if (result && result.isOnInventory) {
         toast.error("Serial Number already in stock");
+        return;
+      }
+
+      if (result && result.isUnregistered) {
+        setUnregisteredSerials((prev) => {
+          if (prev.includes(serial)) return prev;
+          return [...prev, serial];
+        });
+        toast.info(`Serial ${serial} is unregistered. Please register it.`);
         return;
       }
 
@@ -412,6 +430,13 @@ export function UpdateSalesReturnModal({
   const handleDeleteRow = (index: number) => setDetails((prev) => prev.filter((_, i) => i !== index));
 
   const handleUpdateClick = () => {
+    if (unregisteredSerials.length > 0) {
+      toast.error("Submission Blocked", {
+        description: "You cannot update or receive this sales return because one or more products contain unregistered serial numbers. Please complete registration before proceeding.",
+        duration: 8000,
+      });
+      return;
+    }
     if (!headerData.orderNo?.trim()) {
       orderWrapperRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       toast.error("Order No. is required");
@@ -546,7 +571,8 @@ export function UpdateSalesReturnModal({
         appliedInvoiceId: appliedInvoiceId,
         isThirdParty: headerData.isThirdParty,
       });
-      const now = new Date().toISOString();
+      // Use Manila timezone to match the convention of created_at/updated_at
+      const now = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Manila" });
       await SalesReturnProvider.updateStatus(headerData.id, "Received", true, now);
       toast.success("Return Received", { description: "Sales return has been successfully received and posted to inventory." });
       onSuccess();
@@ -600,6 +626,20 @@ export function UpdateSalesReturnModal({
         </div>
 
         <div className="flex-1 overflow-y-auto p-8 space-y-8 bg-muted/50">
+          {unregisteredSerials.length > 0 && (
+            <div className="bg-destructive/10 border border-destructive/20 text-destructive rounded-xl p-4 flex items-start gap-3 shadow-sm animate-in fade-in slide-in-from-top-4 duration-300">
+              <div className="p-2 bg-destructive text-white rounded-lg font-bold text-xs shrink-0">
+                ⚠️
+              </div>
+              <div>
+                <h5 className="font-bold text-sm">Submission Blocked</h5>
+                <p className="text-xs text-muted-foreground mt-1">
+                  You cannot update or receive this sales return because one or more products contain unregistered serial numbers. Please complete registration before proceeding.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-5 gap-y-4 bg-background p-5 rounded-xl border border-border shadow-sm relative">
             <div className="absolute top-0 left-0 w-1 h-full bg-primary rounded-l-xl"></div>
             <ReadOnlyField label="Salesman" value={salesmenOptions.find(s => String(s.value) === String(headerData.salesmanId))?.label} isLoading={loading} />
@@ -786,40 +826,82 @@ export function UpdateSalesReturnModal({
                   <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 px-3 py-1 font-bold shrink-0">{details[selectedRowIndex].serialNumbers?.length || 0} TOTAL</Badge>
                 </div>
               </div>
+              {/* Unregistered Serials Alert Banner */}
+              {unregisteredSerials.length > 0 && (
+                <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-5">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-amber-500 rounded-lg text-white font-bold text-xs shrink-0">
+                      ⚠️
+                    </div>
+                    <div>
+                      <h5 className="font-bold text-sm text-amber-900 dark:text-amber-400">{unregisteredSerials.length} UNREGISTERED SERIALS</h5>
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {unregisteredSerials.map(sn => (
+                          <Badge key={sn} variant="outline" className="bg-amber-100/80 border-amber-300 text-amber-800 flex items-center gap-1 py-0.5 px-2 font-mono text-[10px]">
+                            {sn}
+                            <X className="h-3 w-3 cursor-pointer text-amber-600 hover:text-amber-900" onClick={() => setUnregisteredSerials(prev => prev.filter(s => s !== sn))} />
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <Button onClick={() => setIsBulkRegisterOpen(true)} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9 px-4 shrink-0">
+                    REGISTER ALL
+                  </Button>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 max-h-40 overflow-y-auto p-1">
                 {(details[selectedRowIndex].serialNumbers || [])
-                  .filter(sn => sn.toLowerCase().includes(serialSearch.toLowerCase()))
-                  .map(sn => (
-                    <div key={sn} className="flex items-center justify-between bg-muted/20 border border-border px-3 py-2 rounded-md hover:border-primary/30 transition-all group hover:shadow-sm">
-                      <span className="text-[10px] font-mono font-bold text-foreground truncate">{sn}</span>
-                      {canEditAll && (
-                        <button onClick={() => {
-                          setDetails(prev => {
-                            const next = [...prev];
-                            const row = next[selectedRowIndex];
-                            const newSerials = row.serialNumbers!.filter(s => s !== sn);
-                            const newQty = newSerials.length;
-                            const gross = Math.round(row.unitPrice * newQty * 100) / 100;
-                            let discAmt = 0;
-                            if (row.discountType) {
-                              const opt = discountOptions.find(d => d.id.toString() === row.discountType?.toString());
-                              if (opt) discAmt = Math.round(gross * (parseFloat(opt.total_percent) / 100) * 100) / 100;
-                            }
-                            next[selectedRowIndex] = { 
-                              ...row, 
-                              serialNumbers: newSerials, 
-                              quantity: newQty, 
-                              grossAmount: gross, 
-                              discountAmount: discAmt, 
-                              totalAmount: Math.round((gross - discAmt) * 100) / 100 
-                            };
-                            return next;
-                          });
-                        }} className="p-1 text-destructive/50 hover:text-destructive transition-colors"><X className="h-3 w-3" /></button>
-                      )}
-                    </div>
-                  ))}
-                {(details[selectedRowIndex].serialNumbers || []).filter(sn => sn.toLowerCase().includes(serialSearch.toLowerCase())).length === 0 && (
+                  .filter(sobj => {
+                    const sn = typeof sobj === "string" ? sobj : sobj.serialNumber;
+                    return sn.toLowerCase().includes(serialSearch.toLowerCase());
+                  })
+                  .map(sobj => {
+                    const sn = typeof sobj === "string" ? sobj : sobj.serialNumber;
+                    return (
+                      <div key={sn} className="flex items-center justify-between bg-muted/20 border border-border px-3 py-2 rounded-md hover:border-primary/30 transition-all group hover:shadow-sm">
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-[10px] font-mono font-bold text-foreground truncate">{sn}</span>
+                          {typeof sobj !== "string" && sobj.cylinderCondition && (
+                            <span className="text-[8px] text-muted-foreground uppercase tracking-wider">{sobj.cylinderCondition}</span>
+                          )}
+                        </div>
+                        {canEditAll && (
+                          <button onClick={() => {
+                            setDetails(prev => {
+                              const next = [...prev];
+                              const row = next[selectedRowIndex];
+                              const newSerials = row.serialNumbers!.filter(s => {
+                                const sVal = typeof s === "string" ? s : s.serialNumber;
+                                return sVal !== sn;
+                              });
+                              const newQty = newSerials.length;
+                              const gross = Math.round(row.unitPrice * newQty * 100) / 100;
+                              let discAmt = 0;
+                              if (row.discountType) {
+                                const opt = discountOptions.find(d => d.id.toString() === row.discountType?.toString());
+                                if (opt) discAmt = Math.round(gross * (parseFloat(opt.total_percent) / 100) * 100) / 100;
+                              }
+                              next[selectedRowIndex] = { 
+                                ...row, 
+                                serialNumbers: newSerials, 
+                                quantity: newQty, 
+                                grossAmount: gross, 
+                                discountAmount: discAmt, 
+                                totalAmount: Math.round((gross - discAmt) * 100) / 100 
+                              };
+                              return next;
+                            });
+                          }} className="p-1 text-destructive/50 hover:text-destructive transition-colors"><X className="h-3 w-3" /></button>
+                        )}
+                      </div>
+                    );
+                  })}
+                {(details[selectedRowIndex].serialNumbers || []).filter(sobj => {
+                  const sn = typeof sobj === "string" ? sobj : sobj.serialNumber;
+                  return sn.toLowerCase().includes(serialSearch.toLowerCase());
+                }).length === 0 && (
                   <div className="col-span-full py-8 text-center border border-dashed rounded-lg text-muted-foreground italic">
                     {serialSearch ? "No matching serial numbers found." : "No serial numbers entered yet."}
                   </div>
@@ -835,7 +917,7 @@ export function UpdateSalesReturnModal({
                 <div className="space-y-1.5" ref={orderWrapperRef}>
                   <Label className="text-xs font-bold uppercase tracking-wide">Order No.</Label>
                   <div className="relative group">
-                    <Input disabled={!canEditAll} className="h-9 w-full bg-background border-border shadow-sm text-sm" placeholder="Search Order No..." value={orderSearch} onChange={e => { setOrderSearch(e.target.value); setHeaderData({ ...headerData, orderNo: e.target.value }); setIsOrderOpen(true); }} onFocus={() => setIsOrderOpen(true)} />
+                    <Input disabled={!canEditAll || statusCardData?.invoicePosted} className="h-9 w-full bg-background border-border shadow-sm text-sm" placeholder="Search Order No..." value={orderSearch} onChange={e => { setOrderSearch(e.target.value); setHeaderData({ ...headerData, orderNo: e.target.value }); setIsOrderOpen(true); }} onFocus={() => setIsOrderOpen(true)} />
                     <ChevronDown className="h-3 w-3 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                     {isOrderOpen && (
                       <div className="absolute bottom-[calc(100%+4px)] left-0 w-full z-50 bg-background border border-border rounded-md shadow-xl max-h-48 overflow-y-auto divide-y">
@@ -852,7 +934,7 @@ export function UpdateSalesReturnModal({
                 <div className="space-y-1.5" ref={invoiceWrapperRef}>
                   <Label className="text-xs font-bold uppercase tracking-wide">Invoice No.</Label>
                   <div className="relative group">
-                    <Input disabled={!canEditAll} className="h-9 w-full bg-background border-border shadow-sm text-sm" placeholder="Search Invoice No..." value={invoiceSearch} onChange={e => { setInvoiceSearch(e.target.value); setHeaderData({ ...headerData, invoiceNo: e.target.value }); setIsInvoiceOpen(true); }} onFocus={() => setIsInvoiceOpen(true)} />
+                    <Input disabled={!canEditAll || statusCardData?.invoicePosted} className="h-9 w-full bg-background border-border shadow-sm text-sm" placeholder="Search Invoice No..." value={invoiceSearch} onChange={e => { setInvoiceSearch(e.target.value); setHeaderData({ ...headerData, invoiceNo: e.target.value }); setIsInvoiceOpen(true); }} onFocus={() => setIsInvoiceOpen(true)} />
                     <ChevronDown className="h-3 w-3 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                     {isInvoiceOpen && (
                       <div className="absolute bottom-[calc(100%+4px)] left-0 w-full z-50 bg-background border border-border rounded-md shadow-xl max-h-48 overflow-y-auto divide-y">
@@ -878,12 +960,17 @@ export function UpdateSalesReturnModal({
               <div className="h-px bg-border my-2"></div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-muted-foreground font-medium">Applied to</span>
-                {canEditLimited ? (
+                {canEditLimited && !statusCardData?.invoicePosted ? (
                   <Button variant="ghost" size="sm" className="h-6 text-xs border-primary/20 text-primary hover:bg-primary/10 px-2" onClick={() => setIsInvoiceLookupOpen(true)}>
                     {statusCardData?.appliedTo || invoiceOptions.find(i => Number(i.id) === appliedInvoiceId)?.invoice_no || "Select Invoice"} <LinkIcon className="ml-1 h-3 w-3" />
                   </Button>
                 ) : (
-                  <span className="font-bold">{statusCardData?.appliedTo || "-"}</span>
+                  <span className="font-bold flex items-center gap-1.5">
+                    {statusCardData?.appliedTo || invoiceOptions.find(i => Number(i.id) === appliedInvoiceId)?.invoice_no || "-"}
+                    {statusCardData?.invoicePosted && (
+                      <Badge variant="outline" className="text-[9px] font-bold px-1 py-0 border-amber-500/30 bg-amber-500/10 text-amber-600 rounded">Posted</Badge>
+                    )}
+                  </span>
                 )}
               </div>
             </div>
@@ -894,7 +981,16 @@ export function UpdateSalesReturnModal({
         <div className="border-t border-border p-5 bg-background flex justify-end gap-3 shrink-0">
           <Button variant="outline" onClick={handlePrintInNewTab}><Printer className="h-4 w-4 mr-2" /> Print Slip</Button>
           <Button variant="outline" onClick={onClose}>Close</Button>
-          <Button onClick={() => setIsReceiveConfirmOpen(true)} disabled={!isPending}>Receive</Button>
+          <Button onClick={() => {
+            if (unregisteredSerials.length > 0) {
+              toast.error("Submission Blocked", {
+                description: "You cannot update or receive this sales return because one or more products contain unregistered serial numbers. Please complete registration before proceeding.",
+                duration: 8000,
+              });
+              return;
+            }
+            setIsReceiveConfirmOpen(true);
+          }} disabled={!isPending}>Receive</Button>
           <Button className="bg-primary hover:bg-primary text-white min-w-40 flex items-center gap-2" onClick={handleUpdateClick} disabled={!canEditLimited || isUpdating}>
             {isUpdating ? <><Loader2 className="h-4 w-4 animate-spin" /> Submitting...</> : "Update Sales Return"}
           </Button>
@@ -902,6 +998,45 @@ export function UpdateSalesReturnModal({
       </DialogContent>
 
       <ProductLookupModal isOpen={isProductLookupOpen} onClose={() => setIsProductLookupOpen(false)} onConfirm={handleConfirmProductLookup} priceType={headerData.priceType || "A"} customerCode={headerData.customerCode} />
+
+      <BulkRegisterModal
+        open={isBulkRegisterOpen}
+        onOpenChange={setIsBulkRegisterOpen}
+        serials={unregisteredSerials}
+        productId={selectedRowIndex !== null ? Number(details[selectedRowIndex]?.productId || details[selectedRowIndex]?.product_id || 0) : 0}
+        branchId={Number(salesmenOptions.find(s => String(s.value) === String(headerData.salesmanId))?.branchId || headerData.branchId || 0)}
+        onSuccess={(registeredSerials) => {
+          setDetails((prev) => {
+            const idx = selectedRowIndex;
+            if (idx === null) return prev;
+            const next = [...prev];
+            const row = next[idx];
+            if (!row) return prev;
+            
+            const newSerials = [...(row.serialNumbers || []), ...registeredSerials];
+            const newQty = newSerials.length;
+            const unitPrice = Number(row.unitPrice) || 0;
+            const grossAmount = Math.round(unitPrice * newQty * 100) / 100;
+            
+            let discountAmt = 0;
+            if (row.discountType) {
+              const opt = discountOptions.find(d => d.id.toString() === row.discountType?.toString());
+              if (opt) discountAmt = Math.round(grossAmount * (parseFloat(opt.total_percent) / 100) * 100) / 100;
+            }
+            
+            next[idx] = {
+              ...row,
+              serialNumbers: newSerials,
+              quantity: newQty,
+              grossAmount,
+              discountAmount: discountAmt,
+              totalAmount: Math.round((grossAmount - discountAmt) * 100) / 100
+            };
+            return next;
+          });
+          setUnregisteredSerials([]);
+        }}
+      />
 
       <Dialog open={isInvoiceLookupOpen} onOpenChange={setIsInvoiceLookupOpen}>
         <DialogContent className="max-w-md">
@@ -912,10 +1047,12 @@ export function UpdateSalesReturnModal({
               <Input placeholder="Search Invoice No..." className="pl-10" value={invoiceSearch} onChange={e => setInvoiceSearch(e.target.value)} />
             </div>
             <div className="max-h-[300px] overflow-y-auto border rounded-md divide-y shadow-inner">
-              <div className="p-3 hover:bg-destructive/10 cursor-pointer flex items-center gap-3 transition-colors text-destructive font-medium" onClick={() => { setAppliedInvoiceId(null); setStatusCardData(prev => prev ? { ...prev, appliedTo: "" } : null); setIsInvoiceLookupOpen(false); }}>
-                <div className="h-8 w-8 rounded-full bg-destructive/10 flex items-center justify-center"><X className="h-4 w-4" /></div>
-                <div className="text-sm">Clear Selection (Unlink)</div>
-              </div>
+              {!statusCardData?.invoicePosted && (
+                <div className="p-3 hover:bg-destructive/10 cursor-pointer flex items-center gap-3 transition-colors text-destructive font-medium" onClick={() => { setAppliedInvoiceId(null); setStatusCardData(prev => prev ? { ...prev, appliedTo: "" } : null); setIsInvoiceLookupOpen(false); }}>
+                  <div className="h-8 w-8 rounded-full bg-destructive/10 flex items-center justify-center"><X className="h-4 w-4" /></div>
+                  <div className="text-sm">Clear Selection (Unlink)</div>
+                </div>
+              )}
               {invoiceOptions.filter(inv => inv.invoice_no.toLowerCase().includes(invoiceSearch.toLowerCase())).map(inv => (
                 <div key={inv.id} className="p-3 hover:bg-primary/5 cursor-pointer flex items-center justify-between transition-all" onClick={() => { 
                   setAppliedInvoiceId(Number(inv.id)); 
