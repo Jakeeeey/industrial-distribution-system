@@ -24,12 +24,14 @@ export type ProductOption = {
   product_id: number;
   product_code: string | null;
   product_name: string;
+  is_serialized?: number | null;
 };
 
 export type SupplierOption = {
   id: number;
   supplier_name: string;
   supplier_shortcut?: string | null;
+  division_id?: number | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -117,11 +119,15 @@ export async function fetchPriceHistory(
 export async function fetchProductOptions(
   q: string,
   limit = 30,
+  isSerialized?: number | null,
 ): Promise<ProductOption[]> {
   const sp = new URLSearchParams();
   sp.set("q", q);
   sp.set("page", "1");
   sp.set("page_size", String(limit));
+  if (isSerialized !== undefined && isSerialized !== null) {
+    sp.set("is_serialized", String(isSerialized));
+  }
 
   const res = await fetch(`${PRODUCT_SEARCH_ENDPOINT}?${sp.toString()}`, {
     cache: "no-store",
@@ -148,13 +154,21 @@ export async function fetchProductOptions(
     .map((item) => {
       const productId = Number(item.product_id ?? 0);
       if (!Number.isFinite(productId) || productId <= 0) return null;
-      return {
+      // Parse is_serialized value (can be boolean, number, string, etc.)
+      let isSerializedVal: number = 0;
+      if (item.is_serialized === true || item.is_serialized === 1 || item.is_serialized === '1') {
+        isSerializedVal = 1;
+      }
+
+      const opt: ProductOption = {
         product_id: productId,
         product_code:
           typeof item.product_code === "string" ? item.product_code : null,
         product_name:
           typeof item.product_name === "string" ? item.product_name : `#${productId}`,
+        is_serialized: isSerializedVal,
       };
+      return opt;
     })
     .filter((r): r is ProductOption => r !== null);
 }
@@ -195,6 +209,7 @@ export async function fetchSupplierOptions(): Promise<SupplierOption[]> {
         typeof item.supplier_name === "string" ? item.supplier_name : `Supplier #${id}`,
       supplier_shortcut:
         typeof item.supplier_shortcut === "string" ? item.supplier_shortcut : null,
+      division_id: item.division_id !== undefined && item.division_id !== null ? Number(item.division_id) : null,
     });
   }
   return result;

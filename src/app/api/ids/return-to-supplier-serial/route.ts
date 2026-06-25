@@ -164,6 +164,29 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
 
+    const token = req.cookies.get("vos_access_token")?.value;
+    const jwtPayload = token ? decodeJwtPayload(token) : null;
+    const userId = jwtPayload?.user_id ?? jwtPayload?.userId ?? jwtPayload?.sub ?? null;
+
+    if (!userId) {
+      return json({ error: "Unauthorized: Invalid or missing session" }, 401);
+    }
+
+    // Support registering assets
+    if (body.action === "register-assets") {
+      const { createCylinderAsset } = await import("@/modules/industrial-distribution-system/return-to-supplier-serial/repositories/rts-repository");
+      const assets = Array.isArray(body.assets) ? body.assets : [];
+      const phNow = new Date(new Date().getTime() + (8 * 60 + new Date().getTimezoneOffset()) * 60000).toISOString();
+      for (const asset of assets) {
+        await createCylinderAsset({
+          ...asset,
+          created_by: Number(userId),
+          created_date: phNow,
+        });
+      }
+      return json({ success: true }, 201);
+    }
+
     // Zod validation
     const parsed = createReturnSchema.safeParse(body);
     if (!parsed.success) {
@@ -174,14 +197,6 @@ export async function POST(req: NextRequest) {
         },
         400,
       );
-    }
-
-    const token = req.cookies.get("vos_access_token")?.value;
-    const jwtPayload = token ? decodeJwtPayload(token) : null;
-    const userId = jwtPayload?.user_id ?? jwtPayload?.userId ?? jwtPayload?.sub ?? null;
-
-    if (!userId) {
-      return json({ error: "Unauthorized: Invalid or missing session" }, 401);
     }
 
     const payloadWithAudit = {

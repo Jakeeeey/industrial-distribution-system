@@ -20,10 +20,19 @@ import * as React from "react";
 import {
   Activity,
   AlertCircle,
+  LineChart as LineChartIcon,
+  BarChart2,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 // Layer imports
@@ -42,6 +51,7 @@ import {
   getUniqueYears,
 } from "./utils/matrixUtils";
 import { exportToExcel, buildExportFilename } from "./utils/exportUtils";
+import type { ViewPriceMonitoringRow } from "./types";
 
 // ---------------------------------------------------------------------------
 // Module component
@@ -53,9 +63,11 @@ import { exportToExcel, buildExportFilename } from "./utils/exportUtils";
  * Architecture: thin orchestration layer — delegates all logic to hooks/utils,
  * and all UI to components. This component only wires them together.
  */
-export default function PriceMonitoringModule() {
-  // ── Supplier options (loaded once on mount for the filter bar) ──────────
+export default function PriceMonitoringModule({userName}: {userName?: string}) {
+  // ── Supplier options (loaded once on mount for the filter bar) ─────────
   const [suppliers, setSuppliers] = React.useState<SupplierOption[]>([]);
+  const serializedAndDiv1Only = true;
+
   React.useEffect(() => {
     fetchSupplierOptions()
       .then(setSuppliers)
@@ -64,38 +76,38 @@ export default function PriceMonitoringModule() {
       });
   }, []);
 
-  // ── Data hook ────────────────────────────────────────────────────────────
-  const {
-    query,
-    setQuery,
-    rows,
-    setRows,
-    loading,
-    error,
-    refresh,
-  } = usePriceMonitoring();
+  // ── Data hook ───────────────────────────────────────────────────────────
+  const { query, setQuery, rows, setRows, loading, error, refresh } =
+    usePriceMonitoring();
 
-  // ── Auto-clear rows when product filter is cleared/empty ───────────────────
+  // ── Auto-clear rows when product filter is cleared/empty ────────────────
+  const [selectedRow, setSelectedRow] = React.useState<
+    ViewPriceMonitoringRow | ViewPriceMonitoringRow[] | null
+  >(null);
+
   React.useEffect(() => {
     if (!query.productId) {
       setRows([]);
+      setSelectedRow(null);
     }
   }, [query.productId, setRows]);
 
-  // ── Year tab state ────────────────────────────────────────────────────────
-  // Default to the most recent year when data loads. Reset when product changes.
+  // ── Year tab state ──────────────────────────────────────────────────────
   const [selectedYear, setSelectedYear] = React.useState<number | null>(null);
 
-  // ── Granularity state for Trend Chart ──────────────────────────────────────
-  const [granularity, setGranularity] = React.useState<"daily" | "weekly" | "monthly" | "yearly">("monthly");
+  // ── Granularity state for Trend Chart ───────────────────────────────────
+  const [granularity, setGranularity] = React.useState<
+    "daily" | "weekly" | "monthly" | "yearly"
+  >("monthly");
+  const [chartType, setChartType] = React.useState<"line" | "bar">("line");
 
-  // ── Mounted state to avoid hydration mismatch ─────────────────────────────
+  // ── Mounted state to avoid hydration mismatch ───────────────────────────
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => {
     setMounted(true);
   }, []);
 
-  // ── Product-required validation (show error if Apply clicked without product) ──
+  // ── Product-required validation ─────────────────────────────────────────
   const [showProductError, setShowProductError] = React.useState(false);
 
   const handleApply = React.useCallback(() => {
@@ -108,20 +120,20 @@ export default function PriceMonitoringModule() {
   }, [query.productId, refresh]);
 
   const handleClear = React.useCallback(() => {
+    const currentYear = new Date().getFullYear();
     setQuery({
       productId: "",
       productCode: null,
       productLabel: null,
       supplierId: "",
       supplierLabel: null,
-      dateFrom: undefined,
-      dateTo: undefined,
+      dateFrom: `${currentYear}-01-01`,
+      dateTo: `${currentYear}-12-31`,
     });
     setShowProductError(false);
-    // Note: rows are cleared automatically via useEffect when productId becomes empty.
   }, [setQuery]);
 
-  // ── Enrich rows with supplier details from suppliers lookup ──────────────
+  // ── Enrich rows with supplier details from suppliers lookup ─────────────
   const enrichedRows = React.useMemo(() => {
     if (suppliers.length === 0 || rows.length === 0) return rows;
     return rows.map((row) => {
@@ -136,83 +148,96 @@ export default function PriceMonitoringModule() {
     });
   }, [rows, suppliers]);
 
-  // ── Client-side date range filtering on enriched rows ─────────────────────
-  const filteredEnrichedRows = React.useMemo(() => {
-    if (!query.dateFrom && !query.dateTo) return enrichedRows;
+  // ── Date range from query ───────────────────────────────────────────────
+  const filterDateFrom = React.useMemo(() => {
+    if (!query.dateFrom) return undefined;
+    const d = new Date(query.dateFrom);
+    if (isNaN(d.getTime())) return undefined;
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, [query.dateFrom]);
 
+  const filterDateTo = React.useMemo(() => {
+    if (!query.dateTo) return undefined;
+    const d = new Date(query.dateTo);
+    if (isNaN(d.getTime())) return undefined;
+    d.setHours(23, 59, 59, 999);
+    return d;
+  }, [query.dateTo]);
+
+  // ── Client-side date filtering ──────────────────────────────────────────
+  const filteredEnrichedRows = React.useMemo(() => {
+    if (!filterDateFrom && !filterDateTo) return enrichedRows;
     return enrichedRows.filter((row) => {
       const dt = row.priceChangeDatetime ?? row.approvedAt;
       if (!dt) return false;
       const rowTime = new Date(dt).getTime();
-
-      if (query.dateFrom) {
-        const fromTime = query.dateFrom.getTime();
-        if (rowTime < fromTime) return false;
-      }
-      if (query.dateTo) {
-        const toTime = new Date(query.dateTo.getTime()).setHours(23, 59, 59, 999);
-        if (rowTime > toTime) return false;
-      }
+      if (filterDateFrom && rowTime < filterDateFrom.getTime()) return false;
+      if (filterDateTo && rowTime > filterDateTo.getTime()) return false;
       return true;
     });
-  }, [enrichedRows, query.dateFrom, query.dateTo]);
+  }, [enrichedRows, filterDateFrom, filterDateTo]);
 
-  // ── Years list derived from date-filtered range or raw rows ────────────────
+  // ── Years list ──────────────────────────────────────────────────────────
   const derivedAvailableYears = React.useMemo(() => {
-    if (query.dateFrom || query.dateTo) {
-      const yearsFromHistory = getUniqueYears(enrichedRows);
-      if (yearsFromHistory.length === 0) return [];
-
-      const minHistoryYear = Math.min(...yearsFromHistory);
-      const maxHistoryYear = Math.max(...yearsFromHistory);
-
-      const startYear = query.dateFrom ? query.dateFrom.getFullYear() : minHistoryYear;
-      const endYear = query.dateTo ? query.dateTo.getFullYear() : maxHistoryYear;
-
-      const years: number[] = [];
-      const minY = Math.min(startYear, endYear);
-      const maxY = Math.max(startYear, endYear);
-      for (let y = minY; y <= maxY; y++) {
-        years.push(y);
-      }
-      return years.slice().sort((a, b) => b - a);
+    if (!query.dateFrom || !query.dateTo) {
+      const years = getUniqueYears(enrichedRows);
+      return years.length > 0
+        ? years.slice().sort((a, b) => b - a)
+        : [new Date().getFullYear()];
     }
+    const startYear = new Date(query.dateFrom).getFullYear();
+    const endYear = new Date(query.dateTo).getFullYear();
+    if (isNaN(startYear) || isNaN(endYear)) {
+      const years = getUniqueYears(enrichedRows);
+      return years.length > 0
+        ? years.slice().sort((a, b) => b - a)
+        : [new Date().getFullYear()];
+    }
+    const years = [];
+    for (let y = endYear; y >= startYear; y--) {
+      years.push(y);
+    }
+    return years;
+  }, [query.dateFrom, query.dateTo, enrichedRows]);
 
-    const years = getUniqueYears(enrichedRows);
-    return years.slice().sort((a, b) => b - a);
-  }, [enrichedRows, query.dateFrom, query.dateTo]);
-
-  // Update selectedYear to the most recent available year when data arrives
   React.useEffect(() => {
     if (derivedAvailableYears.length > 0) {
-      // Most recent year first
       setSelectedYear((prev) =>
-        prev && derivedAvailableYears.includes(prev) ? prev : derivedAvailableYears[0],
+        prev && derivedAvailableYears.includes(prev)
+          ? prev
+          : derivedAvailableYears[0],
       );
     } else {
       setSelectedYear(null);
     }
   }, [derivedAvailableYears]);
 
-  // ── Export ────────────────────────────────────────────────────────────────
+  // ── Export ──────────────────────────────────────────────────────────────
   const handleExport = React.useCallback(() => {
     if (filteredEnrichedRows.length === 0) {
       toast.info("No data to export.");
       return;
     }
-
     exportToExcel(
       filteredEnrichedRows,
       buildExportFilename(query.productCode, null),
       {
         productLabel: query.productLabel,
         supplierLabel: query.supplierLabel,
-      }
+      },
+      userName,
     );
     toast.success(`Exported ${filteredEnrichedRows.length} record(s) to Excel.`);
-  }, [filteredEnrichedRows, query.productCode, query.productLabel, query.supplierLabel]);
+  }, [
+    filteredEnrichedRows,
+    query.productCode,
+    query.productLabel,
+    query.supplierLabel,
+    userName,
+  ]);
 
-  // ── Derived data for the selected year ───────────────────────────────────
+  // ── Derived data for the selected year ──────────────────────────────────
   const priceTypeGroups = React.useMemo(
     () => groupByPriceType(enrichedRows),
     [enrichedRows],
@@ -220,19 +245,32 @@ export default function PriceMonitoringModule() {
 
   const matrixEntries = React.useMemo(() => {
     if (!selectedYear) return [];
+    const yearStart = new Date(selectedYear, 0, 1, 0, 0, 0, 0);
+    const yearEnd = new Date(selectedYear, 11, 31, 23, 59, 59, 999);
+    const tabDateFrom =
+      filterDateFrom && filterDateFrom.getFullYear() === selectedYear
+        ? filterDateFrom > yearStart
+          ? filterDateFrom
+          : yearStart
+        : yearStart;
+    const tabDateTo =
+      filterDateTo && filterDateTo.getFullYear() === selectedYear
+        ? filterDateTo < yearEnd
+          ? filterDateTo
+          : yearEnd
+        : yearEnd;
+
     return priceTypeGroups.map((group) =>
-      buildMonthlyMatrix(group, selectedYear, enrichedRows, query.dateFrom, query.dateTo),
+      buildMonthlyMatrix(group, selectedYear, enrichedRows, tabDateFrom, tabDateTo),
     );
-  }, [priceTypeGroups, selectedYear, enrichedRows, query.dateFrom, query.dateTo]);
-
-
+  }, [priceTypeGroups, selectedYear, enrichedRows, filterDateFrom, filterDateTo]);
 
   const overallSummary = React.useMemo(
     () => computeOverallSummary(filteredEnrichedRows),
     [filteredEnrichedRows],
   );
 
-  // ── Render states ─────────────────────────────────────────────────────────
+  // ── Render states ───────────────────────────────────────────────────────
   const hasData = rows.length > 0;
   const hasYears = derivedAvailableYears.length > 0;
 
@@ -256,10 +294,11 @@ export default function PriceMonitoringModule() {
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6 animate-in fade-in duration-500">
       {/* HEADER SECTION */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between space-y-2 sm:space-y-0">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between space-y-1 sm:space-y-0">
         <div>
-
-          <h1 className="text-3xl font-bold tracking-tight">Price Monitoring</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
+            Price Monitoring
+          </h1>
           <p className="text-muted-foreground mt-0.5 text-sm">
             Monitor approved historical product price changes.
           </p>
@@ -269,107 +308,201 @@ export default function PriceMonitoringModule() {
 
       {/* Main Content Area */}
       <div className="space-y-4">
-        {/* Bare Filter card with just CardContent */}
-          <Card className="border shadow-sm">
-            <CardContent className="pt-4 pb-4">
-              <FilterBar
-                query={query}
-                onQueryChange={(updates) =>
-                  setQuery((prev) => ({ ...prev, ...updates }))
-                }
-                onApply={handleApply}
-                onClear={handleClear}
-                onExport={handleExport}
-                hasData={hasData}
-                loading={loading}
-                suppliers={suppliers}
-                showProductError={showProductError}
-              />
+        {/* Filter Card */}
+        <Card className="border shadow-sm">
+          <CardContent className="pt-4 pb-4">
+            <FilterBar
+              query={query}
+              onQueryChange={(updates) =>
+                setQuery((prev) => ({ ...prev, ...updates }))
+              }
+              onApply={handleApply}
+              onClear={handleClear}
+              onExport={handleExport}
+              hasData={hasData}
+              loading={loading}
+              suppliers={suppliers}
+              showProductError={showProductError}
+              serializedAndDiv1Only={serializedAndDiv1Only}
+            />
+          </CardContent>
+        </Card>
+
+        {/* Error Banner */}
+        {error && (
+          <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* Empty State */}
+        {!hasData && !loading && !error && (
+          <Card className="border border-dashed shadow-sm">
+            <CardContent className="flex flex-col items-center justify-center gap-3 py-12 sm:py-16 text-center">
+              <div className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-muted">
+                <Activity className="h-5 w-5 sm:h-6 sm:w-6 text-muted-foreground" />
+              </div>
+              <div className="space-y-1">
+                <p className="font-semibold text-foreground">No data to display</p>
+                <p className="text-sm text-muted-foreground max-w-sm">
+                  Select a product above and click{" "}
+                  <span className="font-medium">Apply</span> to load its approved
+                  price change history.
+                </p>
+              </div>
             </CardContent>
           </Card>
+        )}
 
-          {/* Error Banner */}
-          {error && (
-            <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
+        {/* Overall KPI Bar (above Year Tabs) */}
+        {(hasData || loading) && (
+          <KpiBar overallSummary={overallSummary} loading={loading} />
+        )}
 
-          {/* Empty State */}
-          {!hasData && !loading && !error && (
-            <Card className="border border-dashed shadow-sm">
-              <CardContent className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
-                  <Activity className="h-6 w-6 text-muted-foreground" />
+        {/* Year Tabs & Content cards */}
+        {(hasData || loading) && hasYears && selectedYear && (
+          <Tabs
+            value={String(selectedYear)}
+            onValueChange={(val) => setSelectedYear(Number(val))}
+          >
+            {derivedAvailableYears.length > 1 && (
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                {/* Scrollable tabs on mobile if many years */}
+                <div className="overflow-x-auto w-full">
+                  <TabsList className="flex-nowrap sm:flex-wrap h-auto gap-1 w-max sm:w-auto">
+                    {derivedAvailableYears.map((year) => (
+                      <TabsTrigger
+                        key={year}
+                        value={String(year)}
+                        className="text-xs sm:text-sm"
+                      >
+                        {year}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
                 </div>
-                <div className="space-y-1">
-                  <p className="font-semibold text-foreground">No data to display</p>
-                  <p className="text-sm text-muted-foreground max-w-sm">
-                    Select a product above and click{" "}
-                    <span className="font-medium">Apply</span> to load its approved
-                    price change history.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+              </div>
+            )}
 
-          {/* Overall KPI Bar (above Year Tabs) */}
-          {(hasData || loading) && (
-            <KpiBar
-              overallSummary={overallSummary}
-              loading={loading}
-            />
-          )}
+            {derivedAvailableYears.map((year) => {
+              const yearStart = new Date(year, 0, 1, 0, 0, 0, 0);
+              const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
+              const tabDateFrom =
+                filterDateFrom && filterDateFrom.getFullYear() === year
+                  ? filterDateFrom > yearStart
+                    ? filterDateFrom
+                    : yearStart
+                  : yearStart;
+              const tabDateTo =
+                filterDateTo && filterDateTo.getFullYear() === year
+                  ? filterDateTo < yearEnd
+                    ? filterDateTo
+                    : yearEnd
+                  : yearEnd;
 
-          {/* Year Tabs & Content cards */}
-          {(hasData || loading) && hasYears && selectedYear && (
-            <Tabs
-              value={String(selectedYear)}
-              onValueChange={(val) => setSelectedYear(Number(val))}
-            >
-              {/* <div className="flex items-center justify-between mb-4">
-                <TabsList className="flex-wrap h-auto gap-1">
-                  {derivedAvailableYears.map((year) => (
-                    <TabsTrigger key={year} value={String(year)} className="text-sm">
-                      {year}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </div> */}
+              const tabRows = enrichedRows.filter((row) => {
+                const dt = row.priceChangeDatetime ?? row.approvedAt;
+                if (!dt) return false;
+                const rowTime = new Date(dt).getTime();
+                return (
+                  rowTime >= tabDateFrom.getTime() &&
+                  rowTime <= tabDateTo.getTime()
+                );
+              });
 
-              {derivedAvailableYears.map((year) => (
-                <TabsContent key={year} value={String(year)} className="space-y-4 focus-visible:outline-none">
+              return (
+                <TabsContent
+                  key={year}
+                  value={String(year)}
+                  className="space-y-4 focus-visible:outline-none"
+                >
                   {/* Trend chart card */}
                   <Card className="border shadow-sm">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base font-bold">
-                        Price Trend — {year}
-                      </CardTitle>
-                            <div className="flex justify-end">
-                              <Tabs defaultValue="monthly" value={granularity} onValueChange={(v) => setGranularity(v as "daily" | "weekly" | "monthly" | "yearly")}>
-                                <TabsList className="grid w-[280px] grid-cols-4 h-8 p-0.5">
-                                  <TabsTrigger value="daily" className="text-xs h-7">Daily</TabsTrigger>
-                                  <TabsTrigger value="weekly" className="text-xs h-7">Weekly</TabsTrigger>
-                                  <TabsTrigger value="monthly" className="text-xs h-7">Monthly</TabsTrigger>
-                                  <TabsTrigger value="yearly" className="text-xs h-7">Yearly</TabsTrigger>
-                                </TabsList>
-                              </Tabs>
-                            </div>
-                      <CardDescription className="text-xs text-muted-foreground">
-                        One line per price type. X-axis = month. Carry-forward pricing applied.
-                      </CardDescription>
+                    <CardHeader className="flex justify-between gap-3 pb-3">
+                      <div className="space-y-0.5">
+                        <CardTitle className="text-sm sm:text-base font-bold">
+                          Price Trend — {year}
+                        </CardTitle>
+                        <CardDescription className="text-xs text-muted-foreground">
+                          One line per price type. X-axis ={" "}
+                          {granularity === "daily"
+                            ? "day"
+                            : granularity === "weekly"
+                              ? "week"
+                              : granularity === "monthly"
+                                ? "month"
+                                : "year"}
+                          . Carry-forward pricing applied.
+                        </CardDescription>
+                      </div>
+
+                      {/* Controls — wrap on mobile */}
+                      <div className="flex flex-wrap items-center gap-2 ">
+                        {/* Chart Type Toggle */}
+                        <div className="flex items-center border rounded-md p-0.5 bg-muted/40 text-xs">
+                          <Button
+                            variant={chartType === "line" ? "secondary" : "ghost"}
+                            size="sm"
+                            className="h-7 px-2 sm:px-2.5 text-xs font-medium gap-1"
+                            onClick={() => setChartType("line")}
+                            title="Line Chart View"
+                          >
+                            <LineChartIcon className="h-3.5 w-3.5" />
+                            <span className="hidden xs:inline">Line</span>
+                          </Button>
+                          <Button
+                            variant={chartType === "bar" ? "secondary" : "ghost"}
+                            size="sm"
+                            className="h-7 px-2 sm:px-2.5 text-xs font-medium gap-1"
+                            onClick={() => setChartType("bar")}
+                            title="Bar Chart View"
+                          >
+                            <BarChart2 className="h-3.5 w-3.5" />
+                            <span className="hidden xs:inline">Bar</span>
+                          </Button>
+                        </div>
+
+                        {/* Granularity Selector */}
+                        <div className="flex items-center border rounded-md p-0.5 bg-muted/40 text-xs ">
+                          {(
+                            ["daily", "weekly", "monthly", "yearly"] as const
+                          ).map((g) => (
+                            <Button
+                              key={g}
+                              variant={granularity === g ? "secondary" : "ghost"}
+                              size="sm"
+                              className="h-7 px-2 sm:px-2.5 text-xs font-medium capitalize"
+                              onClick={() => setGranularity(g)}
+                              title={`${g.charAt(0).toUpperCase() + g.slice(1)} View`}
+                            >
+                              {/* Abbreviate on very small screens */}
+                              {/* <span className="sm:hidden">
+                                {g === "daily"
+                                  ? "D"
+                                  : g === "weekly"
+                                    ? "W"
+                                    : g === "monthly"
+                                      ? "M"
+                                      : "Y"}
+                              </span> */}
+                              <span>{g}</span>
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
                     </CardHeader>
                     <CardContent className="pb-4">
                       <PriceTrendChart
                         allRows={enrichedRows}
-                        filteredRows={filteredEnrichedRows}
+                        filteredRows={tabRows}
                         selectedYear={year}
                         loading={loading}
-                        dateFrom={query.dateFrom}
-                        dateTo={query.dateTo}
+                        dateFrom={tabDateFrom}
+                        dateTo={tabDateTo}
                         granularity={granularity}
+                        chartType={chartType}
                       />
                     </CardContent>
                   </Card>
@@ -377,11 +510,12 @@ export default function PriceMonitoringModule() {
                   {/* Monthly matrix Table card */}
                   <Card className="border shadow-sm">
                     <CardHeader className="pb-3">
-                      <CardTitle className="text-base font-bold">
+                      <CardTitle className="text-sm sm:text-base font-bold">
                         Monthly Price Matrix — {year}
                       </CardTitle>
                       <CardDescription className="text-xs text-muted-foreground">
-                        Highlighted cells indicate a price change occurred that month. Outlines show the current live price (may differ from history).
+                        Highlighted cells indicate a price change occurred that month.
+                        Outlines show the current live price.
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="pb-4">
@@ -389,6 +523,7 @@ export default function PriceMonitoringModule() {
                         matrixEntries={matrixEntries}
                         selectedYear={year}
                         loading={loading}
+                        onSelectRow={setSelectedRow}
                       />
                     </CardContent>
                   </Card>
@@ -396,32 +531,49 @@ export default function PriceMonitoringModule() {
                   {/* Audit detail grid card */}
                   <Card className="border shadow-sm">
                     <CardHeader className="pb-3">
-                      <CardTitle className="text-base font-bold">
+                      <CardTitle className="text-sm sm:text-base font-bold">
                         Audit Detail — {year}
                       </CardTitle>
                       <CardDescription className="text-xs text-muted-foreground">
-                        All approved price change events. Unmapped supplier warnings are shown but records are never hidden.
+                        All approved price change events. Unmapped supplier warnings
+                        are shown but records are never hidden.
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="pb-4">
                       <AuditDetailGrid
-                        rows={filteredEnrichedRows}
+                        rows={tabRows}
+                        allRows={enrichedRows}
                         selectedYear={year}
                         loading={loading}
+                        selectedRow={selectedRow}
+                        onSelectedRowChange={setSelectedRow}
                       />
                     </CardContent>
                   </Card>
                 </TabsContent>
-              ))}
-            </Tabs>
-          )}
+              );
+            })}
+          </Tabs>
+        )}
 
-          {loading && !hasYears && (
-            <div className="space-y-4">
-              <KpiBar overallSummary={{ currentPrice: null, lastUpdated: null, highestPrice: null, highestPriceYear: null, lowestPrice: null, lowestPriceYear: null, averagePrice: null, totalChanges: 0 }} loading={true} />
-            </div>
-          )}
-        </div>
+        {loading && !hasYears && (
+          <div className="space-y-4">
+            <KpiBar
+              overallSummary={{
+                currentPrice: null,
+                lastUpdated: null,
+                highestPrice: null,
+                highestPriceYear: null,
+                lowestPrice: null,
+                lowestPriceYear: null,
+                averagePrice: null,
+                totalChanges: 0,
+              }}
+              loading={true}
+            />
+          </div>
+        )}
       </div>
+    </div>
   );
 }

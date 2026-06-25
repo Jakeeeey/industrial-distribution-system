@@ -1,10 +1,10 @@
 import React from "react";
 import { Product, Category, Brand } from "../types";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Edit, Trash, Eye, Package, Tag } from "lucide-react";
+import { Edit, Trash, Package, Tag } from "lucide-react";
 import Image from "next/image";
 
 interface ProductCatalogProps {
@@ -66,9 +66,10 @@ export function ProductCatalog({
         return (
           <Card 
             key={product.product_id} 
-            className={`overflow-hidden transition-all duration-200 border group relative flex flex-col ${isSelected ? 'ring-2 ring-primary border-transparent shadow-md' : 'border-border/50 hover:shadow-lg hover:border-border'}`}
+            className={`cursor-pointer overflow-hidden transition-all duration-200 border group relative flex flex-col ${isSelected ? 'ring-2 ring-primary border-transparent shadow-md' : 'border-border/50 hover:shadow-lg hover:border-border'}`}
+            onClick={() => onView(product)}
           >
-            <div className="absolute top-3 left-3 z-10">
+            <div className="absolute top-3 left-3 z-10" onClick={(e) => e.stopPropagation()}>
               <Checkbox 
                 checked={isSelected}
                 onCheckedChange={() => toggleOne(product.product_id)}
@@ -117,19 +118,8 @@ export function ProductCatalog({
               </div>
             </CardHeader>
             
-            <CardContent className="p-4 pt-0">
-              <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/50">
-                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Base Price</div>
-                <div className="font-bold text-lg text-primary">
-                  {new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(product.price_per_unit || 0)}
-                </div>
-              </div>
-            </CardContent>
-            
-            <CardFooter className="p-2 flex justify-end gap-1 bg-muted/30">
-              <Button variant="ghost" size="icon" onClick={() => onView(product)} title="View" className="h-8 w-8 text-slate-500 hover:text-slate-700 hover:bg-slate-200 dark:hover:bg-slate-800">
-                <Eye className="h-4 w-4" />
-              </Button>
+
+            <CardFooter className="p-2 flex justify-end gap-1 bg-muted/30" onClick={(e) => e.stopPropagation()}>
               <Button variant="ghost" size="icon" onClick={() => onEdit(product)} title="Edit" className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/30">
                 <Edit className="h-4 w-4" />
               </Button>

@@ -99,10 +99,9 @@ export interface PriceMonitoringQuery {
   /** Optional. When "" → API returns all suppliers for the product. */
   supplierId: number | "";
   supplierLabel?: string | null;
-  /** Optional client-side start date filter. */
-  dateFrom?: Date;
-  /** Optional client-side end date filter. */
-  dateTo?: Date;
+  /** Required date range filters (default is current year range). */
+  dateFrom: string;
+  dateTo: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -133,8 +132,8 @@ export interface MonthlyMatrixEntry {
   monthlyPrices: MonthlyPrices;
   /** Whether a real change event occurred that month (for cell highlight). */
   changedMonths: boolean[];
-  /** The actual change event row for each month (null if carry-forward). */
-  changeEvents?: (ViewPriceMonitoringRow | null)[];
+  /** All change event rows for each month (null if carry-forward). */
+  changeEvents?: (ViewPriceMonitoringRow[] | null)[];
   /** currentLivePrice from the latest row for this price type. */
   currentLivePrice: number | null;
 }

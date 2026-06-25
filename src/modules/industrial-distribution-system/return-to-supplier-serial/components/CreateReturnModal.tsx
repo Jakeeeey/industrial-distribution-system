@@ -183,11 +183,13 @@ export function CreateReturnModal({
           discountTypeId: currentDiscountTypeId,
         };
       })
-      // Filter: only stock > 0 AND unit order 1 or 2 (small units only)
+      // Filter: only stock > 0 AND unit order 0 or 2 (Full and Empty cylinders only)
       .filter((p) => {
         const order = unitOrderMap.get(p.unit) ?? 0;
-        return Number(p.stock ?? 0) > 0 && (order === 1 || order === 2);
+        // Modified to allow order 0 (EMPTY) and 2 (FULL) to list all cylinder products in pieces
+        return Number(p.stock ?? 0) > 0 && (order === 0 || order === 2);
       });
+
 
     interface VariantItem {
       id: string;

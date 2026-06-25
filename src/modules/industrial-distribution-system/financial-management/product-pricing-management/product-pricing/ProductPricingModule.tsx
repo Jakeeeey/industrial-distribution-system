@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import PricingMatrixView from "./components/PricingMatrixView";
 
 export default function ProductPricingModule() {
+    
     return (
         <Card className="rounded-2xl shadow-sm">
             <CardHeader className="pb-3">
