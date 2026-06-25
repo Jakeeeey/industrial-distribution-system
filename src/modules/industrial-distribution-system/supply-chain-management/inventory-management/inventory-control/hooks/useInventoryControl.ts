@@ -177,14 +177,12 @@ export function useInventoryControl(): UseInventoryControlReturn {
   }, []);
 
   // Client-side search filtering
+  // Dev-rule: Modal searchbar filters by serials only as per instructions
   const filteredSerials: EnrichedSerial[] = selectedProduct
     ? selectedProduct.serials.filter((s) => {
         const q = searchQuery.toLowerCase().trim();
         if (!q) return true;
-        if (viewMode === "serial") {
-          return s.serialNumber.toLowerCase().includes(q);
-        }
-        return (s.barcode ?? "").toLowerCase().includes(q);
+        return s.serialNumber.toLowerCase().includes(q);
       })
     : [];
 

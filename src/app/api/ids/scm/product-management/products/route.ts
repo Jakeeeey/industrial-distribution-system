@@ -27,13 +27,14 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get("status");
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "10");
+    const sort = searchParams.get("sort") || "-created_at";
 
     const params = new URLSearchParams();
     params.set("page", page.toString());
     params.set("limit", limit.toString());
     params.set("meta", "filter_count,total_count");
     params.set("fields", "product_id,isActive,product_brand,product_code,product_name,description,short_description,unit_of_measurement,unit_of_measurement_count,product_category,cost_per_unit,price_per_unit,is_serialized,product_image,status,created_at,created_by,updated_at,updated_by,last_updated,parent_id,uom_ids");
-    params.set("sort", "-created_at");
+    params.set("sort", sort);
 
     let filterIdx = 0;
 
@@ -43,17 +44,17 @@ export async function GET(req: NextRequest) {
       filterIdx++;
     }
 
-    if (category) {
+    if (category && category !== "all") {
       params.set(`filter[_and][${filterIdx}][product_category][_eq]`, category);
       filterIdx++;
     }
 
-    if (brand) {
+    if (brand && brand !== "all") {
       params.set(`filter[_and][${filterIdx}][product_brand][_eq]`, brand);
       filterIdx++;
     }
 
-    if (status) {
+    if (status && status !== "all") {
       params.set(`filter[_and][${filterIdx}][status][_eq]`, status);
       filterIdx++;
     }

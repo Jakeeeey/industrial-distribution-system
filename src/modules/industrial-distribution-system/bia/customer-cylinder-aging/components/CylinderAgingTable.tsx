@@ -146,12 +146,82 @@ async function exportToPdf(rows: CustomerCylinderAgingRecord[]): Promise<void> {
     return;
   }
 
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  let companyName = "VOS GAS";
+  let companyLogo = "";
+  let companyTin = "";
+  let companyContact = "";
+  let companyEmail = "";
+  let companyAddress = "";
 
-  // Header
+  try {
+    const res = await fetch("/api/pdf/company");
+    if (res.ok) {
+      const json = await res.json();
+      const companyData = json.data?.[0] || json.data;
+      if (companyData) {
+        companyName = companyData.company_name || companyName;
+        companyLogo = companyData.company_logo || "";
+        companyTin = companyData.company_tin || "";
+        companyContact = companyData.company_contact || "";
+        companyEmail = companyData.company_email || "";
+        companyAddress = [
+          companyData.company_address,
+          companyData.company_brgy,
+          companyData.company_city,
+          companyData.company_province,
+          companyData.company_zipCode,
+        ].filter(Boolean).join(", ");
+      }
+    }
+  } catch (err) {
+    console.error("Failed to fetch company details for PDF:", err);
+  }
+
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+  const margin = 14;
+  let y = 14;
+
+  if (companyLogo) {
+    try {
+      doc.addImage(companyLogo, "PNG", margin, y, 28, 16, undefined, "FAST");
+    } catch (e) {
+      console.error("Error adding logo to PDF:", e);
+    }
+  }
+
+  const headerTextX = companyLogo ? margin + 32 : margin;
+
   doc.setFontSize(14);
   doc.setFont("helvetica", "bold");
-  doc.text("Customer Cylinder Aging Report", 14, 16);
+  doc.setTextColor(0, 0, 0);
+  doc.text(companyName.toUpperCase(), headerTextX, y + 5);
+
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(100);
+  doc.text(
+    `TIN: ${companyTin || "—"}  |  Contact: ${companyContact || "—"}  |  Email: ${companyEmail || "—"}`,
+    headerTextX,
+    y + 10
+  );
+  if (companyAddress) {
+    doc.text(companyAddress, headerTextX, y + 14);
+  }
+
+  y += 20;
+
+  doc.setDrawColor(200);
+  doc.setLineWidth(0.3);
+  doc.line(margin, y, pageW - margin, y);
+
+  y += 6;
+
+  // Title
+  doc.setFontSize(12);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(0, 0, 0);
+  doc.text("Customer Cylinder Aging Report", margin, y);
 
   doc.setFontSize(8);
   doc.setFont("helvetica", "normal");
@@ -164,14 +234,15 @@ async function exportToPdf(rows: CustomerCylinderAgingRecord[]): Promise<void> {
       hour: "2-digit",
       minute: "2-digit",
     })} · Total Records: ${rows.length}`,
-    14,
-    22
+    margin,
+    y + 5
   );
-  doc.setTextColor(0);
+
+  y += 10;
 
   // Table
   autoTable(doc, {
-    startY: 27,
+    startY: y,
     styles: { fontSize: 7, cellPadding: 2 },
     headStyles: { fillColor: [30, 30, 40], textColor: 255, fontStyle: "bold" },
     alternateRowStyles: { fillColor: [245, 245, 250] },

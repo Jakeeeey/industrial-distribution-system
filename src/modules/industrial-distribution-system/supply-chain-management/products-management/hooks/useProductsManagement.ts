@@ -15,6 +15,13 @@ export function useProductsManagement() {
   const [limit, setLimit] = useState(10);
   const [totalItems, setTotalItems] = useState(0);
 
+  // Filters & Sorting
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [selectedBrand, setSelectedBrand] = useState<string>("all");
+  const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [sortOrder, setSortOrder] = useState<string>("-created_at");
+
   const refresh = () => setRefreshKey(prev => prev + 1);
 
   // 1. Initial metadata load (Run on mount and refresh)
@@ -41,7 +48,15 @@ export function useProductsManagement() {
     async function fetchProducts() {
       setLoading(true);
       try {
-        const prodRes = await productsService.getProducts({ page, limit });
+        const prodRes = await productsService.getProducts({ 
+          page, 
+          limit,
+          q: searchQuery,
+          category: selectedCategory === "all" ? undefined : selectedCategory,
+          brand: selectedBrand === "all" ? undefined : selectedBrand,
+          status: selectedStatus === "all" ? undefined : selectedStatus,
+          sort: sortOrder
+        });
         setProducts(prodRes.data || []);
         setTotalItems(
           prodRes.meta?.filter_count !== undefined 
@@ -55,7 +70,7 @@ export function useProductsManagement() {
       }
     }
     fetchProducts();
-  }, [page, limit, refreshKey]); // Re-run when page/limit/refresh changes
+  }, [page, limit, refreshKey, searchQuery, selectedCategory, selectedBrand, selectedStatus, sortOrder]); // Re-run when filters change
 
   return {
     products,
@@ -68,6 +83,16 @@ export function useProductsManagement() {
     setPage,
     limit,
     setLimit,
-    totalItems
+    totalItems,
+    searchQuery,
+    setSearchQuery,
+    selectedCategory,
+    setSelectedCategory,
+    selectedBrand,
+    setSelectedBrand,
+    selectedStatus,
+    setSelectedStatus,
+    sortOrder,
+    setSortOrder
   };
 }
