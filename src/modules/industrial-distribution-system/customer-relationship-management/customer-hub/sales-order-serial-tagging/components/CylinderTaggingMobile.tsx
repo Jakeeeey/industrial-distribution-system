@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Scan,
@@ -127,22 +128,59 @@ export default function CylinderTaggingMobile({
   onRefresh,
 }: CylinderTaggingMobileProps) {
   const [scanInput, setScanInput] = useState("");
+  const [isProcessingScan, setIsProcessingScan] = useState(false);
+  const [autoEnter, setAutoEnter] = useState(true);
   const [activeTab, setActiveTab] = useState("scan");
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Focus scanner input on tab switch to scan
   useEffect(() => {
-    if (activeTab === "scan" && inputRef.current) {
+    if (activeTab === "scan" && inputRef.current && !isProcessingScan) {
       inputRef.current.focus();
     }
-  }, [activeTab, scannedList]);
+  }, [activeTab, scannedList, isProcessingScan]);
 
   const handleScanSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isProcessingScan) return;
     const serial = scanInput.trim();
     if (serial) {
       onScan(serial);
       setScanInput("");
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    const diff = value.length - scanInput.length;
+    setScanInput(value);
+    
+    if (autoEnter && diff > 2 && !isProcessingScan) {
+      const serial = value.trim();
+      if (serial) {
+        setIsProcessingScan(true);
+        setTimeout(() => {
+          onScan(serial);
+          setScanInput("");
+          setIsProcessingScan(false);
+        }, 500); // 500ms delay to briefly display scanned code
+      }
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    if (!autoEnter) return;
+    if (isProcessingScan) return;
+    e.preventDefault();
+    const pastedText = e.clipboardData.getData("text").trim();
+    if (pastedText) {
+      setScanInput(pastedText);
+      setIsProcessingScan(true);
+      setTimeout(() => {
+        onScan(pastedText);
+        setScanInput("");
+        setIsProcessingScan(false);
+      }, 500); // 500ms delay to briefly display pasted code
     }
   };
 
@@ -362,8 +400,14 @@ export default function CylinderTaggingMobile({
             <Card className="border border-primary/20 shadow-md">
               <CardContent className="p-4 space-y-4">
                 <form onSubmit={handleScanSubmit} className="space-y-1.5">
-                  <label className="text-xs font-bold text-muted-foreground flex items-center gap-1">
-                    <Scan className="w-3.5 h-3.5 text-primary" /> Input Cylinder Serial ({mappedSerials.length} loaded)
+                  <label className="text-xs font-bold text-muted-foreground flex items-center justify-between gap-1 w-full">
+                    <span className="flex items-center gap-1">
+                      <Scan className="w-3.5 h-3.5 text-primary" /> Input Cylinder Serial ({mappedSerials.length} loaded)
+                    </span>
+                    <div className="flex items-center gap-1.5 select-none cursor-pointer" onClick={() => setAutoEnter(!autoEnter)}>
+                      <span className="text-[9px] text-muted-foreground font-semibold">Auto-Enter</span>
+                      <Switch checked={autoEnter} onCheckedChange={setAutoEnter} size="sm" id="mobile-auto-enter-toggle" />
+                    </div>
                   </label>
                   <div className="relative">
                     <Input
@@ -371,9 +415,10 @@ export default function CylinderTaggingMobile({
                       type="text"
                       placeholder="Scan barcode or tap code..."
                       value={scanInput}
-                      onChange={(e) => setScanInput(e.target.value)}
-                      className="font-mono text-base tracking-widest pl-10 h-12 uppercase"
-                      disabled={submitting}
+                      onChange={handleInputChange}
+                      onPaste={handlePaste}
+                      className="font-mono text-base tracking-widest pl-10 h-12 uppercase disabled:opacity-90 disabled:bg-emerald-500/5 disabled:border-emerald-500/30"
+                      disabled={submitting || isProcessingScan}
                     />
                     <Scan className="absolute left-3 top-3.5 w-5 h-5 text-muted-foreground" />
                   </div>

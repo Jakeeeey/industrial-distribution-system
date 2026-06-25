@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
 import {
   Scan,
   Trash2,
@@ -127,21 +128,58 @@ export default function CylinderTaggingDesktop({
   onRefresh,
 }: CylinderTaggingDesktopProps) {
   const [scanInput, setScanInput] = useState("");
+  const [isProcessingScan, setIsProcessingScan] = useState(false);
+  const [autoEnter, setAutoEnter] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Keep scanner input focused
   useEffect(() => {
-    if (inputRef.current) {
+    if (inputRef.current && !isProcessingScan) {
       inputRef.current.focus();
     }
-  }, [scannedList]);
+  }, [scannedList, isProcessingScan]);
 
   const handleScanSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isProcessingScan) return;
     const serial = scanInput.trim();
     if (serial) {
       onScan(serial);
       setScanInput("");
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    const diff = value.length - scanInput.length;
+    setScanInput(value);
+    
+    if (autoEnter && diff > 2 && !isProcessingScan) {
+      const serial = value.trim();
+      if (serial) {
+        setIsProcessingScan(true);
+        setTimeout(() => {
+          onScan(serial);
+          setScanInput("");
+          setIsProcessingScan(false);
+        }, 500); // 500ms delay to briefly display scanned code
+      }
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    if (!autoEnter) return;
+    if (isProcessingScan) return;
+    e.preventDefault();
+    const pastedText = e.clipboardData.getData("text").trim();
+    if (pastedText) {
+      setScanInput(pastedText);
+      setIsProcessingScan(true);
+      setTimeout(() => {
+        onScan(pastedText);
+        setScanInput("");
+        setIsProcessingScan(false);
+      }, 500); // 500ms delay to briefly display pasted code
     }
   };
 
@@ -309,9 +347,15 @@ export default function CylinderTaggingDesktop({
                 <Scan className="w-4 h-4 text-primary animate-pulse" />
                 Serial Number Scanner
               </span>
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                AUTO-FOCUS ON
-              </span>
+              <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-1.5 select-none cursor-pointer" onClick={() => setAutoEnter(!autoEnter)}>
+                  <span className="text-[10px] text-muted-foreground font-semibold">Fast Mode</span>
+                  <Switch checked={autoEnter} onCheckedChange={setAutoEnter} size="sm" id="auto-enter-toggle" />
+                </div>
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                  AUTO-FOCUS ON
+                </span>
+              </div>
             </CardTitle>
             <CardDescription className="text-xs">
               Input or scan cylinder serial numbers. Only loaded consolidator mappings are accepted ({mappedSerials.length} loaded).
@@ -325,9 +369,10 @@ export default function CylinderTaggingDesktop({
                   type="text"
                   placeholder="Scan or type serial number..."
                   value={scanInput}
-                  onChange={(e) => setScanInput(e.target.value)}
-                  className="font-mono text-xs tracking-widest pl-8 h-9 border border-primary/20 focus:border-primary uppercase"
-                  disabled={submitting}
+                  onChange={handleInputChange}
+                  onPaste={handlePaste}
+                  className="font-mono text-xs tracking-widest pl-8 h-9 border border-primary/20 focus:border-primary uppercase disabled:opacity-90 disabled:bg-emerald-500/5 disabled:border-emerald-500/30"
+                  disabled={submitting || isProcessingScan}
                 />
                 <Scan className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
               </div>
