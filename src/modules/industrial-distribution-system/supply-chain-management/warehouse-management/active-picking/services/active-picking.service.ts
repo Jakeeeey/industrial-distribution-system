@@ -17,13 +17,16 @@ export const ActivePickingService = {
         };
     },
 
+    // Fixed unused parameters warning by referencing them using void statements
     async getPickingDetails(consolidatorId: number, branchId: number, sessionToken: string | null = null): Promise<ConsolidatorDetail[]> {
         // OPTIMIZATION: Bypassed heavy database view calculations for available stocks.
         // The Stock column has been removed from UI, and stock validation runs purely on the backend during scans.
+        void branchId;
+        void sessionToken;
         return ActivePickingRepo.fetchPickingDetails(consolidatorId);
     },
 
-    async processSerialPick(consolidatorId: number, serialNumber: string, userId: number | null, branchId: number, sessionToken: string | null = null): Promise<{ success: boolean; message: string; newQuantity: number; detailId: number }> {
+    async processSerialPick(consolidatorId: number, serialNumber: string, userId: number | null, branchId: number, sessionToken: string | null = null): Promise<{ success: boolean; message: string; newQuantity: number; detailId: number; serialMapping?: ConsolidatorSerialMapping }> {
         // Concurrently verify if serial is on hand and check mapping uniqueness
         const [onhandInfoResult, serialScanned] = await Promise.allSettled([
             ActivePickingRepo.verifySerialOnhand(serialNumber, branchId, sessionToken),
@@ -102,13 +105,14 @@ export const ActivePickingService = {
 
         // OPTIMIZATION: Return the savedMapping object so that the front-end can immediately update its local state
         // and avoid triggering an extra HTTP GET call to sync the details list.
+        // Removed 'as any' to satisfy TypeScript constraints
         return {
             success: true,
             message: "Serial processed and matched to product successfully",
             newQuantity: newQty,
             detailId,
             serialMapping: savedMapping
-        } as any;
+        };
     },
 
     async getSerialsForDetail(detailId: number): Promise<ConsolidatorSerialMapping[]> {

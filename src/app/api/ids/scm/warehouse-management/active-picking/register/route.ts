@@ -6,7 +6,15 @@ import { ActivePickingRepo } from "@/modules/industrial-distribution-system/supp
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function decodeJwtPayload(token: string): any {
+interface DecodedToken {
+    id?: number | string;
+    sub?: number | string;
+    userId?: number | string;
+    user_id?: number | string;
+}
+
+// Added DecodedToken interface and updated return type from any to resolve @typescript-eslint/no-explicit-any
+function decodeJwtPayload(token: string): DecodedToken | null {
     try {
         const parts = token.split(".");
         if (parts.length !== 3) return null;
@@ -24,11 +32,12 @@ function decodeJwtPayload(token: string): any {
                 .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
                 .join("")
         );
-        return JSON.parse(jsonPayload);
+        return JSON.parse(jsonPayload) as DecodedToken;
     } catch {
         return null;
     }
 }
+
 
 function getUserIdFromToken(token: string | undefined): number | null {
     if (!token) return null;

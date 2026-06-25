@@ -19,7 +19,9 @@ interface ProductRef {
     unit_of_measurement?: { unit_name: string };
 }
 
-interface RawProductInventory {
+// Removed unused RawProductInventory interface to resolve @typescript-eslint/no-unused-vars
+
+interface RawSpringInventoryItem {
     productId?: number;
     product_id?: number;
     branchId?: number;
@@ -27,7 +29,16 @@ interface RawProductInventory {
     runningInventoryUnit?: number;
     running_inventory_unit?: number;
     quantity?: number;
+    lastCutoff?: string | null;
+    last_cutoff?: string | null;
+    lastCountUnit?: number;
+    last_count_unit?: number;
+    lastCount?: number;
+    movementAfterUnit?: number;
+    movement_after_unit?: number;
+    movementAfter?: number;
 }
+
 
 export const ActivePickingRepo = {
     getDirectusBase() { return DIRECTUS_BASE; },
@@ -130,6 +141,10 @@ export const ActivePickingRepo = {
         });
     },
 
+
+
+
+    // Fixed 'any' errors by declaring RawSpringInventoryItem and casting as ProductInventory
     async fetchInventoryForProducts(productIds: number[], branchId: number, sessionToken: string | null = null): Promise<ProductInventory[]> {
         if (productIds.length === 0) return [];
 
@@ -167,20 +182,20 @@ export const ActivePickingRepo = {
             const json = await response.json();
 
             // Handle Spring Boot response structure (might be wrapped in 'content' or 'data')
-            let items = [];
+            let items: RawSpringInventoryItem[] = [];
             if (Array.isArray(json)) items = json;
             else if (json.content && Array.isArray(json.content)) items = json.content;
             else if (json.data && Array.isArray(json.data)) items = json.data;
 
             // Map Spring Boot fields to our ProductInventory type (including last_cutoff)
-            return items.map((item: any) => ({
+            return items.map((item: RawSpringInventoryItem) => ({
                 product_id: item.productId ?? item.product_id,
                 branch_id: item.branchId ?? item.branch_id,
                 running_inventory_unit: item.runningInventoryUnit ?? item.running_inventory_unit ?? item.quantity ?? 0,
                 last_cutoff: item.lastCutoff ?? item.last_cutoff ?? null,
                 last_count_unit: item.lastCountUnit ?? item.last_count_unit ?? item.lastCount ?? 0,
                 movement_after_unit: item.movementAfterUnit ?? item.movement_after_unit ?? item.movementAfter ?? 0
-            } as any));
+            } as unknown as ProductInventory));
         } catch {
             return [];
         }
@@ -297,16 +312,18 @@ export const ActivePickingRepo = {
             const json = await res.json();
 
             // Handle different shapes returned by /filter (object, array, or wrapped content)
-            let onhand: any = null;
+            // Typed as Record<string, unknown> to resolve @typescript-eslint/no-explicit-any error
+            let onhand: Record<string, unknown> | null = null;
             if (json && typeof json === "object" && !Array.isArray(json)) {
-                if ("productId" in json || "product_id" in json) {
-                    onhand = json;
+                const jsonObj = json as Record<string, unknown>;
+                if ("productId" in jsonObj || "product_id" in jsonObj) {
+                    onhand = jsonObj;
                 } else {
-                    const dataArray = json.content || json.data || [];
-                    onhand = dataArray[0];
+                    const dataArray = (jsonObj.content || jsonObj.data || []) as unknown[];
+                    onhand = (dataArray[0] || null) as Record<string, unknown> | null;
                 }
             } else if (Array.isArray(json)) {
-                onhand = json[0];
+                onhand = (json[0] || null) as Record<string, unknown> | null;
             }
 
             if (onhand) {
@@ -355,16 +372,18 @@ export const ActivePickingRepo = {
         return data.data.length > 0;
     },
 
-    async fetchCylinderAssetBySerial(serialNumber: string): Promise<any | null> {
+    // Changed Promise return type from any to Record<string, unknown> | null to avoid any errors
+    async fetchCylinderAssetBySerial(serialNumber: string): Promise<Record<string, unknown> | null> {
         const encoded = encodeURIComponent(serialNumber.trim().toUpperCase());
         const url = `${DIRECTUS_BASE}/items/cylinder_assets?filter[serial_number][_eq]=${encoded}&fields=product_id&limit=1`;
         const response = await fetch(url, { headers: getHeaders(), cache: "no-store" });
         if (!response.ok) return null;
         const data = await response.json();
-        return data.data[0] || null;
+        return (data.data[0] || null) as Record<string, unknown> | null;
     },
 
-    async createCylinderAsset(payload: any): Promise<any> {
+    // Replaced any types in parameters and return type with Record<string, unknown>
+    async createCylinderAsset(payload: Record<string, unknown>): Promise<Record<string, unknown>> {
         const url = `${DIRECTUS_BASE}/items/cylinder_assets`;
         const response = await fetch(url, {
             method: "POST",
@@ -376,7 +395,7 @@ export const ActivePickingRepo = {
             throw new Error(errData.error?.message || "Failed to register cylinder asset");
         }
         const data = await response.json();
-        return data.data;
+        return data.data as Record<string, unknown>;
     }
 };
 
