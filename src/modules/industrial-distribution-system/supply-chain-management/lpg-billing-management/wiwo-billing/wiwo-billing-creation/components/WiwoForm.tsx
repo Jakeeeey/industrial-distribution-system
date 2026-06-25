@@ -1501,6 +1501,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                           <tr>
                             <th className="p-2 sm:p-3 sticky left-0 bg-zinc-50 dark:bg-zinc-900 z-10 text-[10px] sm:text-xs">Serial</th>
                             <th className="p-2 sm:p-3 text-[10px] sm:text-xs">Product Name</th>
+                            <th className="p-2 sm:p-3 text-center text-[10px] sm:text-xs">Level</th>
                             <th className="p-2 sm:p-3 text-center text-[10px] sm:text-xs">Status</th>
                           </tr>
                         </thead>
@@ -1513,14 +1514,34 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                 const deploymentLines = details.filter(d => d.line_type === "NEW_DEPLOYMENT");
                                 const matchedDeployment = deploymentLines[idx];
                                 const isSwapped = !!matchedDeployment;
+                                const typedLine = line as typeof line & { product_name?: string; cylinder_asset?: CylinderAsset };
 
                                 return (
                                   <Fragment key={idx}>
                                     <tr className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20">
-                                      <td className="p-2 sm:p-3 font-mono font-bold sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r border-border shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] text-[10px] sm:text-xs">{line.serial_number}</td>
+                                      <td className="p-2 sm:p-3 font-mono font-bold sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r border-border shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] text-[10px] sm:text-xs">{typedLine.serial_number}</td>
                                       <td className="p-2 sm:p-3 font-semibold text-zinc-700 dark:text-zinc-300 text-[10px] sm:text-xs">
-                                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                                        {(line as any).cylinder_asset?.product?.product_name || (line as any).product_name || "LPG Cylinder"}
+                                        {typedLine.cylinder_asset?.product?.product_name || typedLine.product_name || "LPG Cylinder"}
+                                      </td>
+                                      <td className="p-2 sm:p-3 text-center">
+                                        {(() => {
+                                          const capacity = typedLine.cylinder_asset?.product?.unit_of_measurement_count || 50;
+                                          const percentage = Math.min(100, Math.max(0, (typedLine.remaining_lpg_kg / capacity) * 100));
+                                          const isLow = percentage <= 20;
+                                          return (
+                                            <div className="flex flex-col items-center gap-1">
+                                              <div className="w-16 sm:w-20 h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
+                                                <div 
+                                                  className={`h-full rounded-full ${isLow ? 'bg-red-500' : percentage <= 50 ? 'bg-yellow-500' : 'bg-emerald-500'}`}
+                                                  style={{ width: `${percentage}%` }}
+                                                />
+                                              </div>
+                                              <span className={`text-[8px] sm:text-[9px] font-bold ${isLow ? 'text-red-500 animate-pulse' : 'text-muted-foreground'}`}>
+                                                {percentage.toFixed(0)}% {isLow && '(Needs Swap)'}
+                                              </span>
+                                            </div>
+                                          );
+                                        })()}
                                       </td>
                                       <td className="p-2 sm:p-3 text-center">
                                         {isSwapped ? (
@@ -1535,7 +1556,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                       </td>
                                     </tr>
                                     <tr className="bg-zinc-50/20 dark:bg-zinc-900/5">
-                                      <td colSpan={3} className="p-4 border-l-2 border-border dark:border-zinc-700">
+                                      <td colSpan={4} className="p-4 border-l-2 border-border dark:border-zinc-700">
                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-2">
                                           <div>
                                             <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Tare Weight</span>
@@ -1558,7 +1579,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                     </tr>
                                     {isSwapped && (
                                       <tr className="bg-zinc-50/40 dark:bg-zinc-900/10">
-                                        <td colSpan={3} className="p-4 border-l-2 border-primary bg-zinc-50/30 dark:bg-zinc-900/10">
+                                        <td colSpan={4} className="p-4 border-l-2 border-primary bg-zinc-50/30 dark:bg-zinc-900/10">
                                           <div className="flex flex-col sm:flex-row gap-6 text-xs">
                                             <div>
                                               <span className="font-semibold text-muted-foreground uppercase tracking-wider block text-[10px] mb-0.5">Replacement Cylinder Serial</span>
@@ -1582,7 +1603,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                           ) : (
                             calculatedReturnedCylinders.length === 0 ? (
                               <tr>
-                                <td colSpan={3} className="p-6 text-center text-muted-foreground">
+                                <td colSpan={4} className="p-6 text-center text-muted-foreground">
                                   No connected cylinders found for this site. Must run onboarding setup first.
                                 </td>
                               </tr>
@@ -1604,6 +1625,26 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                       </td>
                                       <td className="p-2 sm:p-3 font-semibold text-zinc-700 dark:text-zinc-300 text-[10px] sm:text-xs">
                                         {row.cylinder_asset?.product?.product_name || "LPG Cylinder"}
+                                      </td>
+                                      <td className="p-2 sm:p-3 text-center">
+                                        {(() => {
+                                          const capacity = row.cylinder_asset?.product?.unit_of_measurement_count || 50;
+                                          const percentage = Math.min(100, Math.max(0, (row.remaining / capacity) * 100));
+                                          const isLow = percentage <= 20;
+                                          return (
+                                            <div className="flex flex-col items-center gap-1">
+                                              <div className="w-16 sm:w-20 h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
+                                                <div 
+                                                  className={`h-full rounded-full ${isLow ? 'bg-red-500' : percentage <= 50 ? 'bg-yellow-500' : 'bg-emerald-500'}`}
+                                                  style={{ width: `${percentage}%` }}
+                                                />
+                                              </div>
+                                              <span className={`text-[8px] sm:text-[9px] font-bold ${isLow ? 'text-red-500 animate-pulse' : 'text-muted-foreground'}`}>
+                                                {percentage.toFixed(0)}% {isLow && '(Needs Swap)'}
+                                              </span>
+                                            </div>
+                                          );
+                                        })()}
                                       </td>
                                       <td className="p-2 sm:p-3 text-center">
                                         {row.isSwapped ? (
