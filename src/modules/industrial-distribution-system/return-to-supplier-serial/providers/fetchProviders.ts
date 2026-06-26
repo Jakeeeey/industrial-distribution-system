@@ -155,16 +155,30 @@ export async function updateTransaction(
  * @param serialNumber - The serial number to validate.
  * @param productId - The product ID.
  * @param branchId - The branch ID.
- * @returns Success confirmation, or throws on error.
+ * @returns Success confirmation and unregistered flag, or throws on error.
  */
 export async function validateSerialNumber(
   serialNumber: string,
   productId: number,
   branchId: number,
-): Promise<{ success: boolean }> {
+): Promise<{ success: boolean; isUnregistered?: boolean }> {
   const res = await fetch(
     `${API_BASE}?action=serial-validate&serialNumber=${encodeURIComponent(serialNumber)}&productId=${productId}&branchId=${branchId}`,
     { cache: "no-store" },
   );
-  return handleResponse<{ success: boolean }>(res);
+  return handleResponse<{ success: boolean; isUnregistered?: boolean }>(res);
 }
+
+/**
+ * Bulk registers cylinder assets.
+ * @param assets - Array of asset records.
+ */
+export async function registerAssets(assets: unknown[]): Promise<unknown> {
+  const res = await fetch(API_BASE, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "register-assets", assets }),
+  });
+  return handleResponse(res);
+}
+
