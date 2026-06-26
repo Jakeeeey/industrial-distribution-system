@@ -31,6 +31,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { RegisterCylinderModal } from "./RegisterCylinderModal";
 
 export function PickingWorkbench() {
     const {
@@ -52,6 +53,8 @@ export function PickingWorkbench() {
     const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({});
     const [showSaveConfirm, setShowSaveConfirm] = useState(false);
     const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
+    const [isRegisterOpen, setIsRegisterOpen] = useState(false);
+    const [unregisteredSerial, setUnregisteredSerial] = useState("");
     const inputRef = useRef<HTMLInputElement>(null);
 
     const activePicking = pickings.find(p => p.id === activePickingId);
@@ -66,7 +69,8 @@ export function PickingWorkbench() {
     const toggleRow = (id: number) => {
         const isExpanding = !expandedRows[id];
         setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
-        if (isExpanding) {
+        // OPTIMIZATION: Only fetch serials if they are not already cached in serialsMap.
+        if (isExpanding && (!serialsMap[id] || serialsMap[id].length === 0)) {
             fetchSerials(id);
         }
     };
@@ -90,13 +94,25 @@ export function PickingWorkbench() {
         if (!serialInput.trim() || isProcessingSerial || !activePicking) return;
 
         const currentSerial = serialInput.trim();
-        const success = await processSerial(activePickingId, currentSerial, activePicking.branch_id || 0);
 
-        if (success) {
+        // Check if all expected items in this picking order are already fulfilled
+        const hasPendingItems = details.some(d => d.picked_quantity < d.ordered_quantity);
+        if (!hasPendingItems) {
+            toast.error("Order limit reached for all items. Cannot pick or register any more serial numbers.");
+            inputRef.current?.select();
+            return;
+        }
+
+        const result = await processSerial(activePickingId, currentSerial, activePicking.branch_id || 0);
+
+        if (result === "UNREGISTERED_SERIAL") {
+            setUnregisteredSerial(currentSerial);
+            setIsRegisterOpen(true);
+        } else if (result) {
             setSerialInput("");
             inputRef.current?.focus();
-
-            // The success logic in the hook already refreshes the specific detail quantity and its serials
+        } else {
+            inputRef.current?.select();
         }
     };
 
@@ -216,7 +232,7 @@ export function PickingWorkbench() {
                                 <TableRow>
                                     <TableHead className="w-[50px]"></TableHead>
                                     <TableHead>Product Details</TableHead>
-                                    <TableHead className="text-center">Stock</TableHead>
+                                    {/* OPTIMIZATION: Stock column removed per revised spec; validation is handled on backend scans */}
                                     <TableHead className="text-center">Order</TableHead>
                                     <TableHead className="text-center">Picked</TableHead>
                                     <TableHead className="text-right pr-6">Status</TableHead>
@@ -252,9 +268,7 @@ export function PickingWorkbench() {
                                                         SKU: {detail.product?.product_code || 'N/A'}
                                                     </div>
                                                 </TableCell>
-                                                <TableCell className="text-center">
-                                                    <Badge variant="secondary" className="opacity-40 font-normal text-[10px]">Hidden</Badge>
-                                                </TableCell>
+                                                {/* OPTIMIZATION: Removed redundant Stock cell */}
                                                 <TableCell className="text-center font-bold text-muted-foreground">
                                                     {detail.ordered_quantity}
                                                 </TableCell>
@@ -281,7 +295,8 @@ export function PickingWorkbench() {
 
                                             {isExpanded && (
                                                 <TableRow className="bg-muted/5 border-l-4 border-l-primary/30">
-                                                    <TableCell colSpan={6} className="p-0">
+                                                    {/* OPTIMIZATION: Adjusted colSpan to 5 (from 6) since the Stock column was removed */}
+                                                    <TableCell colSpan={5} className="p-0">
                                                         <div className="p-4 bg-background/40 border-y space-y-3">
                                                             <div className="flex items-center justify-between">
                                                                 <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Registered Serials ({serials.length})</span>
@@ -388,6 +403,23 @@ export function PickingWorkbench() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            <RegisterCylinderModal
+                open={isRegisterOpen}
+                onOpenChange={setIsRegisterOpen}
+                serialNumber={unregisteredSerial}
+                branchId={activePicking?.branch_id || 0}
+                details={details}
+                onSuccess={async (prodId, serial) => {
+                    const success = await processSerial(activePickingId, serial, activePicking?.branch_id || 0);
+                    if (success === true) {
+                        setSerialInput("");
+                        inputRef.current?.focus();
+                        return true;
+                    }
+                    return false;
+                }}
+            />
         </div>
     );
 }

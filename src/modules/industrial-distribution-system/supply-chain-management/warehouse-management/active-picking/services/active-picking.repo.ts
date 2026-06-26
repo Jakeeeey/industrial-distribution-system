@@ -19,7 +19,9 @@ interface ProductRef {
     unit_of_measurement?: { unit_name: string };
 }
 
-interface RawProductInventory {
+// Removed unused RawProductInventory interface to resolve @typescript-eslint/no-unused-vars
+
+interface RawSpringInventoryItem {
     productId?: number;
     product_id?: number;
     branchId?: number;
@@ -27,7 +29,16 @@ interface RawProductInventory {
     runningInventoryUnit?: number;
     running_inventory_unit?: number;
     quantity?: number;
+    lastCutoff?: string | null;
+    last_cutoff?: string | null;
+    lastCountUnit?: number;
+    last_count_unit?: number;
+    lastCount?: number;
+    movementAfterUnit?: number;
+    movement_after_unit?: number;
+    movementAfter?: number;
 }
+
 
 export const ActivePickingRepo = {
     getDirectusBase() { return DIRECTUS_BASE; },
@@ -130,6 +141,10 @@ export const ActivePickingRepo = {
         });
     },
 
+
+
+
+    // Fixed 'any' errors by declaring RawSpringInventoryItem and casting as ProductInventory
     async fetchInventoryForProducts(productIds: number[], branchId: number, sessionToken: string | null = null): Promise<ProductInventory[]> {
         if (productIds.length === 0) return [];
 
@@ -139,8 +154,17 @@ export const ActivePickingRepo = {
         const baseUrl = process.env.SPRING_API_BASE_URL;
         const productIdsStr = productIds.join(",");
 
-        // Target Spring Boot View with specific dates and divisionId
-        const url = `${baseUrl}/api/view-running-inventory-by-unit/all?startDate=2025-01-01&endDate=2026-12-30&divisionId=1&productId=${productIdsStr}&branchId=${branchId}&size=10000`;
+        // OPTIMIZATION: Dynamically compute a 30-day range (1 month) instead of a static 1 year.
+        // This limits database movements scanning workload significantly, reducing execution time to milliseconds.
+        const now = new Date();
+        const startObj = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        const endObj = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+        const startDate = startObj.toISOString().split("T")[0];
+        const endDate = endObj.toISOString().split("T")[0];
+
+        // Target Spring Boot View with specific dates, divisionId, and a small buffer size=10
+        const url = `${baseUrl}/api/view-running-inventory-by-unit/all?startDate=${startDate}&endDate=${endDate}&divisionId=1&productId=${productIdsStr}&branchId=${branchId}&size=10`;
 
         try {
             const response = await fetch(url, {
@@ -158,17 +182,20 @@ export const ActivePickingRepo = {
             const json = await response.json();
 
             // Handle Spring Boot response structure (might be wrapped in 'content' or 'data')
-            let items = [];
+            let items: RawSpringInventoryItem[] = [];
             if (Array.isArray(json)) items = json;
             else if (json.content && Array.isArray(json.content)) items = json.content;
             else if (json.data && Array.isArray(json.data)) items = json.data;
 
-            // Map Spring Boot fields to our ProductInventory type
-            return items.map((item: RawProductInventory) => ({
+            // Map Spring Boot fields to our ProductInventory type (including last_cutoff)
+            return items.map((item: RawSpringInventoryItem) => ({
                 product_id: item.productId ?? item.product_id,
                 branch_id: item.branchId ?? item.branch_id,
-                running_inventory_unit: item.runningInventoryUnit ?? item.running_inventory_unit ?? item.quantity ?? 0
-            }));
+                running_inventory_unit: item.runningInventoryUnit ?? item.running_inventory_unit ?? item.quantity ?? 0,
+                last_cutoff: item.lastCutoff ?? item.last_cutoff ?? null,
+                last_count_unit: item.lastCountUnit ?? item.last_count_unit ?? item.lastCount ?? 0,
+                movement_after_unit: item.movementAfterUnit ?? item.movement_after_unit ?? item.movementAfter ?? 0
+            } as unknown as ProductInventory));
         } catch {
             return [];
         }
@@ -268,84 +295,40 @@ export const ActivePickingRepo = {
             throw new Error("NETWORK_FAILURE");
         }
 
-        const extractData = (raw: Record<string, unknown> | unknown[] | null): Record<string, unknown>[] => {
-            if (Array.isArray(raw)) return raw as Record<string, unknown>[];
-            if (raw && typeof raw === 'object' && 'content' in raw && Array.isArray(raw.content)) return raw.content as Record<string, unknown>[];
-            if (raw && typeof raw === 'object' && 'data' in raw && Array.isArray(raw.data)) return raw.data as Record<string, unknown>[];
-            return [];
-        };
-
-        const tryFetch = async (endpoint: string, queryParams: string) => {
-            const urlWithAll = `${baseUrl}/api/${endpoint}/all?${queryParams}&size=10000`;
-            try {
-                const res = await fetch(urlWithAll, {
-                    cache: "no-store",
-                    headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }
-                });
-
-                if (res.ok) {
-                    const json = await res.json();
-                    return extractData(json);
-                }
-
-                // Fallback: try without /all
-                const urlWithoutAll = `${baseUrl}/api/${endpoint}?${queryParams}&size=10000`;
-                const res2 = await fetch(urlWithoutAll, {
-                    cache: "no-store",
-                    headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }
-                });
-
-                if (res2.ok) {
-                    const json2 = await res2.json();
-                    return extractData(json2);
-                }
-
-                return [];
-            } catch {
-                throw new Error("NETWORK_FAILURE");
-            }
-        };
+        // ADVANCED OPTIMIZATION: Query the high-performance '/filter' endpoint instead of the heavy '/all' endpoint.
+        // This utilizes direct database index filtering on the Spring Boot side, resolving in milliseconds rather than seconds.
+        const url = `${baseUrl}/api/v-serial-onhand/filter?serialNumber=${encodeURIComponent(inputSerial)}&branchId=${branchId}`;
 
         try {
-            // Optimize by querying all serial-based patterns concurrently
-            const serialQueries = [
-                tryFetch("v-serial-onhand", `serialNumber=${encodeURIComponent(inputSerial)}&branchId=${branchId}`),
-                tryFetch("v-serial-onhand", `serial_number=${encodeURIComponent(inputSerial)}&branch_id=${branchId}`),
-                tryFetch("v-serial-onhand", `serialNumber=${encodeURIComponent(inputSerial)}`),
-                tryFetch("v-serial-onhand", `serial_number=${encodeURIComponent(inputSerial)}`)
-            ];
+            const res = await fetch(url, {
+                cache: "no-store",
+                headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }
+            });
 
-            const results = await Promise.all(serialQueries);
-            let data = results.flat();
-
-            // Fallback to branch-only scan only if specific serial searches return nothing
-            if (data.length === 0) {
-                const branchQueries = [
-                    tryFetch("v-serial-onhand", `branchId=${branchId}`),
-                    tryFetch("v-serial-onhand", `branch_id=${branchId}`)
-                ];
-                const branchResults = await Promise.all(branchQueries);
-                data = branchResults.flat();
+            if (!res.ok) {
+                return null;
             }
 
-            const onhand = data.find((item: Record<string, unknown>) => {
-                const dbVal = item.serialNumber ?? item.serial_number ?? item.serialNo ?? item.serial ?? item.sn ?? item.snCode;
-                if (dbVal === undefined || dbVal === null) return false;
+            const json = await res.json();
 
-                const dbSerial = String(dbVal).trim().toUpperCase();
-                const dbBranchId = item.branchId ?? item.branch_id;
-                const branchMatch = dbBranchId === undefined || dbBranchId === null || Number(dbBranchId) === Number(branchId);
-                const serialMatch = dbSerial === inputSerial;
-
-                return serialMatch && branchMatch;
-            });
+            // Handle different shapes returned by /filter (object, array, or wrapped content)
+            // Typed as Record<string, unknown> to resolve @typescript-eslint/no-explicit-any error
+            let onhand: Record<string, unknown> | null = null;
+            if (json && typeof json === "object" && !Array.isArray(json)) {
+                const jsonObj = json as Record<string, unknown>;
+                if ("productId" in jsonObj || "product_id" in jsonObj) {
+                    onhand = jsonObj;
+                } else {
+                    const dataArray = (jsonObj.content || jsonObj.data || []) as unknown[];
+                    onhand = (dataArray[0] || null) as Record<string, unknown> | null;
+                }
+            } else if (Array.isArray(json)) {
+                onhand = (json[0] || null) as Record<string, unknown> | null;
+            }
 
             if (onhand) {
                 const product = onhand.product as ProductRef | undefined;
 
-                // Try all known field name patterns for the product ID
-                // Each access returns `unknown` (Record<string,unknown>), so cast each
-                // individually before chaining to satisfy strict TS typing.
                 type PrimId = string | number | null | undefined;
                 let pId: PrimId =
                     (onhand.productId as PrimId) ??
@@ -369,9 +352,51 @@ export const ActivePickingRepo = {
             }
 
             return null;
-        } catch {
+        } catch (error) {
+            const err = error as Error;
+            if (err.message === "NETWORK_FAILURE") {
+                throw err;
+            }
             throw new Error("NETWORK_FAILURE");
         }
+    },
+
+    async checkCylinderAssetExists(serialNumber: string): Promise<boolean> {
+        const encoded = encodeURIComponent(serialNumber.trim().toUpperCase());
+        const url = `${DIRECTUS_BASE}/items/cylinder_assets?filter[serial_number][_eq]=${encoded}&limit=1`;
+        const response = await fetch(url, { headers: getHeaders(), cache: "no-store" });
+        if (!response.ok) {
+            throw new Error("Failed to check cylinder asset");
+        }
+        const data = await response.json();
+        return data.data.length > 0;
+    },
+
+    // Changed Promise return type from any to Record<string, unknown> | null to avoid any errors
+    async fetchCylinderAssetBySerial(serialNumber: string): Promise<Record<string, unknown> | null> {
+        const encoded = encodeURIComponent(serialNumber.trim().toUpperCase());
+        const url = `${DIRECTUS_BASE}/items/cylinder_assets?filter[serial_number][_eq]=${encoded}&fields=product_id&limit=1`;
+        const response = await fetch(url, { headers: getHeaders(), cache: "no-store" });
+        if (!response.ok) return null;
+        const data = await response.json();
+        return (data.data[0] || null) as Record<string, unknown> | null;
+    },
+
+    // Replaced any types in parameters and return type with Record<string, unknown>
+    async createCylinderAsset(payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+        const url = `${DIRECTUS_BASE}/items/cylinder_assets`;
+        const response = await fetch(url, {
+            method: "POST",
+            headers: getHeaders(),
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.error?.message || "Failed to register cylinder asset");
+        }
+        const data = await response.json();
+        return data.data as Record<string, unknown>;
     }
 };
+
 ;

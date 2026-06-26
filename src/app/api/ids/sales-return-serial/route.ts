@@ -15,7 +15,7 @@ import {
   updateReturn,
   updateStatus,
 } from "@/modules/industrial-distribution-system/sales-return-serial/services";
-import { handleApiError, AppError } from "@/modules/industrial-distribution-system/sales-return-serial/services/sales-return.helpers";
+import { handleApiError, AppError, getManilaTimestamp } from "@/modules/industrial-distribution-system/sales-return-serial/services/sales-return.helpers";
 
 /**
  * Decodes the base64url payload of a JWT without verifying the signature.
@@ -154,7 +154,7 @@ export async function GET(req: NextRequest) {
 }
 
 // =============================================================================
-// POST — Create a new Sales Return
+// POST — Create a new Sales Return or register cylinder assets
 // =============================================================================
 export async function POST(req: NextRequest) {
   try {
@@ -166,6 +166,22 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
+    
+    // Support registering assets
+    if (body.action === "register-assets") {
+      const { createCylinderAsset } = await import("@/modules/industrial-distribution-system/sales-return-serial/services/sales-return-cylinder.repo");
+      const assets = Array.isArray(body.assets) ? body.assets : [];
+      const phNow = getManilaTimestamp();
+      for (const asset of assets) {
+        await createCylinderAsset({
+          ...asset,
+          created_by: userId,
+          created_date: phNow,
+        });
+      }
+      return json({ success: true }, 201);
+    }
+
     const data = await submitReturn(body, userId);
     return json({ data }, 201);
   } catch (error: any) {

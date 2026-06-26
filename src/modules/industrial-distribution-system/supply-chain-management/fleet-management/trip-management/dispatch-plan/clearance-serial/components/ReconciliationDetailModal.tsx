@@ -344,7 +344,11 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                                     editReturnNo: returnMode === 'link' ? selectedReturnNo : undefined
                                 };
                                 localStorage.setItem('scm_dispatch_return_data', JSON.stringify(returnData));
-                                window.open('/ids/scm/sales-return-serial?fromClearance=true', '_blank');
+                                const queryParams = new URLSearchParams({ fromClearance: 'true' });
+                                if (returnMode === 'link' && selectedReturnNo) {
+                                    queryParams.append('editReturnNo', selectedReturnNo);
+                                }
+                                window.open(`/ids/scm/sales-return-serial?${queryParams.toString()}`, '_blank');
                                 handleSave();
                             }}
                             disabled={(returnMode === 'link' && !selectedReturnNo) || !remarks.trim()}
