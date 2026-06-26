@@ -187,17 +187,38 @@ interface POProductRow {
 // DATA FETCHERS
 // =====================
 async function fetchApprovedNotReceivedPOs(base: string): Promise<POHeaderRow[]> {
-    const qs = [
+    const supUrl = `${base}/items/${SUPPLIERS_COLLECTION}?limit=-1&filter[division_id][_eq]=1&fields=id`;
+    let validSupplierIds: number[] = [];
+    try {
+        const supJ = await fetchJson<{ data: { id: number }[] }>(supUrl);
+        validSupplierIds = (supJ?.data || []).map((s) => Number(s.id)).filter((id) => id > 0);
+    } catch {
+        return [];
+    }
+
+    if (validSupplierIds.length === 0) return [];
+
+    const baseQs = [
         "limit=-1", "sort=-purchase_order_id",
         "fields=purchase_order_id,purchase_order_no,date,date_encoded,approver_id,date_approved,payment_status,inventory_status,date_received,supplier_name,total_amount,price_type",
         "filter[_or][0][inventory_status][_eq]=13", "filter[_or][1][inventory_status][_eq]=9",
         "filter[_or][2][inventory_status][_eq]=11", "filter[_or][3][inventory_status][_eq]=12",
         "filter[_or][4][inventory_status][_eq]=3",
-        "filter[inventory_status][_neq]=6",
+        "filter[inventory_status][_neq]=6"
     ].join("&");
-    const url = `${base}/items/${PO_COLLECTION}?${qs}`;
-    const j = await fetchJson<{ data: POHeaderRow[] }>(url);
-    return j?.data ?? [];
+
+    const allRows: POHeaderRow[] = [];
+    
+    for (const ids of chunk(validSupplierIds, 150)) {
+        const qs = `${baseQs}&filter[supplier_name][_in]=${encodeURIComponent(ids.join(","))}`;
+        const url = `${base}/items/${PO_COLLECTION}?${qs}`;
+        try {
+            const j = await fetchJson<{ data: POHeaderRow[] }>(url);
+            if (j?.data) allRows.push(...j.data);
+        } catch {}
+    }
+    
+    return allRows.sort((a, b) => Number(b.purchase_order_id) - Number(a.purchase_order_id));
 }
 
 async function fetchSupplierNames(base: string, supplierIds: number[]) {
