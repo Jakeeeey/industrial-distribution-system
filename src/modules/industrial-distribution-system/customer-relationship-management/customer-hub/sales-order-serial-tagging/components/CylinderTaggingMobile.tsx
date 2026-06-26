@@ -1,8 +1,8 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { SalesOrderTaggingDetails, MappedSerial, CustomerAsset } from "../types";
+import { SalesOrderTaggingDetails, MappedSerial, CustomerAsset, TaggedSerial } from "../types";
 import { ScannedItem } from "../hooks/useCylinderTagging";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -24,34 +24,65 @@ import {
 } from "lucide-react";
 
 interface LineItemSerialsListProps {
-  taggedSerials: string[];
+  productMappedSerials: string[];
+  taggedSerials: TaggedSerial[];
   sessionScans: ScannedItem[];
   onRemove: (serial: string) => void;
 }
 
 function LineItemSerialsList({
+  productMappedSerials,
   taggedSerials,
   sessionScans,
   onRemove,
 }: LineItemSerialsListProps) {
   const [filterQuery, setFilterQuery] = useState("");
   
-  const filteredTagged = taggedSerials.filter((s) =>
-    s.toLowerCase().includes(filterQuery.toLowerCase())
-  );
-  
-  const filteredSession = sessionScans.filter((s) =>
-    s.serial_number.toLowerCase().includes(filterQuery.toLowerCase())
-  );
+  // Construct the union of all serial numbers
+  const allSerials = useMemo(() => {
+    const set = new Set<string>();
+    productMappedSerials.forEach((s) => set.add(s.toUpperCase()));
+    taggedSerials.forEach((t) => set.add(t.serial_number.toUpperCase()));
+    sessionScans.forEach((s) => set.add(s.serial_number.toUpperCase()));
+    return Array.from(set);
+  }, [productMappedSerials, taggedSerials, sessionScans]);
 
-  const totalSerials = taggedSerials.length + sessionScans.length;
-  const hasSerials = filteredTagged.length > 0 || filteredSession.length > 0;
+  // Map each serial to its status and other info
+  const serialItems = useMemo(() => {
+    return allSerials.map((serial) => {
+      const sessionScan = sessionScans.find((s) => s.serial_number.toUpperCase() === serial);
+      const dbTag = taggedSerials.find((t) => t.serial_number.toUpperCase() === serial);
+      
+      let status = "not tagged";
+      if (sessionScan) {
+        status = "new";
+      } else if (dbTag) {
+        status = dbTag.status || "tagged";
+      }
+
+      return {
+        serial_number: serial,
+        status,
+        isSession: !!sessionScan,
+        isDb: !!dbTag,
+      };
+    });
+  }, [allSerials, sessionScans, taggedSerials]);
+
+  const filteredSerials = useMemo(() => {
+    return serialItems.filter((item) =>
+      item.serial_number.toLowerCase().includes(filterQuery.toLowerCase())
+    );
+  }, [serialItems, filterQuery]);
+
+  const totalSerials = allSerials.length;
+  const hasSerials = filteredSerials.length > 0;
 
   return (
     <div className="space-y-1.5 mt-1 pt-1 border-t w-full">
       <div className="flex items-center justify-between gap-2">
         <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
-          Tagged Serials ({totalSerials})
+          Cylinder Serials ({totalSerials})
         </span>
         {totalSerials > 5 && (
           <Input
@@ -67,34 +98,47 @@ function LineItemSerialsList({
       <div className="max-h-24 overflow-y-auto pr-1">
         {!hasSerials ? (
           <p className="text-[9px] text-muted-foreground italic py-1">
-            {filterQuery ? "No matches." : "None tagged."}
+            {filterQuery ? "No matches." : "None loaded."}
           </p>
         ) : (
-          <div className="grid grid-cols-2 gap-1">
-            {filteredTagged.map((serial) => (
-              <Badge
-                key={serial}
-                variant="outline"
-                className="bg-background/80 text-muted-foreground font-mono text-[9px] border border-border px-1.5 py-0.5 justify-between w-full truncate"
-                title={`${serial} (Tagged)`}
-              >
-                <span className="truncate">{serial}</span>
-                <span className="text-[7px] opacity-75 font-sans ml-0.5 shrink-0 select-none">(Tagged)</span>
-              </Badge>
-            ))}
-            {filteredSession.map((scan) => (
-              <Badge
-                key={scan.serial_number}
-                className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-mono text-[9px] flex items-center justify-between px-1.5 py-0.5 w-full truncate"
-                title={`${scan.serial_number} (New)`}
-              >
-                <span className="truncate">{scan.serial_number}</span>
-                <Trash2
-                  className="w-2.5 h-2.5 cursor-pointer hover:text-red-500 ml-0.5 shrink-0"
-                  onClick={() => onRemove(scan.serial_number)}
-                />
-              </Badge>
-            ))}
+          <div className="flex flex-wrap gap-1.5">
+            {filteredSerials.map((item) => {
+              if (item.isSession) {
+                return (
+                  <Badge
+                    key={item.serial_number}
+                    className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-mono text-[9px] flex items-center justify-between px-1.5 py-0.5 shrink-0"
+                    title={`${item.serial_number} (New)`}
+                  >
+                    <span>{item.serial_number}</span>
+                    <Trash2
+                      className="w-2.5 h-2.5 cursor-pointer hover:text-red-500 ml-1.5 shrink-0"
+                      onClick={() => onRemove(item.serial_number)}
+                    />
+                  </Badge>
+                );
+              }
+
+              const isTagged = item.status.toLowerCase() === "tagged";
+
+              return (
+                <Badge
+                  key={item.serial_number}
+                  variant="outline"
+                  className={`font-mono text-[9px] border px-1.5 py-0.5 flex items-center shrink-0 ${
+                    isTagged 
+                      ? "bg-blue-500/5 text-blue-500 border-blue-500/25" 
+                      : "bg-amber-500/5 text-amber-500 border-amber-500/25"
+                  }`}
+                  title={`${item.serial_number} (${isTagged ? "Tagged" : "Not Tagged"})`}
+                >
+                  <span>{item.serial_number}</span>
+                  <span className="text-[8px] font-sans ml-1.5 shrink-0 select-none uppercase font-bold">
+                    {isTagged ? "Tagged" : "Not Tagged"}
+                  </span>
+                </Badge>
+              );
+            })}
           </div>
         )}
       </div>
@@ -250,7 +294,7 @@ export default function CylinderTaggingMobile({
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0  divide-y divide-border text-sm">
-                <div className="flex justify-between items-center py-2">
+                <div className="flex justify-between items-start py-2">
                   <span className="text-muted-foreground font-semibold">Customer</span>
                   <div className="text-right">
                     <p className="font-bold text-foreground">{order.customer_name}</p>
@@ -314,13 +358,23 @@ export default function CylinderTaggingMobile({
                     <Progress value={percent} className="h-2 mx-2" />
                     
                     {/* Tagged list */}
-                    {(item.tagged_serials.length > 0 || sessionScans.length > 0) && (
-                      <LineItemSerialsList
-                        taggedSerials={item.tagged_serials}
-                        sessionScans={sessionScans}
-                        onRemove={onRemove}
-                      />
-                    )}
+                    {(() => {
+                      const productMappedSerials = mappedSerials
+                        .filter((ms) => Number(ms.product_id) === Number(item.product_id))
+                        .map((ms) => ms.serial_number);
+                      const hasAnySerials = productMappedSerials.length > 0 || item.tagged_serials.length > 0 || sessionScans.length > 0;
+
+                      if (!hasAnySerials) return null;
+
+                      return (
+                        <LineItemSerialsList
+                          productMappedSerials={productMappedSerials}
+                          taggedSerials={item.tagged_serials}
+                          sessionScans={sessionScans}
+                          onRemove={onRemove}
+                        />
+                      );
+                    })()}
                   </Card>
                 );
               })}
@@ -397,30 +451,36 @@ export default function CylinderTaggingMobile({
             transition={{ duration: 0.2 }}
             className="space-y-4"
           >
-            <Card className="border border-primary/20 shadow-md">
+            <Card className="border border-primary/20 shadow-md gap-0">
+              <CardHeader className="border-b">
+                <CardTitle className="text-xs font-bold flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Scan className="w-3.5 h-3.5 text-primary animate-pulse" />
+                    Serial Number Scanner
+                  </span>
+                  <div className="flex items-center gap-1.5 select-none cursor-pointer" onClick={() => setAutoEnter(!autoEnter)}>
+                    <span className="text-[9px] text-muted-foreground font-semibold">Fast-Mode</span>
+                    <Switch checked={autoEnter} onCheckedChange={setAutoEnter} size="sm" id="mobile-auto-enter-toggle" />
+                  </div>
+                </CardTitle>
+                <CardDescription className="text-[10px]">
+                  Input cylinder serials. Only loaded mappings are accepted ({mappedSerials.length} loaded).
+                </CardDescription>
+              </CardHeader>
               <CardContent className="p-4 space-y-4">
                 <form onSubmit={handleScanSubmit} className="space-y-1.5">
-                  <label className="text-xs font-bold text-muted-foreground flex items-center justify-between gap-1 w-full">
-                    <span className="flex items-center gap-1">
-                      <Scan className="w-3.5 h-3.5 text-primary" /> Input Cylinder Serial ({mappedSerials.length} loaded)
-                    </span>
-                    <div className="flex items-center gap-1.5 select-none cursor-pointer" onClick={() => setAutoEnter(!autoEnter)}>
-                      <span className="text-[9px] text-muted-foreground font-semibold">Auto-Enter</span>
-                      <Switch checked={autoEnter} onCheckedChange={setAutoEnter} size="sm" id="mobile-auto-enter-toggle" />
-                    </div>
-                  </label>
                   <div className="relative">
                     <Input
                       ref={inputRef}
                       type="text"
-                      placeholder="Scan barcode or tap code..."
+                      placeholder="Scan QR Code or manually enter here..."
                       value={scanInput}
-                      onChange={handleInputChange}
+                      onChange={handleInputChange}  
                       onPaste={handlePaste}
-                      className="font-mono text-base tracking-widest pl-10 h-12 uppercase disabled:opacity-90 disabled:bg-emerald-500/5 disabled:border-emerald-500/30"
+                      className="font-mono  tracking-widest pl-10 h-12 text-[12px] border-2 border-primary/20 uppercase disabled:opacity-90 disabled:bg-emerald-500/5 disabled:border-emerald-500/30"
                       disabled={submitting || isProcessingScan}
                     />
-                    <Scan className="absolute left-3 top-3.5 w-5 h-5 text-muted-foreground" />
+                    <Scan className="absolute left-3 top-3.5 w-5 h-5 text-primary" />
                   </div>
                 </form>
 

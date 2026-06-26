@@ -26,9 +26,33 @@ import {
   ChevronRight,
   Filter,
 } from "lucide-react";
+import { useSidebar } from "@/components/ui/sidebar";
 
 export default function SalesOrderSerialTagging() {
   const isMobile = useIsMobile();
+  const { setOpen } = useSidebar();
+
+  const renderTaggingStatusBadge = (status?: "tagged" | "partially tagged" | "not tagged") => {
+    if (status === "tagged") {
+      return (
+        <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white border-none font-bold text-[9px] py-0.5 h-auto px-2 shrink-0 rounded-full">
+          Tagged
+        </Badge>
+      );
+    }
+    if (status === "partially tagged") {
+      return (
+        <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/20 font-bold text-[9px] py-0.5 h-auto px-2 shrink-0 rounded-full">
+          Partially Tagged
+        </Badge>
+      );
+    }
+    return (
+      <Badge variant="secondary" className="bg-secondary text-muted-foreground font-bold text-[9px] py-0.5 h-auto px-2 shrink-0 rounded-full">
+        Not Tagged
+      </Badge>
+    );
+  };
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -41,6 +65,17 @@ export default function SalesOrderSerialTagging() {
   useEffect(() => {
     setOptimisticOrderId(orderIdParam);
   }, [orderIdParam]);
+
+  // Collapse the global app navigation sidebar to maximize workspace space on initial mount if an order is active and screen size is small
+  const hasCollapsedOnMount = React.useRef(false);
+  useEffect(() => {
+    if (orderIdParam && !hasCollapsedOnMount.current) {
+      if (isMobile) {
+        setOpen(false);
+      }
+      hasCollapsedOnMount.current = true;
+    }
+  }, [orderIdParam, setOpen, isMobile]);
 
   // Orders list states
   const [orders, setOrders] = useState<SalesOrderListItem[]>([]);
@@ -94,6 +129,9 @@ export default function SalesOrderSerialTagging() {
   const handleSelectOrder = (id: number) => {
     const idStr = String(id);
     setOptimisticOrderId(idStr);
+    if (isMobile) {
+      setOpen(false); // Collapse sidebar only when window size is small
+    }
     const params = new URLSearchParams(searchParams.toString());
     params.set("orderId", idStr);
     router.push(`${pathname}?${params.toString()}`);
@@ -245,11 +283,9 @@ export default function SalesOrderSerialTagging() {
                       <div className="space-y-1 pr-2 min-w-0 flex-1">
                         <div className="flex items-center justify-between">
                           <span className="font-bold text-xs text-foreground">{o.order_no}</span>
-                          <Badge variant="outline" className="text-[9px] font-semibold py-0 h-4.5 border-primary/40 text-primary px-1.5 max-w-[120px] truncate">
-                            {o.branch_name || `Branch ${o.branch_id}`}
-                          </Badge>
+                          {renderTaggingStatusBadge(o.tagging_status)}
                         </div>
-                        <p className="text-xs font-semibold text-muted-foreground truncate">{o.customer_name}</p>
+                        <p className="text-xs font-semibold text-muted-foreground line-clamp-2">{o.customer_name}</p>
                         <p className="text-[10px] text-muted-foreground/80 font-mono">Code: {o.customer_code}</p>
                       </div>
                       <ChevronRight className={`w-3.5 h-3.5 shrink-0 transition-transform ${isSelected ? "text-primary translate-x-1" : "text-muted-foreground"}`} />
@@ -269,11 +305,9 @@ export default function SalesOrderSerialTagging() {
                     <div className="space-y-1 pr-3 min-w-0 flex-1">
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-sm text-foreground">{o.order_no}</span>
-                        <Badge variant="outline" className="text-[9px] font-semibold py-0 h-4.5 border-primary/40 text-primary px-1.5 max-w-[125px] truncate">
-                          {o.branch_name || `Branch ${o.branch_id}`}
-                        </Badge>
+                        {renderTaggingStatusBadge(o.tagging_status)}
                       </div>
-                      <p className="text-xs font-semibold text-muted-foreground truncate">{o.customer_name}</p>
+                      <p className="text-xs font-semibold text-muted-foreground line-clamp-2">{o.customer_name}</p>
                       <p className="text-[10px] text-muted-foreground/80 font-mono">Code: {o.customer_code}</p>
                     </div>
                     <ChevronRight className="w-4.5 h-4.5 text-muted-foreground shrink-0" />
@@ -306,9 +340,12 @@ export default function SalesOrderSerialTagging() {
                         <TableCell className="font-mono text-muted-foreground text-xs">{o.customer_code}</TableCell>
                         <TableCell className="font-semibold text-xs">{o.branch_name || `Branch ${o.branch_id}`}</TableCell>
                         <TableCell className="text-right">
-                          <Badge variant="secondary" className="font-bold text-[11px]">
-                            {o.order_status || "PENDING"}
-                          </Badge>
+                          <div className="flex justify-end items-center gap-2">
+                            {renderTaggingStatusBadge(o.tagging_status)}
+                            <Badge variant="secondary" className="font-bold text-[11px]">
+                              {o.order_status || "PENDING"}
+                            </Badge>
+                          </div>
                         </TableCell>
                         <TableCell className="text-right pr-4">
                           <ChevronRight className="w-4.5 h-4.5 text-muted-foreground ml-auto" />
@@ -462,6 +499,17 @@ export default function SalesOrderSerialTagging() {
       {/* Module Title Section */}
       <div className="flex items-center justify-between border-b pb-3 shrink-0">
         <div className="flex items-center gap-3">
+          {optimisticOrderId && (
+            <Button
+              onClick={handleGoBack}
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 border-2 lg:hidden shrink-0"
+              title="Back to Orders List"
+            >
+              <ArrowLeft className="w-4.5 h-4.5 text-foreground" />
+            </Button>
+          )}
           <div className="p-2 bg-primary/10 rounded-xl">
             <Cylinder className="w-6 h-6 text-primary" />
           </div>
@@ -478,12 +526,16 @@ export default function SalesOrderSerialTagging() {
 
       <div className="flex flex-col md:flex-row gap-4 items-stretch flex-1 overflow-hidden">
         {/* Left Sidebar Pane */}
-        <div className="w-full md:w-80 lg:w-90 shrink-0 flex flex-col h-full overflow-hidden">
+        <div className={`w-full md:w-80 lg:w-90 shrink-0 flex flex-col h-full overflow-hidden ${
+          optimisticOrderId ? "hidden lg:flex" : "flex"
+        }`}>
           {renderOrdersList(true)}
         </div>
 
         {/* Right Workspace Pane */}
-        <div className="flex-1 min-w-0 w-full h-full overflow-y-auto pr-1">
+        <div className={`flex-1 min-w-0 w-full h-full overflow-y-auto pr-1 ${
+          !optimisticOrderId ? "hidden lg:block" : "block"
+        }`}>
           {!optimisticOrderId ? (
             <div className="flex flex-col items-center justify-center h-full border border-dashed rounded-2xl p-12 text-center bg-secondary/5">
               <div className="p-4 bg-primary/5 rounded-full mb-4 border border-primary/10">

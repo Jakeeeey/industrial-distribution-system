@@ -108,7 +108,7 @@ export function useCylinderTagging(orderId: string | null) {
 
     // 2. Check if already tagged in the database (previously submitted)
     const alreadyTagged = orderDetails.items.find((item) =>
-      item.tagged_serials.some((ts) => ts.toUpperCase() === serial)
+      item.tagged_serials.some((ts) => ts.serial_number.toUpperCase() === serial)
     );
     if (alreadyTagged) {
       toast.error(`Serial "${serial}" has already been tagged to this order.`);

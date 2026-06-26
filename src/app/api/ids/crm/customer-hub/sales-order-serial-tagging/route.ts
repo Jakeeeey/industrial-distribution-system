@@ -127,16 +127,68 @@ export async function GET(req: NextRequest) {
           console.warn("Could not retrieve branch names:", branchErr);
         }
 
-        const orders = rawOrders.map((o) => ({
-          order_id: o.order_id,
-          order_no: o.order_no,
-          customer_code: o.customer_code,
-          customer_name: customerMap.get(o.customer_code) || o.customer_code || "Unknown Customer",
-          branch_id: o.branch_id,
-          branch_name: branchMap.get(o.branch_id) || `Branch ${o.branch_id}`,
-          order_status: o.order_status,
-          created_date: o.created_date,
-        }));
+        const orderIds = rawOrders.map((o) => o.order_id);
+        const targetQtyMap = new Map<number, number>();
+        const taggedQtyMap = new Map<number, number>();
+
+        if (orderIds.length > 0) {
+          try {
+            // Fetch required target quantities (allocated if > 0, otherwise ordered)
+            interface RawDetail {
+              order_id: number;
+              ordered_quantity?: number | string;
+              allocated_quantity?: number | string;
+            }
+            const detailsRes = await fetchDirectus(`/items/sales_order_details?filter[order_id][_in]=${orderIds.join(",")}&fields=order_id,ordered_quantity,allocated_quantity&limit=-1`);
+            const rawDetails = (detailsRes.data || []) as RawDetail[];
+            for (const d of rawDetails) {
+              const oId = Number(d.order_id);
+              const target = Number(d.allocated_quantity || 0) > 0 
+                ? Number(d.allocated_quantity) 
+                : Number(d.ordered_quantity || 0);
+              targetQtyMap.set(oId, (targetQtyMap.get(oId) || 0) + target);
+            }
+
+            // Fetch tagged serial counts from sales_order_details_serial
+            interface RawDetailsSerialCount {
+              sales_order_id: number | string;
+            }
+            const serialsRes = await fetchDirectus(`/items/sales_order_details_serial?filter[sales_order_id][_in]=${orderIds.join(",")}&fields=sales_order_id&limit=-1`);
+            const rawSerials = (serialsRes.data || []) as RawDetailsSerialCount[];
+            for (const s of rawSerials) {
+              const oId = Number(s.sales_order_id);
+              taggedQtyMap.set(oId, (taggedQtyMap.get(oId) || 0) + 1);
+            }
+          } catch (qtyErr) {
+            console.warn("Could not calculate tagging status counts:", qtyErr);
+          }
+        }
+
+        const orders = rawOrders.map((o) => {
+          const targetQty = targetQtyMap.get(o.order_id) || 0;
+          const taggedQty = taggedQtyMap.get(o.order_id) || 0;
+          let taggingStatus: "tagged" | "partially tagged" | "not tagged" = "not tagged";
+          
+          if (targetQty > 0) {
+            if (taggedQty >= targetQty) {
+              taggingStatus = "tagged";
+            } else if (taggedQty > 0) {
+              taggingStatus = "partially tagged";
+            }
+          }
+
+          return {
+            order_id: o.order_id,
+            order_no: o.order_no,
+            customer_code: o.customer_code,
+            customer_name: customerMap.get(o.customer_code) || o.customer_code || "Unknown Customer",
+            branch_id: o.branch_id,
+            branch_name: branchMap.get(o.branch_id) || `Branch ${o.branch_id}`,
+            order_status: o.order_status,
+            created_date: o.created_date,
+            tagging_status: taggingStatus,
+          };
+        });
 
         return NextResponse.json({ data: orders });
       }
@@ -237,14 +289,17 @@ export async function GET(req: NextRequest) {
         const allTaggedRes = await fetchDirectus(`/items/sales_order_details_serial?filter[sales_order_id][_eq]=${orderId}&fields=sales_order_detail_id,serial_number&limit=-1`);
         const allTagged = (allTaggedRes.data || []) as RawDetailsSerial[];
         
-        const taggedMap = new Map<number, string[]>();
+        const taggedMap = new Map<number, { serial_number: string; status: string }[]>();
         for (const t of allTagged) {
           const dId = Number(t.sales_order_detail_id);
           if (!isNaN(dId)) {
             if (!taggedMap.has(dId)) {
               taggedMap.set(dId, []);
             }
-            taggedMap.get(dId)!.push(t.serial_number);
+            taggedMap.get(dId)!.push({
+              serial_number: t.serial_number,
+              status: "tagged",
+            });
           }
         }
 

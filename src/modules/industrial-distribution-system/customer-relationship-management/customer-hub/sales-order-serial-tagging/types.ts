@@ -8,6 +8,11 @@ export interface SalesOrderHeader {
   order_status?: string;
 }
 
+export interface TaggedSerial {
+  serial_number: string;
+  status: string;
+}
+
 export interface SalesOrderItem {
   detail_id: number;
   product_id: number;
@@ -17,7 +22,7 @@ export interface SalesOrderItem {
   ordered_qty: number;
   allocated_qty: number;
   tagged_qty: number;
-  tagged_serials: string[];
+  tagged_serials: TaggedSerial[];
 }
 
 export interface SalesOrderTaggingDetails {
@@ -46,4 +51,5 @@ export interface SalesOrderListItem {
   branch_name?: string;
   order_status?: string;
   created_date?: string;
+  tagging_status?: "tagged" | "partially tagged" | "not tagged";
 }
