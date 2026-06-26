@@ -344,25 +344,32 @@ async function tagSerials(
         `&limit=-1` +
         `&fields=purchase_order_product_id,ordered_quantity`;
 
-    const serialsUrl =
-        `${base}/items/purchase_order_serial` +
-        `?filter[purchase_order_product_id.purchase_order_id][_eq]=${poId}` +
-        `&limit=-1` +
-        `&fields=purchase_order_product_id`;
-
-    const [linesRes, serialsRes] = await Promise.all([
-        directusFetch(linesUrl),
-        directusFetch(serialsUrl),
-    ]);
-
+    const linesRes = await directusFetch(linesUrl);
     const linesData = ((await linesRes.json().catch(() => ({}))).data ?? []) as Record<string, unknown>[];
-    const serialsData = ((await serialsRes.json().catch(() => ({}))).data ?? []) as Record<string, unknown>[];
+
+    let serialsData: Record<string, unknown>[] = [];
+    const lineIds = linesData.map((l) => Number(l.purchase_order_product_id)).filter(Boolean);
+
+    if (lineIds.length > 0) {
+        const serialsUrl =
+            `${base}/items/purchase_order_serial` +
+            `?filter[purchase_order_product_id][_in]=${lineIds.join(",")}` +
+            `&limit=-1` +
+            `&fields=purchase_order_product_id`;
+
+        const serialsRes = await directusFetch(serialsUrl);
+        serialsData = ((await serialsRes.json().catch(() => ({}))).data ?? []) as Record<string, unknown>[];
+    }
 
     // Count serials per line
     const snByLine = new Map<number, number>();
     for (const sr of serialsData) {
-        const lid = Number(sr.purchase_order_product_id);
-        snByLine.set(lid, (snByLine.get(lid) ?? 0) + 1);
+        // Handle case where Directus might return an object
+        const raw = sr.purchase_order_product_id;
+        const lid = typeof raw === 'object' && raw !== null ? Number((raw as Record<string, unknown>).id || (raw as Record<string, unknown>).purchase_order_product_id) : Number(raw);
+        if (Number.isFinite(lid) && lid > 0) {
+            snByLine.set(lid, (snByLine.get(lid) ?? 0) + 1);
+        }
     }
 
     // Check completeness: every line's serial count >= ordered_quantity
@@ -379,7 +386,7 @@ async function tagSerials(
         // Patch purchase_order.is_tagged = 1
         const patchRes = await directusFetch(`${base}/items/purchase_order/${poId}`, {
             method: "PATCH",
-            body: JSON.stringify({ is_tagged: 1 }),
+            body: JSON.stringify({ is_tagged: true }),
         });
         isTaggedNow = patchRes.ok;
     }

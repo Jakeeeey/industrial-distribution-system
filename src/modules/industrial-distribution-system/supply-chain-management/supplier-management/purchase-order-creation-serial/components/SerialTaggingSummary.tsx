@@ -6,7 +6,7 @@
 
 import * as React from "react";
 import { Barcode, Cylinder, Save, Loader2, Info } from "lucide-react";
-import { Separator } from "@/components/ui/separator";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
