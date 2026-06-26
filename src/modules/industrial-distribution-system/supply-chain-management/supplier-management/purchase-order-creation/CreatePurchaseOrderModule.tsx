@@ -472,7 +472,7 @@ function BranchMultiSelect(props: {
     );
 }
 
-export default function CreatePurchaseOrderModule({ encoderId, preparerName }: { encoderId?: number; preparerName?: string; }) {
+export default function CreatePurchaseOrderModule({ encoderId, preparerName, isRefill }: { encoderId?: number; preparerName?: string; isRefill?: boolean; }) {
     const [isLoading, setIsLoading] = React.useState(true);
     const [isSaving, setIsSaving] = React.useState(false);
     const [error, setError] = React.useState<string>("");
@@ -684,9 +684,13 @@ export default function CreatePurchaseOrderModule({ encoderId, preparerName }: {
                 p.name.toLowerCase().includes(q) ||
                 p.sku.toLowerCase().includes(q) ||
                 String(p.id).toLowerCase().includes(q);
-            return catOk && qOk;
+            
+            // ✅ Filter only empty cylinder products for Cylinder Refill POs
+            const isRefillOk = !isRefill || String(p.uom || "").toUpperCase() === "EMPTY";
+            
+            return catOk && qOk && isRefillOk;
         });
-    }, [allProducts, selectedCategory, searchQuery]);
+    }, [allProducts, selectedCategory, searchQuery, isRefill]);
 
     const canAddProducts = Boolean(selectedSupplier?.id);
 
@@ -885,6 +889,9 @@ export default function CreatePurchaseOrderModule({ encoderId, preparerName }: {
 
                 inventory_status: 1,
                 encoder_id: encoderId,
+                
+                // ✅ FLAG Cylinder Refill POs
+                is_refill: isRefill ? 1 : 0,
 
                 poNumber,
                 poDate,
@@ -919,7 +926,7 @@ export default function CreatePurchaseOrderModule({ encoderId, preparerName }: {
 
             console.log("PO RESPONSE:", (json as any)?.data ?? json);
             setIsLocked(true);
-            toast.success("Purchase Order created successfully!", {
+            toast.success(isRefill ? "Cylinder Refill PO created successfully!" : "Purchase Order created successfully!", {
                 description: `PO ${poNumber} has been saved and locked.`,
             });
             return json;
@@ -932,7 +939,7 @@ export default function CreatePurchaseOrderModule({ encoderId, preparerName }: {
         } finally {
             setIsSaving(false);
         }
-    }, [selectedSupplier, allItemsFlat, poNumber, poDate, poDateISO, allocations, financials, isInvoice, encoderId, selectedPaymentTermId]);
+    }, [selectedSupplier, allItemsFlat, poNumber, poDate, poDateISO, allocations, financials, isInvoice, encoderId, selectedPaymentTermId, isRefill]);
 
     const pickerBranchLabel = React.useMemo(() => {
         const b = allocations.find((x) => x.branchId === pickerBranchId);
@@ -980,9 +987,13 @@ export default function CreatePurchaseOrderModule({ encoderId, preparerName }: {
         <div className="w-full min-w-0 space-y-6">
             <div className="flex items-center justify-between gap-4">
                 <div className="space-y-1 text-left">
-                    <div className="text-xl font-black text-foreground">Create Purchase Order</div>
+                    <div className="text-xl font-black text-foreground">
+                        {isRefill ? "Create Cylinder Refill PO" : "Create Purchase Order"}
+                    </div>
                     <div className="text-sm text-muted-foreground">
-                        Configure your supplier and branch allocations below.
+                        {isRefill 
+                            ? "Configure your refill supplier and branch allocations below." 
+                            : "Configure your supplier and branch allocations below."}
                     </div>
                 </div>
 
