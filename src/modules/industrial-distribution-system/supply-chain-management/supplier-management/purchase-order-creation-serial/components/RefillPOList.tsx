@@ -126,7 +126,7 @@ export function RefillPOList({ items, loading, selectedId, onSelectPO, onRefresh
     const isDisabled = loading;
 
     return (
-        <div className="min-w-0 border border-border rounded-xl bg-background shadow-sm overflow-hidden flex flex-col sticky top-4 self-start h-[calc(100vh-120px)]">
+        <div className="min-w-0 border border-border rounded-xl bg-background shadow-sm overflow-hidden flex flex-col h-full">
             <div className="px-4 py-3 border-b border-border bg-muted/30 flex items-center justify-between gap-3">
                 <div className="min-w-0">
                     <div className="text-sm font-black text-foreground uppercase tracking-tight">
@@ -192,7 +192,8 @@ export function RefillPOList({ items, loading, selectedId, onSelectPO, onRefresh
                     paginated.map((po) => {
                         const selected = selectedId === po.poId;
                         const cardType = getCardType(po);
-                        const progress = po.totalOrderedQty > 0 ? Math.round((po.totalSerials / po.totalOrderedQty) * 100) : 0;
+                        const displaySerials = po.isTagged ? Math.max(po.totalSerials, po.totalOrderedQty) : po.totalSerials;
+                        const progress = po.totalOrderedQty > 0 ? Math.round((displaySerials / po.totalOrderedQty) * 100) : 0;
                         const isCardDisabled = cardType !== "ready" && cardType !== "tagged";
 
                         return (
@@ -230,7 +231,7 @@ export function RefillPOList({ items, loading, selectedId, onSelectPO, onRefresh
                                                 />
                                             </div>
                                             <span className="text-[9px] text-muted-foreground font-medium">
-                                                {po.totalSerials}/{po.totalOrderedQty}
+                                                {displaySerials}/{po.totalOrderedQty}
                                             </span>
                                         </div>
                                     </div>

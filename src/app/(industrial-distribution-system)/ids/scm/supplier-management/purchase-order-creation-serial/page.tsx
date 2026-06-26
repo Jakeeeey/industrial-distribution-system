@@ -11,7 +11,7 @@ import {
     BreadcrumbPage,
     BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { ScrollArea } from "@/components/ui/scroll-area";
+
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { NavUser } from "@/components/shared/app-sidebar/nav-user";
@@ -100,14 +100,12 @@ export default async function Page() {
             </header>
 
             {/* ── Page Content ── */}
-            <ScrollArea className="min-h-0 flex-1">
-                <div className="p-4">
-                    <CreateSerialPurchaseOrderModule
-                        encoderId={encoderId}
-                        preparerName={headerUser.name}
-                    />
-                </div>
-            </ScrollArea>
+            <div className="flex-1 min-h-0 p-4">
+                <CreateSerialPurchaseOrderModule
+                    encoderId={encoderId}
+                    preparerName={headerUser.name}
+                />
+            </div>
         </div>
     );
 }

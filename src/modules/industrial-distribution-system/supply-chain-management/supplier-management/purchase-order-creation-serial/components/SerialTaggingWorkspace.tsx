@@ -6,7 +6,7 @@
 
 import * as React from "react";
 import {
-    CalendarDays, Building2, ScanLine, Info,
+    CalendarDays, Building2, ScanLine, Info, Save, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -58,7 +58,7 @@ export function SerialTaggingWorkspace({ po, loading, hook }: SerialTaggingWorks
 
     if (!po && !loading) {
         return (
-            <div className="min-w-0 border border-border rounded-xl bg-background shadow-sm overflow-hidden flex flex-col h-[calc(100vh-120px)] sticky top-4 self-start">
+            <div className="min-w-0 border border-border rounded-xl bg-background shadow-sm overflow-hidden flex flex-col h-full">
                 <div className="px-4 py-3 border-b border-border bg-muted/30 flex items-center justify-between gap-3 shrink-0">
                     <div className="min-w-0">
                         <div className="text-sm font-black text-foreground uppercase tracking-tight">
@@ -80,7 +80,7 @@ export function SerialTaggingWorkspace({ po, loading, hook }: SerialTaggingWorks
 
     if (loading) {
         return (
-            <div className="min-w-0 border border-border rounded-xl bg-background shadow-sm overflow-hidden flex flex-col h-[calc(100vh-120px)] sticky top-4 self-start">
+            <div className="min-w-0 border border-border rounded-xl bg-background shadow-sm overflow-hidden flex flex-col h-full">
                 <div className="px-4 py-3 border-b border-border bg-muted/30 flex items-center gap-3 shrink-0">
                     <Skeleton className="h-6 w-48" />
                 </div>
@@ -98,7 +98,7 @@ export function SerialTaggingWorkspace({ po, loading, hook }: SerialTaggingWorks
     const isTagged = po.isTagged;
 
     return (
-        <div className="min-w-0 border border-border rounded-xl bg-background shadow-sm overflow-hidden flex flex-col h-[calc(100vh-120px)] sticky top-4 self-start">
+        <div className="min-w-0 border border-border rounded-xl bg-background shadow-sm overflow-hidden flex flex-col h-full">
             {/* ── Header ── */}
             <div className="px-4 py-3 border-b border-border bg-muted/30 flex items-center justify-between gap-3 flex-wrap shrink-0">
                 <div className="min-w-0">
@@ -214,6 +214,7 @@ export function SerialTaggingWorkspace({ po, loading, hook }: SerialTaggingWorks
                             <SerialEntryPanel
                                 key={line.lineId}
                                 line={line}
+                                isReadOnly={isTagged}
                                 onAddSerial={isTagged ? () => {} : hook.addDraftSerial}
                                 onRemoveDraft={isTagged ? () => {} : hook.removeDraftSerial}
                             />
@@ -221,16 +222,56 @@ export function SerialTaggingWorkspace({ po, loading, hook }: SerialTaggingWorks
                     )}
                 </div>
 
-                {/* ── Summary & Actions ── */}
+                {/* ── Summary ── */}
                 <SerialTaggingSummary
                     po={po}
                     totalOrderedCount={hook.totalOrderedCount}
                     totalSavedCount={hook.totalSavedCount}
                     totalDraftCount={hook.totalDraftCount}
-                    canSubmit={hook.canSubmit}
-                    isSubmitting={hook.isSubmitting}
-                    onSubmit={hook.submitSerials}
                 />
+            </div>
+
+            {/* ── Fixed Action Bar ── */}
+            <div className="p-4 bg-background/95 backdrop-blur-xl border-t border-border flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between shrink-0 z-10">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    {!hook.canSubmit && hook.totalDraftCount === 0 && (
+                        <>
+                            <Info className="h-4 w-4 shrink-0" />
+                            <span>Add serials to enable saving.</span>
+                        </>
+                    )}
+                    {!hook.canSubmit && hook.totalDraftCount > 0 && (
+                        <span className="text-orange-500 font-medium flex items-center gap-1.5">
+                            <Info className="h-4 w-4 shrink-0" />
+                            All lines must match ordered quantity to save.
+                        </span>
+                    )}
+                </div>
+
+                <div className="flex items-center gap-3">
+                    <Button
+                        id="serial-tagging-submit-btn"
+                        type="button"
+                        className={cn(
+                            "h-10 rounded-xl font-black uppercase tracking-wider px-6",
+                            (hook.totalSavedCount + hook.totalDraftCount) === hook.totalOrderedCount && hook.totalOrderedCount > 0 && !hook.isSubmitting && "bg-emerald-600 hover:bg-emerald-700 text-white"
+                        )}
+                        disabled={!hook.canSubmit || hook.isSubmitting}
+                        onClick={hook.submitSerials}
+                    >
+                        {hook.isSubmitting ? (
+                            <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Saving...
+                            </>
+                        ) : (
+                            <>
+                                <Save className="mr-2 h-4 w-4" />
+                                {(hook.totalSavedCount + hook.totalDraftCount) === hook.totalOrderedCount && hook.totalOrderedCount > 0 ? "Confirm & Save All" : `Save ${hook.totalDraftCount} Drafts`}
+                            </>
+                        )}
+                    </Button>
+                </div>
             </div>
 
             {/* ── Rapid Scan Modal ── */}
