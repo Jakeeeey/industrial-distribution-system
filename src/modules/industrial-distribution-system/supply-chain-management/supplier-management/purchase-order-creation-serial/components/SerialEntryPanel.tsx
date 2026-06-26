@@ -30,6 +30,7 @@ import type { SerialTaggingLine } from "../types/serial-po.types";
 
 interface SerialEntryPanelProps {
     line: SerialTaggingLine;
+    isReadOnly?: boolean;
     onAddSerial: (lineId: number, serial: string) => void;
     onRemoveDraft: (lineId: number, index: number) => void;
 }
@@ -45,7 +46,7 @@ function getStatus(entered: number, required: number): "incomplete" | "complete"
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function SerialEntryPanel({ line, onAddSerial, onRemoveDraft }: SerialEntryPanelProps) {
+export function SerialEntryPanel({ line, isReadOnly, onAddSerial, onRemoveDraft }: SerialEntryPanelProps) {
     const [inputValue, setInputValue] = React.useState("");
     const [isValidating, setIsValidating] = React.useState(false);
     const inputRef = React.useRef<HTMLInputElement>(null);
@@ -256,7 +257,7 @@ export function SerialEntryPanel({ line, onAddSerial, onRemoveDraft }: SerialEnt
                             className="pl-9 pr-8 h-9 text-xs font-mono"
                             autoComplete="off"
                             spellCheck={false}
-                            disabled={isValidating || status === "complete"}
+                            disabled={isValidating || status === "complete" || isReadOnly}
                         />
                         {isValidating && (
                             <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -275,7 +276,7 @@ export function SerialEntryPanel({ line, onAddSerial, onRemoveDraft }: SerialEnt
                         size="icon"
                         className="h-9 w-9 shrink-0"
                         onClick={() => commitSerial(inputValue)}
-                        disabled={!inputValue.trim() || isValidating || status === "complete"}
+                        disabled={!inputValue.trim() || isValidating || status === "complete" || isReadOnly}
                     >
                         <Plus className="h-4 w-4" />
                     </Button>
@@ -288,7 +289,7 @@ export function SerialEntryPanel({ line, onAddSerial, onRemoveDraft }: SerialEnt
                         className="h-9 w-9 shrink-0"
                         onClick={handleManualPaste}
                         title="Paste serials from clipboard (newline/comma separated)"
-                        disabled={isValidating || status === "complete"}
+                        disabled={isValidating || status === "complete" || isReadOnly}
                     >
                         <ClipboardPaste className="h-4 w-4" />
                     </Button>

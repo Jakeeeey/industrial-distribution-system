@@ -128,21 +128,21 @@ export function ReceiptDetailsStep({ onContinue }: { onContinue: () => void }) {
 
                 {/* ✅ MERGED: Previous Receipts History */}
                 {selectedPO?.history && selectedPO.history.length > 0 && (
-                    <Card className="p-4 border-amber-500/20 bg-amber-500/5 shadow-sm">
-                        <div className="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-400">
+                    <Card className="p-4 border-primary/20 bg-primary/5 shadow-sm">
+                        <div className="text-[10px] font-black uppercase tracking-widest text-primary">
                             Previous Receipts History
                         </div>
                         <div className="mt-3 space-y-2">
                             {selectedPO.history.map((h: any) => (
                                 <div
                                     key={h.receiptNo}
-                                    className="flex items-center justify-between gap-3 text-[10px] border-b border-amber-500/10 pb-2 last:border-0 last:pb-0"
+                                    className="flex items-center justify-between gap-3 text-[10px] border-b border-primary/10 pb-2 last:border-0 last:pb-0"
                                 >
                                     <div className="flex flex-col">
-                                        <span className="font-mono font-black text-amber-900 dark:text-amber-100">
+                                        <span className="font-mono font-black text-primary">
                                             {h.receiptNo}
                                         </span>
-                                        <span className="text-[9px] font-bold text-amber-700/70 dark:text-amber-400/60">
+                                        <span className="text-[9px] font-bold text-slate-500">
                                             {h.receiptDate || "N/A"}
                                         </span>
                                     </div>
@@ -153,8 +153,8 @@ export function ReceiptDetailsStep({ onContinue }: { onContinue: () => void }) {
                                         <Badge
                                             variant="outline"
                                             className={cn(
-                                                "text-[9px] uppercase h-4 px-1 leading-none border-amber-500/30 font-black",
-                                                h.isPosted ? "bg-amber-100 text-amber-800" : "bg-white text-muted-foreground"
+                                                "text-[9px] uppercase h-4 px-1 leading-none border-primary/30 font-black",
+                                                h.isPosted ? "bg-primary/10 text-primary" : "bg-white text-muted-foreground"
                                             )}
                                         >
                                             {h.isPosted ? "Posted" : "Unposted"}
