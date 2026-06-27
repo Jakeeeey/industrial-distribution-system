@@ -16,6 +16,16 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
     Table,
     TableBody,
     TableCell,
@@ -37,6 +47,7 @@ import { Label } from '@/components/ui/label';
 import { InvoiceDetail, ReconciliationRow, SerialMapping } from '../types';
 import { fetchInvoiceDetails } from '../providers/fetchProviders';
 import ScanningModal from './ScanningModal';
+import CylinderTaggingModal from './CylinderTaggingModal';
 
 interface ReconciliationDetailModalProps {
     isOpen: boolean;
@@ -60,6 +71,8 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
     const [scannedQtys, setScannedQtys] = useState<Record<string | number, number>>({});
     const [scannedSerials, setScannedSerials] = useState<Record<string | number, string[]>>({});
     const [isScanningOpen, setIsScanningOpen] = useState(false);
+    const [isCylinderModalOpen, setIsCylinderModalOpen] = useState(false);
+    const [isConfirmMissingOpen, setIsConfirmMissingOpen] = useState(false);
     const [selectedLineIds, setSelectedLineIds] = useState<Set<string | number>>(new Set());
 
     // 🟢 Link Sales Return State
@@ -115,7 +128,7 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
 
     if (!reconciliation) return null;
 
-    const handleSave = () => {
+    const proceedSave = () => {
         // Only include data for selected lines if status is Concerns
         const finalMissingQtys: Record<string | number, number> = {};
         const finalScannedQtys: Record<string | number, number> = {};
@@ -138,6 +151,19 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
 
         onSave(reconciliation.id, reconciliation.status, remarks, finalMissingQtys, finalScannedQtys, finalScannedSerials);
         onClose();
+        setIsConfirmMissingOpen(false);
+    };
+
+    const handleSave = () => {
+        if (reconciliation.status === 'Fulfilled') {
+            const hasMissing = detail?.lines.some(line => (scannedQtys[line.id] || 0) < line.qty);
+            if (hasMissing) {
+                setIsConfirmMissingOpen(true);
+                return;
+            }
+        }
+
+        proceedSave();
     };
 
     const handleScanningConfirm = (scanned: Record<string | number, number>, returnedSerials: Record<string | number, string[]> = {}) => {
@@ -312,7 +338,46 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                             </div>
                         </div>
 
-                        <div className="space-y-2 pt-2 border-t border-border/50">
+                        <div className="rounded-xl border border-border overflow-hidden bg-card mt-4">
+                            <div className="bg-muted px-4 py-2 border-b border-border">
+                                <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">Transaction Details (Serial)</p>
+                            </div>
+                            <div className="overflow-x-auto custom-scrollbar">
+                                <Table className="min-w-[700px] md:min-w-full">
+                                    <TableHeader>
+                                        <TableRow className="bg-muted/50 hover:bg-muted/50 border-border">
+                                            <TableHead className="text-xs font-bold text-muted-foreground">Product / Unit of Measure</TableHead>
+                                            <TableHead className="text-xs font-bold text-muted-foreground text-center">Qty</TableHead>
+                                            <TableHead className="text-xs font-bold text-muted-foreground text-center">Tagged Serials</TableHead>
+                                            <TableHead className="text-xs font-bold text-muted-foreground text-right pr-6">Amount</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {detail.lines.map((line) => (
+                                            <TableRow key={line.id} className="hover:bg-muted/30 transition-colors border-border">
+                                                <TableCell>
+                                                    <div className="space-y-0.5">
+                                                        <p className="text-sm font-bold text-foreground">{line.product_name}</p>
+                                                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground font-bold uppercase border border-border">{line.unit}</span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-sm font-bold text-foreground text-center tabular-nums">{line.qty}</TableCell>
+                                                <TableCell className="text-center w-24">
+                                                    <div className="h-9 w-16 flex items-center mx-auto justify-center font-bold rounded-lg border bg-primary/5 text-primary border-primary/20 tabular-nums">
+                                                        {scannedQtys[line.id] || 0}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-right text-sm font-bold text-foreground pr-6 tabular-nums">
+                                                    ₱{Number(line.net_total).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2 pt-2 border-t border-border/50 mt-4">
                             <p className="text-sm font-bold text-foreground">
                                 Remarks (Mandatory)
                             </p>
@@ -325,38 +390,66 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                         </div>
                     </div>
 
-                    <div className="flex justify-end gap-3 pt-4 border-t border-border">
-                        <Button variant="outline" onClick={onClose} className="rounded-xl px-6 border-border">Cancel</Button>
-                        <Button
-                            onClick={() => {
-                                const returnData = {
-                                    invoiceNo: reconciliation.invoiceNo,
-                                    orderNo: reconciliation.orderNo,
-                                    customerCode: detail?.header.customer_code || reconciliation.customer || '',
-                                    customerName: reconciliation.customerName,
-                                    salesmanId: detail?.header.salesman_id,
-                                    salesmanName: detail?.header.salesman_name,
-                                    salesmanCode: detail?.header.salesman_code,
-                                    branchId: detail?.header.branch_id,
-                                    branchName: detail?.header.branch_name,
-                                    remarks: remarks,
-                                    isLinking: returnMode === 'link',
-                                    editReturnNo: returnMode === 'link' ? selectedReturnNo : undefined
-                                };
-                                localStorage.setItem('scm_dispatch_return_data', JSON.stringify(returnData));
-                                const queryParams = new URLSearchParams({ fromClearance: 'true' });
-                                if (returnMode === 'link' && selectedReturnNo) {
-                                    queryParams.append('editReturnNo', selectedReturnNo);
-                                }
-                                window.open(`/ids/scm/sales-return-serial?${queryParams.toString()}`, '_blank');
-                                handleSave();
-                            }}
-                            disabled={(returnMode === 'link' && !selectedReturnNo) || !remarks.trim()}
-                            className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl px-8 font-bold shadow-lg shadow-primary/20 transition-all active:scale-95"
-                        >
-                            Open & Confirm
-                        </Button>
+                    <div className="flex flex-col md:flex-row justify-end items-center gap-3 pt-4 border-t border-border mt-auto">
+                        <div className="flex items-center gap-2 w-full md:w-auto md:mr-auto">
+                            <Button
+                                variant="outline"
+                                onClick={() => setIsCylinderModalOpen(true)}
+                                className="flex-1 md:flex-none rounded-xl px-6 font-bold text-primary border-primary/20 bg-primary/5 hover:bg-primary/10 flex items-center gap-2 h-10 transition-all active:scale-95"
+                            >
+                                Cylinder Tagging
+                            </Button>
+                        </div>
+
+                        <div className="flex items-center gap-3 w-full md:w-auto">
+                            <Button variant="outline" onClick={onClose} className="flex-1 md:flex-none rounded-xl px-6 font-semibold border-border h-10">Cancel</Button>
+                            <Button
+                                onClick={() => {
+                                    const returnData = {
+                                        invoiceNo: reconciliation.invoiceNo,
+                                        orderNo: reconciliation.orderNo,
+                                        customerCode: detail?.header.customer_code || reconciliation.customer || '',
+                                        customerName: reconciliation.customerName,
+                                        salesmanId: detail?.header.salesman_id,
+                                        salesmanName: detail?.header.salesman_name,
+                                        salesmanCode: detail?.header.salesman_code,
+                                        branchId: detail?.header.branch_id,
+                                        branchName: detail?.header.branch_name,
+                                        remarks: remarks,
+                                        isLinking: returnMode === 'link',
+                                        editReturnNo: returnMode === 'link' ? selectedReturnNo : undefined
+                                    };
+                                    localStorage.setItem('scm_dispatch_return_data', JSON.stringify(returnData));
+                                    const queryParams = new URLSearchParams({ fromClearance: 'true' });
+                                    if (returnMode === 'link' && selectedReturnNo) {
+                                        queryParams.append('editReturnNo', selectedReturnNo);
+                                    }
+                                    window.open(`/ids/scm/sales-return-serial?${queryParams.toString()}`, '_blank');
+                                    handleSave();
+                                }}
+                                disabled={(returnMode === 'link' && !selectedReturnNo) || !remarks.trim()}
+                                className="flex-1 md:flex-none rounded-xl px-8 font-bold text-primary-foreground bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all active:scale-95 h-10"
+                            >
+                                Open & Confirm
+                            </Button>
+                        </div>
                     </div>
+                    
+                    <CylinderTaggingModal
+                        isOpen={isCylinderModalOpen}
+                        onClose={() => setIsCylinderModalOpen(false)}
+                        allowedProductNames={detail ? detail.lines.map(l => l.product_name) : []}
+                        invoiceId={reconciliation.id}
+                        onConfirm={(serials, productName) => {
+                            const line = detail?.lines.find(l => l.product_name === productName);
+                            if (line) {
+                                setScannedQtys(prev => ({
+                                    ...prev,
+                                    [line.id]: (prev[line.id] || 0) + serials.length
+                                }));
+                            }
+                        }}
+                    />
                 </div>
             );
         }
@@ -395,12 +488,14 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                                     )}
                                     <TableHead className="text-xs font-bold text-muted-foreground">Product / Unit of Measure</TableHead>
                                     <TableHead className="text-xs font-bold text-muted-foreground text-center">Qty</TableHead>
-                                    {reconciliation.status !== 'Fulfilled' && (
+                                    {reconciliation.status !== 'Fulfilled' ? (
                                         <>
                                             <TableHead className="text-xs font-bold text-muted-foreground text-center">Scanned Qty</TableHead>
                                             <TableHead className="text-xs font-bold text-muted-foreground text-center">Missing</TableHead>
                                             <TableHead className="text-xs font-bold text-muted-foreground text-right">Missing Amount</TableHead>
                                         </>
+                                    ) : (
+                                        <TableHead className="text-xs font-bold text-muted-foreground text-center">Tagged Serials</TableHead>
                                     )}
                                     <TableHead className="text-xs font-bold text-muted-foreground text-right pr-6">Amount</TableHead>
                                 </TableRow>
@@ -429,7 +524,7 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                                             </div>
                                         </TableCell>
                                         <TableCell className="text-sm font-bold text-foreground text-center tabular-nums">{line.qty}</TableCell>
-                                        {reconciliation.status !== 'Fulfilled' && (
+                                        {reconciliation.status !== 'Fulfilled' ? (
                                             <>
                                                 <TableCell className="text-center w-24">
                                                     <div className="h-9 w-16 flex items-center justify-center font-bold rounded-lg border bg-muted/50 border-border tabular-nums">
@@ -445,6 +540,12 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                                                     ₱{(reconciliation.status !== 'Fulfilled with Concerns' || selectedLineIds.has(line.id)) ? (((line.net_total || 0) / (line.qty || 1)) * (missingQtys[line.id] || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
                                                 </TableCell>
                                             </>
+                                        ) : (
+                                            <TableCell className="text-center w-24">
+                                                <div className="h-9 w-16 flex items-center mx-auto justify-center font-bold rounded-lg border bg-primary/5 text-primary border-primary/20 tabular-nums">
+                                                    {scannedQtys[line.id] || 0}
+                                                </div>
+                                            </TableCell>
                                         )}
                                         <TableCell className="text-right text-sm font-bold text-foreground pr-6 tabular-nums">
                                             ₱{Number(line.net_total).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -473,7 +574,7 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                 </div>
 
                 <div className="flex flex-col md:flex-row justify-end items-center gap-3 pt-4 border-t border-border mt-auto">
-                    {reconciliation.status !== 'Fulfilled' && (
+                    {reconciliation.status !== 'Fulfilled' ? (
                         <div className="flex items-center gap-2 w-full md:w-auto md:mr-auto">
                             <Button
                                 variant="outline"
@@ -482,6 +583,16 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                             >
                                 <Scan className="w-4 h-4" />
                                 Start Scan (Serial)
+                            </Button>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-2 w-full md:w-auto md:mr-auto">
+                            <Button
+                                variant="outline"
+                                onClick={() => setIsCylinderModalOpen(true)}
+                                className="flex-1 md:flex-none rounded-xl px-6 font-bold text-primary border-primary/20 bg-primary/5 hover:bg-primary/10 flex items-center gap-2 h-10 transition-all active:scale-95"
+                            >
+                                Cylinder Tagging
                             </Button>
                         </div>
                     )}
@@ -519,21 +630,56 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                     initialScannedSerials={scannedSerials}
                     serialNumbers={serialNumbers}
                 />
+
+                <CylinderTaggingModal
+                    isOpen={isCylinderModalOpen}
+                    onClose={() => setIsCylinderModalOpen(false)}
+                    allowedProductNames={detail ? detail.lines.map(l => l.product_name) : []}
+                    invoiceId={reconciliation.id}
+                    onConfirm={(serials, productName) => {
+                        const line = detail?.lines.find(l => l.product_name === productName);
+                        if (line) {
+                            setScannedQtys(prev => ({
+                                ...prev,
+                                [line.id]: (prev[line.id] || 0) + serials.length
+                            }));
+                        }
+                    }}
+                />
             </div>
         );
     };
 
     return (
-        <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="sm:max-w-3xl w-[95vw] p-4 md:p-6 bg-card rounded-2xl md:rounded-3xl border-border shadow-2xl max-h-[95vh] flex flex-col overflow-hidden">
-                <DialogHeader className="mb-2 shrink-0 border-b border-border pb-4">
-                    {renderHeader()}
-                </DialogHeader>
-                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar mt-4">
-                    {renderContent()}
-                </div>
-            </DialogContent>
-        </Dialog>
+        <>
+            <Dialog open={isOpen} onOpenChange={onClose}>
+                <DialogContent className="sm:max-w-3xl w-[95vw] p-4 md:p-6 bg-card rounded-2xl md:rounded-3xl border-border shadow-2xl max-h-[95vh] flex flex-col overflow-hidden">
+                    <DialogHeader className="mb-2 shrink-0 border-b border-border pb-4">
+                        {renderHeader()}
+                    </DialogHeader>
+                    <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar mt-4">
+                        {renderContent()}
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            <AlertDialog open={isConfirmMissingOpen} onOpenChange={setIsConfirmMissingOpen}>
+                <AlertDialogContent className="rounded-2xl max-w-md">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Incomplete Serial Tags</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            There are missing or incomplete serial tags for the products. Are you sure you want to proceed with saving?
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="mt-4 gap-2">
+                        <AlertDialogCancel className="rounded-xl mt-0">Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={proceedSave} className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90">
+                            Proceed
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </>
     );
 };
 

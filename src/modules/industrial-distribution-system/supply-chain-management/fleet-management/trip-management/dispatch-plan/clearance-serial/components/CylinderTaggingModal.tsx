@@ -24,13 +24,17 @@ import { ProductSearchSelect } from './ProductSearchSelect';
 interface CylinderTaggingModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onConfirm?: (serials: string[]) => void;
+    onConfirm?: (serials: string[], productName?: string) => void;
+    allowedProductNames?: string[];
+    invoiceId?: number;
 }
 
 const CylinderTaggingModal: React.FC<CylinderTaggingModalProps> = ({
     isOpen,
     onClose,
-    onConfirm
+    onConfirm,
+    allowedProductNames,
+    invoiceId
 }) => {
     // serials = existing/registered serials
     const [serials, setSerials] = useState<string[]>([]);
@@ -55,7 +59,12 @@ const CylinderTaggingModal: React.FC<CylinderTaggingModalProps> = ({
             fetch('/api/ids/scm/fleet-management/trip-management/dispatch-plan/clearance-serial/cylinder-assets/products')
                 .then(res => res.json())
                 .then(data => {
-                    setProducts(data.data || []);
+                    const fetched = data.data || [];
+                    if (allowedProductNames && allowedProductNames.length > 0) {
+                        setProducts(fetched.filter((p: { product_id: number; product_name: string; product_code: string }) => allowedProductNames.includes(p.product_name)));
+                    } else {
+                        setProducts(fetched);
+                    }
                 })
                 .catch(err => {
                     console.error('Failed to load products:', err);
@@ -65,7 +74,7 @@ const CylinderTaggingModal: React.FC<CylinderTaggingModalProps> = ({
                     setIsLoadingProducts(false);
                 });
         }
-    }, [isOpen]);
+    }, [isOpen, allowedProductNames]);
 
     // Reset state when modal opens
     useEffect(() => {
@@ -149,7 +158,8 @@ const CylinderTaggingModal: React.FC<CylinderTaggingModalProps> = ({
                     },
                     body: JSON.stringify({
                         serials,
-                        selectedProductId
+                        selectedProductId,
+                        invoiceId
                     })
                 });
                 
@@ -159,7 +169,8 @@ const CylinderTaggingModal: React.FC<CylinderTaggingModalProps> = ({
             }
 
             if (onConfirm) {
-                onConfirm(serials);
+                const productName = products.find(p => String(p.product_id) === selectedProductId)?.product_name;
+                onConfirm(serials, productName);
             }
             toast.success(`Successfully confirmed ${serials.length} serial numbers.`);
             onClose();
