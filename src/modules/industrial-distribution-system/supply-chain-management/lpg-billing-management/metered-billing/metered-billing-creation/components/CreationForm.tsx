@@ -52,6 +52,7 @@ interface Props {
   onCancel: () => void;
   transactionHeader?: LpgTransactionHeader | null;
   initialFlowType?: "ROUTINE" | "ONBOARDING" | null;
+  draftTxId?: number | null;
   /**
    * PER_INVOICE mode (default: true)
    *   true  — resolve previous reading by site + customer + sales invoice
@@ -72,8 +73,8 @@ interface Props {
     invoice_id: number;
     invoice_no: string;
     sales_invoice_no?: string;
-    total_amount: number;
-    invoice_date: string;
+    total_amount?: number;
+    invoice_date?: string;
     sales_order_id?: number | null;
     sales_order_no?: string | null;
   } | null;
@@ -108,7 +109,7 @@ const TX_TYPE_LABELS: Record<
 
 type MobileTab = "details" | "readings" | "review";
 
-export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFlowType, salesInvoice, perInvoice = true, autoPeriodFrom = true, currentUserId = null }: Props) {
+export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFlowType, salesInvoice, draftTxId = null, perInvoice = true, autoPeriodFrom = true, currentUserId = null }: Props) {
   const {
     form,
     setForm,
@@ -133,7 +134,7 @@ export function CreationForm({ onSuccess, onCancel, transactionHeader, initialFl
     isValidReading,
     meterDirection,
     pressureLine,
-  } = useMeteredBillingCreation(transactionHeader, initialFlowType, salesInvoice, currentUserId);
+  } = useMeteredBillingCreation(transactionHeader, initialFlowType, salesInvoice, currentUserId, draftTxId);
 
   const [activeTab, setActiveTab] = useState<MobileTab>("details");
   // RULE DEV: Print receipt modal states (active when onboarding is true)
