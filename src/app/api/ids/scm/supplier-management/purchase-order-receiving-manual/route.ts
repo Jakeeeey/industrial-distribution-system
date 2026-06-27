@@ -691,6 +691,23 @@ export async function POST(req: NextRequest) {
                             // If it fails, we might want to try with a unique RFID fallback if it's critical
                             // but usually we want to respect the uniqueness constraint
                         });
+
+                        // ✅ NEW: Save to purchase_order_receiving_serial table for all POs (dev-rule.md requirement)
+                        const recSerialPayload: Record<string, unknown> = {
+                            purchase_order_product_id: Number(porId),
+                            product_id: Number(pId),
+                            serial_number: String(snValue).trim(),
+                        };
+                        if (typeof sObj === 'object' && sObj.tareWeight) {
+                            recSerialPayload.tare_weight = toNum(sObj.tareWeight);
+                        }
+
+                        await fetchJson(`${base}/items/purchase_order_receiving_serial`, {
+                            method: "POST",
+                            body: JSON.stringify(recSerialPayload)
+                        }).catch(e => {
+                            console.error(`Failed to insert into purchase_order_receiving_serial for ${snValue}:`, e.message);
+                        });
                     }
                 }
             }
