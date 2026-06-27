@@ -58,7 +58,7 @@ interface Invoice {
 
 interface CreateBillingWorkspaceProps {
   header: LpgTransactionHeader;
-  onProceed: (transactionType: "ROUTINE" | "ONBOARDING", selectedInvoice: Invoice | null) => void;
+  onProceed: (transactionType: "ROUTINE" | "ONBOARDING", selectedInvoice: Invoice | null, draftTxId?: number | null) => void;
   onCancel: () => void;
 }
 
@@ -75,6 +75,7 @@ export function CreateBillingWorkspace({
   const [transactionType, setTransactionType] = useState<"ROUTINE" | "ONBOARDING" | null>(null);
   const [alreadyOnboarded, setAlreadyOnboarded] = useState(false);
   const [hasDraftOnboarding, setHasDraftOnboarding] = useState(false);
+  const [draftTxId, setDraftTxId] = useState<number | null>(null);
   // RULE DEV: Stores the display label (e.g. ID or transaction_no) of the draft onboarding record
   const [draftTransactionNo, setDraftTransactionNo] = useState<string | null>(null);
   const [checkingOnboarded, setCheckingOnboarded] = useState(true);
@@ -98,10 +99,11 @@ export function CreateBillingWorkspace({
     setTransactionType(null);
     setSelectedInvoiceId(null);
     setHasDraftOnboarding(false);
+    setDraftTxId(null);
     setDraftTransactionNo(null);
     setLockedInvoice(null);
 
-    fetch(`/api/ids/scm/lpg-billing-management/metered-billing?type=check-onboarding&siteId=${header.customer_site_id}`)
+    fetch(`/api/ids/scm/lpg-billing-management/metered-billing?type=check-onboarding&siteId=${header.customer_site_id}&headerId=${header.header_id}`)
       .then((res) => res.json())
       .then((json) => {
         if (isMounted) {
@@ -111,6 +113,7 @@ export function CreateBillingWorkspace({
           if (json.draft) {
             setHasDraftOnboarding(true);
             setTransactionType("ONBOARDING");
+            setDraftTxId(Number(json.draft.id));
             // RULE DEV: Use transaction_no if available, otherwise fall back to the record ID as a display label
             setDraftTransactionNo(
               (json.draft.transaction_no as string | undefined) ||
@@ -142,7 +145,7 @@ export function CreateBillingWorkspace({
     return () => {
       isMounted = false;
     };
-  }, [header.customer_site_id]);
+  }, [header.customer_site_id, header.header_id]);
 
   // ─── Fetch Invoices ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -268,7 +271,7 @@ export function CreateBillingWorkspace({
       console.log("   -> Transaction Type:", transactionType);
       console.log("   -> Invoice Data to Map:", finalInvoiceToPass);
 
-      onProceed(transactionType, finalInvoiceToPass);
+      onProceed(transactionType, finalInvoiceToPass, hasDraftOnboarding ? draftTxId : null);
     }
   };
 

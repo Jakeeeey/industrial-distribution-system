@@ -463,10 +463,13 @@ export async function fetchMeteredTransactionById(
         cylinder_asset_id: item.cylinder_asset_id
           ? Number(item.cylinder_asset_id)
           : null,
+        // IDS-CHANGE: Cast to include newly added PSI_IMAGE and MTRD_READING_IMAGE attachment types
         attachment_type: item.attachment_type as
           | "SERIAL_IMAGE"
           | "WEIGHT_IMAGE"
-          | "GENERAL_PHOTO",
+          | "GENERAL_PHOTO"
+          | "PSI_IMAGE"
+          | "MTRD_READING_IMAGE",
         directus_file_id: String(item.directus_file_id),
         created_by: item.created_by ? Number(item.created_by) : null,
         created_at: item.created_at ? String(item.created_at) : undefined,
@@ -586,41 +589,42 @@ async function buildBridgePayload(
   readingId: number,
   userId?: number,
   isUpdate = false,
+  existing?: MeteredWiwoTransaction | null,
 ): Promise<Record<string, unknown>> {
   const data: Record<string, unknown> = {
-    transaction_no: payload.transaction_no || payload.reading_no,
-    transaction_type: payload.transaction_type ?? "REGULAR_BILLING",
+    transaction_no: payload.transaction_no || payload.reading_no || existing?.transaction_no || existing?.reading_no,
+    transaction_type: payload.transaction_type ?? existing?.transaction_type ?? "REGULAR_BILLING",
     transaction_date:
-      payload.transaction_date || new Date().toISOString().split("T")[0],
-    customer_code: payload.customer_code,
-    lpg_site_id: payload.lpg_site_id,
-    meter_reading_id: readingId,
-    wiwo_header_id: payload.wiwo_header_id || null,
-    metered_kg: payload.metered_kg ?? 0,
-    wiwo_kg: payload.wiwo_kg ?? 0,
-    variance_kg: payload.variance_kg ?? 0,
-    billable_source: payload.billable_source ?? "METERED",
-    billable_kg: payload.billable_kg ?? 0,
-    price_per_kg: payload.price_per_kg ?? 0,
-    gross_amount: payload.gross_amount ?? 0,
-    vat_amount: payload.vat_amount ?? 0,
-    net_amount: payload.net_amount ?? 0,
-    discount_amount: payload.discount_amount ?? 0,
-    sales_invoice_id: payload.sales_invoice_id || null,
-    sales_invoice_no: payload.sales_invoice_no || null,
-    sales_order_id: payload.sales_order_id || null,
-    sales_order_no: payload.sales_order_no || null,
-    status: payload.status || "DRAFT",
-    remarks: payload.remarks || null,
-    pressure_line: payload.pressure_line ?? null,
-    psi: payload.psi ?? null,
-    atmospheric_pressure: payload.atmospheric_pressure ?? null,
-    lpg_vapor_factor: payload.lpg_vapor_factor ?? null,
-    meter_unit: payload.meter_unit || null,
-    meter_direction: payload.meter_direction || null,
-    conversion_factor: payload.conversion_factor ?? null,
-    billing_period_from: payload.billing_period_from || null,
-    billing_period_to: payload.billing_period_to || null,
+      payload.transaction_date || existing?.transaction_date || new Date().toISOString().split("T")[0],
+    customer_code: payload.customer_code ?? existing?.customer_code,
+    lpg_site_id: payload.lpg_site_id ?? existing?.lpg_site_id,
+    meter_reading_id: readingId || existing?.meter_reading_id,
+    wiwo_header_id: payload.wiwo_header_id || existing?.wiwo_header_id || null,
+    metered_kg: payload.metered_kg ?? existing?.metered_kg ?? 0,
+    wiwo_kg: payload.wiwo_kg ?? existing?.wiwo_kg ?? 0,
+    variance_kg: payload.variance_kg ?? existing?.variance_kg ?? 0,
+    billable_source: payload.billable_source ?? existing?.billable_source ?? "METERED",
+    billable_kg: payload.billable_kg ?? existing?.billable_kg ?? 0,
+    price_per_kg: payload.price_per_kg ?? existing?.price_per_kg ?? 0,
+    gross_amount: payload.gross_amount ?? existing?.gross_amount ?? 0,
+    vat_amount: payload.vat_amount ?? existing?.vat_amount ?? 0,
+    net_amount: payload.net_amount ?? existing?.net_amount ?? 0,
+    discount_amount: payload.discount_amount ?? existing?.discount_amount ?? 0,
+    sales_invoice_id: payload.sales_invoice_id || existing?.sales_invoice_id || null,
+    sales_invoice_no: payload.sales_invoice_no || existing?.sales_invoice_no || null,
+    sales_order_id: payload.sales_order_id || existing?.sales_order_id || null,
+    sales_order_no: payload.sales_order_no || existing?.sales_order_no || null,
+    status: payload.status || existing?.status || "DRAFT",
+    remarks: payload.remarks || existing?.remarks || null,
+    pressure_line: payload.pressure_line ?? existing?.pressure_line ?? null,
+    psi: payload.psi ?? existing?.psi ?? null,
+    atmospheric_pressure: payload.atmospheric_pressure ?? existing?.atmospheric_pressure ?? null,
+    lpg_vapor_factor: payload.lpg_vapor_factor ?? existing?.lpg_vapor_factor ?? null,
+    meter_unit: payload.meter_unit || existing?.meter_unit || null,
+    meter_direction: payload.meter_direction || existing?.meter_direction || null,
+    conversion_factor: payload.conversion_factor ?? existing?.conversion_factor ?? null,
+    billing_period_from: payload.billing_period_from || existing?.billing_period_from || null,
+    billing_period_to: payload.billing_period_to || existing?.billing_period_to || null,
     ...(userId
       ? payload.status === "POSTED"
         ? { posted_by: userId, posted_date: new Date().toISOString() }
@@ -790,6 +794,7 @@ export async function updateMeteredTransaction(
     readingId!,
     userId,
     true,
+    existing,
   );
   bridgeData.transaction_header_id = headerId;
 
@@ -799,7 +804,48 @@ export async function updateMeteredTransaction(
     { method: "PATCH", body: JSON.stringify(bridgeData) },
   );
 
-  // 5. Update attachments (delete existing, then insert new ones)
+  // 6. Link / Update invoice connection to transaction header
+  const invoiceId = payload.sales_invoice_id || existing?.sales_invoice_id || null;
+  if (headerId && invoiceId) {
+    try {
+      const headerInvoiceStatus =
+        (payload.status || existing?.status) === "POSTED" ? "POSTED" : "DRAFT";
+
+      const checkRes = await directusFetch<{ data: { id: number }[] }>(
+        `${DIRECTUS_URL}/items/lpg_transaction_header_invoices?filter[header_id][_eq]=${headerId}&filter[sales_invoice_id][_eq]=${invoiceId}&limit=1`
+      );
+      const existingLink = checkRes.data?.[0];
+
+      if (existingLink) {
+        await directusFetch(
+          `${DIRECTUS_URL}/items/lpg_transaction_header_invoices/${existingLink.id}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              status: headerInvoiceStatus,
+              modified_by: userId ?? null,
+              modified_date: new Date().toISOString(),
+            }),
+          }
+        );
+      } else {
+        await directusFetch(`${DIRECTUS_URL}/items/lpg_transaction_header_invoices`, {
+          method: "POST",
+          body: JSON.stringify({
+            header_id: headerId,
+            sales_invoice_id: invoiceId,
+            linked_by: userId ?? null,
+            linked_at: new Date().toISOString(),
+            status: headerInvoiceStatus,
+          }),
+        });
+      }
+    } catch (linkErr) {
+      console.warn("[updateMeteredTransaction] Failed to link/update invoice status to header:", linkErr);
+    }
+  }
+
+  // 7. Update attachments (delete existing, then insert new ones)
   try {
     const existingAttsRes = await directusFetch<{ data: { id: number }[] }>(
       `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions_attachments?filter[transaction_id][_eq]=${id}&fields=id`,
@@ -1054,8 +1100,30 @@ export async function checkOnboardingExists(siteId: number): Promise<boolean> {
   }
 }
 
-export async function fetchDraftOnboarding(siteId: number): Promise<Record<string, unknown> | null> {
+export async function fetchDraftOnboarding(
+  siteId: number,
+  headerId?: number,
+): Promise<Record<string, unknown> | null> {
   if (!siteId) return null;
+
+  if (headerId) {
+    const filter = {
+      transaction_type: { _eq: "ONBOARDING_BASELINE" },
+      lpg_site_id: { _eq: siteId },
+      transaction_header_id: { _eq: headerId },
+      status: { _eq: "DRAFT" },
+    };
+    const qs = `filter=${encodeURIComponent(JSON.stringify(filter))}&sort=-id&limit=1&fields=*`;
+    try {
+      const res = await directusFetch<{ data: Record<string, unknown>[] }>(
+        `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions?${qs}`
+      );
+      if (res.data?.[0]) return res.data[0];
+    } catch (err) {
+      console.error("fetchDraftOnboarding by headerId failed:", err);
+    }
+  }
+
   const filter = {
     transaction_type: { _eq: "ONBOARDING_BASELINE" },
     lpg_site_id: { _eq: siteId },
@@ -1068,7 +1136,7 @@ export async function fetchDraftOnboarding(siteId: number): Promise<Record<strin
     );
     return res.data?.[0] ?? null;
   } catch (err) {
-    console.error("fetchDraftOnboarding failed:", err);
+    console.error("fetchDraftOnboarding fallback failed:", err);
     return null;
   }
 }

@@ -202,14 +202,21 @@ export function useMeteredBillingCreation(
   transactionHeader?: LpgTransactionHeader | null,
   initialFlowType?: "ROUTINE" | "ONBOARDING" | null,
   salesInvoice?: InvoiceInfo | null,
-  currentUserId?: number | null
+  currentUserId?: number | null,
+  draftTxId?: number | null
 ) {
   const initialType = initialFlowType === "ONBOARDING" ? "ONBOARDING_BASELINE" : "REGULAR_BILLING";
   const [form, setForm] = useState<MeteredBillingFormState>(() => defaultFormState(initialType));
-  const [txId, setTxId] = useState<number | null>(null);
+  const [txId, setTxId] = useState<number | null>(draftTxId ?? null);
   const [onboardingDrafts, setOnboardingDrafts] = useState<MeteredWiwoTransaction[]>([]);
   const [onboardingLoading, setOnboardingLoading] = useState(false);
   const [wiwoKg, setWiwoKg] = useState(0);
+
+  useEffect(() => {
+    if (draftTxId !== undefined && draftTxId !== null) {
+      setTxId(draftTxId);
+    }
+  }, [draftTxId]);
   const [linkedWiwo] = useState<WiwoHeaderRef | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -306,7 +313,9 @@ export function useMeteredBillingCreation(
   useEffect(() => {
     if (form.transactionType !== "ONBOARDING_BASELINE" || !form.siteId) {
       setOnboardingDrafts([]);
-      setTxId(null);
+      if (!draftTxId) {
+        setTxId(null);
+      }
       return;
     }
 
@@ -319,14 +328,15 @@ export function useMeteredBillingCreation(
         const data = await res.json();
         if (!active) return;
 
-        const list = (data.data ?? []).map(mapMeteredTransaction).filter(
-          (t: MeteredWiwoTransaction) => t.meter_reading_id === null
-        );
+        const list = (data.data ?? []).map(mapMeteredTransaction);
 
         setOnboardingDrafts(list);
 
-        if (list.length > 0) {
-          const draft = list[0];
+        const draft = draftTxId
+          ? list.find((t: MeteredWiwoTransaction) => t.id === draftTxId)
+          : list[0];
+
+        if (draft) {
           setTxId(draft.id ?? null);
 
           let lpgVapor = Number(draft.site?.default_pressure_line ?? 2.0183);
@@ -347,11 +357,14 @@ export function useMeteredBillingCreation(
             }
           }
 
+          // IDS-CHANGE: Resolve metered reading and PSI images using the new MTRD_READING_IMAGE and PSI_IMAGE types, with fallback to legacy (SERIAL_IMAGE, WEIGHT_IMAGE) and GENERAL_PHOTO
           const meteredReadingImage = draft.attachments?.find(
-            (a: { attachment_type: string; directus_file_id?: string }) => a.attachment_type === "SERIAL_IMAGE"
+            (a: { attachment_type: string; directus_file_id?: string }) =>
+              a.attachment_type === "MTRD_READING_IMAGE" || a.attachment_type === "GENERAL_PHOTO"
           );
           const psiReadingImage = draft.attachments?.find(
-            (a: { attachment_type: string; directus_file_id?: string }) => a.attachment_type === "WEIGHT_IMAGE"
+            (a: { attachment_type: string; directus_file_id?: string }) =>
+              a.attachment_type === "PSI_IMAGE" || a.attachment_type === "GENERAL_PHOTO"
           );
 
           setForm((prev) => ({
@@ -384,6 +397,8 @@ export function useMeteredBillingCreation(
             salesOrderNo: draft.sales_order_no ?? prev.salesOrderNo,
           }));
           setWiwoKg(draft.wiwo_kg);
+        } else if (draftTxId) {
+          setTxId(draftTxId);
         } else {
           setTxId(null);
         }
@@ -398,7 +413,7 @@ export function useMeteredBillingCreation(
     return () => {
       active = false;
     };
-  }, [form.siteId, form.transactionType]);
+  }, [form.siteId, form.transactionType, draftTxId]);
 
   const handleOnboardingDraftChange = useCallback(
     (id: number) => {
@@ -423,11 +438,14 @@ export function useMeteredBillingCreation(
         }
       }
 
+      // IDS-CHANGE: Resolve metered reading and PSI images using the new MTRD_READING_IMAGE and PSI_IMAGE types, with fallback to GENERAL_PHOTO
       const meteredReadingImage = tx.attachments?.find(
-        (a: { attachment_type: string; directus_file_id?: string }) => a.attachment_type === "SERIAL_IMAGE"
+        (a: { attachment_type: string; directus_file_id?: string }) =>
+          a.attachment_type === "MTRD_READING_IMAGE" || a.attachment_type === "GENERAL_PHOTO"
       );
       const psiReadingImage = tx.attachments?.find(
-        (a: { attachment_type: string; directus_file_id?: string }) => a.attachment_type === "WEIGHT_IMAGE"
+        (a: { attachment_type: string; directus_file_id?: string }) =>
+          a.attachment_type === "PSI_IMAGE" || a.attachment_type === "GENERAL_PHOTO"
       );
 
       setTxId(tx.id ?? null);
@@ -735,6 +753,24 @@ export function useMeteredBillingCreation(
       setSubmitting(true);
       try {
         const targetStatus = statusOverride || form.status;
+        let targetTxNo = form.transactionNo;
+        if (form.transactionType === "ONBOARDING_BASELINE" && targetTxNo) {
+          if (targetTxNo.toUpperCase().startsWith("TX-ONB-")) {
+            targetTxNo = "MTR-ON-" + targetTxNo.slice(7);
+          } else if (targetTxNo.toLowerCase().startsWith("tx-onb-")) {
+            targetTxNo = "mtr-on-" + targetTxNo.slice(7);
+          }
+        }
+
+        let targetReadingNo = form.readingNo || form.transactionNo;
+        if (form.transactionType === "ONBOARDING_BASELINE" && targetReadingNo) {
+          if (targetReadingNo.toUpperCase().startsWith("TX-ONB-")) {
+            targetReadingNo = "MTR-ON-" + targetReadingNo.slice(7);
+          } else if (targetReadingNo.toLowerCase().startsWith("tx-onb-")) {
+            targetReadingNo = "mtr-on-" + targetReadingNo.slice(7);
+          }
+        }
+
         const payload: Partial<MeteredWiwoTransaction> & {
           previous_reading?: number;
           current_reading?: number;
@@ -747,8 +783,8 @@ export function useMeteredBillingCreation(
           sales_order_id?: number | null;
           sales_order_no?: string | null;
         } = {
-          reading_no: form.readingNo || form.transactionNo,
-          transaction_no: form.transactionNo,
+          reading_no: targetReadingNo,
+          transaction_no: targetTxNo,
           transaction_type: form.transactionType,
           transaction_date: form.transactionDate,
           customer_code: form.customerCode,
@@ -783,11 +819,12 @@ export function useMeteredBillingCreation(
           billing_period_to: form.billingPeriodTo || null,
           transaction_header_id: form.transaction_header_id,
           created_by: currentUserId ?? undefined,
+          // IDS-CHANGE: Map metered reading and PSI screenshots to their new specific attachment types
           attachments: [
             ...(form.meteredReadingImageId
               ? [
                 {
-                  attachment_type: "SERIAL_IMAGE" as const,
+                  attachment_type: "MTRD_READING_IMAGE" as const,
                   directus_file_id: form.meteredReadingImageId,
                 },
               ]
@@ -795,7 +832,7 @@ export function useMeteredBillingCreation(
             ...(form.psiReadingImageId
               ? [
                 {
-                  attachment_type: "WEIGHT_IMAGE" as const,
+                  attachment_type: "PSI_IMAGE" as const,
                   directus_file_id: form.psiReadingImageId,
                 },
               ]

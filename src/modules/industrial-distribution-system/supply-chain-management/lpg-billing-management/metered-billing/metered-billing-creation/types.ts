@@ -163,7 +163,8 @@ export interface MeteredWiwoTransactionAttachment {
   transaction_id?: number;
   site_cylinder_id?: number | null;
   cylinder_asset_id?: number | null;
-  attachment_type: "SERIAL_IMAGE" | "WEIGHT_IMAGE" | "GENERAL_PHOTO";
+  // IDS-CHANGE: Added "PSI_IMAGE" and "MTRD_READING_IMAGE" for metered billing screenshots
+  attachment_type: "SERIAL_IMAGE" | "WEIGHT_IMAGE" | "GENERAL_PHOTO" | "PSI_IMAGE" | "MTRD_READING_IMAGE";
   directus_file_id: string;
   created_by?: number | null;
   created_at?: string;
