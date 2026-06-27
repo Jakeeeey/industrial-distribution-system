@@ -89,6 +89,34 @@ export function ReceiveScanner({
         </div>
       </div>
 
+      {/* ── Scanner input row ──
+        * Note: Moved to the top (just below the header) to improve ergonomics for hardware scanner/keyboard focus 
+        * and to keep scanner activity status highly visible to the user at all times.
+        */}
+      <div className="border-b border-border bg-muted/20 px-4 py-3">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-pulse" />
+            Serial Scanner Active
+          </span>
+          <span className="text-[10px] text-muted-foreground/60 font-mono">
+            Focus input to scan
+          </span>
+        </div>
+        <form onSubmit={onSerialSubmit} className="flex items-center gap-3">
+          <div className="relative flex-1">
+            <ScanLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-indigo-500" />
+            <Input
+              placeholder="Scan barcode or type serial number and press Enter..."
+              value={serialInput}
+              onChange={(e) => setSerialInput(e.target.value)}
+              className="h-10 bg-background pl-9 font-mono text-sm border-muted-foreground/20 focus-visible:ring-indigo-500/20 shadow-sm transition-all focus:border-indigo-500/50"
+              autoFocus
+            />
+          </div>
+        </form>
+      </div>
+
       {/* ── Scrollable body: table only ── */}
       <ScrollArea className="min-h-0 flex-1">
         <div className="overflow-hidden border-b border-border">
@@ -186,26 +214,11 @@ export function ReceiveScanner({
         </div>
       </ScrollArea>
 
-      {/* ── Scanner dock + footer ── */}
-      <div className="border-t border-border bg-background">
-        {/* Scanner input row */}
-        <form onSubmit={onSerialSubmit} className="flex items-center gap-3 border-b border-border px-4 py-2.5">
-          <div className="relative flex-1">
-            <ScanLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
-            <Input
-              placeholder="Scan or type serial number…"
-              value={serialInput}
-              onChange={(e) => setSerialInput(e.target.value)}
-              className="h-9 bg-muted/30 pl-9 font-mono text-sm focus-visible:ring-indigo-500/30"
-              autoFocus
-            />
-          </div>
-        </form>
-
-        {/* Progress + action row */}
-        <div className="flex items-center justify-between px-4 py-2.5">
+      {/* ── Footer ── */}
+      <div className="border-t border-border bg-background px-4 py-3">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="h-1 w-24 overflow-hidden rounded-full bg-muted">
+            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-muted">
               <div
                 className="h-full rounded-full bg-indigo-500 transition-all duration-500"
                 style={{ width: `${metrics.progress}%` }}

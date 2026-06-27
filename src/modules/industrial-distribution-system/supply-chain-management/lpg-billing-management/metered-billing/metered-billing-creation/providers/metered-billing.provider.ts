@@ -499,6 +499,20 @@ async function createOrUpdateMeterReading(
       ? Math.max(0, prevReading - currReading)
       : Math.max(0, currReading - prevReading);
 
+  // Developer Comment: Ensure the reading number posted to lpg_meter_readings has MTR-ONB prefix if onboarding, MTR-REG prefix otherwise
+  let readingNo = payload.reading_no;
+  if (payload.transaction_type === "ONBOARDING_BASELINE") {
+    if (!readingNo || !readingNo.startsWith("MTR-ONB-")) {
+      const num = Math.floor(100000 + Math.random() * 900000);
+      readingNo = `MTR-ONB-${num}`;
+    }
+  } else {
+    if (!readingNo || !readingNo.startsWith("MTR-REG-")) {
+      const num = Math.floor(100000 + Math.random() * 900000);
+      readingNo = `MTR-REG-${num}`;
+    }
+  }
+
   const data = {
     lpg_site_id: payload.lpg_site_id,
     customer_code: payload.customer_code,
@@ -510,7 +524,7 @@ async function createOrUpdateMeterReading(
     price_per_kg: payload.price_per_kg ?? 0,
     raw_consumption: rawConsumption,
     reading_status: payload.status || "DRAFT",
-    reading_no: payload.reading_no,
+    reading_no: readingNo,
     billing_period_from: payload.billing_period_from || null,
     billing_period_to: payload.billing_period_to || null,
     meter_unit: payload.meter_unit || "KG",
