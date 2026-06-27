@@ -79,7 +79,7 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
     const [returnMode, setReturnMode] = useState<'create' | 'link'>('create');
     const [existingReturns, setExistingReturns] = useState<{ id: number; returnNo: string; returnDate: string; totalAmount: number }[]>([]);
     const [selectedReturnNo, setSelectedReturnNo] = useState<string>('');
-    const [selectedReturnDetails, setSelectedReturnDetails] = useState<any[]>([]);
+    const [selectedReturnDetails, setSelectedReturnDetails] = useState<{ description: string; quantity: number; serialNumbers: string[] }[]>([]);
     const [isLoadingReturnDetails, setIsLoadingReturnDetails] = useState(false);
 
     // Reset/initialize state when modal opens — intentional reset pattern
@@ -352,7 +352,7 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                                                                 <div className="space-y-3">
                                                                     <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Return Items & Serials</p>
                                                                     <div className="space-y-2">
-                                                                        {selectedReturnDetails.map((item: any, idx: number) => (
+                                                                        {selectedReturnDetails.map((item: { description: string; quantity: number; serialNumbers: string[] }, idx: number) => (
                                                                             <div key={idx} className="flex flex-col gap-1.5 text-xs border-b border-border/50 pb-2 last:border-0 last:pb-0">
                                                                                 <div className="flex justify-between items-start gap-4 font-bold">
                                                                                     <span className="text-foreground leading-tight">{item.description || 'Unknown Product'}</span>
