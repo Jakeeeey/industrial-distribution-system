@@ -5,10 +5,10 @@
 "use client";
 
 import * as React from "react";
-import { Barcode, Cylinder, Save, Loader2, Info } from "lucide-react";
+import { Barcode, Cylinder } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+// Removed unused Button import to resolve lint error - AG 2026-06-26
 import { cn } from "@/lib/utils";
 import type { SerialTaggingPODetail } from "../types/serial-po.types";
 
@@ -19,9 +19,6 @@ interface SerialTaggingSummaryProps {
     totalOrderedCount: number;
     totalSavedCount: number;
     totalDraftCount: number;
-    canSubmit: boolean;
-    isSubmitting: boolean;
-    onSubmit: () => void;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -31,9 +28,6 @@ export function SerialTaggingSummary({
     totalOrderedCount,
     totalSavedCount,
     totalDraftCount,
-    canSubmit,
-    isSubmitting,
-    onSubmit,
 }: SerialTaggingSummaryProps) {
     const totalEntered = totalSavedCount + totalDraftCount;
     const serialsComplete = totalEntered === totalOrderedCount && totalOrderedCount > 0;
@@ -170,48 +164,6 @@ export function SerialTaggingSummary({
                 )}
             </div>
 
-            {/* ── Action Bar ── */}
-            <div className="sticky bottom-[-16px] -mx-4 -mb-4 p-4 bg-background/95 backdrop-blur-xl border-t border-border flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between z-10">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    {!canSubmit && totalDraftCount === 0 && (
-                        <>
-                            <Info className="h-4 w-4" />
-                            <span>Add serials to enable saving.</span>
-                        </>
-                    )}
-                    {!canSubmit && totalDraftCount > 0 && (
-                        <span className="text-orange-500 font-medium flex items-center gap-1.5">
-                            <Info className="h-4 w-4" />
-                            All lines must match ordered quantity to save.
-                        </span>
-                    )}
-                </div>
-
-                <div className="flex items-center gap-3">
-                    <Button
-                        id="serial-tagging-submit-btn"
-                        type="button"
-                        className={cn(
-                            "h-10 rounded-xl font-black uppercase tracking-wider px-6",
-                            serialsComplete && !isSubmitting && "bg-emerald-600 hover:bg-emerald-700 text-white"
-                        )}
-                        disabled={!canSubmit || isSubmitting}
-                        onClick={onSubmit}
-                    >
-                        {isSubmitting ? (
-                            <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Saving...
-                            </>
-                        ) : (
-                            <>
-                                <Save className="mr-2 h-4 w-4" />
-                                {serialsComplete ? "Confirm & Save All" : `Save ${totalDraftCount} Drafts`}
-                            </>
-                        )}
-                    </Button>
-                </div>
-            </div>
         </div>
     );
 }

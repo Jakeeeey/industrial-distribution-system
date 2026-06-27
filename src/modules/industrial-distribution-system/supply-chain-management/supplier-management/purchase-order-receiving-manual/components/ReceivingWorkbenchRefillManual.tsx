@@ -4,45 +4,44 @@ import * as React from "react";
 import { useReceivingProductsManual } from "../providers/ReceivingProductsManualProvider";
 import { ReceiptDetailsStep } from "./steps/ReceiptDetailsStep";
 import { ProductVerificationStep } from "./steps/ProductVerificationStep";
-import { ManualProductsStep } from "./steps/ManualProductsStep";
+import { RefillManualProductsStep } from "./steps/RefillManualProductsStep";
 import { ReviewReceiptStep } from "./steps/ReviewReceiptStep";
 
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { ReceivingWorkbenchRefillManual } from "./ReceivingWorkbenchRefillManual";
 
+// Step dot styling for POs
 function StepDot({ active }: { active: boolean }) {
     return (
         <div
-            className={cn("h-2.5 w-2.5 rounded-full", active ? "bg-primary" : "bg-muted")}
+            className={cn(
+                "h-2.5 w-2.5 rounded-full transition-all duration-300",
+                active ? "bg-primary scale-125 shadow-sm shadow-primary/50" : "bg-slate-200 dark:bg-slate-800"
+            )}
         />
     );
 }
 
-export function ReceivingWorkbenchManual({ receiverName }: { receiverName?: string }) {
+/**
+ * ReceivingWorkbenchRefillManual Component
+ * Dedicated workbench view for receiving Refilled POs.
+ * Features a cylinder refill theme matching the Normal PO theme.
+ */
+export function ReceivingWorkbenchRefillManual({ receiverName }: { receiverName?: string }) {
     const { selectedPO, receiptSaved } = useReceivingProductsManual();
-
-    // Hooks must be called unconditionally before any early returns - AG 2026-06-26
     const [step, setStep] = React.useState(0);
 
-    // Reset to step 0 if PO is deselected - AG 2026-06-26
+    // Reset to step 0 if PO is deselected
     React.useEffect(() => {
         if (!selectedPO) setStep(0);
     }, [selectedPO]);
 
-    // If receipt is saved, we usually stay on step 3 or the module handles visibility - AG 2026-06-26
+    // Keep on review step (index 3) to show success state when saved
     React.useEffect(() => {
         if (receiptSaved) {
-            // Keep on review step (index 3) to show success state
             setStep(3);
         }
     }, [receiptSaved]);
-
-    // Delegate to dedicated refill workbench if selected PO is a refill PO.
-    // Moved after hooks to comply with Rules of Hooks. - AG 2026-06-26
-    if (selectedPO?.isRefill) {
-        return <ReceivingWorkbenchRefillManual receiverName={receiverName} />;
-    }
 
     if (!selectedPO) {
         return (
@@ -53,20 +52,23 @@ export function ReceivingWorkbenchManual({ receiverName }: { receiverName?: stri
                     </svg>
                 </div>
                 <div>
-                    <div className="text-lg font-semibold">No Purchase Order Selected</div>
-                    <div className="text-sm text-muted-foreground">Select a PO from the sidebar to begin receiving</div>
+                    <div className="text-lg font-semibold">No Refill Purchase Order Selected</div>
+                    <div className="text-sm text-slate-500">Select a Refill PO from the sidebar to begin cylinder serial registration</div>
                 </div>
             </Card>
         );
     }
 
     return (
-        <Card className="p-4 h-full flex flex-col overflow-hidden">
-            <div className="flex items-start justify-between gap-3 shrink-0">
+        <Card className="p-4 h-full flex flex-col overflow-hidden shadow-sm border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950">
+            <div className="flex items-start justify-between gap-3 shrink-0 border-b pb-3">
                 <div>
-                    <div className="text-base font-semibold">Receiving Workbench Manual</div>
-                    <div className="text-xs text-muted-foreground">
-                        Follow the steps to receive items for {selectedPO.poNumber}
+                    <div className="text-base font-black text-slate-900 dark:text-slate-100 flex items-center gap-2 tracking-tight">
+                        <span>Refill Cylinder Receiving Workbench</span>
+                        <span className="text-[9px] font-black uppercase tracking-widest bg-primary text-white px-2 py-0.5 rounded-md shadow-sm">Refill</span>
+                    </div>
+                    <div className="text-xs text-slate-500 font-medium mt-0.5">
+                        Follow the steps to register cylinder serials and receive items for {selectedPO.poNumber}
                     </div>
                 </div>
 
@@ -84,7 +86,8 @@ export function ReceivingWorkbenchManual({ receiverName }: { receiverName?: stri
                 ) : step === 1 ? (
                     <ProductVerificationStep onContinue={() => setStep(2)} />
                 ) : step === 2 ? (
-                    <ManualProductsStep onContinue={() => setStep(3)} onBack={() => setStep(1)} />
+                    // RefillManualProductsStep — standard themed step with tagged serials view & rapid scan
+                    <RefillManualProductsStep onContinue={() => setStep(3)} onBack={() => setStep(1)} />
                 ) : step === 3 ? (
                     <ReviewReceiptStep onBack={() => setStep(2)} receiverName={receiverName} />
                 ) : null}
@@ -92,3 +95,5 @@ export function ReceivingWorkbenchManual({ receiverName }: { receiverName?: stri
         </Card>
     );
 }
+
+export default ReceivingWorkbenchRefillManual;
