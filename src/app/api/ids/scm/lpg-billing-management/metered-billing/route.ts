@@ -15,6 +15,7 @@ import {
   fetchNextMeterReadingSeq,
   checkOnboardingExists,
   fetchDraftOnboarding,
+  fetchWiwoHeaderByTransactionHeader,
 } from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/metered-billing/metered-billing-creation/providers/metered-billing.provider";
 import {
   fetchTransactionHeaders,
@@ -82,8 +83,10 @@ export async function GET(request: NextRequest) {
 
     if (type === "check-onboarding") {
       const siteId = Number(searchParams.get("siteId") ?? 0);
+      const headerIdParam = searchParams.get("headerId");
+      const headerId = headerIdParam ? Number(headerIdParam) : undefined;
       const hasCompleted = await checkOnboardingExists(siteId);
-      const draft = await fetchDraftOnboarding(siteId);
+      const draft = await fetchDraftOnboarding(siteId, headerId);
       return NextResponse.json({ hasCompleted, draft });
     }
 
@@ -117,6 +120,13 @@ export async function GET(request: NextRequest) {
 
       const lastTx = await fetchLastMeteredTransaction(siteId);
       return NextResponse.json({ data: lastTx });
+    }
+
+    if (type === "wiwo-header-by-header") {
+      const headerId = Number(searchParams.get("headerId"));
+      if (!headerId) return NextResponse.json({ wiwoHeaderId: null });
+      const wiwoHeaderId = await fetchWiwoHeaderByTransactionHeader(headerId);
+      return NextResponse.json({ wiwoHeaderId });
     }
 
     if (type === "wiwo-kg") {
