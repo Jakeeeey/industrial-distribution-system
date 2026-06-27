@@ -200,6 +200,7 @@ interface ReceivingItem {
     serial_no?: string;
     tare_weight?: number | string;
     expiry_date?: string;
+    sourceTable?: 'items' | 'serial';
 }
 
 const POR_SAFE_FIELDS =
@@ -386,6 +387,7 @@ async function fetchPORByPOIds(base: string, poIds: number[]) {
 }
 
 async function fetchReceivingItems(base: string, filterPorIds?: number[]) {
+    // 1. Fetch from purchase_order_receiving_items
     const qs: string[] = [
         "limit=-1",
         "fields=receiving_item_id,purchase_order_product_id,product_id,rfid_code,created_at,serial_no,tare_weight,expiry_date",
@@ -395,7 +397,62 @@ async function fetchReceivingItems(base: string, filterPorIds?: number[]) {
     }
     const url = `${base}/items/${POR_ITEMS_COLLECTION}?${qs.join("&")}`;
     const j = await fetchJson(url) as { data: ReceivingItem[] };
-    return Array.isArray(j?.data) ? j.data : [];
+    const items1 = (Array.isArray(j?.data) ? j.data : []).map(item => ({
+        ...item,
+        sourceTable: 'items' as const
+    }));
+
+    // 2. Fetch from purchase_order_receiving_serial
+    const qsSerial: string[] = [
+        "limit=-1",
+        "fields=receiving_item_id,purchase_order_product_id,product_id,created_at,serial_number,tare_weight",
+    ];
+    if (filterPorIds && filterPorIds.length) {
+        qsSerial.push(`filter[purchase_order_product_id][_in]=${encodeURIComponent(filterPorIds.join(","))}`);
+    }
+    const urlSerial = `${base}/items/purchase_order_receiving_serial?${qsSerial.join("&")}`;
+    
+    let items2: ReceivingItem[] = [];
+    try {
+        // Defined RawSerialItem interface to avoid typescript-eslint no-explicit-any error.
+        interface RawSerialItem {
+            receiving_item_id: unknown;
+            purchase_order_product_id: unknown;
+            product_id: unknown;
+            serial_number: unknown;
+            created_at: unknown;
+            tare_weight: unknown;
+        }
+        const jSerial = await fetchJson(urlSerial) as { data: RawSerialItem[] };
+        const rawItems = Array.isArray(jSerial?.data) ? jSerial.data : [];
+        items2 = rawItems.map(r => ({
+            receiving_item_id: toNum(r.receiving_item_id),
+            purchase_order_product_id: toNum(r.purchase_order_product_id),
+            product_id: toNum(r.product_id),
+            rfid_code: `M-${toStr(r.serial_number)}`,
+            created_at: toStr(r.created_at),
+            serial_no: toStr(r.serial_number),
+            tare_weight: toNum(r.tare_weight) || undefined,
+            sourceTable: 'serial' as const
+        }));
+    } catch (e) {
+        // Handled catch block with unknown type instead of any to satisfy eslint rules.
+        console.error("Failed to fetch from purchase_order_receiving_serial:", e instanceof Error ? e.message : String(e));
+    }
+
+    // 3. Combine them ensuring no duplicate serial_no
+    const combined: ReceivingItem[] = [...items1];
+    const existingSerials = new Set(items1.map(i => toStr(i.serial_no).toUpperCase()).filter(Boolean));
+
+    for (const item of items2) {
+        const snUpper = toStr(item.serial_no).toUpperCase();
+        if (snUpper && !existingSerials.has(snUpper)) {
+            combined.push(item);
+            existingSerials.add(snUpper);
+        }
+    }
+
+    return combined;
 }
 
 async function patchPO(base: string, poId: number, payload: unknown) {
@@ -1762,7 +1819,7 @@ export async function POST(req: NextRequest) {
             if (allLinkIds.length > 0) {
                 try {
                     const linkedItems = await fetchReceivingItems(base, allLinkIds);
-                    const itemIdsToDelete = linkedItems.map(it => toNum(it.receiving_item_id)).filter(id => id > 0);
+                    const itemIdsToDelete = linkedItems.filter(it => it.sourceTable === 'items').map(it => toNum(it.receiving_item_id)).filter(id => id > 0);
                     if (itemIdsToDelete.length > 0) {
                         const deleteUrl = `${base}/items/${POR_ITEMS_COLLECTION}`;
                         await fetch(deleteUrl, {
@@ -1771,8 +1828,18 @@ export async function POST(req: NextRequest) {
                             body: JSON.stringify(itemIdsToDelete),
                         });
                     }
+
+                    const serialIdsToDelete = linkedItems.filter(it => it.sourceTable === 'serial').map(it => toNum(it.receiving_item_id)).filter(id => id > 0);
+                    if (serialIdsToDelete.length > 0) {
+                        const deleteUrl = `${base}/items/purchase_order_receiving_serial`;
+                        await fetch(deleteUrl, {
+                            method: "DELETE",
+                            headers: directusHeaders(),
+                            body: JSON.stringify(serialIdsToDelete),
+                        });
+                    }
                 } catch (err) {
-                    console.error("Failed to delete RFID tags during receipt revert:", err);
+                    console.error("Failed to delete RFID tags/serials during receipt revert:", err);
                 }
             }
 
