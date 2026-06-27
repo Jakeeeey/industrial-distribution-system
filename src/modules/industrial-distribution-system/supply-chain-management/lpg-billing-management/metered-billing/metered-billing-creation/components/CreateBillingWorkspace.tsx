@@ -125,8 +125,16 @@ export function CreateBillingWorkspace({
                 invoice_id: Number(json.draft.sales_invoice_id),
                 invoice_no: json.draft.sales_invoice_no || json.draft.invoice_no || `Invoice #${json.draft.sales_invoice_id}`,
                 sales_invoice_no: json.draft.sales_invoice_no || json.draft.invoice_no,
-                sales_order_id: json.draft.sales_order_id ?? null,
-                sales_order_no: json.draft.sales_order_no ?? null,
+                sales_order_id: json.draft.sales_order_id
+                  ? (typeof json.draft.sales_order_id === "object"
+                    ? Number((json.draft.sales_order_id as Record<string, unknown>).id ?? (json.draft.sales_order_id as Record<string, unknown>).order_id ?? null)
+                    : Number(json.draft.sales_order_id))
+                  : null,
+                sales_order_no: json.draft.sales_order_no
+                  ? (typeof json.draft.sales_order_no === "object"
+                    ? String((json.draft.sales_order_no as Record<string, unknown>).order_no ?? (json.draft.sales_order_no as Record<string, unknown>).no ?? "")
+                    : String(json.draft.sales_order_no))
+                  : null,
               };
               setLockedInvoice(draftInv);
               setSelectedInvoiceId(draftInv.invoice_id);

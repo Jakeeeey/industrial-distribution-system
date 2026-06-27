@@ -82,18 +82,37 @@ function mapTxRecord(raw: Record<string, unknown>): MeteredWiwoTransaction {
     discount_amount: raw["discount_amount"]
       ? Number(raw["discount_amount"])
       : 0,
-    sales_invoice_id: raw["sales_invoice_id"]
-      ? Number(raw["sales_invoice_id"])
-      : null,
-    sales_invoice_no: raw["sales_invoice_no"]
-      ? String(raw["sales_invoice_no"])
-      : null,
-    sales_order_id: raw["sales_order_id"]
-      ? Number(raw["sales_order_id"])
-      : null,
-    sales_order_no: raw["sales_order_no"]
-      ? String(raw["sales_order_no"])
-      : null,
+    sales_invoice_id: (() => {
+      // safe parsing: directus returns relation field either as number ID or object
+      const val = raw["sales_invoice_id"];
+      if (!val) return null;
+      const num = typeof val === "object" && val !== null
+        ? Number((val as Record<string, unknown>).id ?? (val as Record<string, unknown>).invoice_id)
+        : Number(val);
+      return isNaN(num) ? null : num;
+    })(),
+    sales_invoice_no: (() => {
+      const val = raw["sales_invoice_no"];
+      if (!val) return null;
+      return typeof val === "object" && val !== null
+        ? String((val as Record<string, unknown>).invoice_no ?? (val as Record<string, unknown>).no ?? "")
+        : String(val);
+    })(),
+    sales_order_id: (() => {
+      const val = raw["sales_order_id"];
+      if (!val) return null;
+      const num = typeof val === "object" && val !== null
+        ? Number((val as Record<string, unknown>).id ?? (val as Record<string, unknown>).order_id)
+        : Number(val);
+      return isNaN(num) ? null : num;
+    })(),
+    sales_order_no: (() => {
+      const val = raw["sales_order_no"];
+      if (!val) return null;
+      return typeof val === "object" && val !== null
+        ? String((val as Record<string, unknown>).order_no ?? (val as Record<string, unknown>).no ?? "")
+        : String(val);
+    })(),
     status: (raw["status"] as TransactionStatus) ?? "DRAFT",
     remarks: raw["remarks"] ? String(raw["remarks"]) : null,
     pressure_line: raw["pressure_line"]
@@ -528,6 +547,7 @@ async function createOrUpdateMeterReading(
     raw_consumption: rawConsumption,
     reading_status: payload.status || "DRAFT",
     reading_no: readingNo,
+   
     billing_period_from: payload.billing_period_from || null,
     billing_period_to: payload.billing_period_to || null,
     meter_unit: payload.meter_unit || "KG",
@@ -591,40 +611,58 @@ async function buildBridgePayload(
   isUpdate = false,
   existing?: MeteredWiwoTransaction | null,
 ): Promise<Record<string, unknown>> {
+  // Helper to resolve fields: if isUpdate and field is undefined in payload, use existing, otherwise use payload (with fallback)
+  const resolveField = <T>(
+    key: keyof MeteredWiwoTransaction,
+    fallback: T,
+  ) => {
+    if (isUpdate && existing && payload[key] === undefined) {
+      return existing[key] ?? fallback;
+    }
+    return payload[key] !== undefined ? payload[key] : fallback;
+  };
+
+  const resolveReadingNoField = () => {
+    if (isUpdate && existing && payload.reading_no === undefined && payload.transaction_no === undefined) {
+      return existing.transaction_no || existing.reading_no || "";
+    }
+    return payload.transaction_no || payload.reading_no || "";
+  };
+
   const data: Record<string, unknown> = {
-    transaction_no: payload.transaction_no || payload.reading_no || existing?.transaction_no || existing?.reading_no,
-    transaction_type: payload.transaction_type ?? existing?.transaction_type ?? "REGULAR_BILLING",
+    transaction_no: resolveReadingNoField(),
+    transaction_type: resolveField("transaction_type", "REGULAR_BILLING"),
     transaction_date:
-      payload.transaction_date || existing?.transaction_date || new Date().toISOString().split("T")[0],
-    customer_code: payload.customer_code ?? existing?.customer_code,
-    lpg_site_id: payload.lpg_site_id ?? existing?.lpg_site_id,
-    meter_reading_id: readingId || existing?.meter_reading_id,
-    wiwo_header_id: payload.wiwo_header_id || existing?.wiwo_header_id || null,
-    metered_kg: payload.metered_kg ?? existing?.metered_kg ?? 0,
-    wiwo_kg: payload.wiwo_kg ?? existing?.wiwo_kg ?? 0,
-    variance_kg: payload.variance_kg ?? existing?.variance_kg ?? 0,
-    billable_source: payload.billable_source ?? existing?.billable_source ?? "METERED",
-    billable_kg: payload.billable_kg ?? existing?.billable_kg ?? 0,
-    price_per_kg: payload.price_per_kg ?? existing?.price_per_kg ?? 0,
-    gross_amount: payload.gross_amount ?? existing?.gross_amount ?? 0,
-    vat_amount: payload.vat_amount ?? existing?.vat_amount ?? 0,
-    net_amount: payload.net_amount ?? existing?.net_amount ?? 0,
-    discount_amount: payload.discount_amount ?? existing?.discount_amount ?? 0,
-    sales_invoice_id: payload.sales_invoice_id || existing?.sales_invoice_id || null,
-    sales_invoice_no: payload.sales_invoice_no || existing?.sales_invoice_no || null,
-    sales_order_id: payload.sales_order_id || existing?.sales_order_id || null,
-    sales_order_no: payload.sales_order_no || existing?.sales_order_no || null,
-    status: payload.status || existing?.status || "DRAFT",
-    remarks: payload.remarks || existing?.remarks || null,
-    pressure_line: payload.pressure_line ?? existing?.pressure_line ?? null,
-    psi: payload.psi ?? existing?.psi ?? null,
-    atmospheric_pressure: payload.atmospheric_pressure ?? existing?.atmospheric_pressure ?? null,
-    lpg_vapor_factor: payload.lpg_vapor_factor ?? existing?.lpg_vapor_factor ?? null,
-    meter_unit: payload.meter_unit || existing?.meter_unit || null,
-    meter_direction: payload.meter_direction || existing?.meter_direction || null,
-    conversion_factor: payload.conversion_factor ?? existing?.conversion_factor ?? null,
-    billing_period_from: payload.billing_period_from || existing?.billing_period_from || null,
-    billing_period_to: payload.billing_period_to || existing?.billing_period_to || null,
+      resolveField("transaction_date", new Date().toISOString().split("T")[0]),
+    customer_code: resolveField("customer_code", ""),
+    lpg_site_id: resolveField("lpg_site_id", 0),
+    meter_reading_id: readingId || (isUpdate && existing ? existing.meter_reading_id : null),
+    wiwo_header_id: resolveField("wiwo_header_id", null),
+    metered_kg: resolveField("metered_kg", 0),
+    wiwo_kg: resolveField("wiwo_kg", 0),
+    variance_kg: resolveField("variance_kg", 0),
+    billable_source: resolveField("billable_source", "NONE"),
+    billable_kg: resolveField("billable_kg", 0),
+    price_per_kg: resolveField("price_per_kg", 0),
+    gross_amount: resolveField("gross_amount", 0),
+    vat_amount: resolveField("vat_amount", 0),
+    net_amount: resolveField("net_amount", 0),
+    discount_amount: resolveField("discount_amount", 0),
+    sales_invoice_id: resolveField("sales_invoice_id", null),
+    sales_invoice_no: resolveField("sales_invoice_no", null),
+    sales_order_id: resolveField("sales_order_id", null),
+    sales_order_no: resolveField("sales_order_no", null),
+    status: resolveField("status", "DRAFT"),
+    remarks: resolveField("remarks", null),
+    pressure_line: resolveField("pressure_line", null),
+    psi: resolveField("psi", null),
+    atmospheric_pressure: resolveField("atmospheric_pressure", null),
+    lpg_vapor_factor: resolveField("lpg_vapor_factor", null),
+    meter_unit: resolveField("meter_unit", null),
+    meter_direction: resolveField("meter_direction", null),
+    conversion_factor: resolveField("conversion_factor", null),
+    billing_period_from: resolveField("billing_period_from", null),
+    billing_period_to: resolveField("billing_period_to", null),
     ...(userId
       ? payload.status === "POSTED"
         ? { posted_by: userId, posted_date: new Date().toISOString() }
@@ -1140,4 +1178,62 @@ export async function fetchDraftOnboarding(
     return null;
   }
 }
+
+/**
+ * Auto-resolve associated wiwo_header_id for a given transaction_header_id.
+ * 1. Checks if there is an existing non-cancelled transaction matching transaction_header_id that has a wiwo_header_id.
+ * 2. If not found, looks up the linked invoices for this transaction header, and finds a matching PENDING/POSTED WIWO header.
+ */
+export async function fetchWiwoHeaderByTransactionHeader(headerId: number): Promise<number | null> {
+  if (!headerId) return null;
+
+  try {
+    // 1. Look up in existing metered/wiwo transactions first
+    const filterTx = {
+      transaction_header_id: { _eq: headerId },
+      wiwo_header_id: { _null: false },
+      status: { _neq: "CANCELLED" }
+    };
+    const qsTx = `filter=${encodeURIComponent(JSON.stringify(filterTx))}&fields=wiwo_header_id&limit=1`;
+    const resTx = await directusFetch<{ data: { wiwo_header_id: number | { id: number } }[] }>(
+      `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions?${qsTx}`
+    );
+    const rowTx = resTx.data?.[0];
+    if (rowTx) {
+      const wId = typeof rowTx.wiwo_header_id === "object" && rowTx.wiwo_header_id !== null
+        ? rowTx.wiwo_header_id.id
+        : rowTx.wiwo_header_id;
+      if (wId) return wId;
+    }
+
+    // 2. Fallback: Find linked invoices for this transaction header and find WIWO header linked to one of those invoices
+    const resLinks = await directusFetch<{ data: { sales_invoice_id: number | { invoice_id: number } }[] }>(
+      `${DIRECTUS_URL}/items/lpg_transaction_header_invoices?filter[header_id][_eq]=${headerId}&limit=10`
+    );
+    const invoiceIds = (resLinks.data ?? []).map(link => 
+      typeof link.sales_invoice_id === "object" && link.sales_invoice_id !== null
+        ? link.sales_invoice_id.invoice_id
+        : link.sales_invoice_id
+    ).filter(Boolean);
+
+    if (invoiceIds.length > 0) {
+      const filterWiwo = {
+        sales_invoice_id: { _in: invoiceIds },
+        wiwo_status: { _neq: "CANCELLED" }
+      };
+      const qsWiwo = `filter=${encodeURIComponent(JSON.stringify(filterWiwo))}&fields=id&limit=1`;
+      const resWiwo = await directusFetch<{ data: { id: number }[] }>(
+        `${DIRECTUS_URL}/items/lpg_wiwo_headers?${qsWiwo}`
+      );
+      if (resWiwo.data?.[0]?.id) {
+        return resWiwo.data[0].id;
+      }
+    }
+  } catch (err) {
+    console.error("fetchWiwoHeaderByTransactionHeader failed:", err);
+  }
+
+  return null;
+}
+
 

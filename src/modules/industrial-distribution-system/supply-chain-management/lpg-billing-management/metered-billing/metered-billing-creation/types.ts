@@ -80,7 +80,7 @@ export interface MeteredWiwoTransaction {
   id?: number;
   transaction_header_id: number | null;
 
-  /** Primary transaction identifier (TX-ORB-... or TX-REG-... prefix) */
+  /** Primary transaction identifier (MTR-ONB-... or MTR-REG-... prefix) */
   transaction_no?: string;
   /** Legacy alias kept for backward compat — maps to transaction_no or reading_no */
   reading_no: string;

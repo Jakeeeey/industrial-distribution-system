@@ -73,8 +73,8 @@ interface Props {
     invoice_id: number;
     invoice_no: string;
     sales_invoice_no?: string;
-    total_amount: number;
-    invoice_date: string;
+    total_amount?: number;
+    invoice_date?: string;
     sales_order_id?: number | null;
     sales_order_no?: string | null;
   } | null;
