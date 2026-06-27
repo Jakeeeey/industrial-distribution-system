@@ -45,9 +45,19 @@ export function AvailableForReceivingManual() {
         serialsByPorId,
     } = useReceivingProductsManual();
 
+    const [activeTab, setActiveTab] = React.useState<"normal" | "refill">("normal");
     const [q, setQ] = React.useState("");
     const [pendingPO, setPendingPO] = React.useState<{ id: string; poNumber: string } | null>(null);
     const [isSwitchModalOpen, setIsSwitchModalOpen] = React.useState(false);
+
+    // Calculate PO counts for badges
+    const normalCount = React.useMemo(() => {
+        return (poList ?? []).filter((x) => !x.isRefill).length;
+    }, [poList]);
+
+    const refillCount = React.useMemo(() => {
+        return (poList ?? []).filter((x) => !!x.isRefill).length;
+    }, [poList]);
 
     const hasUnsavedProgress = React.useMemo(() => {
         return Object.keys(manualCounts || {}).length > 0 || Object.keys(serialsByPorId || {}).length > 0;
@@ -78,21 +88,27 @@ export function AvailableForReceivingManual() {
 
     const filtered = React.useMemo(() => {
         const s = q.trim().toLowerCase();
-        if (!s) return poList ?? [];
-        return (poList ?? []).filter((x) => {
+        // Filter by active tab (normal vs refill PO)
+        const tabFiltered = (poList ?? []).filter((x) => {
+            if (activeTab === "refill") return !!x.isRefill;
+            return !x.isRefill;
+        });
+
+        if (!s) return tabFiltered;
+        return tabFiltered.filter((x) => {
             const a = String(x?.poNumber ?? "").toLowerCase();
             const b = String(x?.supplierName ?? "").toLowerCase();
             return a.includes(s) || b.includes(s);
         });
-    }, [poList, q]);
+    }, [poList, q, activeTab]);
 
     const totalItems = filtered.length;
     const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
 
-    // ✅ reset to page 1 when search changes
+    // ✅ reset to page 1 when search or tab changes
     React.useEffect(() => {
         setPage(1);
-    }, [q]);
+    }, [q, activeTab]);
 
     // ✅ clamp page if list shrinks
     React.useEffect(() => {
@@ -125,6 +141,34 @@ export function AvailableForReceivingManual() {
                     <RefreshCw className="h-4 w-4" />
                     Refresh
                 </Button>
+            </div>
+
+            {/* Tabs for Normal vs Refill POs */}
+            <div className="mt-4 flex border-b border-border shrink-0">
+                <button
+                    type="button"
+                    onClick={() => setActiveTab("normal")}
+                    className={cn(
+                        "flex-1 pb-2 text-xs font-bold border-b-2 transition-all duration-200",
+                        activeTab === "normal"
+                            ? "border-primary text-primary"
+                            : "border-transparent text-muted-foreground hover:text-foreground"
+                    )}
+                >
+                    Normal POs ({normalCount})
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setActiveTab("refill")}
+                    className={cn(
+                        "flex-1 pb-2 text-xs font-bold border-b-2 transition-all duration-200",
+                        activeTab === "refill"
+                            ? "border-primary text-primary"
+                            : "border-transparent text-muted-foreground hover:text-foreground"
+                    )}
+                >
+                    Refill POs ({refillCount})
+                </button>
             </div>
 
             <div className="mt-4">
@@ -188,18 +232,22 @@ export function AvailableForReceivingManual() {
                 ) : (
                     pageItems.map((po) => {
                         const active = selectedPO?.id === po.id;
+                        // Block only if it is the refill tab and PO is not tagged
+                        const isNotTagged = activeTab === "refill" && po.isTagged === false;
 
                         return (
                             <button
                                 key={po.id}
                                 type="button"
-                                onClick={() => initiatePOSwitch(po.id, po.poNumber)}
+                                onClick={() => !isNotTagged && initiatePOSwitch(po.id, po.poNumber)}
+                                disabled={isNotTagged}
                                 className={cn(
-                                    "w-full text-left rounded-xl border border-border p-3 transition",
-                                    "hover:bg-muted/40",
-                                    active
+                                    "w-full text-left rounded-xl border border-border p-3 transition relative overflow-hidden",
+                                    !isNotTagged && "hover:bg-muted/40",
+                                    active && !isNotTagged
                                         ? "ring-2 ring-primary/25 bg-muted/30"
-                                        : "bg-background"
+                                        : "bg-background",
+                                    isNotTagged && "opacity-60 cursor-not-allowed bg-slate-50 grayscale"
                                 )}
                             >
                                 <div className="flex items-start justify-between gap-3">
@@ -209,8 +257,11 @@ export function AvailableForReceivingManual() {
                                                 <Package className="h-4 w-4 text-muted-foreground" />
                                             </div>
                                             <div className="min-w-0">
-                                                <div className="text-sm font-semibold text-foreground">
+                                                <div className="text-sm font-semibold text-foreground flex items-center gap-2">
                                                     {po.poNumber}
+                                                    {isNotTagged && (
+                                                        <Badge variant="outline" className="text-[9px] font-black uppercase text-red-500 border-red-200 bg-red-50 px-1.5 py-0">Not Tagged</Badge>
+                                                    )}
                                                 </div>
                                                 <div className="text-xs text-muted-foreground">
                                                     {po.supplierName}
