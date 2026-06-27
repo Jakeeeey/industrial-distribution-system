@@ -462,6 +462,7 @@ export async function POST(req: NextRequest) {
         const receipt_required = intOrDefault(input?.receipt_required ?? input?.receiptRequired, 1);
         const price_type = strOrDefault(input?.price_type ?? input?.priceType, "Cost Per Unit");
         const inventory_status = intOrDefault(input?.inventory_status ?? input?.inventoryStatus, 1);
+        const is_refill = input?.is_refill === 1 || input?.is_refill === true || input?.isRefill === true || input?.isRefill === 1 ? true : false;
 
         const payload: Record<string, unknown> = {
             purchase_order_no: poNumber,
@@ -485,6 +486,7 @@ export async function POST(req: NextRequest) {
             receipt_required,
             price_type,
             inventory_status,
+            is_refill,
 
             reference: input?.reference ?? null,
             remark: input?.remark ?? null,
