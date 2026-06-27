@@ -167,9 +167,19 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json().catch(() => ({}));
     
-    // Support registering assets is disabled
+    // Support registering assets
     if (body.action === "register-assets") {
-      return json({ error: "Registration of assets is no longer supported" }, 400);
+      const { createCylinderAsset } = await import("@/modules/industrial-distribution-system/sales-return-serial/services/sales-return-cylinder.repo");
+      const assets = Array.isArray(body.assets) ? body.assets : [];
+      const phNow = getManilaTimestamp();
+      for (const asset of assets) {
+        await createCylinderAsset({
+          ...asset,
+          created_by: userId,
+          created_date: phNow,
+        });
+      }
+      return json({ success: true }, 201);
     }
 
     const data = await submitReturn(body, userId);
