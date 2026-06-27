@@ -409,11 +409,7 @@ export function UpdateSalesReturnModal({
       }
 
       if (result && result.isUnregistered) {
-        setUnregisteredSerials((prev) => {
-          if (prev.includes(serial)) return prev;
-          return [...prev, serial];
-        });
-        toast.info(`Serial ${serial} is unregistered. Please register it.`);
+        toast.error("Serial Number is not outbound (not found in outbound mappings)");
         return;
       }
 
@@ -823,30 +819,6 @@ export function UpdateSalesReturnModal({
                           </div>
                         </div>
 
-                        {/* Unregistered Serials Alert Banner */}
-                        {unregisteredSerials.length > 0 && (
-                          <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
-                            <div className="flex items-start gap-3">
-                              <div className="p-2 bg-amber-500 rounded-lg text-white font-bold text-xs shrink-0">
-                                ⚠️
-                              </div>
-                              <div>
-                                <h5 className="font-bold text-sm text-amber-900 dark:text-amber-400">{unregisteredSerials.length} UNREGISTERED SERIALS</h5>
-                                <div className="flex flex-wrap gap-1 mt-1.5">
-                                  {unregisteredSerials.map(sn => (
-                                    <Badge key={sn} variant="outline" className="bg-amber-100/80 border-amber-300 text-amber-800 flex items-center gap-1 py-0.5 px-2 font-mono text-[10px]">
-                                      {sn}
-                                      <X className="h-3 w-3 cursor-pointer text-amber-600 hover:text-amber-900" onClick={() => setUnregisteredSerials(prev => prev.filter(s => s !== sn))} />
-                                    </Badge>
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-                            <Button onClick={() => setIsBulkRegisterOpen(true)} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9 px-4 shrink-0">
-                              REGISTER ALL
-                            </Button>
-                          </div>
-                        )}
 
                         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 max-h-40 overflow-y-auto p-1">
                           {(item.serialNumbers || [])
@@ -1001,44 +973,7 @@ export function UpdateSalesReturnModal({
 
       <ProductLookupModal isOpen={isProductLookupOpen} onClose={() => setIsProductLookupOpen(false)} onConfirm={handleConfirmProductLookup} priceType={headerData.priceType || "A"} customerCode={headerData.customerCode} />
 
-      <BulkRegisterModal
-        open={isBulkRegisterOpen}
-        onOpenChange={setIsBulkRegisterOpen}
-        serials={unregisteredSerials}
-        productId={selectedRowIndex !== null ? Number(details[selectedRowIndex]?.productId || details[selectedRowIndex]?.product_id || 0) : 0}
-        branchId={Number(salesmenOptions.find(s => String(s.value) === String(headerData.salesmanId))?.branchId || headerData.branchId || 0)}
-        onSuccess={(registeredSerials) => {
-          setDetails((prev) => {
-            const idx = selectedRowIndex;
-            if (idx === null) return prev;
-            const next = [...prev];
-            const row = next[idx];
-            if (!row) return prev;
-            
-            const newSerials = [...(row.serialNumbers || []), ...registeredSerials];
-            const newQty = newSerials.length;
-            const unitPrice = Number(row.unitPrice) || 0;
-            const grossAmount = Math.round(unitPrice * newQty * 100) / 100;
-            
-            let discountAmt = 0;
-            if (row.discountType) {
-              const opt = discountOptions.find(d => d.id.toString() === row.discountType?.toString());
-              if (opt) discountAmt = Math.round(grossAmount * (parseFloat(opt.total_percent) / 100) * 100) / 100;
-            }
-            
-            next[idx] = {
-              ...row,
-              serialNumbers: newSerials,
-              quantity: newQty,
-              grossAmount,
-              discountAmount: discountAmt,
-              totalAmount: Math.round((grossAmount - discountAmt) * 100) / 100
-            };
-            return next;
-          });
-          setUnregisteredSerials([]);
-        }}
-      />
+
 
       <Dialog open={isInvoiceLookupOpen} onOpenChange={setIsInvoiceLookupOpen}>
         <DialogContent className="max-w-md">

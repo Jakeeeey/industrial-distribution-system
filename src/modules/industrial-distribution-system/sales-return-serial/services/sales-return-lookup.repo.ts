@@ -175,3 +175,12 @@ export async function getRawProductById(productId: number) {
     `/items/products/${productId}?fields=product_id,product_code,product_name,description,priceA,priceB,priceC,priceD,priceE,unit_of_measurement,unit_of_measurement_count,is_serialized`,
   );
 }
+
+export async function checkOutboundSerial(serialNumber: string) {
+  const serial = serialNumber.trim().toUpperCase();
+  const encoded = encodeURIComponent(serial);
+  return directusGet<{ data: Record<string, unknown>[] }>(
+    `/items/consolidator_serial_mappings?filter[serial_number][_eq]=${encoded}&limit=1`
+  );
+}
+

@@ -290,13 +290,12 @@ export async function checkSerialOnHand(
     };
   }
 
-  // 2. If Serial is on cylinder_assets, accepts and proceeds
-  const { getCylinderAssetBySerial } = await import("./sales-return-cylinder.repo");
-  const assetRes = await getCylinderAssetBySerial(serial);
-  if (assetRes && assetRes.data && assetRes.data.length > 0) {
+  // 2. Validate outbound status via consolidator_serial_mappings table
+  const checkRes = await lookupRepo.checkOutboundSerial(serial);
+  if (checkRes?.data && checkRes.data.length > 0) {
     return { isOnInventory: false, isUnregistered: false };
   }
 
-  // 3. If Serial is not found on cylinder_assets AND not in on-hand, it is unregistered
+  // 3. If Serial is not found in consolidator_serial_mappings, it is not outbound (unregistered/invalid)
   return { isOnInventory: false, isUnregistered: true };
 }

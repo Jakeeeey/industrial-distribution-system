@@ -399,18 +399,7 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
       }
 
       if (result && result.isUnregistered) {
-        const rowTempId = selectedRow.tempId;
-        if (rowTempId) {
-          setUnregisteredSerialsMap((prev) => {
-            const currentSerials = prev[rowTempId] || [];
-            if (currentSerials.includes(serial)) return prev;
-            return {
-              ...prev,
-              [rowTempId]: [...currentSerials, serial],
-            };
-          });
-        }
-        toast.info(`Serial ${serial} is unregistered. Please register it.`);
+        toast.error("Serial Number is not outbound (not found in outbound mappings)");
         return;
       }
 
@@ -1127,43 +1116,6 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
                     {/* Serial Management Collapsible */}
                     {selectedRowIndex === idx && (
                       <div onClick={e => e.stopPropagation()} className="mt-4 pt-4 border-t border-primary/25 bg-background rounded-lg border-2 border-primary/20 shadow-sm p-4 animate-in slide-in-from-top-2 duration-200">
-                        {/* Unregistered Serials Alert Banner */}
-                        {currentUnregisteredSerials.length > 0 && (
-                          <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
-                            <div className="flex items-start gap-3">
-                              <div className="p-2 bg-amber-500 rounded-lg text-white font-bold text-xs shrink-0">
-                                ⚠️
-                              </div>
-                              <div>
-                                <h5 className="font-bold text-sm text-amber-900 dark:text-amber-400">{currentUnregisteredSerials.length} UNREGISTERED SERIALS</h5>
-                                <div className="flex flex-wrap gap-1 mt-1.5">
-                                  {currentUnregisteredSerials.map((sn: string) => (
-                                    <Badge key={sn} variant="outline" className="bg-amber-100/80 border-amber-300 text-amber-800 flex items-center gap-1 py-0.5 px-2 font-mono text-[10px]">
-                                      {sn}
-                                      <X className="h-3 w-3 cursor-pointer text-amber-600 hover:text-amber-900" onClick={() => {
-                                        const rowTempId = item.tempId;
-                                        if (rowTempId) {
-                                          const key = rowTempId;
-                                          setUnregisteredSerialsMap(prev => {
-                                            const currentSerials = prev[key] || [];
-                                            return {
-                                              ...prev,
-                                              [key]: currentSerials.filter(s => s !== sn)
-                                            };
-                                          });
-                                        }
-                                      }} />
-                                    </Badge>
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-                            <Button onClick={() => setIsBulkRegisterOpen(true)} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9 px-4 shrink-0">
-                              REGISTER ALL
-                            </Button>
-                          </div>
-                        )}
-
                         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-4">
                           <h4 className="font-bold text-foreground flex items-center gap-2 text-base shrink-0"><div className="bg-emerald-500/10 p-1.5 rounded text-emerald-600"><ScanLine className="h-5 w-5" /></div>Serial Management</h4>
                           <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
@@ -1308,52 +1260,7 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
 
       <ProductLookupModal isOpen={isProductLookupOpen} onClose={() => setIsProductLookupOpen(false)} onConfirm={handleAddProducts} preselectedItems={items} priceType={priceType} customerCode={customerCode} />
 
-      <BulkRegisterModal
-        open={isBulkRegisterOpen}
-        onOpenChange={setIsBulkRegisterOpen}
-        serials={currentUnregisteredSerials}
-        productId={selectedRowIndex !== null ? Number(items[selectedRowIndex]?.productId || items[selectedRowIndex]?.product_id || 0) : 0}
-        branchId={Number(currentBranchId || lockedBranchId || 0)}
-        onSuccess={(registeredSerials) => {
-          setItems((prev) => {
-            const idx = selectedRowIndex;
-            if (idx === null) return prev;
-            const next = [...prev];
-            const row = next[idx];
-            if (!row) return prev;
-            
-            const newSerials = [...(row.serialNumbers || []), ...registeredSerials];
-            const newQty = newSerials.length;
-            const unitPrice = Number(row.unitPrice) || 0;
-            const grossAmount = Math.round(unitPrice * newQty * 100) / 100;
-            
-            let discountAmt = 0;
-            if (row.discountType) {
-              const opt = lineDiscountOptions.find(d => d.id.toString() === row.discountType?.toString());
-              if (opt) discountAmt = Math.round(grossAmount * (parseFloat(opt.total_percent) / 100) * 100) / 100;
-            }
-            
-            next[idx] = {
-              ...row,
-              serialNumbers: newSerials,
-              quantity: newQty,
-              grossAmount,
-              discountAmount: discountAmt,
-              totalAmount: Math.round((grossAmount - discountAmt) * 100) / 100,
-            };
-            return next;
-          });
-          const rowTempId = selectedRowIndex !== null ? items[selectedRowIndex]?.tempId : null;
-          if (rowTempId) {
-            setUnregisteredSerialsMap((prev) => {
-              const nextMap = { ...prev };
-              delete nextMap[rowTempId];
-              return nextMap;
-            });
-          }
-          toast.success("All cylinders registered and added to list");
-        }}
-      />
+
 
       <Dialog open={isCreateConfirmOpen} onOpenChange={setIsCreateConfirmOpen}>
         <DialogContent className="max-w-[400px] text-center p-8 bg-background border-border rounded-xl">
