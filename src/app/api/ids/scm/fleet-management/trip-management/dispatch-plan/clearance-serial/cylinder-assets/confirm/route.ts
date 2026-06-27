@@ -1,4 +1,22 @@
 import { NextResponse } from 'next/server';
+import { cookies } from "next/headers";
+
+function getUserIdFromToken(token: string | undefined | null): number | null {
+    if (!token) return null;
+    try {
+        const parts = token.split(".");
+        if (parts.length < 2) return null;
+        const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+        const json = Buffer.from(b64, "base64").toString("utf8");
+        const payload = JSON.parse(json);
+        const idValue = payload.user_id ?? payload.userId ?? payload.id ?? payload.sub;
+        if (idValue != null) {
+            const num = Number(idValue);
+            return isNaN(num) ? null : num;
+        }
+    } catch {}
+    return null;
+}
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL + '/items';
 const TOKEN = process.env.DIRECTUS_STATIC_TOKEN;
@@ -69,7 +87,12 @@ async function deleter(endpoint: string, data?: unknown) {
 export async function POST(request: Request) {
     try {
         const body = await request.json(); 
-        const { serials, selectedProductId } = body;
+        const { serials, selectedProductId, invoiceId } = body;
+
+        const cookieStore = await cookies();
+        const token = cookieStore.get("vos_access_token")?.value;
+        const userId = getUserIdFromToken(token);
+        const now = new Date().toISOString();
 
         if (!Array.isArray(serials) || !selectedProductId) {
             return NextResponse.json({ error: 'serials array and selectedProductId are required' }, { status: 400 });
@@ -99,6 +122,13 @@ export async function POST(request: Request) {
                 delete newAsset.date_created;
                 delete newAsset.user_updated;
                 delete newAsset.date_updated;
+                
+                if (userId) {
+                    newAsset.created_by = userId;
+                    newAsset.modified_by = userId;
+                }
+                newAsset.modified_date = now;
+
                 return newAsset;
             });
             await poster('/cylinder_assets', payloads);
@@ -113,9 +143,23 @@ export async function POST(request: Request) {
             const bulkUpdates = existingAssets.map((a: { id: string | number }) => ({
                 id: a.id,
                 product_id: Number(selectedProductId),
-                cylinder_status: 'EMPTY'
+                cylinder_status: 'EMPTY',
+                ...(userId ? { modified_by: userId } : {}),
+                modified_date: now
             }));
             await patcher('/cylinder_assets', bulkUpdates);
+        }
+
+        // 4. Save to post_dispatch_invoices_serial
+        if (invoiceId && serials.length > 0) {
+            const invoiceSerialPayloads = serials.map((s: string) => ({
+                post_dispatch_invoice_id: invoiceId,
+                product_id: Number(selectedProductId),
+                serial_number: s.trim().toUpperCase(),
+                ...(userId ? { created_by: userId, modified_by: userId } : {}),
+                modified_date: now
+            }));
+            await poster('/post_dispatch_invoices_serial', invoiceSerialPayloads);
         }
 
         return NextResponse.json({ success: true });
