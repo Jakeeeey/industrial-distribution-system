@@ -157,7 +157,7 @@ export const ReceivablesWidget: React.FC = () => {
       {/* Top Outstanding Exposures */}
       <div className="w-full lg:w-[260px] shrink-0 border border-border/40 rounded-xl p-3.5 bg-muted/5 self-stretch flex flex-col justify-between">
         <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground block mb-2.5">
-          Top Outstanding Exposures
+          Financial Exposures
         </span>
 
         <div className="space-y-2.5 flex-1 overflow-y-auto custom-scrollbar">

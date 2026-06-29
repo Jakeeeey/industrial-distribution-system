@@ -1,45 +1,82 @@
 // src/modules/industrial-distribution-system/dashboard/components/WidgetContainer.tsx
-// NOTE: Replaced react-rnd absolute positioning with CSS Grid placement.
-// Widgets now use grid-column / grid-row so the browser handles alignment automatically.
-// This eliminates all overlap and drift issues from free-form absolute positioning.
+// NOTE: Replaced GlassCard with a standard card layout to remove background blur and hover scaling.
+// Fullscreen mode removed in favor of navigating directly to the respective module report/summary page.
+// Added Move Left/Right controls to re-order layout dynamically via array re-ordering (autoflow).
 
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { WidgetLayout } from "../types";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { GlassCard } from "@/components/command-center/GlassCard";
 import {
-  Minimize2,
   RefreshCw,
-  Fullscreen,
   EyeOff,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUpRight,
 } from "lucide-react";
 
 interface WidgetContainerProps {
   layout: WidgetLayout;
-  onHide: () => void;
   title: string;
   subtitle?: string;
   children: React.ReactNode;
+  onHide: () => void;
   onRefresh?: () => void;
-  // colWidth / rowHeight / onLayoutChange kept for API compatibility but unused in CSS-grid mode
+  onMoveLeft?: () => void;
+  onMoveRight?: () => void;
+  isFirst?: boolean;
+  isLast?: boolean;
+  
+  // Unused props kept for backward/prop compatibility
   colWidth?: number;
   rowHeight?: number;
   onLayoutChange?: (changes: Partial<WidgetLayout>) => void;
 }
 
+// Maps widget IDs to their respective operational module report / summary routes
+const getModulePath = (id: string): string => {
+  switch (id) {
+    case "rto-overview":
+      return "/ids/bia/rto-operation";
+    case "cylinder-aging":
+      return "/ids/bia/customer-cylinder-aging";
+    case "order-status":
+      return "/ids/crm/customer-hub";
+    case "sales-performance":
+      return "/ids/crm/customer-hub"; // Under Sales/Revenue reports
+    case "logistics-trips":
+      return "/ids/scm/fleet-management";
+    case "inventory-stock":
+      return "/ids/scm/inventory-management";
+    case "low-stock-alert":
+      return "/ids/scm/products-management";
+    case "receivables":
+      return "/ids/invoicing";
+    case "weather-calendar":
+      return "/ids/scm/logistics";
+    case "activity-feed":
+      return "/ids/settings";
+    default:
+      return "";
+  }
+};
+
 export const WidgetContainer: React.FC<WidgetContainerProps> = ({
   layout,
-  onHide,
   title,
   subtitle,
   children,
+  onHide,
   onRefresh,
+  onMoveLeft,
+  onMoveRight,
+  isFirst = false,
+  isLast = false,
 }) => {
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [localRefreshSpin, setLocalRefreshSpin] = useState(false);
+  const modulePath = getModulePath(layout.id);
 
   const handleLocalRefresh = () => {
     if (onRefresh) {
@@ -49,67 +86,46 @@ export const WidgetContainer: React.FC<WidgetContainerProps> = ({
     }
   };
 
-  // Determine accent color from widget id
-  let accent: "cyan" | "indigo" | "emerald" | "amber" | "violet" | "rose" = "cyan";
-  if (layout.id.includes("rto") || layout.id.includes("aging")) accent = "rose";
-  else if (layout.id.includes("sales") || layout.id.includes("receivable")) accent = "indigo";
-  else if (layout.id.includes("stock") || layout.id.includes("low")) accent = "emerald";
-  else if (layout.id.includes("logistics")) accent = "amber";
-  else if (layout.id.includes("alert")) accent = "rose";
-  else if (layout.id.includes("activity")) accent = "violet";
-
-  // --- Fullscreen overlay ---
-  if (isFullscreen) {
-    return (
-      <div className="fixed inset-0 z-[9999] flex flex-col bg-background/96 backdrop-blur-md p-6">
-        <div className="flex items-center justify-between border-b border-border/50 pb-4 mb-4">
-          <div>
-            <h2 className="text-xl font-black uppercase italic tracking-tighter text-slate-800 dark:text-slate-100">
-              {title}
-            </h2>
-            {subtitle && (
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-0.5 leading-none">
-                {subtitle}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            {onRefresh && (
-              <Button variant="outline" size="sm" onClick={handleLocalRefresh}>
-                <RefreshCw className={cn("h-4 w-4 mr-2", localRefreshSpin && "animate-spin")} />
-                Refresh
-              </Button>
-            )}
-            <Button variant="outline" size="sm" onClick={() => setIsFullscreen(false)}>
-              <Minimize2 className="h-4 w-4 mr-2" />
-              Exit Fullscreen
-            </Button>
-          </div>
-        </div>
-        <div className="flex-1 min-h-0 bg-card rounded-xl border border-border/80 p-4 overflow-auto shadow-inner">
-          {children}
-        </div>
-      </div>
-    );
+  // Determine standard accent styling based on widget id (gives subtle left-side border color matching the category)
+  let accentBorder = "border-l-cyan-500";
+  let hoverBorder = "hover:border-cyan-500/40";
+  if (layout.id.includes("rto") || layout.id.includes("aging")) {
+    accentBorder = "border-l-rose-500";
+    hoverBorder = "hover:border-rose-500/40";
+  } else if (layout.id.includes("sales") || layout.id.includes("receivable")) {
+    accentBorder = "border-l-indigo-500";
+    hoverBorder = "hover:border-indigo-500/40";
+  } else if (layout.id.includes("stock") || layout.id.includes("low")) {
+    accentBorder = "border-l-emerald-500";
+    hoverBorder = "hover:border-emerald-500/40";
+  } else if (layout.id.includes("logistics") || layout.id.includes("weather")) {
+    accentBorder = "border-l-amber-500";
+    hoverBorder = "hover:border-amber-500/40";
+  } else if (layout.id.includes("activity")) {
+    accentBorder = "border-l-violet-500";
+    hoverBorder = "hover:border-violet-500/40";
   }
 
-  // --- CSS Grid item: placed via inline grid-column / grid-row ---
-  // x is 0-indexed column start, w is column span
-  // y is 0-indexed row start,    h is row span (each row = 100px via grid-auto-rows on parent)
+  // Row height units = 80px.
+  // Set width spanning w columns and height spanning h rows.
   const gridStyle: React.CSSProperties = {
-    gridColumn: `${layout.x + 1} / span ${layout.w}`,
-    gridRow: `${layout.y + 1} / span ${layout.h}`,
-    minHeight: 0, // allow flex shrink inside grid cell
+    gridColumn: `span ${layout.w}`,
+    gridRow: `span ${layout.h}`,
+    minHeight: 0,
   };
 
   return (
-    <div style={gridStyle} className="min-w-0">
-      <GlassCard
-        accent={accent}
-        className="h-full w-full flex flex-col overflow-hidden !rounded-xl !shadow-sm !p-0 border border-border/70 bg-card/50 backdrop-blur-xs"
+    <div style={gridStyle} className="min-w-0 h-full w-full">
+      {/* Standard non-blurred card, removes large scale and shadow blurs */}
+      <div
+        className={cn(
+          "h-full w-full flex flex-col overflow-hidden rounded-xl border border-border/70 bg-card text-card-foreground shadow-xs transition-all duration-200 border-l-4",
+          accentBorder,
+          hoverBorder
+        )}
       >
         {/* Widget header bar */}
-        <div className="flex items-center justify-between border-b border-border/40 px-4 py-2 bg-muted/10 shrink-0">
+        <div className="flex items-center justify-between border-b border-border/40 px-3.5 py-2 bg-muted/10 shrink-0 select-none">
           <div className="min-w-0 flex-1">
             <h3 className="text-[10px] font-black uppercase italic tracking-tighter text-slate-800 dark:text-slate-100 truncate">
               {title}
@@ -121,26 +137,69 @@ export const WidgetContainer: React.FC<WidgetContainerProps> = ({
             )}
           </div>
 
+          {/* Action buttons list */}
           <div className="flex items-center gap-1 shrink-0 ml-2">
+            {/* Move Left/Up button */}
+            {onMoveLeft && (
+              <button
+                onClick={onMoveLeft}
+                disabled={isFirst}
+                className={cn(
+                  "rounded-md p-1 transition-all cursor-pointer",
+                  isFirst 
+                    ? "text-muted-foreground/30 cursor-not-allowed" 
+                    : "text-muted-foreground/75 hover:bg-muted hover:text-foreground"
+                )}
+                title="Move Left"
+              >
+                <ArrowLeft className="h-3 w-3" />
+              </button>
+            )}
+
+            {/* Move Right/Down button */}
+            {onMoveRight && (
+              <button
+                onClick={onMoveRight}
+                disabled={isLast}
+                className={cn(
+                  "rounded-md p-1 transition-all cursor-pointer",
+                  isLast 
+                    ? "text-muted-foreground/30 cursor-not-allowed" 
+                    : "text-muted-foreground/75 hover:bg-muted hover:text-foreground"
+                )}
+                title="Move Right"
+              >
+                <ArrowRight className="h-3 w-3" />
+              </button>
+            )}
+
+            {/* Refresh widget content */}
             {onRefresh && (
               <button
                 onClick={handleLocalRefresh}
-                className="rounded-md p-1 text-muted-foreground/70 hover:bg-muted hover:text-foreground transition-all cursor-pointer"
+                className="rounded-md p-1 text-muted-foreground/75 hover:bg-muted hover:text-foreground transition-all cursor-pointer"
                 title="Refresh Widget"
               >
                 <RefreshCw className={cn("h-3 w-3", localRefreshSpin && "animate-spin")} />
               </button>
             )}
-            <button
-              onClick={() => setIsFullscreen(true)}
-              className="rounded-md p-1 text-muted-foreground/70 hover:bg-muted hover:text-foreground transition-all cursor-pointer"
-              title="Fullscreen"
-            >
-              <Fullscreen className="h-3 w-3" />
-            </button>
+
+            {/* Link to module report instead of fullscreen */}
+            {modulePath && (
+              <Link
+                href={modulePath}
+                className="rounded-md p-1 text-muted-foreground/75 hover:bg-muted hover:text-primary transition-all cursor-pointer flex items-center justify-center"
+                title="View Module Report"
+              >
+                <ArrowUpRight className="h-3.5 w-3.5 text-primary" />
+              </Link>
+            )}
+
+
+            {/* Hide Widget */}
             <button
               onClick={onHide}
-              className="rounded-md p-1 text-muted-foreground/70 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30 transition-all cursor-pointer"
+              className="rounded-md p-1 text-muted-foreground/75 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30 transition-all cursor-pointer"
               title="Hide Widget"
             >
               <EyeOff className="h-3 w-3" />
@@ -148,11 +207,11 @@ export const WidgetContainer: React.FC<WidgetContainerProps> = ({
           </div>
         </div>
 
-        {/* Widget content */}
-        <div className="flex-1 p-3 min-h-0 overflow-auto select-text">
+        {/* Content container fills height of the grid cell container perfectly */}
+        <div className="flex-1 w-full h-full min-h-0 overflow-auto select-text p-3 flex flex-col">
           {children}
         </div>
-      </GlassCard>
+      </div>
     </div>
   );
 };

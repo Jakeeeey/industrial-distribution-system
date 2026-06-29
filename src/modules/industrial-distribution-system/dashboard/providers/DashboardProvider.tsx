@@ -17,6 +17,14 @@ interface DashboardContextProps {
   loading: boolean;
   rtoData: any[];
   opsData: any[];
+  activityLogs: any[];
+  revenueData: { targetAmount: number; actualAmount: number; revenueTrend: any[] } | null;
+  activeDispatches: any[];
+  cylinderStock: any[];
+  lowStock: any[];
+  orderStatusData: { status: string; count: number }[];
+  topSalesmen: any[];
+  topCustomers: any[];
   branches: { id: string; name: string; code: string }[];
   
   // Refresh mechanisms
@@ -42,6 +50,14 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [loading, setLoading] = useState<boolean>(true);
   const [rtoData, setRtoData] = useState<any[]>([]);
   const [opsData, setOpsData] = useState<any[]>([]);
+  const [activityLogs, setActivityLogs] = useState<any[]>([]);
+  const [revenueData, setRevenueData] = useState<{ targetAmount: number; actualAmount: number; revenueTrend: any[] } | null>(null);
+  const [activeDispatches, setActiveDispatches] = useState<any[]>([]);
+  const [cylinderStock, setCylinderStock] = useState<any[]>([]);
+  const [lowStock, setLowStock] = useState<any[]>([]);
+  const [orderStatusData, setOrderStatusData] = useState<{ status: string; count: number }[]>([]);
+  const [topSalesmen, setTopSalesmen] = useState<any[]>([]);
+  const [topCustomers, setTopCustomers] = useState<any[]>([]);
   const [branches, setBranches] = useState<{ id: string; name: string; code: string }[]>([]);
 
   const setBranchId = (branchId: string) => {
@@ -74,18 +90,48 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const fetchData = useCallback(async (showToast = false) => {
     setLoading(true);
     try {
-      // 1. Fetch BIA RTO Operation data
+      // Fetch BIA RTO, Ops dashboard, branches, activity logs, revenue tracker, dispatches, stock levels, and low stock warnings
       const rtoUrl = new URL("/api/ids/bia/rto-operation", window.location.origin);
-      // branchId can be appended if the API supports it, otherwise post-filtered on client
+      const activityUrl = new URL("/api/ids/dashboard/activity-feed", window.location.origin);
+      const revenueUrl = new URL("/api/ids/dashboard/revenue-tracker", window.location.origin);
+      const dispatchUrl = new URL("/api/ids/dashboard/active-dispatches", window.location.origin);
+      const stockUrl = new URL("/api/ids/dashboard/cylinder-stock", window.location.origin);
+      const lowStockUrl = new URL("/api/ids/dashboard/low-stock", window.location.origin);
+      const orderStatusUrl = new URL("/api/ids/dashboard/order-status", window.location.origin);
+      const topSalesmanUrl = new URL("/api/ids/dashboard/top-salesman", window.location.origin);
+      const topCustomerUrl = new URL("/api/ids/dashboard/top-customer", window.location.origin);
       
-      const [rtoRes, opsRes, branchList] = await Promise.all([
+      activityUrl.searchParams.append("branchId", filters.branchId);
+      revenueUrl.searchParams.append("branchId", filters.branchId);
+      dispatchUrl.searchParams.append("branchId", filters.branchId);
+      stockUrl.searchParams.append("branchId", filters.branchId);
+      lowStockUrl.searchParams.append("branchId", filters.branchId);
+      orderStatusUrl.searchParams.append("branchId", filters.branchId);
+      topSalesmanUrl.searchParams.append("branchId", filters.branchId);
+      topCustomerUrl.searchParams.append("branchId", filters.branchId);
+      
+      const [rtoRes, opsRes, activityRes, revenueRes, dispatchRes, stockRes, lowStockRes, orderStatusRes, topSalesmanRes, topCustomerRes, branchList] = await Promise.all([
         fetch(rtoUrl.toString()),
         fetch("/api/ids/crm/customer-hub/ops-dashboard"),
+        fetch(activityUrl.toString()),
+        fetch(revenueUrl.toString()),
+        fetch(dispatchUrl.toString()),
+        fetch(stockUrl.toString()),
+        fetch(lowStockUrl.toString()),
+        fetch(orderStatusUrl.toString()),
+        fetch(topSalesmanUrl.toString()),
+        fetch(topCustomerUrl.toString()),
         fetchBranches()
       ]);
 
       let rtoRecords: any[] = [];
       let opsRecords: any[] = [];
+      let activityRecords: any[] = [];
+      let revRecords: any = null;
+      let dispRecords: any[] = [];
+      let stockRecords: any[] = [];
+      let lowStockRecords: any[] = [];
+      let orderStatusRecords: { status: string; count: number }[] = [];
 
       if (rtoRes.ok) {
         rtoRecords = await rtoRes.json();
@@ -99,16 +145,71 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         console.error("Failed to fetch Ops dashboard data:", await opsRes.text());
       }
 
+      if (activityRes.ok) {
+        activityRecords = await activityRes.json();
+      } else {
+        console.error("Failed to fetch Dashboard activity logs:", await activityRes.text());
+      }
+
+      if (revenueRes.ok) {
+        revRecords = await revenueRes.json();
+      } else {
+        console.error("Failed to fetch Dashboard revenue data:", await revenueRes.text());
+      }
+
+      if (dispatchRes.ok) {
+        dispRecords = await dispatchRes.json();
+      } else {
+        console.error("Failed to fetch Dashboard dispatch plans:", await dispatchRes.text());
+      }
+
+      if (stockRes.ok) {
+        stockRecords = await stockRes.json();
+      } else {
+        console.error("Failed to fetch Dashboard cylinder stock:", await stockRes.text());
+      }
+
+      if (lowStockRes.ok) {
+        lowStockRecords = await lowStockRes.json();
+      } else {
+        console.error("Failed to fetch Dashboard low stock alerts:", await lowStockRes.text());
+      }
+
+      if (orderStatusRes.ok) {
+        orderStatusRecords = await orderStatusRes.json();
+      } else {
+        console.error("Failed to fetch Dashboard order status counts:", await orderStatusRes.text());
+      }
+
+      let salesmanRecords: any[] = [];
+      if (topSalesmanRes.ok) {
+        salesmanRecords = await topSalesmanRes.json();
+      } else {
+        console.error("Failed to fetch Dashboard top salesmen:", await topSalesmanRes.text());
+      }
+
+      let customerRecords: any[] = [];
+      if (topCustomerRes.ok) {
+        customerRecords = await topCustomerRes.json();
+      } else {
+        console.error("Failed to fetch Dashboard top customers:", await topCustomerRes.text());
+      }
+
       setRtoData(rtoRecords);
       setOpsData(opsRecords);
+      setActivityLogs(activityRecords);
+      setRevenueData(revRecords);
+      setActiveDispatches(dispRecords);
+      setCylinderStock(stockRecords);
+      setLowStock(lowStockRecords);
+      setOrderStatusData(orderStatusRecords);
+      setTopSalesmen(salesmanRecords);
+      setTopCustomers(customerRecords);
 
-      // Resolve branches: combine fetched branches with any branches found inside RTO data
+      // Resolve branches
       const branchMap = new Map<string, { id: string; name: string; code: string }>();
-      
-      // Seed with fetched consolidation branches
       branchList.forEach((b) => branchMap.set(b.id, b));
       
-      // Collect from RTO data as fallback/enrichment
       rtoRecords.forEach((item: any) => {
         if (item.branchId && item.branchName) {
           const idStr = String(item.branchId);
@@ -134,7 +235,7 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     } finally {
       setLoading(false);
     }
-  }, [fetchBranches]);
+  }, [fetchBranches, filters.branchId]);
 
   useEffect(() => {
     fetchData();
@@ -153,6 +254,14 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         loading,
         rtoData,
         opsData,
+        activityLogs,
+        revenueData,
+        activeDispatches,
+        cylinderStock,
+        lowStock,
+        orderStatusData,
+        topSalesmen,
+        topCustomers,
         branches,
         refreshAll,
       }}
@@ -161,3 +270,5 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     </DashboardContext.Provider>
   );
 };
+
+

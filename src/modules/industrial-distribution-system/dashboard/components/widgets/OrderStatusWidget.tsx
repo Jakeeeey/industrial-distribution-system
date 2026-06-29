@@ -1,8 +1,7 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/modules/industrial-distribution-system/dashboard/components/widgets/OrderStatusWidget.tsx
+// NOTE: Replaced hardcoded fallback counts with live orderStatusData from useDashboard context.
 
 "use client";
-
 
 import React, { useMemo } from "react";
 import { useDashboard } from "../../providers/DashboardProvider";
@@ -16,62 +15,16 @@ import {
 } from "lucide-react";
 
 export const OrderStatusWidget: React.FC = () => {
-  const { opsData, loading } = useDashboard();
+  const { orderStatusData, loading } = useDashboard();
 
+  // Convert flat array to lookup map: { status → count }
   const counts = useMemo(() => {
-    const statuses: Record<string, number> = {
-      "For Approval": 0,
-      "For Consolidation": 0,
-      "For Picking": 0,
-      "For Invoicing": 0,
-      "For Loading": 0,
-      "For Shipping": 0,
-      "En Route": 0,
-      "Delivered": 0,
-      "On Hold": 0,
-      "Cancelled": 0,
-    };
-
-    if (opsData.length > 0) {
-      // Data format from BFF is:
-      // StatusGroupedOrders[] or flat array of orders
-      if (Array.isArray(opsData)) {
-        opsData.forEach((item: any) => {
-          // If grouped by status
-          if (item.status && Array.isArray(item.customerGroups)) {
-            let count = 0;
-            item.customerGroups.forEach((cg: any) => {
-              count += Array.isArray(cg.orders) ? cg.orders.length : 0;
-            });
-            statuses[item.status] = count;
-          } else if (item.status && typeof item.status === "string") {
-            // Flat order list fallback
-            const status = item.status;
-            if (statuses[status] !== undefined) {
-              statuses[status]++;
-            }
-          }
-        });
-      }
-    }
-
-    // Default mock fallback seed if database is empty
-    const totalCount = Object.values(statuses).reduce((a, b) => a + b, 0);
-    if (totalCount === 0) {
-      statuses["For Approval"] = 5;
-      statuses["For Consolidation"] = 12;
-      statuses["For Picking"] = 8;
-      statuses["For Invoicing"] = 14;
-      statuses["For Loading"] = 6;
-      statuses["For Shipping"] = 9;
-      statuses["En Route"] = 18;
-      statuses["Delivered"] = 245;
-      statuses["On Hold"] = 2;
-      statuses["Cancelled"] = 4;
-    }
-
-    return statuses;
-  }, [opsData]);
+    const map: Record<string, number> = {};
+    orderStatusData.forEach(({ status, count }) => {
+      map[status] = count;
+    });
+    return map;
+  }, [orderStatusData]);
 
   if (loading) {
     return (
@@ -89,35 +42,36 @@ export const OrderStatusWidget: React.FC = () => {
   const pipelineStages = [
     {
       title: "Draft/Approval",
-      count: counts["For Approval"],
+      // Combine Draft + Pending + For Approval into the first column
+      count: (counts["Draft"] ?? 0) + (counts["Pending"] ?? 0) + (counts["For Approval"] ?? 0),
       color: "bg-blue-500",
       textColor: "text-blue-500",
       icon: FileText,
     },
     {
       title: "Consolidation",
-      count: counts["For Consolidation"],
+      count: counts["For Consolidation"] ?? 0,
       color: "bg-cyan-500",
       textColor: "text-cyan-500",
       icon: Boxes,
     },
     {
       title: "Warehouse Picking",
-      count: counts["For Picking"],
+      count: (counts["For Picking"] ?? 0) + (counts["For Invoicing"] ?? 0),
       color: "bg-indigo-500",
       textColor: "text-indigo-500",
       icon: FileCheck2,
     },
     {
       title: "Logistics Dispatch",
-      count: counts["For Loading"] + counts["For Shipping"] + counts["En Route"],
+      count: (counts["For Loading"] ?? 0) + (counts["For Shipping"] ?? 0) + (counts["En Route"] ?? 0),
       color: "bg-amber-500",
       textColor: "text-amber-500",
       icon: Truck,
     },
     {
       title: "Delivered Cores",
-      count: counts["Delivered"],
+      count: counts["Delivered"] ?? 0,
       color: "bg-emerald-500",
       textColor: "text-emerald-500",
       icon: CheckCircle,
@@ -144,7 +98,7 @@ export const OrderStatusWidget: React.FC = () => {
               <div className="flex items-center justify-between">
                 <Icon className={`h-4.5 w-4.5 ${stage.textColor}`} />
                 <span className="text-xl font-black text-foreground">
-                  {stage.count}
+                  {stage.count.toLocaleString()}
                 </span>
               </div>
               <div className="mt-2">

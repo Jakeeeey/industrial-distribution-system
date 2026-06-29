@@ -89,11 +89,6 @@ const WIDGET_CATEGORIES: {
     category: "Utilities & System",
     widgets: [
       {
-        id: "alerts-feed",
-        name: "Critical Operations Alerts",
-        description: "High priority alerts (credit limit breaches, inventory mismatches).",
-      },
-      {
         id: "activity-feed",
         name: "Live Audit Logs Timeline",
         description: "Real-time scrollable feed of system-wide transactions.",
@@ -111,6 +106,7 @@ const WIDGET_CATEGORIES: {
     ],
   },
 ];
+
 
 export const CustomizePanel: React.FC<CustomizePanelProps> = ({
   isOpen,
@@ -211,9 +207,10 @@ export const CustomizePanel: React.FC<CustomizePanelProps> = ({
             </div>
 
             {/* Footer */}
-            <div className="border-t border-border/60 p-4 bg-muted/20 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80">
-              Drag & resize widgets freely on the dashboard.
+            <div className="border-t border-border/60 p-4 bg-muted/20 text-center text-[9px] font-bold uppercase tracking-widest text-muted-foreground/80">
+              Widgets auto-align and rearrange sequentially to fit your workspace.
             </div>
+
           </motion.div>
         </>
       )}

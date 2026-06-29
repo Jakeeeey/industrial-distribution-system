@@ -8,9 +8,12 @@ import { DashboardProvider } from "./providers/DashboardProvider";
 import { useDashboardState } from "./hooks/useDashboardState";
 import { DashboardHeader } from "./components/DashboardHeader";
 import { CustomizePanel } from "./components/CustomizePanel";
+import { NotificationsPanel } from "./components/NotificationsPanel";
 import { WidgetContainer } from "./components/WidgetContainer";
+
 import { exportToCsv } from "./utils/kpiCalculations";
-import { GlassCard } from "@/components/command-center/GlassCard";
+
+
 
 // Widgets imports
 import { RtoOverviewWidget } from "./components/widgets/RtoOverviewWidget";
@@ -21,10 +24,12 @@ import { LogisticsTripsWidget } from "./components/widgets/LogisticsTripsWidget"
 import { InventoryStockWidget } from "./components/widgets/InventoryStockWidget";
 import { LowStockAlertWidget } from "./components/widgets/LowStockAlertWidget";
 import { ReceivablesWidget } from "./components/widgets/ReceivablesWidget";
-import { AlertsFeedWidget } from "./components/widgets/AlertsFeedWidget";
 import { ActivityFeedWidget } from "./components/widgets/ActivityFeedWidget";
+
 import { QuickActionsWidget } from "./components/widgets/QuickActionsWidget";
 import { WeatherCalendarWidget } from "./components/widgets/WeatherCalendarWidget";
+import { TopSalesmanWidget } from "./components/widgets/TopSalesmanWidget";
+import { TopCustomerWidget } from "./components/widgets/TopCustomerWidget";
 import { EyeOff } from "lucide-react";
 
 
@@ -38,14 +43,17 @@ export const DashboardModuleContent: React.FC = () => {
     activePreset,
     layouts,
     changePreset,
-    updateWidgetLayout,
     resetLayout,
     toggleWidgetVisibility,
+    moveWidget,
   } = useDashboardState();
 
+
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isMobile, setIsMobile] = useState(false);
+
 
   // Detect mobile viewport to switch between stacked and grid layouts
   useEffect(() => {
@@ -76,14 +84,17 @@ export const DashboardModuleContent: React.FC = () => {
         return <LowStockAlertWidget />;
       case "receivables":
         return <ReceivablesWidget />;
-      case "alerts-feed":
-        return <AlertsFeedWidget />;
       case "activity-feed":
         return <ActivityFeedWidget />;
+
       case "quick-actions":
         return <QuickActionsWidget />;
       case "weather-calendar":
         return <WeatherCalendarWidget />;
+      case "top-salesman":
+        return <TopSalesmanWidget />;
+      case "top-customer":
+        return <TopCustomerWidget />;
       default:
         return <div className="text-xs text-muted-foreground p-4">Widget not found</div>;
     }
@@ -108,14 +119,17 @@ export const DashboardModuleContent: React.FC = () => {
         return { title: "Low Inventory Alerts", subtitle: "Items below reorder point" };
       case "receivables":
         return { title: "Receivables & Credit Alerts", subtitle: "Accounts aging & debt risks" };
-      case "alerts-feed":
-        return { title: "Critical Operations Alerts", subtitle: "High severity system flags" };
       case "activity-feed":
         return { title: "Live Audit Logs Timeline", subtitle: "Chronological transaction trail" };
+
       case "quick-actions":
         return { title: "Quick Action Shortcuts", subtitle: "ERP navigation triggers" };
       case "weather-calendar":
         return { title: "Logistics Weather & Calendar", subtitle: "Scheduled events & conditions" };
+      case "top-salesman":
+        return { title: "Top Sales Performers", subtitle: "Leaderboard of top salesmen" };
+      case "top-customer":
+        return { title: "Top Customer Revenue", subtitle: "Purchases leader board ranking" };
       default:
         return { title: "System Widget", subtitle: "" };
     }
@@ -150,7 +164,6 @@ export const DashboardModuleContent: React.FC = () => {
       </div>
     );
   }
-
   const visibleLayouts = layouts.filter((l) => l.visible);
 
   // ─── MOBILE LAYOUT: Simple vertical stack, no drag/resize ────────────────
@@ -161,6 +174,7 @@ export const DashboardModuleContent: React.FC = () => {
           activePreset={activePreset}
           onChangePreset={changePreset}
           onToggleCustomize={() => setIsCustomizeOpen(true)}
+          onToggleNotifications={() => setIsNotificationsOpen(true)}
           onResetLayout={resetLayout}
           onExportDashboard={handleExportDashboard}
         />
@@ -175,20 +189,28 @@ export const DashboardModuleContent: React.FC = () => {
               </p>
             </div>
           )}
-          {/* Sort widgets by their y-position (row order) for predictable mobile stacking */}
+          {/* Sort widgets for predictable mobile stacking */}
           {[...visibleLayouts]
-            .sort((a, b) => a.y - b.y || a.x - b.x)
             .map((layout) => {
+
               const details = getWidgetDetails(layout.id);
-              // Taller desktop widgets get more min-height on mobile
               const minH = layout.h >= 4 ? "min-h-[280px]" : layout.h >= 3 ? "min-h-[220px]" : "min-h-[160px]";
+              
+              // Mobile border accent
+              let borderAccent = "border-l-cyan-500";
+              if (layout.id.includes("rto") || layout.id.includes("aging")) borderAccent = "border-l-rose-500";
+              else if (layout.id.includes("sales") || layout.id.includes("receivable")) borderAccent = "border-l-indigo-500";
+              else if (layout.id.includes("stock") || layout.id.includes("low")) borderAccent = "border-l-emerald-500";
+              else if (layout.id.includes("logistics") || layout.id.includes("weather")) borderAccent = "border-l-amber-500";
+              else if (layout.id.includes("activity")) borderAccent = "border-l-violet-500";
+
               return (
-                <GlassCard
+                <div
                   key={layout.id}
-                  className={`w-full ${minH} flex flex-col !rounded-xl !p-0 border border-border/60 bg-card/60 overflow-hidden`}
+                  className={`w-full ${minH} flex flex-col rounded-xl border border-border/70 border-l-4 bg-card text-card-foreground shadow-xs overflow-hidden ${borderAccent}`}
                 >
                   {/* Mobile widget header */}
-                  <div className="flex items-center justify-between border-b border-border/40 px-3 py-2 bg-muted/10">
+                  <div className="flex items-center justify-between border-b border-border/40 px-3.5 py-2 bg-muted/10">
                     <div className="min-w-0">
                       <h3 className="text-[10px] font-black uppercase italic tracking-tighter text-foreground truncate">
                         {details.title}
@@ -201,17 +223,17 @@ export const DashboardModuleContent: React.FC = () => {
                     </div>
                     <button
                       onClick={() => toggleWidgetVisibility(layout.id)}
-                      className="rounded-md p-1 text-muted-foreground/60 hover:bg-muted hover:text-red-500 transition-all cursor-pointer shrink-0 ml-2"
+                      className="rounded-md p-1.5 text-muted-foreground/60 hover:bg-muted hover:text-red-500 transition-all cursor-pointer shrink-0 ml-2"
                       title="Hide Widget"
                     >
-                      <EyeOff className="h-3 w-3" />
+                      <EyeOff className="h-3.5 w-3.5" />
                     </button>
                   </div>
                   {/* Widget content */}
-                  <div className="flex-1 p-3 min-h-0 overflow-auto select-text">
+                  <div className="flex-1 p-3 min-h-0 overflow-auto select-text flex flex-col">
                     {renderWidgetContent(layout.id)}
                   </div>
-                </GlassCard>
+                </div>
               );
             })}
         </div>
@@ -221,20 +243,22 @@ export const DashboardModuleContent: React.FC = () => {
           layouts={layouts}
           onToggleWidget={toggleWidgetVisibility}
         />
+        <NotificationsPanel
+          isOpen={isNotificationsOpen}
+          onClose={() => setIsNotificationsOpen(false)}
+        />
       </div>
     );
   }
 
   // ─── DESKTOP LAYOUT: CSS Grid — no overlap, auto-aligned ─────────────────
-  // Each WidgetContainer renders as a grid item using grid-column / grid-row
-  // derived from layout.x, layout.y, layout.w, layout.h. The browser handles
-  // all placement — no absolute positioning, no drift, no overlap possible.
   return (
     <div className="flex flex-col h-full bg-background">
       <DashboardHeader
         activePreset={activePreset}
         onChangePreset={changePreset}
         onToggleCustomize={() => setIsCustomizeOpen(true)}
+        onToggleNotifications={() => setIsNotificationsOpen(true)}
         onResetLayout={resetLayout}
         onExportDashboard={handleExportDashboard}
       />
@@ -251,7 +275,7 @@ export const DashboardModuleContent: React.FC = () => {
           </div>
         ) : (
           // 12-column CSS grid; each row = ROW_HEIGHT px.
-          // Widgets are auto-placed via grid-column / grid-row inline styles.
+          // Widgets are auto-placed via grid-column / grid-row span styles.
           <div
             ref={containerRef}
             className="w-full"
@@ -262,7 +286,7 @@ export const DashboardModuleContent: React.FC = () => {
               gap: "12px",
             }}
           >
-            {visibleLayouts.map((layout) => {
+            {visibleLayouts.map((layout, idx) => {
               const details = getWidgetDetails(layout.id);
               return (
                 <WidgetContainer
@@ -271,8 +295,11 @@ export const DashboardModuleContent: React.FC = () => {
                   title={details.title}
                   subtitle={details.subtitle}
                   onHide={() => toggleWidgetVisibility(layout.id)}
-                  onLayoutChange={(changes) => updateWidgetLayout(layout.id, changes)}
                   onRefresh={() => console.log(`Refreshing: ${layout.id}`)}
+                  onMoveLeft={() => moveWidget(layout.id, "left")}
+                  onMoveRight={() => moveWidget(layout.id, "right")}
+                  isFirst={idx === 0}
+                  isLast={idx === visibleLayouts.length - 1}
                 >
                   {renderWidgetContent(layout.id)}
                 </WidgetContainer>
@@ -287,6 +314,10 @@ export const DashboardModuleContent: React.FC = () => {
         onClose={() => setIsCustomizeOpen(false)}
         layouts={layouts}
         onToggleWidget={toggleWidgetVisibility}
+      />
+      <NotificationsPanel
+        isOpen={isNotificationsOpen}
+        onClose={() => setIsNotificationsOpen(false)}
       />
     </div>
   );

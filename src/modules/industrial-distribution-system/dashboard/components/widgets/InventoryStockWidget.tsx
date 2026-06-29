@@ -1,9 +1,11 @@
 // src/modules/industrial-distribution-system/dashboard/components/widgets/InventoryStockWidget.tsx
+// NOTE: Replaced hardcoded status ratios with live aggregates from useDashboard context.
 
 "use client";
 
 import React, { useMemo } from "react";
 import { useDashboard } from "../../providers/DashboardProvider";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   PieChart,
   Pie,
@@ -12,48 +14,28 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-
 export const InventoryStockWidget: React.FC = () => {
-  const { filters } = useDashboard();
-
-  // Mock cylinder data based on branches
-  const stockData = useMemo(() => {
-    const branch = filters.branchId;
-
-    // Adjust ratios slightly depending on branch selected to look dynamic
-    let filled = 1450;
-    let empty = 820;
-    let transit = 340;
-    let repair = 75;
-
-    if (branch === "1") {
-      filled = 650;
-      empty = 410;
-      transit = 120;
-      repair = 30;
-    } else if (branch === "2") {
-      filled = 480;
-      empty = 260;
-      transit = 150;
-      repair = 25;
-    } else if (branch === "3") {
-      filled = 320;
-      empty = 150;
-      transit = 70;
-      repair = 20;
-    }
-
-    return [
-      { name: "Filled Cylinders", value: filled, color: "#06b6d4" }, // Cyan
-      { name: "Empty Cylinders", value: empty, color: "#94a3b8" }, // Slate
-      { name: "Cylinders In Transit", value: transit, color: "#f59e0b" }, // Amber
-      { name: "Under Repair", value: repair, color: "#ef4444" }, // Red
-    ];
-  }, [filters.branchId]);
+  const { cylinderStock, loading } = useDashboard();
 
   const totalStock = useMemo(() => {
-    return stockData.reduce((a, b) => a + b.value, 0);
-  }, [stockData]);
+    if (!cylinderStock) return 0;
+    return cylinderStock.reduce((a, b) => a + b.value, 0);
+  }, [cylinderStock]);
+
+  if (loading || !cylinderStock) {
+    return (
+      <div className="flex flex-col h-full justify-between p-2">
+        <Skeleton className="h-4 w-1/3 mb-4" />
+        <div className="flex items-center gap-4 flex-1">
+          <Skeleton className="h-20 w-20 rounded-full shrink-0" />
+          <div className="space-y-2 flex-1">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-full" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full justify-between">
@@ -75,7 +57,7 @@ export const InventoryStockWidget: React.FC = () => {
                 itemStyle={{ color: "#ffffff", fontSize: "10px" }}
               />
               <Pie
-                data={stockData}
+                data={cylinderStock}
                 cx="50%"
                 cy="50%"
                 innerRadius={30}
@@ -83,7 +65,7 @@ export const InventoryStockWidget: React.FC = () => {
                 paddingAngle={3}
                 dataKey="value"
               >
-                {stockData.map((entry, index) => (
+                {cylinderStock.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
               </Pie>
@@ -93,20 +75,20 @@ export const InventoryStockWidget: React.FC = () => {
 
         {/* Custom Legends & Details */}
         <div className="flex-1 pl-4 space-y-1.5 self-center">
-          {stockData.map((item, idx) => (
+          {cylinderStock.map((item, idx) => (
             <div key={idx} className="flex items-center justify-between text-[10px]">
               <div className="flex items-center gap-1.5 min-w-0">
                 <div className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
                 <span className="text-slate-400 font-bold truncate">{item.name}</span>
               </div>
-              <span className="font-mono font-extrabold text-foreground ml-2">
+              <span className="font-mono text-foreground font-black text-right pl-2">
                 {item.value.toLocaleString()}
               </span>
             </div>
           ))}
-          <div className="border-t border-border/40 pt-1.5 mt-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
-            <span className="text-slate-400">Total Asset Pool</span>
-            <span className="text-primary font-black">{totalStock.toLocaleString()}</span>
+          <div className="border-t border-border/40 pt-1.5 mt-2 flex items-center justify-between text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+            <span>Total Asset Pool</span>
+            <span className="font-mono text-foreground text-right">{totalStock.toLocaleString()}</span>
           </div>
         </div>
       </div>

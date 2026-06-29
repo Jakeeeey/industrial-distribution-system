@@ -1,46 +1,96 @@
 // src/modules/industrial-distribution-system/dashboard/components/widgets/WeatherCalendarWidget.tsx
+// NOTE: Replaced static weather card (29°C / Light Rain hardcoded) with live Open-Meteo API data.
+// Scheduled events are wired to activeDispatches from useDashboard context.
 
 "use client";
 
-import React, { useMemo } from "react";
-import { CloudRain, Calendar, Clock, MapPin } from "lucide-react";
+import React, { useMemo, useEffect, useState } from "react";
+import { useDashboard } from "../../providers/DashboardProvider";
+import {
+  CloudRain,
+  Cloud,
+  Sun,
+  CloudDrizzle,
+  CloudLightning,
+  CloudSnow,
+  Calendar,
+  Clock,
+  MapPin,
+  Loader2,
+} from "lucide-react";
+
+// Map icon string keys returned by BFF to Lucide components
+const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+  Sun,
+  Cloud,
+  CloudRain,
+  CloudDrizzle,
+  CloudLightning,
+  CloudSnow,
+};
+
+interface WeatherData {
+  temp: string;
+  condition: string;
+  humidity: string;
+  wind: string;
+  icon: string;
+  alertLevel: string;
+  status: string;
+  fallback?: boolean;
+}
+
+const ALERT_COLORS: Record<string, string> = {
+  normal: "text-emerald-500 bg-emerald-500/10 border-emerald-500/25",
+  warning: "text-amber-500 bg-amber-500/10 border-amber-500/25",
+  critical: "text-red-500 bg-red-500/10 border-red-500/25",
+};
 
 export const WeatherCalendarWidget: React.FC = () => {
-  const weather = useMemo(() => {
-    return {
-      temp: "29°C",
-      condition: "Light Rain showers",
-      humidity: "82%",
-      wind: "14 km/h NE",
-      status: "Wet roads - Drive safely",
-      icon: CloudRain,
+  const { activeDispatches } = useDashboard();
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState(true);
+
+  // Fetch live weather on mount
+  useEffect(() => {
+    const fetchWeather = async () => {
+      setWeatherLoading(true);
+      try {
+        const res = await fetch("/api/ids/dashboard/weather", { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          setWeather(data);
+        }
+      } catch (e) {
+        console.error("[WeatherCalendarWidget] Failed to fetch weather:", e);
+      } finally {
+        setWeatherLoading(false);
+      }
     };
+    fetchWeather();
   }, []);
 
+  // Live scheduled events from active dispatches (top 3); fallback to static if none
   const upcomingEvents = useMemo(() => {
+    if (activeDispatches && activeDispatches.length > 0) {
+      return activeDispatches.slice(0, 3).map((d) => {
+        const cleanTime = d.time.replace("Scheduled/Created:", "").trim();
+        return {
+          title: `Dispatch Run ${d.dispatchNo} — ${d.driverName}`,
+          time: cleanTime,
+          location: d.route,
+          type: "Dispatch",
+        };
+      });
+    }
+    // Static fallback only when no dispatches are active
     return [
-      {
-        title: "Pasig Dispatch Peak (PDP-000187)",
-        time: "11:30 AM",
-        location: "Warehouse A",
-        type: "Dispatch",
-      },
-      {
-        title: "Batangas Supplier LPG Refill Delivery",
-        time: "02:00 PM",
-        location: "Warehouse B",
-        type: "Receiving",
-      },
-      {
-        title: "Metered Tank Refill: First Chem Corp",
-        time: "04:30 PM",
-        location: "Customer Site",
-        type: "Refill",
-      },
+      { title: "No active dispatch runs scheduled", time: "—", location: "All Warehouses", type: "Info" },
     ];
-  }, []);
+  }, [activeDispatches]);
 
-  const WeatherIcon = weather.icon;
+  const WeatherIcon = weather ? (ICON_MAP[weather.icon] ?? Cloud) : Cloud;
+  const alertColorClass = ALERT_COLORS[weather?.alertLevel ?? "normal"];
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 h-full items-center justify-between">
@@ -50,21 +100,32 @@ export const WeatherCalendarWidget: React.FC = () => {
           Logistics Weather
         </span>
 
-        <div className="my-2">
-          <div className="flex justify-center items-center gap-1.5">
-            <WeatherIcon className="h-6 w-6 text-cyan-500 animate-bounce" />
-            <span className="text-xl font-black text-foreground leading-none">{weather.temp}</span>
+        {weatherLoading ? (
+          <div className="flex items-center justify-center flex-1 py-4">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
-          <span className="text-[10px] font-bold text-foreground mt-1 block">
-            {weather.condition}
-          </span>
-          <span className="text-[9px] text-slate-400 block mt-0.5 font-medium leading-none">
-            Wind: {weather.wind}
-          </span>
-        </div>
+        ) : (
+          <div className="my-2">
+            <div className="flex justify-center items-center gap-1.5">
+              <WeatherIcon className="h-6 w-6 text-cyan-500 animate-pulse" />
+              <span className="text-xl font-black text-foreground leading-none">
+                {weather?.temp ?? "—"}
+              </span>
+            </div>
+            <span className="text-[10px] font-bold text-foreground mt-1 block">
+              {weather?.condition ?? "—"}
+            </span>
+            <span className="text-[9px] text-slate-400 block mt-0.5 font-medium leading-none">
+              Wind: {weather?.wind ?? "—"}
+            </span>
+            <span className="text-[9px] text-slate-400 block mt-0.5 font-medium leading-none">
+              Humidity: {weather?.humidity ?? "—"}
+            </span>
+          </div>
+        )}
 
-        <div className="text-[9px] font-black uppercase text-amber-500 bg-amber-500/10 py-1 rounded-md px-1.5 border border-amber-500/25">
-          {weather.status}
+        <div className={`text-[9px] font-black uppercase py-1 rounded-md px-1.5 border ${alertColorClass}`}>
+          {weather?.status ?? "Drive safely"}
         </div>
       </div>
 

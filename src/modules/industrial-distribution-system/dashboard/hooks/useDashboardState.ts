@@ -13,7 +13,8 @@ import { toast } from "sonner";
 const LOCAL_STORAGE_KEY = "ids-dashboard-layout";
 
 // Bump this whenever the coordinate system or schema changes.
-const LAYOUT_VERSION = 2; // v2 = integer-only CSS Grid coords (was v1 react-rnd fractional)
+const LAYOUT_VERSION = 3; // v3 = removed alerts-feed widget (moved to notification drawer)
+
 
 interface LocalStorageState {
   version?: number;
@@ -124,6 +125,34 @@ export function useDashboardState() {
     });
   }, [activePreset, saveState]);
 
+  // Move a widget left/up or right/down in the flow by swapping array elements
+  const moveWidget = useCallback((id: WidgetId, direction: "left" | "right") => {
+    setLayouts((prev) => {
+      const visibleIndices = prev
+        .map((l, i) => (l.visible ? i : -1))
+        .filter((idx) => idx !== -1);
+      
+      const currentIndex = prev.findIndex((l) => l.id === id);
+      const currentVisiblePos = visibleIndices.indexOf(currentIndex);
+
+      if (currentVisiblePos === -1) return prev;
+
+      const targetVisiblePos = currentVisiblePos + (direction === "left" ? -1 : 1);
+      if (targetVisiblePos < 0 || targetVisiblePos >= visibleIndices.length) return prev;
+
+      const targetIndex = visibleIndices[targetVisiblePos];
+      const updated = [...prev];
+      
+      // Swap positions
+      const temp = updated[currentIndex];
+      updated[currentIndex] = updated[targetIndex];
+      updated[targetIndex] = temp;
+
+      saveState(activePreset, updated);
+      return updated;
+    });
+  }, [activePreset, saveState]);
+
   return {
     isLoaded,
     activePreset,
@@ -132,6 +161,8 @@ export function useDashboardState() {
     updateWidgetLayout,
     resetLayout,
     toggleWidgetVisibility,
+    moveWidget,
   };
 }
+
 
