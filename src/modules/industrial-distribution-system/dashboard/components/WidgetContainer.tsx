@@ -43,21 +43,21 @@ const getModulePath = (id: string): string => {
     case "cylinder-aging":
       return "/ids/bia/customer-cylinder-aging";
     case "order-status":
-      return "/ids/crm/customer-hub";
+      return "/ids/crm/customer-hub/sales-order-report";
     case "sales-performance":
       return "/ids/crm/customer-hub"; // Under Sales/Revenue reports
     case "logistics-trips":
-      return "/ids/scm/fleet-management";
+      return "/ids/scm/warehouse-management/consolidation/pre-dispatch-plan/pdp-planner";
     case "inventory-stock":
-      return "/ids/scm/inventory-management";
+      return "/ids/scm/inventory-management/cylinder-assets";
     case "low-stock-alert":
-      return "/ids/scm/products-management";
+      return "/ids/scm/inventory-management/inventory-control";
     case "receivables":
-      return "/ids/invoicing";
-    case "weather-calendar":
-      return "/ids/scm/logistics";
-    case "activity-feed":
-      return "/ids/settings";
+      return "/ids/bia/rto-operation";
+    // case "weather-calendar":
+    //   return "/ids/scm/logistics";
+    // case "activity-feed":
+    //   return "/ids/settings";
     default:
       return "";
   }

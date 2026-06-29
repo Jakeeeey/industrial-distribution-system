@@ -30,7 +30,7 @@ export const QuickActionsWidget: React.FC = () => {
       },
       {
         title: "Serial Tagging",
-        href: "/ids/crm/customer-hub/sales-order-serial-tagging",
+        href: "/ids/crm/customer-hub/sales-order-tagging",
         icon: Tag,
         color: "text-cyan-500 bg-cyan-500/10 hover:bg-cyan-500/15 border-cyan-500/20",
       },
@@ -42,7 +42,7 @@ export const QuickActionsWidget: React.FC = () => {
       },
       {
         title: "Stock Transfer",
-        href: "/ids/scm/transfers",
+        href: "/ids/scm/warehouse-management/stock-transfers/stock-transfer-request",
         icon: ArrowLeftRight,
         color: "text-amber-500 bg-amber-500/10 hover:bg-amber-500/15 border-amber-500/20",
       },
