@@ -53,6 +53,16 @@ const WIDGET_CATEGORIES: {
         name: "Monthly Revenue Tracker",
         description: "Target tracking comparison vs current monthly revenue.",
       },
+      {
+        id: "top-salesman",
+        name: "Top Sales Performers",
+        description: "Leaderboard of top 5 salesmen ranked by total IDS division revenue.",
+      },
+      {
+        id: "top-customer",
+        name: "Top Customer Revenue",
+        description: "Ranking of top 5 customers by total IDS division purchase revenue.",
+      },
     ],
   },
   {

@@ -13,7 +13,7 @@ import { toast } from "sonner";
 const LOCAL_STORAGE_KEY = "ids-dashboard-layout";
 
 // Bump this whenever the coordinate system or schema changes.
-const LAYOUT_VERSION = 3; // v3 = removed alerts-feed widget (moved to notification drawer)
+const LAYOUT_VERSION = 4; // v4 = added top-salesman and top-customer widgets
 
 
 interface LocalStorageState {

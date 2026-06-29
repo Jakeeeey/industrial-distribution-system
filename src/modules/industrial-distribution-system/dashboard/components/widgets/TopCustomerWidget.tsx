@@ -4,7 +4,7 @@
 import React, { useMemo } from "react";
 import { useDashboard } from "../../providers/DashboardProvider";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Award, Store, TrendingUp } from "lucide-react";
+import { Award, Store } from "lucide-react";
 
 export const TopCustomerWidget: React.FC = () => {
   const { topCustomers, loading } = useDashboard();
