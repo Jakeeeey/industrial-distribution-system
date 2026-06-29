@@ -27,10 +27,11 @@ export const ActivePickingService = {
     },
 
     async processSerialPick(consolidatorId: number, serialNumber: string, userId: number | null, branchId: number, sessionToken: string | null = null): Promise<{ success: boolean; message: string; newQuantity: number; detailId: number; serialMapping?: ConsolidatorSerialMapping }> {
-        // Concurrently verify if serial is on hand and check mapping uniqueness
-        const [onhandInfoResult, serialScanned] = await Promise.allSettled([
+        // Concurrently verify if serial is on hand, check mapping uniqueness, and fetch picking details
+        const [onhandInfoResult, serialScanned, detailsResult] = await Promise.allSettled([
             ActivePickingRepo.verifySerialOnhand(serialNumber, branchId, sessionToken),
-            ActivePickingRepo.checkSerialExists(serialNumber)
+            ActivePickingRepo.checkSerialExists(serialNumber),
+            ActivePickingRepo.fetchPickingDetails(consolidatorId)
         ]);
 
         if (serialScanned.status === "rejected" || (serialScanned.status === "fulfilled" && serialScanned.value)) {
@@ -45,24 +46,31 @@ export const ActivePickingService = {
             throw new Error(error.message || "Failed to verify serial number.");
         }
 
+        if (detailsResult.status === "rejected") {
+            throw new Error("Failed to fetch picking details.");
+        }
+
         let productId: number;
+        let availableStock: number | null = null;
         const onhandInfo = onhandInfoResult.value;
+
         if (!onhandInfo) {
             const asset = await ActivePickingRepo.fetchCylinderAssetBySerial(serialNumber);
             if (!asset) {
                 throw new Error("UNREGISTERED_SERIAL");
             }
             productId = Number(asset.product_id);
+
+            // OPTIMIZATION: Only fetch general inventory if the cylinder is NOT physically on hand.
+            // If it is on hand, we safely assume available stock > 0 and skip this heavy query.
+            const inventory = await ActivePickingRepo.fetchInventoryForProducts([productId], branchId, sessionToken);
+            const stockInfo = inventory.find(inv => Number(inv.product_id) === productId);
+            availableStock = stockInfo?.running_inventory_unit || 0;
         } else {
             productId = Number(onhandInfo.productId);
         }
 
-        // Concurrently fetch the details and the inventory check for the matched product
-        const [details, inventory] = await Promise.all([
-            ActivePickingRepo.fetchPickingDetails(consolidatorId),
-            ActivePickingRepo.fetchInventoryForProducts([productId], branchId, sessionToken)
-        ]);
-
+        const details = detailsResult.value;
         const detail = details.find(d => Number(d.product_id) === productId);
         if (!detail) {
             throw new Error("This item is not required for this picking order.");
@@ -78,11 +86,8 @@ export const ActivePickingService = {
             throw new Error("Order limit reached for this item.");
         }
 
-        // 2. Check if Picked >= Available Stock
-        const stockInfo = inventory.find(inv => Number(inv.product_id) === productId);
-        const availableStock = stockInfo?.running_inventory_unit || 0;
-
-        if (detail.picked_quantity >= availableStock) {
+        // 2. Check if Picked >= Available Stock (only validated if we fell back to fetching inventory)
+        if (availableStock !== null && detail.picked_quantity >= availableStock) {
             throw new Error("Cannot pick more than the available physical stock.");
         }
 
