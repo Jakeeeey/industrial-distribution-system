@@ -96,7 +96,8 @@ export async function GET(req: NextRequest) {
           created_date: string;
         }
 
-        const ordersRes = await fetchDirectus(`/items/sales_order?filter[branch_id][_in]=196,197&filter[order_status][_eq]=For%20Shipping&fields=order_id,order_no,customer_code,branch_id,order_status,created_date&sort=-created_date&limit=-1`);
+        // Modified: Changed order status filter from "For Shipping" to "En Route"
+        const ordersRes = await fetchDirectus(`/items/sales_order?filter[branch_id][_in]=196,197&filter[order_status][_eq]=En%20Route&fields=order_id,order_no,customer_code,branch_id,order_status,created_date&sort=-created_date&limit=-1`);
         const rawOrders = (ordersRes.data || []) as RawSalesOrder[];
 
         const uniqueCustCodes = Array.from(new Set(rawOrders.map((o) => o.customer_code).filter(Boolean)));
@@ -406,6 +407,28 @@ export async function GET(req: NextRequest) {
           detail_id: string | number | DirectusSerialMappingDetailObj | null;
         }
 
+        const serialNumbers = mappings.map((m: DirectusSerialMapping) => m.serial_number).filter(Boolean);
+        const statusMap = new Map<string, string>();
+
+        if (serialNumbers.length > 0) {
+          try {
+            interface AssetMin {
+              serial_number: string;
+              cylinder_status?: string;
+            }
+            const encodedSerials = serialNumbers.map((s: string) => encodeURIComponent(s.trim().toUpperCase())).join(",");
+            const assetsRes = await fetchDirectus(`/items/cylinder_assets?filter[serial_number][_in]=${encodedSerials}&fields=serial_number,cylinder_status&limit=-1`);
+            const assets = (assetsRes.data || []) as AssetMin[];
+            for (const asset of assets) {
+              if (asset.serial_number) {
+                statusMap.set(asset.serial_number.toUpperCase(), asset.cylinder_status || "LOADED");
+              }
+            }
+          } catch (assetErr) {
+            console.warn("Could not retrieve status for mapping serials: ", assetErr);
+          }
+        }
+
         const serials = (mappings as DirectusSerialMapping[]).map((mapping) => {
           const detailObj = typeof mapping.detail_id === "object" && mapping.detail_id !== null
             ? mapping.detail_id as DirectusSerialMappingDetailObj
@@ -429,9 +452,14 @@ export async function GET(req: NextRequest) {
             prodId = prodObj.product_id ?? prodObj.id;
           }
 
+          const cylStatus = mapping.serial_number
+            ? (statusMap.get(mapping.serial_number.toUpperCase()) || "LOADED")
+            : "LOADED";
+
           return {
             serial_number: mapping.serial_number,
             product_id: prodId ? Number(prodId) : null,
+            cylinder_status: cylStatus,
           };
         });
 
