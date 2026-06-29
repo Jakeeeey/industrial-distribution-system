@@ -79,6 +79,8 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
     const [returnMode, setReturnMode] = useState<'create' | 'link'>('create');
     const [existingReturns, setExistingReturns] = useState<{ id: number; returnNo: string; returnDate: string; totalAmount: number }[]>([]);
     const [selectedReturnNo, setSelectedReturnNo] = useState<string>('');
+    const [selectedReturnDetails, setSelectedReturnDetails] = useState<{ description: string; quantity: number; serialNumbers: string[] }[]>([]);
+    const [isLoadingReturnDetails, setIsLoadingReturnDetails] = useState(false);
 
     // Reset/initialize state when modal opens — intentional reset pattern
     useEffect(() => {
@@ -125,6 +127,22 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
             setSelectedReturnNo('');
         }
     }, [isOpen, reconciliation]);
+
+    useEffect(() => {
+        if (selectedReturnNo && returnMode === 'link') {
+            const returnData = existingReturns.find(r => r.returnNo === selectedReturnNo);
+            if (returnData) {
+                setIsLoadingReturnDetails(true);
+                fetch(`/api/ids/sales-return-serial?action=details&id=${returnData.id}&returnNo=${selectedReturnNo}`)
+                    .then(res => res.json())
+                    .then(data => setSelectedReturnDetails(data.data || []))
+                    .catch(err => console.error("Failed to load return details", err))
+                    .finally(() => setIsLoadingReturnDetails(false));
+            }
+        } else {
+            setSelectedReturnDetails([]);
+        }
+    }, [selectedReturnNo, returnMode, existingReturns]);
 
     if (!reconciliation) return null;
 
@@ -325,6 +343,41 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                                                             ))}
                                                         </SelectContent>
                                                     </Select>
+                                                    
+                                                    {selectedReturnNo && (
+                                                        <div className="mt-2 p-3 rounded-xl border border-border bg-muted/30">
+                                                            {isLoadingReturnDetails ? (
+                                                                <div className="text-xs text-muted-foreground animate-pulse text-center py-2 font-medium">Loading details...</div>
+                                                            ) : selectedReturnDetails.length > 0 ? (
+                                                                <div className="space-y-3">
+                                                                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Return Items & Serials</p>
+                                                                    <div className="space-y-2">
+                                                                        {selectedReturnDetails.map((item: { description: string; quantity: number; serialNumbers: string[] }, idx: number) => (
+                                                                            <div key={idx} className="flex flex-col gap-1.5 text-xs border-b border-border/50 pb-2 last:border-0 last:pb-0">
+                                                                                <div className="flex justify-between items-start gap-4 font-bold">
+                                                                                    <span className="text-foreground leading-tight">{item.description || 'Unknown Product'}</span>
+                                                                                    <span className="text-muted-foreground whitespace-nowrap bg-background border border-border px-1.5 py-0.5 rounded-md">Qty: {item.quantity}</span>
+                                                                                </div>
+                                                                                {item.serialNumbers && item.serialNumbers.length > 0 ? (
+                                                                                    <div className="flex flex-wrap gap-1 mt-0.5">
+                                                                                        {item.serialNumbers.map((serial: string, sIdx: number) => (
+                                                                                            <span key={sIdx} className="text-[9px] font-bold bg-primary/10 text-primary px-1.5 py-0.5 rounded border border-primary/20">
+                                                                                                {serial}
+                                                                                            </span>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                ) : (
+                                                                                    <span className="text-[10px] text-muted-foreground italic">No serials tagged</span>
+                                                                                )}
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="text-xs text-muted-foreground text-center py-2 font-medium">No items found for this return.</div>
+                                                            )}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             ) : (
                                                 <div className="p-4 rounded-lg bg-amber-500/5 border border-amber-500/20 flex items-center gap-3">
