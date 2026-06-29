@@ -33,6 +33,7 @@ export interface SalesOrderTaggingDetails {
 export interface MappedSerial {
   serial_number: string;
   product_id: number;
+  cylinder_status?: string;
 }
 
 export interface CustomerAsset {
