@@ -253,7 +253,7 @@ export function FilterBar({
       </div>
 
       {/* Active filter badges */}
-      {(query.productId || query.supplierId || query.dateFrom || query.dateTo) && (
+      {/* {(query.productId || query.supplierId || query.dateFrom || query.dateTo) && (
         <div className="flex flex-wrap gap-1.5 items-center">
           <span className="text-xs text-muted-foreground">Filters:</span>
           {query.productId && (
@@ -321,7 +321,7 @@ export function FilterBar({
             </Badge>
           )}
         </div>
-      )}
+      )} */}
     </div>
   );
 }
