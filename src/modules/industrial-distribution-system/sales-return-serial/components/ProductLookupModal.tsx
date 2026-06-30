@@ -160,6 +160,28 @@ export function ProductLookupModal({
     return validIds;
   }, [selectedSupplierId, supplierConnections]);
 
+  const categoriesForSelectedSupplier = useMemo(() => {
+    if (selectedSupplierId === "All") return categoriesList;
+    const activeCategories = new Set<string>();
+    products.forEach((p) => {
+      if (p.product_category && p.product_id && allowedProductIds?.has(Number(p.product_id))) {
+        activeCategories.add(p.product_category.toString());
+      }
+    });
+    return categoriesList.filter((c) => activeCategories.has(c.category_id.toString()));
+  }, [selectedSupplierId, categoriesList, products, allowedProductIds]);
+
+  const brandsForSelectedSupplier = useMemo(() => {
+    if (selectedSupplierId === "All") return brandsList;
+    const activeBrands = new Set<string>();
+    products.forEach((p) => {
+      if (p.product_brand && p.product_id && allowedProductIds?.has(Number(p.product_id))) {
+        activeBrands.add(p.product_brand.toString());
+      }
+    });
+    return brandsList.filter((b) => activeBrands.has(b.brand_id.toString()));
+  }, [selectedSupplierId, brandsList, products, allowedProductIds]);
+
   const filteredSuppliers = suppliersList.filter(
     (s) =>
       (s.supplier_name || "")
@@ -168,7 +190,7 @@ export function ProductLookupModal({
       supplierSearch !== "All Suppliers",
   );
 
-  const filteredCategories = categoriesList.filter(
+  const filteredCategories = categoriesForSelectedSupplier.filter(
     (c) =>
       (c.category_name || "").toLowerCase() !== "all" &&
       (c.category_name || "")
@@ -177,7 +199,7 @@ export function ProductLookupModal({
       categorySearch !== "All Categories",
   );
 
-  const filteredBrands = brandsList.filter(
+  const filteredBrands = brandsForSelectedSupplier.filter(
     (b) =>
       (b.brand_name || "")
         .toLowerCase()
@@ -208,6 +230,14 @@ export function ProductLookupModal({
 
     return matchesSearch && matchesBrand && matchesCategory && matchesSupplier;
   });
+
+  // Reset category/brand selections when supplier changes
+  useEffect(() => {
+    setSelectedCategoryId("All");
+    setSelectedBrandId("All");
+    setCategorySearch("All Categories");
+    setBrandSearch("All Brands");
+  }, [selectedSupplierId]);
 
   // Reset page when filters change
   useEffect(() => {

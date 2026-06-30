@@ -13,8 +13,6 @@ import * as provider from "../services/fetchProviders";
 import type {
     SerialTaggingPOListItem,
     SerialTaggingPODetail,
-    SerialTaggingLine,
-    SerialEntry,
     TagSerialsResult,
 } from "../types/serial-po.types";
 import { useSerialTaggingStore } from "../store/serialTaggingStore";
@@ -184,11 +182,11 @@ export function useSerialTagging(): UseSerialTaggingReturn {
                 // Also update the list item's serial count
                 setPoList((prev) =>
                     prev.map((po) =>
-                        po.poId === refreshed.poId
+                        po.poId === result.updatedDetail!.poId
                             ? {
                                 ...po,
-                                totalSerials: refreshed.lines.reduce((s, l) => s + l.savedSerials.length, 0),
-                                isTagged: refreshed.isTagged,
+                                totalSerials: result.updatedDetail!.lines.reduce((s, l) => s + l.savedSerials.length, 0),
+                                isTagged: result.updatedDetail!.isTagged,
                               }
                             : po
                     )
@@ -208,7 +206,7 @@ export function useSerialTagging(): UseSerialTaggingReturn {
         } finally {
             setIsSubmitting(false);
         }
-    }, [selectedPO, canSubmit]);
+    }, [selectedPO, canSubmit, rawSelectedPO, store]);
 
     return {
         poList, isLoadingList, listError, refreshList,

@@ -28,14 +28,7 @@ interface RapidScanModalProps {
     onAddSerial: (lineId: number, serial: string) => void;
 }
 
-type ScannedItem = {
-    serial: string;
-    lineId: number | null;
-    productName: string;
-    branchName: string;
-    status: "success" | "error";
-    message: string;
-};
+
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -46,7 +39,8 @@ export function RapidScanModal({ poId, open, onClose, lines, onAddSerial }: Rapi
     
     // Use persistent store for scan logs
     const store = useSerialTaggingStore();
-    const scannedList = store.rapidScanLogs[poId] || [];
+    const rawScannedList = store.rapidScanLogs[poId];
+    const scannedList = React.useMemo(() => rawScannedList || [], [rawScannedList]);
 
     // Focus input on open
     React.useEffect(() => {
@@ -149,7 +143,7 @@ export function RapidScanModal({ poId, open, onClose, lines, onAddSerial }: Rapi
             setIsValidating(false);
             setTimeout(() => inputRef.current?.focus(), 50);
         }
-    }, [inputValue, activeLines, scannedList, onAddSerial]);
+    }, [inputValue, activeLines, scannedList, onAddSerial, poId, store]);
 
     // Enter key trigger
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
