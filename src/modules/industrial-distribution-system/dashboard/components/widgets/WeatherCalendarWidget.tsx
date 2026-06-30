@@ -101,12 +101,12 @@ export const WeatherCalendarWidget: React.FC<{ layout?: WidgetLayout }> = ({ lay
   return (
     <div className={cn(
       "flex gap-4 h-full items-center justify-between flex-1 min-h-0 w-full",
-      isNarrow ? "flex-col" : "flex-row"
+      isNarrow ? "flex-row" : "flex-row"
     )}>
       {/* Weather Forecast */}
       <div className={cn(
         "shrink-0 border border-border/40 rounded-xl p-3 bg-muted/5 flex flex-col justify-between self-stretch text-center",
-        isNarrow ? "w-full min-h-[120px]" : "w-full lg:w-[160px]"
+        isNarrow ? " min-h-[120px]" : " lg:w-[160px]"
       )}>
         <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground block">
           Logistics Weather

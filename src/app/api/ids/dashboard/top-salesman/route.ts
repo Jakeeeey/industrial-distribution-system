@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const branchId = searchParams.get("branchId") || "all";
 
-    const springUrl = `${SPRING_API_BASE}/api/views/ids-dashboard-top-salesman`;
+    const springUrl = `${SPRING_API_BASE}/api/v-ids-dashboard-top-salesman`;
     const res = await fetch(springUrl, {
       method: "GET",
       headers: {

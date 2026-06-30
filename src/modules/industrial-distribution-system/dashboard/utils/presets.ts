@@ -29,7 +29,7 @@ export const DEFAULT_LAYOUTS: Record<string, WidgetLayout[]> = {
   executive: [
     { id: "rto-overview",      x: 0, y: 0,  w: 12, h: 3,  visible: true  },
     { id: "order-status",      x: 0, y: 2,  w: 6,  h: 4,  visible: true  },
-    { id: "sales-performance", x: 6, y: 2,  w: 6,  h: 4,  visible: true  },
+    { id: "sales-performance", x: 6, y: 2,  w: 6,  h: 4,  visible: false },
     { id: "cylinder-aging",    x: 0, y: 6,  w: 6,  h: 4,  visible: true  },
     { id: "receivables",       x: 6, y: 6,  w: 6,  h: 4,  visible: true  },
     { id: "activity-feed",     x: 0, y: 10, w: 8,  h: 4,  visible: true  },
@@ -43,7 +43,7 @@ export const DEFAULT_LAYOUTS: Record<string, WidgetLayout[]> = {
   ],
   // ── Sales Command ────────────────────────────────────────────────────────────
   sales: [
-    { id: "sales-performance", x: 0, y: 0,  w: 8,  h: 4,  visible: true  },
+    { id: "sales-performance", x: 0, y: 0,  w: 8,  h: 4,  visible: false },
     { id: "quick-actions",     x: 8, y: 0,  w: 4,  h: 4,  visible: true  },
     { id: "order-status",      x: 0, y: 4,  w: 6,  h: 4,  visible: true  },
     { id: "activity-feed",     x: 6, y: 4,  w: 6,  h: 4,  visible: true  },
@@ -60,7 +60,7 @@ export const DEFAULT_LAYOUTS: Record<string, WidgetLayout[]> = {
   // ── Financial Exposure ───────────────────────────────────────────────────────
   finance: [
     { id: "receivables",       x: 0, y: 0,  w: 8,  h: 5,  visible: true  },
-    { id: "sales-performance", x: 8, y: 0,  w: 4,  h: 5,  visible: true  },
+    { id: "sales-performance", x: 8, y: 0,  w: 4,  h: 5,  visible: false },
     { id: "rto-overview",      x: 0, y: 5,  w: 12, h: 3,  visible: true  },
     { id: "activity-feed",     x: 0, y: 7,  w: 12, h: 4,  visible: true  },
     { id: "cylinder-aging",    x: 0, y: 11, w: 6,  h: 4,  visible: false },
@@ -105,14 +105,13 @@ export const DEFAULT_LAYOUTS: Record<string, WidgetLayout[]> = {
     { id: "top-salesman",      x: 0, y: 28, w: 6,  h: 4,  visible: false },
     { id: "top-customer",      x: 6, y: 28, w: 6,  h: 4,  visible: false },
   ],
-  // ── Personal Workspace ───────────────────────────────────────────────────────
   personal: [
-    { id: "quick-actions",     x: 0, y: 0,  w: 6,  h: 4,  visible: true  },
-    { id: "weather-calendar",  x: 6, y: 0,  w: 6,  h: 4,  visible: true  },
-    { id: "order-status",      x: 0, y: 4,  w: 12, h: 4,  visible: true  },
-    { id: "activity-feed",     x: 0, y: 8,  w: 12, h: 5,  visible: true  },
-    { id: "rto-overview",      x: 0, y: 13, w: 12, h: 3,  visible: false },
-    { id: "cylinder-aging",    x: 0, y: 15, w: 6,  h: 4,  visible: false },
+    { id: "rto-overview",      x: 0, y: 13, w: 12, h: 2,  visible: true  },
+    { id: "order-status",      x: 0, y: 4,  w: 4,  h: 4,  visible: true  },
+    { id: "quick-actions",     x: 0, y: 0,  w: 4,  h: 4,  visible: true  },
+    { id: "weather-calendar",  x: 6, y: 0,  w: 8,  h: 4,  visible: true  },
+    { id: "activity-feed",     x: 0, y: 8,  w: 4,  h: 12, visible: true  },
+    { id: "cylinder-aging",    x: 0, y: 15, w: 8,  h: 4,  visible: true  },
     { id: "sales-performance", x: 6, y: 15, w: 6,  h: 4,  visible: false },
     { id: "logistics-trips",   x: 0, y: 19, w: 6,  h: 4,  visible: false },
     { id: "inventory-stock",   x: 6, y: 19, w: 6,  h: 4,  visible: false },

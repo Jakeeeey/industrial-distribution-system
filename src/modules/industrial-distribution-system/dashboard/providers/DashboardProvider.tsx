@@ -94,7 +94,7 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // Fetch BIA RTO, Ops dashboard, branches, activity logs, revenue tracker, dispatches, stock levels, and low stock warnings
       const rtoUrl = new URL("/api/ids/bia/rto-operation", window.location.origin);
       const activityUrl = new URL("/api/ids/dashboard/activity-feed", window.location.origin);
-      const revenueUrl = new URL("/api/ids/dashboard/revenue-tracker", window.location.origin);
+      // const revenueUrl = new URL("/api/ids/dashboard/revenue-tracker", window.location.origin);
       const dispatchUrl = new URL("/api/ids/dashboard/active-dispatches", window.location.origin);
       const stockUrl = new URL("/api/ids/dashboard/cylinder-stock", window.location.origin);
       const lowStockUrl = new URL("/api/ids/dashboard/low-stock", window.location.origin);
@@ -103,7 +103,7 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const topCustomerUrl = new URL("/api/ids/dashboard/top-customer", window.location.origin);
       
       activityUrl.searchParams.append("branchId", filters.branchId);
-      revenueUrl.searchParams.append("branchId", filters.branchId);
+      // revenueUrl.searchParams.append("branchId", filters.branchId);
       dispatchUrl.searchParams.append("branchId", filters.branchId);
       stockUrl.searchParams.append("branchId", filters.branchId);
       lowStockUrl.searchParams.append("branchId", filters.branchId);
@@ -111,11 +111,10 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       topSalesmanUrl.searchParams.append("branchId", filters.branchId);
       topCustomerUrl.searchParams.append("branchId", filters.branchId);
       
-      const [rtoRes, opsRes, activityRes, revenueRes, dispatchRes, stockRes, lowStockRes, orderStatusRes, topSalesmanRes, topCustomerRes, branchList] = await Promise.all([
+      const [rtoRes, opsRes, activityRes, dispatchRes, stockRes, lowStockRes, orderStatusRes, topSalesmanRes, topCustomerRes, branchList] = await Promise.all([
         fetch(rtoUrl.toString()),
         fetch("/api/ids/crm/customer-hub/ops-dashboard"),
         fetch(activityUrl.toString()),
-        fetch(revenueUrl.toString()),
         fetch(dispatchUrl.toString()),
         fetch(stockUrl.toString()),
         fetch(lowStockUrl.toString()),
@@ -128,7 +127,7 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       let rtoRecords: any[] = [];
       let opsRecords: any[] = [];
       let activityRecords: any[] = [];
-      let revRecords: any = null;
+      const revRecords: any = null;
       let dispRecords: any[] = [];
       let stockRecords: any[] = [];
       let lowStockRecords: any[] = [];
@@ -152,11 +151,11 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         console.error("Failed to fetch Dashboard activity logs:", await activityRes.text());
       }
 
-      if (revenueRes.ok) {
-        revRecords = await revenueRes.json();
-      } else {
-        console.error("Failed to fetch Dashboard revenue data:", await revenueRes.text());
-      }
+      // if (revenueRes.ok) {
+      //   revRecords = await revenueRes.json();
+      // } else {
+      //   console.error("Failed to fetch Dashboard revenue data:", await revenueRes.text());
+      // }
 
       if (dispatchRes.ok) {
         dispRecords = await dispatchRes.json();
