@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState } from "react";
 import { useStockAdjustmentSerialSummary } from "../hooks/useStockAdjustmentSerialSummary";
@@ -18,10 +18,12 @@ import {
 } from "lucide-react";
 import { stockAdjustmentSerialSummaryService } from "../services/stock-adjustment-serial-summary-service";
 import { useRouter } from "next/navigation";
+import { StockAdjustmentDetailModal } from "./StockAdjustmentDetailModal";
 
 export function RecentLog() {
   const { filteredData } = useStockAdjustmentSerialSummary();
   const router = useRouter();
+  const [selectedId, setSelectedId] = useState<number | null>(null);
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -165,7 +167,7 @@ export function RecentLog() {
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          onClick={() => router.push(`/ids/scm/inventory-management/stock-adjustment-serial-posting?id=${item.id}`)} 
+                          onClick={() => setSelectedId(Number(item.id))} 
                           className="text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-lg h-9 w-9"
                           title="View Details"
                         >
@@ -281,6 +283,10 @@ export function RecentLog() {
           </div>
         </div>
       </div>
+      <StockAdjustmentDetailModal
+        id={selectedId}
+        onClose={() => setSelectedId(null)}
+      />
     </Card>
   );
 }

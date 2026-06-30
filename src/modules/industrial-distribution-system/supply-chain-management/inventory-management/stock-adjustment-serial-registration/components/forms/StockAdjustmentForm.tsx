@@ -18,8 +18,11 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
-  ChevronsRight
+  ChevronsRight,
+  Paperclip,
+  ScanLine
 } from "lucide-react";
+import { AttachmentUpload } from "../AttachmentUpload";
 import { Badge } from "@/components/ui/badge";
 import { SerialInputModal } from "../modals/SerialInputModal";
 import { ProductSelectionModal } from "../modals/ProductSelectionModal";
@@ -333,6 +336,29 @@ function SerialBanner({ control }: { control: Control<StockAdjustmentFormValues>
   );
 }
 
+function playTone(
+  audioContext: AudioContext,
+  frequency: number,
+  durationMs: number,
+  startAt: number,
+): void {
+  const oscillator = audioContext.createOscillator();
+  const gainNode = audioContext.createGain();
+
+  oscillator.type = "sine";
+  oscillator.frequency.setValueAtTime(frequency, startAt);
+
+  gainNode.gain.setValueAtTime(0.0001, startAt);
+  gainNode.gain.exponentialRampToValueAtTime(0.08, startAt + 0.01);
+  gainNode.gain.exponentialRampToValueAtTime(0.0001, startAt + durationMs / 1000);
+
+  oscillator.connect(gainNode);
+  gainNode.connect(audioContext.destination);
+
+  oscillator.start(startAt);
+  oscillator.stop(startAt + durationMs / 1000);
+}
+
 // ——————————————————————————————————————————————————————————————————————————————
 export function StockAdjustmentForm({
   id,
@@ -385,6 +411,12 @@ export function StockAdjustmentForm({
   const [pendingExitAction, setPendingExitAction] = useState<string | (() => void) | null>(null);
   const initialValuesRef = useRef<string>("");
 
+  const [scanLog, setScanLog] = useState<Array<{ serial: string; status: 'success' | 'error' | 'validating'; message: string; timestamp: Date }>>([]);
+  const [globalScanInputVal, setGlobalScanInputVal] = useState("");
+  const [isGlobalScanValidating, setIsGlobalScanValidating] = useState(false);
+  const globalScanInputRef = useRef<HTMLInputElement>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+
   const form = useForm<StockAdjustmentFormValues>({
     resolver: zodResolver(StockAdjustmentFormSchema),
     defaultValues: {
@@ -395,6 +427,7 @@ export function StockAdjustmentForm({
       remarks: "",
       items: [],
       isPosted: false,
+      stock_adjustment_attachment: [],
     },
   });
 
@@ -402,6 +435,12 @@ export function StockAdjustmentForm({
     control: form.control,
     name: "items",
   });
+
+  const watchedBranchId = useWatch({ control: form.control, name: "branch_id" });
+  const watchedSupplierId = useWatch({ control: form.control, name: "supplier_id" });
+  const watchedType = useWatch({ control: form.control, name: "type" });
+  const watchedBranchIdForSelect = watchedBranchId;
+  const watchedSupplierIdForSelect = watchedSupplierId;
 
   useEffect(() => {
     const unlock = () => {
@@ -451,6 +490,7 @@ export function StockAdjustmentForm({
             isPosted: resolvedIsPosted,
             postedAt: data.postedAt || undefined,
             posted_by: data.posted_by || undefined,
+            stock_adjustment_attachment: data.stock_adjustment_attachment || [],
             items: data.items.map((item: StockAdjustmentItem) => ({
               ...item,
               quantity: Number(item.quantity || 0),
@@ -500,8 +540,7 @@ export function StockAdjustmentForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  const watchedBranchId = useWatch({ control: form.control, name: "branch_id" });
-  const watchedSupplierId = useWatch({ control: form.control, name: "supplier_id" });
+
 
   useEffect(() => {
     if (watchedBranchId && branches.length > 0) {
@@ -618,6 +657,216 @@ export function StockAdjustmentForm({
     }
     setPendingExitAction(null);
   }, [pendingExitAction, router]);
+
+  const ensureAudioContext = useCallback(async (): Promise<AudioContext | null> => {
+    if (typeof window === "undefined") return null;
+    const AudioContextCtor =
+      window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+
+    if (!AudioContextCtor) return null;
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioContextCtor();
+    }
+    if (audioContextRef.current.state === "suspended") {
+      try {
+        await audioContextRef.current.resume();
+      } catch {
+        return null;
+      }
+    }
+    return audioContextRef.current;
+  }, []);
+
+  const playSuccessBeep = useCallback(async () => {
+    const context = await ensureAudioContext();
+    if (!context) return;
+    const startAt = context.currentTime;
+    playTone(context, 880, 90, startAt);
+    playTone(context, 1180, 120, startAt + 0.11);
+  }, [ensureAudioContext]);
+
+  const playErrorBeep = useCallback(async () => {
+    const context = await ensureAudioContext();
+    if (!context) return;
+    const startAt = context.currentTime;
+    playTone(context, 320, 140, startAt);
+    playTone(context, 240, 180, startAt + 0.16);
+  }, [ensureAudioContext]);
+
+  const handleGlobalScan = useCallback(async (serial: string) => {
+    if (watchedType !== "OUT") return;
+
+    const rawSerial = serial.trim().toUpperCase();
+    if (!rawSerial) return;
+
+    const currentItems = form.getValues("items") || [];
+
+    const isAlreadyScanned = currentItems.some((item) =>
+      item.serial_numbers?.includes(rawSerial)
+    );
+
+    if (isAlreadyScanned) {
+      toast.warning("Duplicate Scan", {
+        description: `Serial number ${rawSerial} has already been scanned.`,
+      });
+      playErrorBeep();
+      setScanLog((prev) => [
+        {
+          serial: rawSerial,
+          status: "error",
+          message: "Duplicate scan. Serial already added.",
+          timestamp: new Date(),
+        },
+        ...prev.slice(0, 4),
+      ]);
+      return;
+    }
+
+    setIsGlobalScanValidating(true);
+    try {
+      const res = await validateSerialAvailability(rawSerial, Number(watchedBranchId));
+
+      if (!res.exists || !res.productId) {
+        const errMsg = res.location || "Serial number is not currently on-hand at the selected branch.";
+        toast.error("Scan Blocked", { description: errMsg });
+        playErrorBeep();
+        setScanLog((prev) => [
+          {
+            serial: rawSerial,
+            status: "error",
+            message: errMsg,
+            timestamp: new Date(),
+          },
+          ...prev.slice(0, 4),
+        ]);
+        return;
+      }
+
+      const productId = Number(res.productId);
+
+      // Check if product belongs to the selected supplier
+      const matchedProduct = products.find((p) => Number(p.id || p.product_id) === productId);
+      if (!matchedProduct) {
+        const errMsg = "Product associated with serial does not belong to the selected supplier.";
+        toast.error("Scan Blocked", { description: errMsg });
+        playErrorBeep();
+        setScanLog((prev) => [
+          {
+            serial: rawSerial,
+            status: "error",
+            message: errMsg,
+            timestamp: new Date(),
+          },
+          ...prev.slice(0, 4),
+        ]);
+        return;
+      }
+
+      const existingIndex = currentItems.findIndex(
+        (item) => Number(item.product_id) === productId
+      );
+
+      if (existingIndex > -1) {
+        const item = currentItems[existingIndex];
+        const updatedSerials = [...(item.serial_numbers || []), rawSerial];
+        form.setValue(`items.${existingIndex}.serial_numbers`, updatedSerials);
+        form.setValue(`items.${existingIndex}.quantity`, updatedSerials.length, { shouldValidate: true });
+        form.setValue(`items.${existingIndex}.serial_count`, updatedSerials.length);
+      } else {
+        const newItem: StockAdjustmentItem = {
+          product_id: productId,
+          product_name: matchedProduct.product_name || "Unknown Product",
+          product_code: matchedProduct.product_code || "",
+          cost_per_unit: matchedProduct.cost_per_unit || matchedProduct.price_per_unit || 0,
+          brand_name: matchedProduct.brand_name || "N/A",
+          barcode: matchedProduct.barcode || "",
+          unit_name: matchedProduct.unit_name || "pcs",
+          unit_order: matchedProduct.unit_of_measurement?.order || 3,
+          is_serialized: true,
+          quantity: 1,
+          serial_numbers: [rawSerial],
+          serial_count: 1,
+          current_stock: 0,
+          remarks: "",
+          branch_id: Number(watchedBranchId),
+          type: "OUT",
+        };
+
+        const newItems = [...currentItems, newItem];
+        form.setValue("items", newItems, { shouldValidate: true });
+
+        const idx = newItems.length - 1;
+        fetchInventory(productId, Number(watchedBranchId))
+          .then((stock) => {
+            form.setValue(`items.${idx}.current_stock`, stock);
+          })
+          .catch(console.error);
+      }
+
+      playSuccessBeep();
+      toast.success(`Scanned: ${matchedProduct.product_name}`);
+      setScanLog((prev) => [
+        {
+          serial: rawSerial,
+          status: "success",
+          message: `Scanned & added: ${matchedProduct.product_name}`,
+          timestamp: new Date(),
+        },
+        ...prev.slice(0, 4),
+      ]);
+    } catch (err) {
+      console.error("Global scan error:", err);
+      toast.error("An error occurred during scanning");
+      playErrorBeep();
+    } finally {
+      setIsGlobalScanValidating(false);
+    }
+  }, [watchedType, watchedBranchId, form, validateSerialAvailability, fetchInventory, products, playSuccessBeep, playErrorBeep]);
+
+  // Global Keyboard Listener for Scanner
+  useEffect(() => {
+    if (isReadOnly || !watchedBranchId || !watchedSupplierId || watchedType !== "OUT") return;
+
+    const handleGlobalKeyDown = async (e: KeyboardEvent) => {
+      if (isGlobalScanValidating) return;
+
+      const activeTag = (document.activeElement?.tagName || "").toLowerCase();
+      if (
+        (activeTag === "input" && document.activeElement !== globalScanInputRef.current) ||
+        activeTag === "textarea" ||
+        activeTag === "select"
+      ) {
+        return;
+      }
+
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const val = globalScanInputRef.current ? globalScanInputRef.current.value : "";
+        if (globalScanInputRef.current) {
+          globalScanInputRef.current.value = "";
+        }
+        setGlobalScanInputVal("");
+        if (val) {
+          await handleGlobalScan(val);
+        }
+        return;
+      }
+
+      if (e.key.length === 1) {
+        if (document.activeElement !== globalScanInputRef.current) {
+          globalScanInputRef.current?.focus();
+          setGlobalScanInputVal((prev) => prev + e.key);
+          e.preventDefault();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown, { capture: true });
+    return () => {
+      window.removeEventListener("keydown", handleGlobalKeyDown, { capture: true });
+    };
+  }, [isReadOnly, watchedBranchId, watchedSupplierId, watchedType, isGlobalScanValidating, handleGlobalScan]);
 
   const handlePost = async () => {
     if (!id) return;
@@ -813,9 +1062,7 @@ export function StockAdjustmentForm({
     }, 600);
   }, [form]);
 
-  const watchedBranchIdForSelect = useWatch({ control: form.control, name: "branch_id" });
-  const watchedSupplierIdForSelect = useWatch({ control: form.control, name: "supplier_id" });
-  const watchedType = useWatch({ control: form.control, name: "type" });
+
 
   const watchedItemsList = useWatch({ control: form.control, name: "items" });
 
@@ -1219,6 +1466,113 @@ export function StockAdjustmentForm({
             </div>
           </CardHeader>
           <CardContent className="p-0">
+            {/* Global Serial Scanner Control Panel */}
+            {!isReadOnly && Number(watchedBranchId) > 0 && Number(watchedSupplierId) > 0 && watchedType === "OUT" && (
+              <div className="border-b border-border bg-muted/10 p-6 flex flex-col gap-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="relative flex items-center justify-center h-10 w-10 rounded-full bg-primary/10 border border-primary/20">
+                      <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping opacity-75" style={{ animationDuration: '3s' }} />
+                      <Tag className="h-5 w-5 text-primary animate-pulse" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                        Global Serial Scanner
+                        <span className="flex h-2 w-2 relative">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                        </span>
+                      </h3>
+                      <p className="text-[11px] text-muted-foreground font-medium">
+                        Focus anywhere on the page and scan serial numbers to adjust quantities instantly.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/40 px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm shrink-0">
+                    <ScanLine className="h-3.5 w-3.5" />
+                    Smart Serial Routing Active
+                  </div>
+                </div>
+
+                {/* Scan Input & Logs */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-stretch mt-1">
+                  {/* Manual input / capture field */}
+                  <div className="md:col-span-4 relative flex items-center">
+                    <input
+                      ref={globalScanInputRef}
+                      type="text"
+                      placeholder="Scan Serial number..."
+                      value={globalScanInputVal}
+                      onChange={(e) => setGlobalScanInputVal(e.target.value)}
+                      onKeyDown={async (e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          const val = globalScanInputVal;
+                          setGlobalScanInputVal("");
+                          await handleGlobalScan(val);
+                        }
+                      }}
+                      className="w-full h-10 pl-9 pr-24 text-xs font-semibold border border-primary/40 focus:border-primary rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm transition-all uppercase"
+                      disabled={isGlobalScanValidating}
+                    />
+                    <ScanLine className="absolute left-3 h-4 w-4 text-muted-foreground/60" />
+                    {isGlobalScanValidating ? (
+                      <span className="absolute right-3 text-[10px] font-bold text-primary animate-pulse flex items-center gap-1">
+                        <span className="h-3 w-3 animate-spin">⌾</span>
+                        Validating...
+                      </span>
+                    ) : (
+                      <span className="absolute right-3 text-[9px] font-bold bg-muted text-muted-foreground px-2 py-1 rounded border uppercase tracking-wider">
+                        Auto Focus
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Scan History Logs */}
+                  <div className="md:col-span-8 border border-border/80 rounded-xl bg-background p-3 flex flex-col justify-center min-h-[50px]">
+                    <div className="text-[9px] font-black text-muted-foreground/50 uppercase tracking-[0.15em] mb-1.5 pl-1 flex items-center justify-between">
+                      <span>Live Scan Log</span>
+                      {scanLog.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setScanLog([])}
+                          className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-red-600 hover:text-white bg-red-50 hover:bg-red-500 border border-red-200 hover:border-red-500 rounded-md transition-all cursor-pointer shadow-sm ml-auto"
+                        >
+                          Clear log
+                        </button>
+                      )}
+                    </div>
+                    {scanLog.length === 0 ? (
+                      <span className="text-[11px] text-muted-foreground italic pl-1">
+                        No serial numbers scanned yet. Position cursor/scanner and scan.
+                      </span>
+                    ) : (
+                      <div className="flex flex-col gap-1.5">
+                        {scanLog.slice(0, 3).map((log, idx) => (
+                          <div key={idx} className="flex items-center justify-between text-xs font-semibold px-2 py-1 rounded bg-muted/30">
+                            <div className="flex items-center gap-2 truncate">
+                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${log.status === 'success' ? 'bg-green-500' : 'bg-red-500 animate-pulse'
+                                }`} />
+                              <span className="font-mono text-[10px] text-muted-foreground/80 tracking-wider">
+                                {log.serial}
+                              </span>
+                              <span className="text-foreground truncate text-[11px] font-bold">
+                                {log.message}
+                              </span>
+                            </div>
+                            <span className="text-[9px] text-muted-foreground/50 shrink-0 pl-2">
+                              {log.timestamp.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {isFormLoading || (isProductsLoading && fields.length === 0) ? (
               <div className="p-6 space-y-6">
                 {[1, 2, 3].map((i) => (
@@ -1361,6 +1715,23 @@ export function StockAdjustmentForm({
               control={form.control}
               fieldCount={fields.length}
               isSerialLoading={isSerialLoading}
+            />
+          </CardContent>
+        </Card>
+
+        {/* Attachments Card */}
+        <Card className="border border-border/40 shadow-sm bg-card rounded-xl">
+          <CardHeader className="bg-card border-b border-border py-4 px-6">
+            <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2 uppercase tracking-wider">
+              <Paperclip className="h-4.5 w-4.5 text-primary" />
+              Attachments
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6">
+            <AttachmentUpload
+              value={form.watch("stock_adjustment_attachment") || []}
+              onChange={(atts) => form.setValue("stock_adjustment_attachment", atts, { shouldValidate: true })}
+              disabled={isReadOnly}
             />
           </CardContent>
         </Card>

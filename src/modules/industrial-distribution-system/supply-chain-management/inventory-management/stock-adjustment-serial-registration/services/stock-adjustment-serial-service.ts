@@ -4,6 +4,7 @@ import {
   StockAdjustmentDetail,
   StockAdjustmentItem,
   StockAdjustmentProduct,
+  StockAdjustmentAttachment,
 } from "../types/stock-adjustment-serial.schema";
 
 /** Shape of a record returned from cylinder_assets_draft */
@@ -41,6 +42,22 @@ interface RawItem {
   inferred_supplier_id?: number;
   current_stock?: number;
 }
+
+interface RawAttachment {
+  id?: number;
+  stock_adjustment_id?: number;
+  // Adjusted to include RawFile to support mapped file details after lookup
+  attachment: string | Record<string, unknown> | RawFile | null;
+  [key: string]: unknown;
+}
+
+interface RawFile {
+  id: string;
+  type?: string;
+  filename_download?: string;
+  filesize?: number;
+}
+
 
 interface PPSData {
   product_id: number | { id: number };
@@ -353,12 +370,41 @@ export const stockAdjustmentService = {
       };
     });
 
+    let attachments: RawAttachment[] = [];
+    try {
+      if (itemIds.length > 0) {
+        const attachmentsRes = await directusFetch<{ data: RawAttachment[] }>(
+          `${DIRECTUS_URL}/items/stock_adjustment_attachment?filter={"stock_adjustment_id":{"_in":${JSON.stringify(itemIds)}}}&limit=-1`
+        );
+        attachments = attachmentsRes.data || [];
+
+        const fileIds = attachments.map(a => typeof a.attachment === 'string' ? a.attachment : null).filter(Boolean);
+        if (fileIds.length > 0) {
+          try {
+            const filesRes = await directusFetch<{ data: RawFile[] }>(
+              `${DIRECTUS_URL}/files?filter={"id":{"_in":${JSON.stringify(fileIds)}}}&fields=id,type,filename_download,filesize`
+            );
+            const filesMap = new Map((filesRes.data || []).map(f => [f.id, f]));
+            attachments = attachments.map(a => ({
+              ...a,
+              attachment: filesMap.get(a.attachment as string) || a.attachment
+            }));
+          } catch (fileErr) {
+            console.warn("Failed to fetch file metadata:", fileErr);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to fetch stock adjustment attachments:", err);
+    }
+
     return {
       ...header,
       remarks: cleanedRemarks,
       items: itemsWithSerials,
       amount: totalAmount > 0 ? totalAmount : (Number(header.amount) || 0),
       supplier_id: resolvedSupplier as unknown,
+      stock_adjustment_attachment: attachments,
     } as unknown as StockAdjustmentDetail;
   },
 
@@ -493,7 +539,7 @@ export const stockAdjustmentService = {
     }
   },
 
-  async checkSerialExists(serial: string, token: string, branchId?: number): Promise<{ exists: boolean; location?: string }> {
+  async checkSerialExists(serial: string, token: string, branchId?: number): Promise<{ exists: boolean; location?: string; productId?: number }> {
     try {
       // 1. Check Spring API (Inventory On Hand)
       const springUrl = new URL(`${SPRING_API_URL}/api/v-serial-onhand/all`);
@@ -515,7 +561,7 @@ export const stockAdjustmentService = {
 
         if (exactMatch) {
           const locationName = exactMatch.branch_name || "Inventory";
-          return { exists: true, location: locationName };
+          return { exists: true, location: locationName, productId: Number(exactMatch.productId || exactMatch.product_id) };
         }
       }
 
@@ -619,6 +665,23 @@ export const stockAdjustmentService = {
       });
     }
 
+    if (header.stock_adjustment_attachment && Array.isArray(header.stock_adjustment_attachment) && (header.stock_adjustment_attachment as StockAdjustmentAttachment[]).length > 0) {
+      const firstItemId = createdItems[0]?.id;
+      if (firstItemId) {
+        const atts = (header.stock_adjustment_attachment as StockAdjustmentAttachment[]).map((att: StockAdjustmentAttachment) => ({
+          stock_adjustment_id: firstItemId,
+          attachment: typeof att.attachment === 'object' ? (att.attachment as { id?: string | number }).id : att.attachment,
+          created_by: payload.userId
+        }));
+        await directusFetch(`${DIRECTUS_URL}/items/stock_adjustment_attachment`, {
+          method: "POST",
+          body: JSON.stringify(atts),
+        }).catch(err => console.error("Failed to save attachments:", err));
+      } else {
+        console.warn("No item id returned — attachments could not be linked.");
+      }
+    }
+
     return headerRes.data;
   },
 
@@ -653,6 +716,22 @@ export const stockAdjustmentService = {
     const itemIds = existingItemsRes.data.map((i: { id: number }) => i.id);
 
     if (itemIds.length > 0) {
+      // Delete old attachments first using old item IDs
+      try {
+        const existingAttRes = await directusFetch<{ data: { id: number }[] }>(
+          `${DIRECTUS_URL}/items/stock_adjustment_attachment?filter={"stock_adjustment_id":{"_in":${JSON.stringify(itemIds)}}}&fields=id&limit=-1`
+        );
+        const attIds = existingAttRes.data.map(a => a.id);
+        if (attIds.length > 0) {
+          await directusFetch(`${DIRECTUS_URL}/items/stock_adjustment_attachment`, {
+            method: "DELETE",
+            body: JSON.stringify(attIds),
+          });
+        }
+      } catch (err) {
+        console.warn("Failed to delete old attachments during update:", err);
+      }
+
       // First delete associated serials
       try {
         const existingSerialsRes = await directusFetch<{ data: { id: number }[] }>(
@@ -712,6 +791,24 @@ export const stockAdjustmentService = {
         method: "POST",
         body: JSON.stringify(serialPayload),
       });
+    }
+
+    // Save new attachments linked to first new item's id
+    if (payload.header.stock_adjustment_attachment && Array.isArray(payload.header.stock_adjustment_attachment) && (payload.header.stock_adjustment_attachment as StockAdjustmentAttachment[]).length > 0) {
+      const firstItemId = createdItems[0]?.id;
+      if (firstItemId) {
+        const atts = (payload.header.stock_adjustment_attachment as StockAdjustmentAttachment[]).map((att: StockAdjustmentAttachment) => ({
+          stock_adjustment_id: firstItemId,
+          attachment: typeof att.attachment === 'object' ? (att.attachment as { id?: string | number }).id : att.attachment,
+          created_by: payload.userId
+        }));
+        await directusFetch(`${DIRECTUS_URL}/items/stock_adjustment_attachment`, {
+          method: "POST",
+          body: JSON.stringify(atts),
+        }).catch(err => console.error("Failed to update attachments:", err));
+      } else {
+        console.warn("No item id returned on update — attachments could not be linked.");
+      }
     }
 
     return { success: true };
@@ -848,6 +945,24 @@ export const stockAdjustmentService = {
       `${DIRECTUS_URL}/items/stock_adjustment?filter={"doc_no":{"_eq":"${docNo}"}}&fields=id`
     );
     const itemIds = itemsRes.data.map((i: { id: number }) => i.id);
+
+    // Delete attachments using item IDs (FK references stock_adjustment.id)
+    if (itemIds.length > 0) {
+      try {
+        const attRes = await directusFetch<{ data: { id: number }[] }>(
+          `${DIRECTUS_URL}/items/stock_adjustment_attachment?filter={"stock_adjustment_id":{"_in":${JSON.stringify(itemIds)}}}&fields=id&limit=-1`
+        );
+        const attIds = attRes.data.map(a => a.id);
+        if (attIds.length > 0) {
+          await directusFetch(`${DIRECTUS_URL}/items/stock_adjustment_attachment`, {
+            method: "DELETE",
+            body: JSON.stringify(attIds),
+          });
+        }
+      } catch (err) {
+        console.warn("Failed to delete attachments during stock adjustment deletion:", err);
+      }
+    }
 
     if (itemIds.length > 0) {
       await directusFetch(`${DIRECTUS_URL}/items/stock_adjustment`, {
@@ -1029,4 +1144,41 @@ export const stockAdjustmentService = {
 
     return `${searchPrefix}${nextNumber.toString().padStart(3, "0")}`;
   },
+
+  async fetchProductById(productId: number): Promise<StockAdjustmentProduct | null> {
+    try {
+      const res = await directusFetch<{
+        data: {
+          product_id: number;
+          product_name?: string | null;
+          product_code?: string | null;
+          price_per_unit?: number | null;
+          cost_per_unit?: number | null;
+          barcode?: string | null;
+          description?: string | null;
+          unit_of_measurement?: { unit_name?: string; order?: number; unit_id?: number } | null;
+          product_brand?: { brand_name?: string } | null;
+          unit_name?: string | null;
+          unit_id?: number | null;
+          brand_name?: string | null;
+        };
+      }>(
+        `${DIRECTUS_URL}/items/products/${productId}?fields=product_id,product_name,product_code,price_per_unit,cost_per_unit,barcode,description,unit_of_measurement.unit_name,unit_of_measurement.order,product_brand.brand_name`
+      );
+      const p = res.data;
+      if (!p) return null;
+      const uom = p.unit_of_measurement;
+      const brand = p.product_brand;
+      return {
+        ...p,
+        id: p.product_id,
+        unit_name: uom?.unit_name || p.unit_name || "pcs",
+        unit_id: uom?.unit_id || p.unit_id || null,
+        brand_name: brand?.brand_name || p.brand_name || "N/A"
+      } as unknown as StockAdjustmentProduct;
+    } catch (err) {
+      console.error("Error fetching product by id:", err);
+      return null;
+    }
+  }
 };
