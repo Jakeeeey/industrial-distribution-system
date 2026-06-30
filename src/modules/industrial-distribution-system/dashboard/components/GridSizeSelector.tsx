@@ -23,7 +23,7 @@ interface GridSizeSelectorProps {
 }
 
 const COLS = 12;
-const ROWS = 8;
+const ROWS = 12;
 
 export const GridSizeSelector: React.FC<GridSizeSelectorProps> = ({
   currentW,

@@ -26,13 +26,12 @@ import { WidgetContainer } from "./components/WidgetContainer";
 import { WidgetLayout, WidgetId } from "./types";
 import { motion } from "framer-motion";
 
-import { exportToCsv } from "./utils/kpiCalculations";
 
 // Widget imports
 import { RtoOverviewWidget } from "./components/widgets/RtoOverviewWidget";
 import { CylinderAgingWidget } from "./components/widgets/CylinderAgingWidget";
 import { OrderStatusWidget } from "./components/widgets/OrderStatusWidget";
-import { SalesPerformanceWidget } from "./components/widgets/SalesPerformanceWidget";
+// import { SalesPerformanceWidget } from "./components/widgets/SalesPerformanceWidget";
 import { LogisticsTripsWidget } from "./components/widgets/LogisticsTripsWidget";
 import { InventoryStockWidget } from "./components/widgets/InventoryStockWidget";
 import { LowStockAlertWidget } from "./components/widgets/LowStockAlertWidget";
@@ -170,6 +169,8 @@ export const DashboardModuleContent: React.FC = () => {
     swapWidgets,
     resizeWidget,
     updateWidgetLayout,
+    importLayouts,
+    exportAllLayouts,
   } = useDashboardState();
 
   const { refreshWidget } = useDashboard();
@@ -214,7 +215,7 @@ export const DashboardModuleContent: React.FC = () => {
       case "rto-overview":       return <RtoOverviewWidget layout={layout} />;
       case "cylinder-aging":     return <CylinderAgingWidget />;
       case "order-status":       return <OrderStatusWidget layout={layout} />;
-      case "sales-performance":  return <SalesPerformanceWidget />;
+      // case "sales-performance":  return <SalesPerformanceWidget />;
       case "logistics-trips":    return <LogisticsTripsWidget />;
       case "inventory-stock":    return <InventoryStockWidget />;
       case "low-stock-alert":    return <LowStockAlertWidget />;
@@ -235,7 +236,7 @@ export const DashboardModuleContent: React.FC = () => {
       case "rto-overview":      return { title: "RTO Operations Overview",        subtitle: "Recovery Metrics HUD" };
       case "cylinder-aging":    return { title: "Cylinder Return Aging",           subtitle: "Overdue buckets (0-90+ days)" };
       case "order-status":      return { title: "CRM Orders Status Flow",          subtitle: "Work-in-progress status pipeline" };
-      case "sales-performance": return { title: "Monthly Revenue Tracker",         subtitle: "Actual revenue vs target" };
+      // case "sales-performance": return { title: "Monthly Revenue Tracker",         subtitle: "Actual revenue vs target" };
       case "logistics-trips":   return { title: "Active Dispatches & Trips",       subtitle: "Fleet & Delivery tracker" };
       case "inventory-stock":   return { title: "Warehouse Cylinder Stock",        subtitle: "Filled vs Empty stock ratio" };
       case "low-stock-alert":   return { title: "Low Inventory Alerts",            subtitle: "Items below reorder point" };
@@ -249,20 +250,8 @@ export const DashboardModuleContent: React.FC = () => {
     }
   };
 
-  // ── CSV export ─────────────────────────────────────────────────────────────
-  const handleExportDashboard = () => {
-    const csvData = layouts.map((l) => {
-      const details = getWidgetDetails(l.id);
-      return {
-        WidgetID:   l.id,
-        WidgetName: details.title,
-        Status:     l.visible ? "Visible" : "Hidden",
-        GridW:      l.w,
-        GridH:      l.h,
-      };
-    });
-    exportToCsv(csvData, `ids-dashboard-layout-${activePreset}`);
-  };
+
+
 
   // ── Loading state ──────────────────────────────────────────────────────────
   if (!isLoaded) {
@@ -293,7 +282,8 @@ export const DashboardModuleContent: React.FC = () => {
           onToggleCustomize={() => setIsCustomizeOpen(true)}
           onToggleNotifications={() => setIsNotificationsOpen(true)}
           onResetLayout={resetLayout}
-          onExportDashboard={handleExportDashboard}
+          onExportDashboard={exportAllLayouts}
+          onImportLayouts={importLayouts}
         />
         <div className="flex-1 p-3 overflow-y-auto space-y-3 custom-scrollbar">
           {visibleLayouts.length === 0 && (
@@ -356,7 +346,8 @@ export const DashboardModuleContent: React.FC = () => {
         onToggleCustomize={() => setIsCustomizeOpen(true)}
         onToggleNotifications={() => setIsNotificationsOpen(true)}
         onResetLayout={resetLayout}
-        onExportDashboard={handleExportDashboard}
+        onExportDashboard={exportAllLayouts}
+        onImportLayouts={importLayouts}
       />
 
       <div className="flex-1 p-3 overflow-y-auto overflow-x-hidden custom-scrollbar">

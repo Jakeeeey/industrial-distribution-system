@@ -26,32 +26,35 @@ export function formatPercent(value: number | string | null | undefined): string
 }
 
 /**
- * Trigger client-side download of JSON data as CSV
+ * Trigger client-side download of JSON data as CSV.
+ * Uses Blob + URL.createObjectURL to safely handle all characters.
  */
 export function exportToCsv(data: Record<string, unknown>[], fileName: string) {
-
   if (!data || data.length === 0) return;
 
   const headers = Object.keys(data[0]);
+
+  // Quote each cell value — escape internal quotes by doubling them
+  const escapeCell = (val: unknown): string => {
+    const str = String(val ?? "");
+    // Wrap in quotes and escape any existing quotes inside
+    return `"${str.replace(/"/g, '""')}"`;
+  };
+
   const csvRows = [
-    headers.join(","), // header row
-    ...data.map((row) =>
-      headers
-        .map((header) => {
-          const val = row[header];
-          const escaped = String(val ?? "").replace(/"/g, '""');
-          return `"${escaped}"`;
-        })
-        .join(",")
-    ),
+    headers.join(","),                                         // header row (unquoted column names)
+    ...data.map((row) => headers.map((h) => escapeCell(row[h])).join(",")),
   ];
 
-  const csvContent = "data:text/csv;charset=utf-8," + csvRows.join("\n");
-  const encodedUri = encodeURI(csvContent);
+  const csvString = csvRows.join("\r\n");
+  const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+
   const link = document.createElement("a");
-  link.setAttribute("href", encodedUri);
-  link.setAttribute("download", `${fileName}.csv`);
+  link.href = url;
+  link.download = `${fileName}.csv`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
