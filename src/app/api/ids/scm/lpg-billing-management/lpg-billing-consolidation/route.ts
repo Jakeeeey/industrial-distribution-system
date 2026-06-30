@@ -24,7 +24,8 @@ import {
 // Updated import paths from stock-adjustment to stock-adjustment-serial-posting
 import { handleApiError } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment-serial-posting/utils/error-handler";
 import { getUserIdFromToken } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment-serial-posting/utils/auth-utils";
-import type { HeaderStatus } from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/lpg-billing-consolidation/types/billing-consolidation.types";
+// Adjusted type imports to resolve ConsolidationHeaderListParams type checks in CI environment
+import type { HeaderStatus, ConsolidationHeaderListParams } from "@/modules/industrial-distribution-system/supply-chain-management/lpg-billing-management/lpg-billing-consolidation/types/billing-consolidation.types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET

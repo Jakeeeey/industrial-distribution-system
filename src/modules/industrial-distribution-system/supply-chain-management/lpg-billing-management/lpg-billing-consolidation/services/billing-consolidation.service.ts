@@ -18,6 +18,21 @@ import type {
   WiwoLineType,
 } from "../types/billing-consolidation.types";
 
+// Adjusted: Exporting types so they are available to external callers and API routes
+export type {
+  ConsolidationHeader,
+  ConsolidationTransaction,
+  ConsolidationWiwoHeader,
+  ConsolidationMeterReading,
+  ConsolidationAttachment,
+  ConsolidationAuditEntry,
+  ConsolidationHeaderListParams,
+  MeterReadingAdjustPayload,
+  WiwoDetailAdjustPayload,
+  ApproveHeaderPayload,
+  WiwoLineType,
+};
+
 import {
   repoFetchHeaders,
   repoFetchHeaderById,
