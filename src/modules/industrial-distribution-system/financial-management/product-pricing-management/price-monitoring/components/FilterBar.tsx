@@ -9,7 +9,7 @@
 import * as React from "react";
 import { Search, RefreshCw, X, Loader2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+// import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { PriceMonitoringQuery } from "../types";
 import type { ProductOption, SupplierOption } from "../providers/priceMonitoringApi";
