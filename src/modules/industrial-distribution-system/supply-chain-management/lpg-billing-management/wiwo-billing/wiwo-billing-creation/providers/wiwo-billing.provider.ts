@@ -1234,7 +1234,8 @@ export async function processRegularSwap(payload: {
   }
 
   // Create WIWO Header
-  const wiwoNo = `WIWO-${Date.now().toString().slice(-6)}`;
+  // IDS-CHANGE: Updated regular prefix from WIWO- to WIWO-REG- per user instruction
+  const wiwoNo = `WIWO-REG-${Date.now().toString().slice(-6)}`;
   // IDS-CHANGE: VAT is absorbed / inclusive: gross = vatable amount, net = vatable sales, vat = gross - net.
   const grossAmount = Number((totalWiwoKg * payload.pricePerKg).toFixed(2));
   const netAmount = Number((grossAmount / 1.12).toFixed(2));

@@ -224,6 +224,14 @@ function buildReceiptText(company: CompanyProfile, data: WiwoThermalReceiptData)
     return " ".repeat(spaceCount) + str.substring(0, 32);
   };
 
+  // Safe toFixed helper to prevent runtime crashes (e.g., TypeError: toFixed is not a function)
+  // when weights or numeric values are null, undefined, or strings.
+  // Changed val type from any to unknown to resolve ESLint error @typescript-eslint/no-explicit-any
+  const safeToFixed = (val: unknown, decimals: number = 1): string => {
+    const num = Number(val);
+    return (isNaN(num) ? 0 : num).toFixed(decimals);
+  };
+
   const lines: string[] = [];
 
   // 1. Company Header
@@ -284,9 +292,9 @@ function buildReceiptText(company: CompanyProfile, data: WiwoThermalReceiptData)
 
   if (hasMeterSync) {
     lines.push(formatCenter("--- METER DUAL CHECK ---"));
-    lines.push(formatLine("Prev. Reading:", Number(data.previousReading).toFixed(4)));
-    lines.push(formatLine("Curr. Reading:", Number(data.currentReading).toFixed(4)));
-    lines.push(formatLine("Metered KG:", `${Number(data.meteredKg).toFixed(4)} kg`));
+    lines.push(formatLine("Prev. Reading:", safeToFixed(data.previousReading, 4)));
+    lines.push(formatLine("Curr. Reading:", safeToFixed(data.currentReading, 4)));
+    lines.push(formatLine("Metered KG:", `${safeToFixed(data.meteredKg, 4)} kg`));
     lines.push(dashes);
   }
 
@@ -295,9 +303,9 @@ function buildReceiptText(company: CompanyProfile, data: WiwoThermalReceiptData)
     lines.push(formatCenter("--- RETURNED CYLINDERS ---"));
     data.returnedCylinders.forEach((cyl) => {
       lines.push(`SN: ${cyl.serialNumber}`);
-      lines.push(formatLine("  Prev. Gross:", `${cyl.previousLpgKg.toFixed(1)}kg`));
-      lines.push(formatLine("  Ret. Gross:", `${cyl.returnedGrossWeight.toFixed(1)}kg`));
-      lines.push(formatLine("  Tare | Cons:", `${cyl.tareWeight.toFixed(1)}kg | ${cyl.consumedLpgKg.toFixed(1)}kg`));
+      lines.push(formatLine("  Prev. Gross:", `${safeToFixed(cyl.previousLpgKg, 1)}kg`));
+      lines.push(formatLine("  Ret. Gross:", `${safeToFixed(cyl.returnedGrossWeight, 1)}kg`));
+      lines.push(formatLine("  Tare | Cons:", `${safeToFixed(cyl.tareWeight, 1)}kg | ${safeToFixed(cyl.consumedLpgKg, 1)}kg`));
     });
     lines.push(dashes);
   }
@@ -307,8 +315,8 @@ function buildReceiptText(company: CompanyProfile, data: WiwoThermalReceiptData)
     lines.push(formatCenter("--- DEPLOYED CYLINDERS ---"));
     data.deployedCylinders.forEach((cyl) => {
       lines.push(`SN: ${cyl.serialNumber}`);
-      lines.push(formatLine("  Tare Weight:", `${cyl.tareWeight.toFixed(1)}kg`));
-      lines.push(formatLine("  Starting Gross:", `${cyl.deployedGrossWeight.toFixed(1)}kg`));
+      lines.push(formatLine("  Tare Weight:", `${safeToFixed(cyl.tareWeight, 1)}kg`));
+      lines.push(formatLine("  Starting Gross:", `${safeToFixed(cyl.deployedGrossWeight, 1)}kg`));
     });
     lines.push(dashes);
   }
@@ -320,19 +328,19 @@ function buildReceiptText(company: CompanyProfile, data: WiwoThermalReceiptData)
   if (!data.isOnboarding) {
     // Item details
     lines.push(formatItemLine("WIWO LPG Consumption", "1", formatCurrency(data.grossAmount)));
-    lines.push(` (${data.billableKg.toFixed(4)} kg @ ${formatCurrency(data.pricePerKg)}/kg)`);
+    lines.push(` (${safeToFixed(data.billableKg, 4)} kg @ ${formatCurrency(data.pricePerKg)}/kg)`);
 
     lines.push("");
     if (hasMeterSync) {
-      lines.push(formatLine("Metered Sync:", `${(data.meteredKg || 0).toFixed(2)} kg`));
-      lines.push(formatLine("WIWO Weigh-In:", `${data.wiwoKg.toFixed(2)} kg`));
+      lines.push(formatLine("Metered Sync:", `${safeToFixed(data.meteredKg || 0, 2)} kg`));
+      lines.push(formatLine("WIWO Weigh-In:", `${safeToFixed(data.wiwoKg, 2)} kg`));
       lines.push(formatLine("Billable Source:", data.billableSource));
     } else {
-      lines.push(formatLine("Total Consumed:", `${data.wiwoKg.toFixed(2)} kg`));
+      lines.push(formatLine("Total Consumed:", `${safeToFixed(data.wiwoKg, 2)} kg`));
     }
     lines.push(dashes);
 
-    const finalVatAmount = data.vatAmount > 0 ? data.vatAmount : parseFloat((data.grossAmount * 0.12).toFixed(2));
+    const finalVatAmount = data.vatAmount > 0 ? data.vatAmount : parseFloat(safeToFixed(data.grossAmount * 0.12, 2));
     lines.push(formatLine("VAT (12%):", formatCurrency(finalVatAmount)));
     lines.push(dashes);
     lines.push(formatLine("TOTAL:", formatCurrency(data.netAmount)));
