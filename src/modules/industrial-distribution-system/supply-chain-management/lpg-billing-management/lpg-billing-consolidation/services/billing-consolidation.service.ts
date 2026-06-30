@@ -47,6 +47,8 @@ import {
   repoUploadInvoicePdf,
   // DEV-CHANGE: Import previous-header lookup for inter-period consumption snapshot
   repoFetchPreviousPostedHeader,
+  // DOMINO-EFFECT: Import cascade lookup for next metered transaction in same header+site
+  repoFetchNextMeterTransaction,
 } from "./billing-consolidation.repo";
 
 import { sendInvoiceEmail } from "../utils/email-sender";
@@ -507,6 +509,16 @@ export async function adjustMeterReading(payload: MeterReadingAdjustPayload): Pr
     modified_by,
   });
 
+  // 8. DOMINO-EFFECT: Cascade the adjusted current_reading as the previous_reading
+  // of the next chronological metered transaction at the same site within this header.
+  // Each downstream transaction is fully recomputed and logged as AUDITOR_CASCADE.
+  await propagateMeterReadingDomino(
+    transactionId,
+    new_current_reading,
+    txBefore.transaction_header_id,
+    modified_by
+  );
+
   return {
     updated_meter_reading: { ...existing, current_reading: new_current_reading, raw_consumption: rawConsumption, kg_consumed: kgConsumed, gross_amount: grossAmount },
     updated_transaction: {
@@ -758,6 +770,17 @@ export async function adjustWiwoDetail(payload: WiwoDetailAdjustPayload): Promis
     },
     modified_by,
   });
+
+  // 8. DOMINO-EFFECT: Cascade the new remaining_lpg_kg as the previous_lpg_kg
+  // of the same cylinder in the next chronological WIWO transaction within this header.
+  // Each downstream detail is fully recomputed and logged as AUDITOR_CASCADE.
+  await propagateWiwoDetailDomino(
+    detail.cylinder_asset_id,
+    remainingLpgKg,
+    wiwoHeaderId,
+    txBefore.transaction_header_id,
+    modified_by
+  );
 
   return {
     updated_detail: {
@@ -1012,7 +1035,9 @@ async function fetchTransactionRaw(transactionId: number): Promise<Consolidation
   const DIRECTUS_URL = getDirectusBase();
 
   const res = await directusFetch<{ data: Record<string, unknown> }>(
-    `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions/${transactionId}?fields=id,transaction_header_id,transaction_no,transaction_type,metered_kg,wiwo_kg,variance_kg,billable_source,billable_kg,price_per_kg,gross_amount,discount_amount,vat_amount,net_amount,status`
+    // DOMINO-FIX: Added lpg_site_id and wiwo_header_id to fields so cascade functions
+    // have reliable site scoping instead of hardcoded 0 values.
+    `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions/${transactionId}?fields=id,transaction_header_id,transaction_no,transaction_type,lpg_site_id,wiwo_header_id,metered_kg,wiwo_kg,variance_kg,billable_source,billable_kg,price_per_kg,gross_amount,discount_amount,vat_amount,net_amount,status`
   );
   if (!res.data) return null;
   const d = res.data;
@@ -1024,9 +1049,9 @@ async function fetchTransactionRaw(transactionId: number): Promise<Consolidation
     transaction_type: (d["transaction_type"] as ConsolidationTransaction["transaction_type"]) ?? "REGULAR_BILLING",
     transaction_date: "",
     customer_code: "",
-    lpg_site_id: 0,
-    meter_reading_id: null,
-    wiwo_header_id: null,
+    lpg_site_id: Number(d["lpg_site_id"] ?? 0),
+    meter_reading_id: d["meter_reading_id"] ? Number(d["meter_reading_id"]) : null,
+    wiwo_header_id: d["wiwo_header_id"] ? Number(d["wiwo_header_id"]) : null,
     metered_kg: Number(d["metered_kg"] ?? 0),
     wiwo_kg: Number(d["wiwo_kg"] ?? 0),
     variance_kg: Number(d["variance_kg"] ?? 0),
@@ -1085,3 +1110,350 @@ async function refreshHeaderTotals(headerId: number, modifiedBy: number): Promis
   // Expose totals to callers via console for verification during development
   console.log(`[refreshHeaderTotals] Header ${headerId}: metered=${totalMeteredKg} wiwo=${totalWiwoKg} billable=${totalBillableKg} gross=${totalGrossAmount} modified_by=${modifiedBy}`);
 }
+
+// ─── Domino-Effect Cascade Algorithms ────────────────────────────────────────
+
+/**
+ * DOMINO-EFFECT — Metered Cascade:
+ * Propagates a `previous_reading` update to the next chronological metered
+ * transaction at the same LPG site within the same billing header.
+ *
+ * When a reviewer corrects a meter reading's `current_reading` on Transaction T1,
+ * this function updates T2's `previous_reading` to match, then fully recomputes
+ * T2's raw consumption, kg consumed, transaction arbitration (METERED vs WIWO),
+ * and financial amounts. It then recurses to T3, T4, etc. until no further
+ * metered transactions exist in the sequence.
+ *
+ * Cascade stops when:
+ *   - No next metered transaction exists in the same header + site
+ *   - The next transaction is not in DRAFT status
+ *
+ * Each cascaded update is audited with action_type = "AUDITOR_CASCADE"
+ * to distinguish from direct reviewer adjustments ("REVIEWER_ADJUSTMENT").
+ *
+ * @param adjustedTxId      The transaction directly adjusted by the reviewer
+ * @param newCurrentReading The adjusted current_reading (becomes next tx's previous_reading)
+ * @param siteId            The LPG site shared by the transaction chain
+ * @param headerId          The billing header scoping the cascade (same-header-only)
+ * @param modifiedBy        The reviewer's user ID who triggered the original adjustment
+ */
+async function propagateMeterReadingDomino(
+  adjustedTxId: number,
+  newCurrentReading: number,
+  headerId: number,
+  modifiedBy: number
+): Promise<void> {
+  console.log(`[DOMINO-METER] Cascade triggered: adjustedTxId=${adjustedTxId} newCurrentReading=${newCurrentReading} headerId=${headerId}`);
+
+  // 1. Find the next metered transaction in the same header
+  const nextTx = await repoFetchNextMeterTransaction(adjustedTxId, headerId);
+  if (!nextTx) return; // No further transaction — cascade terminates
+
+  // NOTE: Status guard removed intentionally.
+  // Individual transactions may be POSTED (own SI generated) while the billing
+  // header is still DRAFT. The HEADER is the final posting unit per business rules.
+  // The cascade must propagate regardless of individual transaction status,
+  // since the auditor is correcting readings on a DRAFT header context.
+
+  // 3. Fetch the next transaction's meter reading for recompute context
+  const reading = await repoFetchMeterReading(nextTx.meter_reading_id);
+  if (!reading) {
+    console.warn(
+      `[DOMINO-METER] Meter reading ${nextTx.meter_reading_id} not found for tx ${nextTx.id}. Cascade stopped.`
+    );
+    return;
+  }
+
+  const oldPreviousReading = reading.previous_reading;
+  const newPreviousReading = newCurrentReading; // Adjusted current becomes next tx's previous
+
+  // 4. Recompute consumption with the updated previous_reading
+  // (current_reading of the next transaction is unchanged by this cascade)
+  const rawConsumption =
+    reading.meter_direction === "DECREASING"
+      ? Math.max(0, newPreviousReading - reading.current_reading)
+      : Math.max(0, reading.current_reading - newPreviousReading);
+
+  const kgConsumed = parseFloat(
+    (
+      rawConsumption *
+      reading.conversion_factor *
+      (reading.pressure_line ?? 1) *
+      (reading.lpg_vapor_factor ?? 1)
+    ).toFixed(3)
+  );
+  const grossAmountOnReading = parseFloat((kgConsumed * reading.price_per_kg).toFixed(2));
+
+  // 5. Patch the meter reading row with the new previous_reading and recomputed values
+  await repoPatchMeterReading(nextTx.meter_reading_id, {
+    previous_reading: newPreviousReading,
+    raw_consumption: rawConsumption,
+    kg_consumed: kgConsumed,
+    gross_amount: grossAmountOnReading,
+    modified_by: modifiedBy,
+    modified_date: new Date().toISOString(),
+  });
+
+  // 6. Fetch the parent transaction for arbitration recompute
+  const txBefore = await fetchTransactionRaw(nextTx.id);
+  if (!txBefore) {
+    console.warn(`[DOMINO-METER] Transaction ${nextTx.id} not found. Cascade stopped.`);
+    return;
+  }
+
+  // 7. Re-arbitrate: compare metered vs WIWO gross amounts to determine billable source
+  const newMeteredKg = kgConsumed;
+  const txPricePerKg = txBefore.price_per_kg;
+
+  const meteredGrossTemp = parseFloat((newMeteredKg * txPricePerKg).toFixed(2));
+  const wiwoGrossTemp = parseFloat((txBefore.wiwo_kg * txPricePerKg).toFixed(2));
+
+  const newBillableSource = meteredGrossTemp >= wiwoGrossTemp ? "METERED" : "WIWO";
+  const newBillableKg = newBillableSource === "METERED" ? newMeteredKg : txBefore.wiwo_kg;
+  const newVarianceKg = parseFloat(Math.abs(newMeteredKg - txBefore.wiwo_kg).toFixed(4));
+
+  const newNetAmount =
+    txBefore.transaction_type === "ONBOARDING_BASELINE"
+      ? 0
+      : parseFloat((newBillableKg * txPricePerKg).toFixed(2));
+  const newGrossAmount = newNetAmount;
+  const newVatAmount =
+    txBefore.transaction_type === "ONBOARDING_BASELINE"
+      ? 0
+      : parseFloat((newNetAmount - newNetAmount / 1.12).toFixed(2));
+
+  await repoPatchTransaction(nextTx.id, {
+    metered_kg: newMeteredKg,
+    variance_kg: newVarianceKg,
+    billable_source: newBillableSource,
+    billable_kg: newBillableKg,
+    gross_amount: newGrossAmount,
+    vat_amount: newVatAmount,
+    net_amount: newNetAmount,
+    modified_by: modifiedBy,
+    modified_date: new Date().toISOString(),
+  });
+
+  // 8. Refresh header totals to keep the summary in sync
+  await refreshHeaderTotals(txBefore.transaction_header_id, modifiedBy);
+
+  // 9. Write audit trail — marks this as a system-triggered cascade, not a direct reviewer edit
+  await repoInsertAuditEntry({
+    transaction_id: nextTx.id,
+    transaction_no: txBefore.transaction_no,
+    action_type: "AUDITOR_CASCADE",
+    changes_payload: {
+      previous_reading: { old: oldPreviousReading, new: newPreviousReading },
+      raw_consumption: { old: reading.raw_consumption, new: rawConsumption },
+      kg_consumed: { old: reading.kg_consumed, new: kgConsumed },
+      metered_kg: { old: txBefore.metered_kg, new: newMeteredKg },
+      variance_kg: { old: txBefore.variance_kg, new: newVarianceKg },
+      billable_source: { old: txBefore.billable_source, new: newBillableSource },
+      billable_kg: { old: txBefore.billable_kg, new: newBillableKg },
+      gross_amount: { old: txBefore.gross_amount, new: newGrossAmount },
+      vat_amount: { old: txBefore.vat_amount, new: newVatAmount },
+      net_amount: { old: txBefore.net_amount, new: newNetAmount },
+      cascade_triggered_by: { old: null, new: `Domino from tx ${adjustedTxId}` },
+    },
+    modified_by: modifiedBy,
+  });
+
+  console.log(
+    `[DOMINO-METER] Cascaded to tx ${nextTx.id}: ` +
+    `previous_reading ${oldPreviousReading} → ${newPreviousReading}, ` +
+    `metered_kg ${txBefore.metered_kg} → ${newMeteredKg}`
+  );
+
+  // 10. Recurse: cascade using this transaction's unchanged current_reading as
+  // the new previous_reading for the transaction that follows it.
+  await propagateMeterReadingDomino(
+    nextTx.id,
+    reading.current_reading, // This tx's own current_reading → becomes T3's previous_reading
+    headerId,
+    modifiedBy
+  );
+}
+
+/**
+ * DOMINO-EFFECT — WIWO Cylinder Cascade:
+ * Propagates a `previous_lpg_kg` update to the same cylinder's detail line
+ * in the next chronological WIWO transaction within the same billing header.
+ *
+ * When a reviewer corrects a cylinder's `returned_gross_weight_kg` on WIWO H1,
+ * the resulting `remaining_lpg_kg` becomes the `previous_lpg_kg` for that same
+ * cylinder in the next WIWO swap (H2). H2's consumed/billable/amounts are then
+ * recomputed and the chain continues until no further WIWO exists in the header.
+ *
+ * Cascade stops when:
+ *   - No next WIWO transaction exists in the same header + site
+ *   - The next WIWO transaction does not contain the same cylinder_asset_id
+ *   - The next transaction is not in DRAFT status
+ *
+ * Each cascaded update is audited with action_type = "AUDITOR_CASCADE".
+ *
+ * @param adjustedCylinderAssetId  The cylinder_asset_id whose weight was corrected
+ * @param newRemainingLpgKg        The corrected remaining LPG (→ next detail's previous_lpg_kg)
+ * @param currentWiwoHeaderId      The WIWO header ID that was just adjusted
+ * @param headerId                 The billing header scoping the cascade (same-header-only)
+ * @param modifiedBy               The reviewer's user ID who triggered the original adjustment
+ */
+async function propagateWiwoDetailDomino(
+  adjustedCylinderAssetId: number,
+  newRemainingLpgKg: number,
+  currentWiwoHeaderId: number,
+  headerId: number,
+  modifiedBy: number
+): Promise<void> {
+  // 1. Fetch all transactions in this header and filter to WIWO ones, sorted chronologically
+  const allTxs = await repoFetchTransactionsByHeader(headerId);
+  const wiwoTxs = allTxs
+    .filter((tx) => tx.wiwo_header_id !== null && tx.wiwo_header_id !== undefined)
+    .sort((a, b) => {
+      const dateA = a.billing_period_from ?? "";
+      const dateB = b.billing_period_from ?? "";
+      if (dateA !== dateB) return dateA < dateB ? -1 : 1;
+      return a.id - b.id;
+    });
+
+  // 2. Find the index of the currently adjusted WIWO transaction
+  const currentIdx = wiwoTxs.findIndex((tx) => tx.wiwo_header_id === currentWiwoHeaderId);
+  if (currentIdx === -1 || currentIdx >= wiwoTxs.length - 1) return; // No next WIWO
+
+  const nextWiwoTx = wiwoTxs[currentIdx + 1];
+
+  // NOTE: Status guard removed intentionally — same reason as propagateMeterReadingDomino.
+  // Header is the final posting unit; cascade within a DRAFT header regardless of
+  // individual transaction status.
+
+  // 4. Fetch the next WIWO header with all its cylinder detail lines
+  if (!nextWiwoTx.wiwo_header_id) return;
+  const nextWiwoHeader = await repoFetchWiwoWithDetails(nextWiwoTx.wiwo_header_id);
+  if (!nextWiwoHeader) return;
+
+  // 5. Find the matching cylinder detail by cylinder_asset_id
+  const nextDetail = (nextWiwoHeader.details ?? []).find(
+    (d) => d.cylinder_asset_id === adjustedCylinderAssetId
+  );
+  if (!nextDetail) {
+    // This cylinder was not involved in the next WIWO — cascade terminates for this cylinder
+    return;
+  }
+
+  const oldPreviousLpgKg = nextDetail.previous_lpg_kg;
+  const newPreviousLpgKg = newRemainingLpgKg; // Corrected remaining LPG → becomes next detail's previous
+
+  // 6. Recompute the detail line with the updated previous_lpg_kg
+  // remaining_lpg_kg is unchanged (determined by the physical returned gross weight)
+  const remainingLpgKg = nextDetail.remaining_lpg_kg;
+  const consumedLpgKg = Math.max(
+    0,
+    parseFloat(((newPreviousLpgKg - nextDetail.tare_weight_kg) - remainingLpgKg).toFixed(3))
+  );
+  const billableKg = nextDetail.is_billable === 1 ? consumedLpgKg : 0;
+  const netAmount = parseFloat((billableKg * nextDetail.price_per_kg).toFixed(2));
+  const grossAmount = netAmount;
+  const vatAmount = parseFloat((netAmount - netAmount / 1.12).toFixed(2));
+
+  // 7. Patch the WIWO detail row with the recomputed values
+  await repoPatchWiwoDetail(nextDetail.id, {
+    previous_lpg_kg: newPreviousLpgKg,
+    consumed_lpg_kg: consumedLpgKg,
+    billable_kg: billableKg,
+    gross_amount: grossAmount,
+    vat_amount: vatAmount,
+    net_amount: netAmount,
+    modified_by: modifiedBy,
+    modified_date: new Date().toISOString(),
+  });
+
+  // 8. Re-sum the WIWO header totals across all its detail lines
+  const otherDetails = (nextWiwoHeader.details ?? []).filter((d) => d.id !== nextDetail.id);
+  const otherBillableKg = otherDetails.reduce((sum, d) => sum + d.billable_kg, 0);
+  const newTotalBillableKg = parseFloat((otherBillableKg + billableKg).toFixed(3));
+  const newHeaderGross = parseFloat((newTotalBillableKg * nextWiwoHeader.price_per_kg).toFixed(2));
+  const newHeaderVat = parseFloat((newHeaderGross - newHeaderGross / 1.12).toFixed(2));
+
+  await repoPatchWiwoHeader(nextWiwoTx.wiwo_header_id, {
+    total_billable_kg: newTotalBillableKg,
+    gross_amount: newHeaderGross,
+    vat_amount: newHeaderVat,
+    net_amount: newHeaderGross,
+    modified_by: modifiedBy,
+    modified_date: new Date().toISOString(),
+  });
+
+  // 9. Re-arbitrate the parent transaction (METERED vs WIWO)
+  const txBefore = await fetchTransactionRaw(nextWiwoTx.id);
+  if (!txBefore) return;
+
+  const newWiwoKg = newTotalBillableKg;
+  const txPricePerKg = txBefore.price_per_kg;
+
+  const meteredGrossTemp = parseFloat((txBefore.metered_kg * txPricePerKg).toFixed(2));
+  const wiwoGrossTemp = parseFloat((newWiwoKg * txPricePerKg).toFixed(2));
+
+  const newBillableSource = meteredGrossTemp >= wiwoGrossTemp ? "METERED" : "WIWO";
+  const newBillableKg = newBillableSource === "METERED" ? txBefore.metered_kg : newWiwoKg;
+  const newVarianceKg = parseFloat(Math.abs(txBefore.metered_kg - newWiwoKg).toFixed(4));
+  const newTxNet = parseFloat((newBillableKg * txPricePerKg).toFixed(2));
+  const newTxGross = newTxNet;
+  const newTxVat =
+    txBefore.transaction_type === "ONBOARDING_BASELINE"
+      ? 0
+      : parseFloat((newTxNet - newTxNet / 1.12).toFixed(2));
+
+  await repoPatchTransaction(nextWiwoTx.id, {
+    wiwo_kg: newWiwoKg,
+    variance_kg: newVarianceKg,
+    billable_source: newBillableSource,
+    billable_kg: newBillableKg,
+    gross_amount: newTxGross,
+    vat_amount: newTxVat,
+    net_amount: newTxNet,
+    modified_by: modifiedBy,
+    modified_date: new Date().toISOString(),
+  });
+
+  // 10. Refresh header totals
+  await refreshHeaderTotals(txBefore.transaction_header_id, modifiedBy);
+
+  // 11. Write audit trail — marks this as a system-triggered cascade
+  await repoInsertAuditEntry({
+    transaction_id: nextWiwoTx.id,
+    transaction_no: txBefore.transaction_no,
+    action_type: "AUDITOR_CASCADE",
+    changes_payload: {
+      cylinder_asset_id: { old: null, new: adjustedCylinderAssetId },
+      previous_lpg_kg: { old: oldPreviousLpgKg, new: newPreviousLpgKg },
+      consumed_lpg_kg: { old: nextDetail.consumed_lpg_kg, new: consumedLpgKg },
+      detail_billable_kg: { old: nextDetail.billable_kg, new: billableKg },
+      wiwo_total_billable_kg: { old: nextWiwoHeader.total_billable_kg, new: newTotalBillableKg },
+      wiwo_kg: { old: txBefore.wiwo_kg, new: newWiwoKg },
+      variance_kg: { old: txBefore.variance_kg, new: newVarianceKg },
+      billable_source: { old: txBefore.billable_source, new: newBillableSource },
+      billable_kg: { old: txBefore.billable_kg, new: newBillableKg },
+      gross_amount: { old: txBefore.gross_amount, new: newTxGross },
+      vat_amount: { old: txBefore.vat_amount, new: newTxVat },
+      net_amount: { old: txBefore.net_amount, new: newTxNet },
+      cascade_triggered_by: { old: null, new: `Domino from WIWO ${currentWiwoHeaderId}` },
+    },
+    modified_by: modifiedBy,
+  });
+
+  console.log(
+    `[DOMINO-WIWO] Cascaded to detail ${nextDetail.id} in WIWO ${nextWiwoTx.wiwo_header_id}: ` +
+    `previous_lpg_kg ${oldPreviousLpgKg} → ${newPreviousLpgKg}, ` +
+    `consumed_lpg_kg ${nextDetail.consumed_lpg_kg} → ${consumedLpgKg}`
+  );
+
+  // 12. Recurse: this detail's unchanged remaining_lpg_kg becomes the next-next detail's previous_lpg_kg
+  // (remaining_lpg_kg is fixed by the physical returned gross weight — only previous_lpg_kg changed)
+  await propagateWiwoDetailDomino(
+    adjustedCylinderAssetId,
+    remainingLpgKg, // This detail's remaining LPG → becomes the next-next detail's previous_lpg_kg
+    nextWiwoTx.wiwo_header_id,
+    headerId,
+    modifiedBy
+  );
+}
+
