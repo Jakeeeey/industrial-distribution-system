@@ -48,11 +48,12 @@ const WIDGET_CATEGORIES: {
         name: "CRM Orders Status Flow",
         description: "Counts of sales orders grouped by status (Consolidation, Picking, Dispatch).",
       },
-      {
-        id: "sales-performance",
-        name: "Monthly Revenue Tracker",
-        description: "Target tracking comparison vs current monthly revenue.",
-      },
+      // hide for now but dont delete
+      // {
+      //   id: "sales-performance",
+      //   name: "Monthly Revenue Tracker",
+      //   description: "Target tracking comparison vs current monthly revenue.",
+      // },
       {
         id: "top-salesman",
         name: "Top Sales Performers",

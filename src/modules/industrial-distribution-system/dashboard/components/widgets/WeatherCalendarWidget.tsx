@@ -40,13 +40,16 @@ interface WeatherData {
   fallback?: boolean;
 }
 
+import { WidgetLayout } from "../../types";
+import { cn } from "@/lib/utils";
+
 const ALERT_COLORS: Record<string, string> = {
   normal: "text-emerald-500 bg-emerald-500/10 border-emerald-500/25",
   warning: "text-amber-500 bg-amber-500/10 border-amber-500/25",
   critical: "text-red-500 bg-red-500/10 border-red-500/25",
 };
 
-export const WeatherCalendarWidget: React.FC = () => {
+export const WeatherCalendarWidget: React.FC<{ layout?: WidgetLayout }> = ({ layout }) => {
   const { activeDispatches } = useDashboard();
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
@@ -92,10 +95,19 @@ export const WeatherCalendarWidget: React.FC = () => {
   const WeatherIcon = weather ? (ICON_MAP[weather.icon] ?? Cloud) : Cloud;
   const alertColorClass = ALERT_COLORS[weather?.alertLevel ?? "normal"];
 
+  const w = layout?.w ?? 12;
+  const isNarrow = w < 8;
+
   return (
-    <div className="flex flex-col lg:flex-row gap-4 h-full items-center justify-between">
+    <div className={cn(
+      "flex gap-4 h-full items-center justify-between flex-1 min-h-0 w-full",
+      isNarrow ? "flex-col" : "flex-row"
+    )}>
       {/* Weather Forecast */}
-      <div className="w-full lg:w-[160px] shrink-0 border border-border/40 rounded-xl p-3 bg-muted/5 flex flex-col justify-between self-stretch text-center">
+      <div className={cn(
+        "shrink-0 border border-border/40 rounded-xl p-3 bg-muted/5 flex flex-col justify-between self-stretch text-center",
+        isNarrow ? "w-full min-h-[120px]" : "w-full lg:w-[160px]"
+      )}>
         <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground block">
           Logistics Weather
         </span>
@@ -130,12 +142,12 @@ export const WeatherCalendarWidget: React.FC = () => {
       </div>
 
       {/* Calendar Schedule */}
-      <div className="flex-1 w-full flex flex-col justify-between self-stretch">
-        <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground block mb-2.5 px-1">
+      <div className="flex-1 w-full flex flex-col justify-between self-stretch min-h-0">
+        <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground block mb-2 px-1 shrink-0">
           Today&apos;s Scheduled Events
         </span>
 
-        <div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar">
+        <div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar min-h-0">
           {upcomingEvents.map((evt, idx) => (
             <div
               key={idx}

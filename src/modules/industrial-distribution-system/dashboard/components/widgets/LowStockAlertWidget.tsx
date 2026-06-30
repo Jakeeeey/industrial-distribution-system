@@ -27,9 +27,9 @@ export const LowStockAlertWidget: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full justify-between">
-      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-3">
+      {/* <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-3">
         Inventory Threshold Warnings
-      </span>
+      </span> */}
 
       <div className="flex-1 space-y-2.5 overflow-y-auto custom-scrollbar">
         {lowStock.length === 0 ? (

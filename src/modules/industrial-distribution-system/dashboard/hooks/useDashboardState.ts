@@ -13,7 +13,8 @@ import { toast } from "sonner";
 const LOCAL_STORAGE_KEY = "ids-dashboard-layout";
 
 // Bump this whenever the coordinate system or schema changes.
-const LAYOUT_VERSION = 4; // v4 = added top-salesman and top-customer widgets
+// v5 = switched to 60px row height, rto-overview h:2→h:3, drag-swap + resize
+const LAYOUT_VERSION = 5;
 
 
 interface LocalStorageState {
@@ -125,29 +126,32 @@ export function useDashboardState() {
     });
   }, [activePreset, saveState]);
 
-  // Move a widget left/up or right/down in the flow by swapping array elements
-  const moveWidget = useCallback((id: WidgetId, direction: "left" | "right") => {
+  // Swap two widgets by exchanging their positions in the layout array.
+  // Used by useDragDrop when a drag-and-drop completes (both desktop + mobile).
+  const swapWidgets = useCallback((idA: string, idB: string) => {
     setLayouts((prev) => {
-      const visibleIndices = prev
-        .map((l, i) => (l.visible ? i : -1))
-        .filter((idx) => idx !== -1);
-      
-      const currentIndex = prev.findIndex((l) => l.id === id);
-      const currentVisiblePos = visibleIndices.indexOf(currentIndex);
+      const idxA = prev.findIndex((l) => l.id === idA);
+      const idxB = prev.findIndex((l) => l.id === idB);
+      if (idxA === -1 || idxB === -1) return prev;
 
-      if (currentVisiblePos === -1) return prev;
-
-      const targetVisiblePos = currentVisiblePos + (direction === "left" ? -1 : 1);
-      if (targetVisiblePos < 0 || targetVisiblePos >= visibleIndices.length) return prev;
-
-      const targetIndex = visibleIndices[targetVisiblePos];
       const updated = [...prev];
-      
-      // Swap positions
-      const temp = updated[currentIndex];
-      updated[currentIndex] = updated[targetIndex];
-      updated[targetIndex] = temp;
+      // ES2015 destructured swap — no temp variable needed
+      [updated[idxA], updated[idxB]] = [updated[idxB], updated[idxA]];
 
+      saveState(activePreset, updated);
+      return updated;
+    });
+  }, [activePreset, saveState]);
+
+  // Resize a widget by setting new column width (w) and row height (h).
+  // Called on every mousemove tick by useResize — saveState is called each time
+  // which is acceptable since it only writes to localStorage (fast).
+  // id typed as string (not WidgetId) so useResize can call it with generic string IDs
+  const resizeWidget = useCallback((id: string, newW: number, newH: number) => {
+    setLayouts((prev) => {
+      const updated = prev.map((l) =>
+        l.id === id ? { ...l, w: newW, h: newH } : l
+      );
       saveState(activePreset, updated);
       return updated;
     });
@@ -161,7 +165,8 @@ export function useDashboardState() {
     updateWidgetLayout,
     resetLayout,
     toggleWidgetVisibility,
-    moveWidget,
+    swapWidgets,
+    resizeWidget,
   };
 }
 

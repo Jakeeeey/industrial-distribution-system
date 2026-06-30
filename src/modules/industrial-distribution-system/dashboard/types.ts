@@ -24,6 +24,7 @@ export interface WidgetLayout {
   h: number; // height in grid rows (minimum 1)
   visible: boolean;
   collapsed?: boolean;
+  customSize?: boolean;
   settings?: Record<string, unknown>;
 }
 

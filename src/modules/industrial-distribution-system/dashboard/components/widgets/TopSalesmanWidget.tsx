@@ -43,14 +43,14 @@ export const TopSalesmanWidget: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full justify-between">
-      <div>
+      {/* <div>
         <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-0.5">
           Top Sales Performers
         </span>
         <span className="text-[8px] font-medium text-slate-400 uppercase tracking-wider block mb-3">
           IDS division revenue by salesman
         </span>
-      </div>
+      </div> */}
 
       <div className="flex-1 space-y-3 overflow-y-auto custom-scrollbar pr-1">
         {topSalesmen.length === 0 ? (

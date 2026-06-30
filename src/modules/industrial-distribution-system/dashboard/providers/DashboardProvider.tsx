@@ -29,6 +29,7 @@ interface DashboardContextProps {
   
   // Refresh mechanisms
   refreshAll: () => Promise<void>;
+  refreshWidget: (widgetId: string) => Promise<void>;
 }
 
 const DashboardContext = createContext<DashboardContextProps | undefined>(undefined);
@@ -245,6 +246,112 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     await fetchData(true);
   }, [fetchData]);
 
+  const refreshWidget = useCallback(async (id: string) => {
+    try {
+      const branchIdParam = filters.branchId;
+
+      switch (id) {
+        case "rto-overview":
+        case "cylinder-aging":
+        case "receivables": {
+          const rtoUrl = new URL("/api/ids/bia/rto-operation", window.location.origin);
+          const res = await fetch(rtoUrl.toString());
+          if (res.ok) {
+            const data = await res.json();
+            setRtoData(data);
+          }
+          break;
+        }
+        case "order-status": {
+          const orderStatusUrl = new URL("/api/ids/dashboard/order-status", window.location.origin);
+          orderStatusUrl.searchParams.append("branchId", branchIdParam);
+          const res = await fetch(orderStatusUrl.toString());
+          if (res.ok) {
+            const data = await res.json();
+            setOrderStatusData(data);
+          }
+          break;
+        }
+        case "sales-performance": {
+          const revenueUrl = new URL("/api/ids/dashboard/revenue-tracker", window.location.origin);
+          revenueUrl.searchParams.append("branchId", branchIdParam);
+          const res = await fetch(revenueUrl.toString());
+          if (res.ok) {
+            const data = await res.json();
+            setRevenueData(data);
+          }
+          break;
+        }
+        case "logistics-trips": {
+          const dispatchUrl = new URL("/api/ids/dashboard/active-dispatches", window.location.origin);
+          dispatchUrl.searchParams.append("branchId", branchIdParam);
+          const res = await fetch(dispatchUrl.toString());
+          if (res.ok) {
+            const data = await res.json();
+            setActiveDispatches(data);
+          }
+          break;
+        }
+        case "inventory-stock": {
+          const stockUrl = new URL("/api/ids/dashboard/cylinder-stock", window.location.origin);
+          stockUrl.searchParams.append("branchId", branchIdParam);
+          const res = await fetch(stockUrl.toString());
+          if (res.ok) {
+            const data = await res.json();
+            setCylinderStock(data);
+          }
+          break;
+        }
+        case "low-stock-alert": {
+          const lowStockUrl = new URL("/api/ids/dashboard/low-stock", window.location.origin);
+          lowStockUrl.searchParams.append("branchId", branchIdParam);
+          const res = await fetch(lowStockUrl.toString());
+          if (res.ok) {
+            const data = await res.json();
+            setLowStock(data);
+          }
+          break;
+        }
+        case "activity-feed": {
+          const activityUrl = new URL("/api/ids/dashboard/activity-feed", window.location.origin);
+          activityUrl.searchParams.append("branchId", branchIdParam);
+          const res = await fetch(activityUrl.toString());
+          if (res.ok) {
+            const data = await res.json();
+            setActivityLogs(data);
+          }
+          break;
+        }
+        case "top-salesman": {
+          const topSalesmanUrl = new URL("/api/ids/dashboard/top-salesman", window.location.origin);
+          topSalesmanUrl.searchParams.append("branchId", branchIdParam);
+          const res = await fetch(topSalesmanUrl.toString());
+          if (res.ok) {
+            const data = await res.json();
+            setTopSalesmen(data);
+          }
+          break;
+        }
+        case "top-customer": {
+          const topCustomerUrl = new URL("/api/ids/dashboard/top-customer", window.location.origin);
+          topCustomerUrl.searchParams.append("branchId", branchIdParam);
+          const res = await fetch(topCustomerUrl.toString());
+          if (res.ok) {
+            const data = await res.json();
+            setTopCustomers(data);
+          }
+          break;
+        }
+        default:
+          break;
+      }
+      toast.success("Widget data refreshed!");
+    } catch (error) {
+      console.error(`Error refreshing widget ${id}:`, error);
+      toast.error("Failed to refresh widget data.");
+    }
+  }, [filters.branchId]);
+
   return (
     <DashboardContext.Provider
       value={{
@@ -264,6 +371,7 @@ export const DashboardProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         topCustomers,
         branches,
         refreshAll,
+        refreshWidget,
       }}
     >
       {children}

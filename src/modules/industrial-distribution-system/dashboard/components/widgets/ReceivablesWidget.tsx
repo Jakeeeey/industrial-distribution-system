@@ -17,8 +17,10 @@ import {
   Cell,
 } from "recharts";
 import { ShieldAlert } from "lucide-react";
+import { WidgetLayout } from "../../types";
+import { cn } from "@/lib/utils";
 
-export const ReceivablesWidget: React.FC = () => {
+export const ReceivablesWidget: React.FC<{ layout?: WidgetLayout }> = ({ layout }) => {
   const { rtoData, loading, filters } = useDashboard();
 
   // Filter rtoData by branch if applicable
@@ -100,10 +102,15 @@ export const ReceivablesWidget: React.FC = () => {
     );
   }
 
+  const isNarrow = layout && layout.w < 8;
+
   return (
-    <div className="flex flex-col lg:flex-row gap-4 h-full items-center justify-between">
+    <div className={cn(
+      "flex gap-4 h-full items-center justify-between",
+      isNarrow ? "flex-col w-full" : "flex-col lg:flex-row"
+    )}>
       {/* Aging Chart */}
-      <div className="flex-1 w-full flex flex-col justify-between self-stretch min-h-[140px]">
+      <div className="flex-1 w-full flex flex-col justify-between self-stretch min-h-[130px]">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
             Accounts Receivables Aging (Days)
@@ -113,7 +120,7 @@ export const ReceivablesWidget: React.FC = () => {
           </span>
         </div>
 
-        <div className="flex-1 w-full min-h-[130px]">
+        <div className="flex-1 w-full min-h-[120px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={accountsData.agingChart} margin={{ top: 5, right: 5, left: -15, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(224, 224, 224, 0.15)" />
@@ -155,8 +162,11 @@ export const ReceivablesWidget: React.FC = () => {
       </div>
 
       {/* Top Outstanding Exposures */}
-      <div className="w-full lg:w-[260px] shrink-0 border border-border/40 rounded-xl p-3.5 bg-muted/5 self-stretch flex flex-col justify-between">
-        <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground block mb-2.5">
+      <div className={cn(
+        "shrink-0 border border-border/40 rounded-xl p-3 bg-muted/5 self-stretch flex flex-col justify-between",
+        isNarrow ? "w-full min-h-[130px] mt-2" : "w-full lg:w-[260px]"
+      )}>
+        <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground block mb-2">
           Financial Exposures
         </span>
 

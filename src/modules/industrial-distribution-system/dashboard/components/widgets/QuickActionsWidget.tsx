@@ -12,8 +12,10 @@ import {
   TrendingUp,
   Receipt,
 } from "lucide-react";
+import { WidgetLayout } from "../../types";
+import { cn } from "@/lib/utils";
 
-export const QuickActionsWidget: React.FC = () => {
+export const QuickActionsWidget: React.FC<{ layout?: WidgetLayout }> = ({ layout }) => {
   const actions = useMemo(() => {
     return [
       {
@@ -55,23 +57,35 @@ export const QuickActionsWidget: React.FC = () => {
     ];
   }, []);
 
-  return (
-    <div className="flex flex-col h-full justify-between">
-      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-2.5">
-        Operational Quick Shortcuts
-      </span>
+  const w = layout?.w ?? 12;
+  const cols = w >= 6 ? 3 : (w >= 3 ? 2 : 1);
+  const rows = Math.ceil(actions.length / cols);
 
-      <div className="grid grid-cols-2 gap-2 flex-1 content-center">
+  return (
+    <div className="flex flex-col flex-1 min-h-0 w-full justify-between">
+      {/* <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground block mb-2 shrink-0">
+        Operational Quick Shortcuts
+      </span> */}
+
+      <div 
+        className="grid gap-1.5 flex-1 min-h-0"
+        style={{
+          gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+          gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+        }}
+      >
         {actions.map((act, idx) => {
           const Icon = act.icon;
           return (
             <Link
               key={idx}
               href={act.href}
-              className={`flex items-center gap-2 border rounded-xl p-2.5 text-[10px] font-extrabold uppercase tracking-wider transition-all duration-200 select-none
-                ${act.color}`}
+              className={cn(
+                "flex items-center gap-1 border rounded-lg px-2 py-1 text-[8px] font-black uppercase tracking-wider transition-all duration-200 select-none h-full w-full",
+                act.color
+              )}
             >
-              <Icon className="h-4 w-4 shrink-0" />
+              <Icon className="h-3 w-3 shrink-0" />
               <span className="truncate leading-none">{act.title}</span>
             </Link>
           );

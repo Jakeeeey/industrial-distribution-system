@@ -39,9 +39,9 @@ export const InventoryStockWidget: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full justify-between">
-      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
+      {/* <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block mb-1">
         Cylinder Inventory Allocation Status
-      </span>
+      </span> */}
 
       <div className="flex-1 w-full min-h-[140px] flex items-center justify-between">
         <div className="w-[130px] h-[130px] shrink-0">
