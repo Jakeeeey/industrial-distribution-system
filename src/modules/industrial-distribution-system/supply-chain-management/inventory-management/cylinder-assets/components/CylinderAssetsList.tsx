@@ -1,7 +1,7 @@
 import { CylinderAsset } from "../types";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Plus, Edit, Trash, Search, Cylinder, ArrowUp, ArrowDown, ArrowUpDown, Filter, X, Building2 } from "lucide-react";
+import { Plus, Edit, Trash, Search, Cylinder, ArrowUp, ArrowDown, ArrowUpDown, X, Building2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
@@ -65,7 +65,6 @@ interface Props {
 }
 
 export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, pagination, sorting }: Props) {
-  const [showFilters, setShowFilters] = useState(false);
   const [invalidSerials, setInvalidSerials] = useState<string[]>([]);
   const [pendingSerials, setPendingSerials] = useState<Record<string, string>>({});
   const [products, setProducts] = useState<{ id: number; name: string }[]>([]);
@@ -232,11 +231,7 @@ export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, 
     );
   };
 
-  const hasActiveFilters =
-    filters.branchId !== undefined ||
-    filters.status !== undefined ||
-    filters.productId !== undefined ||
-    filters.condition !== undefined;
+
 
   return (
     <div className="flex flex-col gap-4 p-4 min-h-full">
@@ -247,20 +242,6 @@ export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, 
             <p className="text-sm text-muted-foreground">Manage and track your serialized products</p>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowFilters(!showFilters)}
-              className={`h-9 gap-2 ${showFilters || hasActiveFilters ? 'border-blue-200 bg-blue-50/50 text-blue-600' : ''}`}
-            >
-              <Filter className="h-4 w-4" />
-              Filters
-              {hasActiveFilters && (
-                <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px] bg-blue-600 text-white hover:bg-blue-600">
-                  {Object.values(filters).filter(v => v !== undefined && v !== "").length - 1}
-                </Badge>
-              )}
-            </Button>
             <Button onClick={onCreate} className="h-9 gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
               <Plus className="h-4 w-4" />
               Add Asset
@@ -315,14 +296,8 @@ export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, 
           />
         </div>
 
-        {showFilters && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden"
-          >
-            <Card className="bg-muted/30 border-none shadow-inner mb-2 transition-all duration-300">
+        <div className="overflow-visible mt-2">
+          <Card className="bg-muted/30 border-none shadow-inner mb-2">
               <CardContent className="p-4 flex flex-wrap items-end gap-4">
                 <div className="flex flex-col gap-1.5">
                   <Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest ml-0.5 opacity-70">Status</Label>
@@ -407,8 +382,7 @@ export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, 
                 </Button>
               </CardContent>
             </Card>
-          </motion.div>
-        )}
+          </div>
       </div>
 
       {/* ── Bulk Actions & Selection Banner ──────────────── */}
