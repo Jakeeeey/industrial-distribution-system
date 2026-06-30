@@ -9,10 +9,12 @@ export type WidgetId =
   | "inventory-stock"
   | "low-stock-alert"
   | "receivables"
-  | "alerts-feed"
   | "activity-feed"
+
   | "quick-actions"
-  | "weather-calendar";
+  | "weather-calendar"
+  | "top-salesman"
+  | "top-customer";
 
 export interface WidgetLayout {
   id: WidgetId;
@@ -22,6 +24,7 @@ export interface WidgetLayout {
   h: number; // height in grid rows (minimum 1)
   visible: boolean;
   collapsed?: boolean;
+  customSize?: boolean;
   settings?: Record<string, unknown>;
 }
 

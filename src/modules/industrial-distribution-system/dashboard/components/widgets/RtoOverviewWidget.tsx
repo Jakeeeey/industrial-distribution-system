@@ -6,6 +6,8 @@ import React, { useMemo } from "react";
 import { useDashboard } from "../../providers/DashboardProvider";
 import { formatCurrency, formatPercent } from "../../utils/kpiCalculations";
 import { Skeleton } from "@/components/ui/skeleton";
+import { WidgetLayout } from "../../types";
+import { cn } from "@/lib/utils";
 import {
   TrendingUp,
   PackageCheck,
@@ -14,8 +16,14 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 
-export const RtoOverviewWidget: React.FC = () => {
+export const RtoOverviewWidget: React.FC<{ layout?: WidgetLayout }> = ({ layout }) => {
   const { rtoData, loading, filters } = useDashboard();
+  
+  const w = layout?.w ?? 12;
+  const h = layout?.h ?? 4;
+  const cols = w >= 10 ? 5 : (w >= 6 ? 3 : (w >= 3 ? 2 : 1));
+  const isWidgetShort = h <= 3;
+  const rows = Math.ceil(5 / cols);
 
   const metrics = useMemo(() => {
     const branchIdStr = String(filters.branchId);
@@ -52,7 +60,12 @@ export const RtoOverviewWidget: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 h-full items-center">
+      <div 
+        className="grid gap-2 flex-1 items-center min-h-0"
+        style={{
+          gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+        }}
+      >
         {Array.from({ length: 5 }).map((_, i) => (
           <div key={i} className="space-y-2 border border-border/40 rounded-xl p-3 bg-muted/5">
             <Skeleton className="h-4 w-1/2" />
@@ -107,32 +120,46 @@ export const RtoOverviewWidget: React.FC = () => {
   ];
 
   return (
-    // 1-col on mobile → 2-col on sm → 5-col on lg
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 h-full content-center">
-      {items.map((item, idx) => {
-        const Icon = item.icon;
-        return (
-          <div
-            key={idx}
-            className="flex items-center gap-3 border border-border/40 hover:border-border/80 transition-all rounded-xl p-3 bg-muted/5 relative overflow-hidden"
-          >
-            <div className={`p-2 rounded-lg ${item.bg} shrink-0`}>
-              <Icon className={`h-5 w-5 ${item.color}`} />
+    <div className="flex flex-col flex-1 min-h-0 w-full justify-between">
+      {/* Dynamic Columns Grid */}
+      <div 
+        className="grid gap-1.5 flex-1 min-h-0"
+        style={{
+          gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+          gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+        }}
+      >
+        {items.map((item, idx) => {
+          const Icon = item.icon;
+          const isWidgetNarrow = w < 6;
+          return (
+            <div
+              key={idx}
+              className={cn(
+                "flex items-center gap-2 border border-border/40 hover:border-border/80 transition-all rounded-lg bg-muted/5 relative overflow-hidden h-full",
+                isWidgetShort ? "p-1.5" : "p-2"
+              )}
+            >
+              <div className={`p-1.5 rounded-md ${item.bg} shrink-0`}>
+                <Icon className={`h-4 w-4 ${item.color}`} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="text-[8px] font-black uppercase tracking-wider text-muted-foreground block truncate leading-tight">
+                  {item.label}
+                </span>
+                <span className={cn("font-black text-foreground block mt-0.5 leading-none", isWidgetNarrow ? "text-xs" : "text-sm")}>
+                  {item.value}
+                </span>
+                {!isWidgetShort && (
+                  <span className="text-[8px] font-medium text-slate-400 block mt-0.5 truncate leading-none">
+                    {item.desc}
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="min-w-0">
-              <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground block truncate leading-tight">
-                {item.label}
-              </span>
-              <span className="text-base font-black text-foreground block mt-0.5 leading-none">
-                {item.value}
-              </span>
-              <span className="text-[8px] font-medium text-slate-400 block mt-0.5 truncate leading-none">
-                {item.desc}
-              </span>
-            </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 };

@@ -13,7 +13,9 @@ import { toast } from "sonner";
 const LOCAL_STORAGE_KEY = "ids-dashboard-layout";
 
 // Bump this whenever the coordinate system or schema changes.
-const LAYOUT_VERSION = 2; // v2 = integer-only CSS Grid coords (was v1 react-rnd fractional)
+// v5 = switched to 60px row height, rto-overview h:2→h:3, drag-swap + resize
+const LAYOUT_VERSION = 5;
+
 
 interface LocalStorageState {
   version?: number;
@@ -124,6 +126,37 @@ export function useDashboardState() {
     });
   }, [activePreset, saveState]);
 
+  // Swap two widgets by exchanging their positions in the layout array.
+  // Used by useDragDrop when a drag-and-drop completes (both desktop + mobile).
+  const swapWidgets = useCallback((idA: string, idB: string) => {
+    setLayouts((prev) => {
+      const idxA = prev.findIndex((l) => l.id === idA);
+      const idxB = prev.findIndex((l) => l.id === idB);
+      if (idxA === -1 || idxB === -1) return prev;
+
+      const updated = [...prev];
+      // ES2015 destructured swap — no temp variable needed
+      [updated[idxA], updated[idxB]] = [updated[idxB], updated[idxA]];
+
+      saveState(activePreset, updated);
+      return updated;
+    });
+  }, [activePreset, saveState]);
+
+  // Resize a widget by setting new column width (w) and row height (h).
+  // Called on every mousemove tick by useResize — saveState is called each time
+  // which is acceptable since it only writes to localStorage (fast).
+  // id typed as string (not WidgetId) so useResize can call it with generic string IDs
+  const resizeWidget = useCallback((id: string, newW: number, newH: number) => {
+    setLayouts((prev) => {
+      const updated = prev.map((l) =>
+        l.id === id ? { ...l, w: newW, h: newH } : l
+      );
+      saveState(activePreset, updated);
+      return updated;
+    });
+  }, [activePreset, saveState]);
+
   return {
     isLoaded,
     activePreset,
@@ -132,6 +165,9 @@ export function useDashboardState() {
     updateWidgetLayout,
     resetLayout,
     toggleWidgetVisibility,
+    swapWidgets,
+    resizeWidget,
   };
 }
+
 

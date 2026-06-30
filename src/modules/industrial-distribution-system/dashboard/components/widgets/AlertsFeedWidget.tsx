@@ -1,4 +1,6 @@
 // src/modules/industrial-distribution-system/dashboard/components/widgets/AlertsFeedWidget.tsx
+// NOTE: Replaced hardcoded static fallback alerts with synthesized live alerts from context states.
+// Sources: lowStock → inventory alerts, activeDispatches → late dispatch warnings, rtoData → exposure alerts.
 
 "use client";
 
@@ -6,16 +8,16 @@ import React, { useMemo } from "react";
 import { useDashboard } from "../../providers/DashboardProvider";
 import { CriticalAlert } from "../../types";
 import { Badge } from "@/components/ui/badge";
-import { ShieldAlert, AlertTriangle, Info, BellRing } from "lucide-react";
+import { ShieldAlert, AlertTriangle, Info, BellRing, CheckCircle } from "lucide-react";
 
 export const AlertsFeedWidget: React.FC = () => {
-  const { rtoData, filters } = useDashboard();
+  const { rtoData, lowStock, activeDispatches, filters } = useDashboard();
 
   const alerts = useMemo((): CriticalAlert[] => {
     const list: CriticalAlert[] = [];
     const branchIdStr = String(filters.branchId);
 
-    // 1. Gather high-risk customers from RTO data
+    // ── 1. RTO high-risk customer alerts ─────────────────────────────────────
     const filteredRto = branchIdStr === "all"
       ? rtoData
       : rtoData.filter((r) => String(r.branchId) === branchIdStr);
@@ -26,7 +28,7 @@ export const AlertsFeedWidget: React.FC = () => {
           id: `rto-exp-${r.customerCode}`,
           severity: "critical",
           message: `HIGH EXPOSURE: ${r.customerName} holds ${r.missingTanks} overdue cylinders. Net exposure: ₱${(r.financialExposure / 1000).toFixed(0)}K.`,
-          timestamp: "Just now",
+          timestamp: "Live",
           category: "rto",
         });
       }
@@ -35,41 +37,75 @@ export const AlertsFeedWidget: React.FC = () => {
           id: `fin-bal-${r.customerCode}`,
           severity: "warning",
           message: `OVER CREDIT LIMIT: ${r.customerName} has ₱${(r.unpaidBalance / 1000).toFixed(0)}K unpaid balances. Delivery on hold.`,
-          timestamp: "10 mins ago",
+          timestamp: "Live",
           category: "finance",
         });
       }
     });
 
-    // 2. Generic stock & system alerts fallback if list is short
-    if (list.length < 3) {
-      list.push({
-        id: "inv-low-lpg",
-        severity: "critical",
-        message: "LOW STOCK WARNING: Industrial LPG 50kg stock (12) has fallen below reorder threshold (35).",
-        timestamp: "5 mins ago",
-        category: "inventory",
+    // ── 2. Low stock threshold alerts (from /api/ids/dashboard/low-stock) ────
+    lowStock
+      .filter((item) => item.status === "Critical")
+      .slice(0, 3) // cap at 3 critical stock alerts
+      .forEach((item) => {
+        list.push({
+          id: `inv-low-${item.productCode}`,
+          severity: "critical",
+          message: `LOW STOCK: ${item.productName} — ${item.stockOnHand} units remaining (reorder threshold: ${item.reorderPoint}).`,
+          timestamp: "Live",
+          category: "inventory",
+        });
       });
-      list.push({
-        id: "ops-delay-dispatch",
-        severity: "warning",
-        message: "LATE DISPATCH: Trip PDP-000186 (Driver J. Ramos) is delayed in loading phase >30 mins.",
-        timestamp: "15 mins ago",
-        category: "operations",
+
+    lowStock
+      .filter((item) => item.status === "Warning")
+      .slice(0, 2) // cap at 2 warning-level stock alerts
+      .forEach((item) => {
+        list.push({
+          id: `inv-warn-${item.productCode}`,
+          severity: "warning",
+          message: `STOCK WARNING: ${item.productName} — ${item.stockOnHand} units nearing reorder threshold (${item.reorderPoint}).`,
+          timestamp: "Live",
+          category: "inventory",
+        });
       });
+
+    // ── 3. Late / pending dispatch alerts (from /api/ids/dashboard/active-dispatches) ──
+    const filteredDispatches = branchIdStr === "all"
+      ? activeDispatches
+      : activeDispatches.filter((d) => {
+          // Route string contains branch number: "Warehouse Branch 196"
+          return d.route?.includes(branchIdStr);
+        });
+
+    filteredDispatches
+      .filter((d) => d.status === "Pending" || d.priority === "Critical")
+      .slice(0, 2)
+      .forEach((d) => {
+        list.push({
+          id: `dispatch-pending-${d.dispatchNo}`,
+          severity: d.priority === "Critical" ? "critical" : "warning",
+          message: `DISPATCH PENDING: Trip ${d.dispatchNo} (Driver: ${d.driverName}, ${d.vehiclePlate}) awaiting clearance.`,
+          timestamp: d.time || "Live",
+          category: "operations",
+        });
+      });
+
+    // ── 4. Empty state — if all systems clear, show a positive info alert ────
+    if (list.length === 0) {
       list.push({
-        id: "sys-failed-sync",
+        id: "sys-all-clear",
         severity: "info",
-        message: "SYSTEM UPDATE: Directus collection 'subsystems' synced successfully with Spring ERP gateways.",
-        timestamp: "1 hour ago",
+        message: "ALL SYSTEMS CLEAR: No critical inventory, dispatch, or RTO alerts at this time.",
+        timestamp: "Live",
         category: "system",
       });
     }
 
-    // Sort: critical first, then warning, then info
-    const priority = { critical: 3, warning: 2, info: 1 };
+    // Sort: critical first → warning → info
+    const priority: Record<string, number> = { critical: 3, warning: 2, info: 1 };
     return list.sort((a, b) => priority[b.severity] - priority[a.severity]);
-  }, [rtoData, filters.branchId]);
+  }, [rtoData, lowStock, activeDispatches, filters.branchId]);
 
   const getAlertStyle = (severity: string) => {
     switch (severity) {
@@ -90,8 +126,9 @@ export const AlertsFeedWidget: React.FC = () => {
       case "warning":
         return <AlertTriangle className="h-4.5 w-4.5 text-amber-500 shrink-0 mt-0.5" />;
       case "info":
-      default:
         return <Info className="h-4.5 w-4.5 text-blue-500 shrink-0 mt-0.5" />;
+      default:
+        return <CheckCircle className="h-4.5 w-4.5 text-emerald-500 shrink-0 mt-0.5" />;
     }
   };
 
