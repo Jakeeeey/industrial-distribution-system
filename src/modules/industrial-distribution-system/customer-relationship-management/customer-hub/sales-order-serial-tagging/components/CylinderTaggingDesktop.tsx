@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 
 interface LineItemSerialsListProps {
-  productMappedSerials: string[];
+  productMappedSerials: MappedSerial[];
   taggedSerials: TaggedSerial[];
   sessionScans: ScannedItem[];
   onRemove: (serial: string) => void;
@@ -41,7 +41,7 @@ function LineItemSerialsList({
   // Construct the union of all serial numbers
   const allSerials = useMemo(() => {
     const set = new Set<string>();
-    productMappedSerials.forEach((s) => set.add(s.toUpperCase()));
+    productMappedSerials.forEach((ms) => set.add(ms.serial_number.toUpperCase()));
     taggedSerials.forEach((t) => set.add(t.serial_number.toUpperCase()));
     sessionScans.forEach((s) => set.add(s.serial_number.toUpperCase()));
     return Array.from(set);
@@ -49,15 +49,18 @@ function LineItemSerialsList({
 
   // Map each serial to its status and other info
   const serialItems = useMemo(() => {
-    return allSerials.map((serial) => {
+    const items = allSerials.map((serial) => {
       const sessionScan = sessionScans.find((s) => s.serial_number.toUpperCase() === serial);
       const dbTag = taggedSerials.find((t) => t.serial_number.toUpperCase() === serial);
+      const mapped = productMappedSerials.find((ms) => ms.serial_number.toUpperCase() === serial);
       
       let status = "not tagged";
       if (sessionScan) {
         status = "new";
       } else if (dbTag) {
         status = dbTag.status || "tagged";
+      } else if (mapped?.cylinder_status === "WITH_CUSTOMER") {
+        status = "delivered_other";
       }
 
       return {
@@ -67,13 +70,33 @@ function LineItemSerialsList({
         isDb: !!dbTag,
       };
     });
-  }, [allSerials, sessionScans, taggedSerials]);
+
+    // Sort: "new" (1) first, then "tagged" (2), then "not tagged" (3), then "delivered_other" (4)
+    return items.sort((a, b) => {
+      const getPriority = (status: string) => {
+        if (status === "new") return 1;
+        if (status === "tagged") return 2;
+        if (status === "not tagged") return 3;
+        return 4;
+      };
+      return getPriority(a.status) - getPriority(b.status);
+    });
+  }, [allSerials, sessionScans, taggedSerials, productMappedSerials]);
 
   const filteredSerials = useMemo(() => {
     return serialItems.filter((item) =>
       item.serial_number.toLowerCase().includes(filterQuery.toLowerCase())
     );
   }, [serialItems, filterQuery]);
+
+  // Count tagged/new vs untagged
+  const taggedCount = useMemo(() => {
+    return serialItems.filter(item => item.status === "new" || item.status === "tagged").length;
+  }, [serialItems]);
+
+  const untaggedCount = useMemo(() => {
+    return serialItems.filter(item => item.status === "not tagged").length;
+  }, [serialItems]);
 
   const totalSerials = allSerials.length;
   const hasSerials = filteredSerials.length > 0;
@@ -82,7 +105,7 @@ function LineItemSerialsList({
     <div className="space-y-1.5 w-full">
       <div className="flex items-center justify-between gap-4">
         <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-          Cylinder Serials ({totalSerials} total)
+          Cylinder Serials ({taggedCount} tagged, {untaggedCount} on truck)
         </span>
         {totalSerials > 6 && (
           <Input
@@ -95,13 +118,13 @@ function LineItemSerialsList({
         )}
       </div>
 
-      <div className="max-h-24 overflow-y-auto pr-1">
+      <div className="max-h-32 overflow-y-auto pr-1">
         {!hasSerials ? (
           <p className="text-[10px] text-muted-foreground italic py-1">
             {filterQuery ? "No serials match search." : "No serials loaded or tagged."}
           </p>
         ) : (
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1.5 items-center">
             {filteredSerials.map((item) => {
               if (item.isSession) {
                 return (
@@ -115,6 +138,22 @@ function LineItemSerialsList({
                       className="w-2.5 h-2.5 cursor-pointer hover:text-red-500 ml-1.5 shrink-0"
                       onClick={() => onRemove(item.serial_number)}
                     />
+                  </Badge>
+                );
+              }
+
+              if (item.status === "delivered_other") {
+                return (
+                  <Badge
+                    key={item.serial_number}
+                    variant="outline"
+                    className="font-mono text-[9px] border px-1.5 py-0.5 flex items-center shrink-0 bg-red-500/5 text-red-500 border-red-500/25 cursor-not-allowed select-none"
+                    title={`${item.serial_number} (Delivered - Other Order)`}
+                  >
+                    <span>{item.serial_number}</span>
+                    <span className="text-[8px] font-sans ml-1.5 shrink-0 select-none uppercase font-bold">
+                      Delivered (Other Order)
+                    </span>
                   </Badge>
                 );
               }
@@ -360,8 +399,7 @@ export default function CylinderTaggingDesktop({
                         {/* Collapsible tags row */}
                         {(() => {
                           const productMappedSerials = mappedSerials
-                            .filter((ms) => Number(ms.product_id) === Number(item.product_id))
-                            .map((ms) => ms.serial_number);
+                            .filter((ms) => Number(ms.product_id) === Number(item.product_id));
                           const hasAnySerials = productMappedSerials.length > 0 || item.tagged_serials.length > 0 || sessionScans.length > 0;
 
                           if (!hasAnySerials) return null;

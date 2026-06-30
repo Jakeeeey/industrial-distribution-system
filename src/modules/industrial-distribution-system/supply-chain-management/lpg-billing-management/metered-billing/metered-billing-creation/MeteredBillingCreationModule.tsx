@@ -48,6 +48,7 @@ export default function MeteredBillingCreationModule({ currentUser }: MeteredBil
       sales_order_id?: number | null;
       sales_order_no?: string | null;
     } | null;
+    draftTxId?: number | null;
   } | null>(null);
 
   const handleSuccess = () => {
@@ -155,7 +156,7 @@ export default function MeteredBillingCreationModule({ currentUser }: MeteredBil
               {!billingContext ? (
                 <CreateBillingWorkspace
                   header={selectedHeader}
-                  onProceed={(type, invoice) => setBillingContext({ type, invoice })}
+                  onProceed={(type, invoice, draftTxId) => setBillingContext({ type, invoice, draftTxId })}
                   onCancel={() => setSelectedHeader(null)}
                 />
               ) : (
@@ -165,6 +166,7 @@ export default function MeteredBillingCreationModule({ currentUser }: MeteredBil
                     transactionHeader={selectedHeader}
                     initialFlowType={billingContext.type}
                     salesInvoice={billingContext.invoice}
+                    draftTxId={billingContext.draftTxId}
                     perInvoice={perInvoice}
                     autoPeriodFrom={autoPeriodFrom}
                     currentUserId={currentUser?.id ?? null}

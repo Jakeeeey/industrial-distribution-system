@@ -80,7 +80,7 @@ export interface MeteredWiwoTransaction {
   id?: number;
   transaction_header_id: number | null;
 
-  /** Primary transaction identifier (TX-ORB-... or TX-REG-... prefix) */
+  /** Primary transaction identifier (MTR-ONB-... or MTR-REG-... prefix) */
   transaction_no?: string;
   /** Legacy alias kept for backward compat — maps to transaction_no or reading_no */
   reading_no: string;
@@ -163,7 +163,8 @@ export interface MeteredWiwoTransactionAttachment {
   transaction_id?: number;
   site_cylinder_id?: number | null;
   cylinder_asset_id?: number | null;
-  attachment_type: "SERIAL_IMAGE" | "WEIGHT_IMAGE" | "GENERAL_PHOTO";
+  // IDS-CHANGE: Added "PSI_IMAGE" and "MTRD_READING_IMAGE" for metered billing screenshots
+  attachment_type: "SERIAL_IMAGE" | "WEIGHT_IMAGE" | "GENERAL_PHOTO" | "PSI_IMAGE" | "MTRD_READING_IMAGE";
   directus_file_id: string;
   created_by?: number | null;
   created_at?: string;

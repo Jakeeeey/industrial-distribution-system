@@ -86,8 +86,9 @@ export function SummaryDetail({ txId, onClose }: Props) {
   const txTypeMeta = TX_TYPE_LABELS[tx.transaction_type] || TX_TYPE_LABELS.REGULAR_BILLING;
   const isOnboarding = tx.transaction_type === "ONBOARDING_BASELINE";
 
-  const prevImg = tx.attachments?.find((a) => a.attachment_type === "SERIAL_IMAGE")?.directus_file_id;
-  const psiImg = tx.attachments?.find((a) => a.attachment_type === "WEIGHT_IMAGE")?.directus_file_id;
+  // IDS-CHANGE: Resolve metered reading and PSI images using the new MTRD_READING_IMAGE and PSI_IMAGE types, with fallback to GENERAL_PHOTO
+  const prevImg = tx.attachments?.find((a) => a.attachment_type === "MTRD_READING_IMAGE" || a.attachment_type === "GENERAL_PHOTO")?.directus_file_id;
+  const psiImg = tx.attachments?.find((a) => a.attachment_type === "PSI_IMAGE" || a.attachment_type === "GENERAL_PHOTO")?.directus_file_id;
 
   const handleZoom = (fileId: string, label: string) => {
     setActivePreviewUrl(`/api/ids/scm/lpg-billing-management/metered-billing/asset?id=${encodeURIComponent(fileId)}`);

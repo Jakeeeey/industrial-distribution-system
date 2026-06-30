@@ -129,6 +129,12 @@ export function useCylinderTagging(orderId: string | null) {
       return;
     }
 
+    // 3b. Check if already tagged/delivered under another order (cylinder_status is WITH_CUSTOMER)
+    if (mapping.cylinder_status === "WITH_CUSTOMER") {
+      toast.error(`Serial "${serial}" has already been delivered (Other Order).`);
+      return;
+    }
+
     // 4. Find the matching line item details for this product that still has capacity
     const matchingItems = orderDetails.items.filter((item) => Number(item.product_id) === Number(mapping.product_id));
     if (matchingItems.length === 0) {

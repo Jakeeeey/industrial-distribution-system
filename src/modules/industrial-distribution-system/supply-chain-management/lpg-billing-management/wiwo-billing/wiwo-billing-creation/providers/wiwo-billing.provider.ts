@@ -304,7 +304,17 @@ export async function checkSiteOnboarded(siteId: number): Promise<boolean> {
   return (res.data ?? []).length > 0;
 }
 
-export async function fetchInvoicesForCustomer(customerCode?: string): Promise<{ invoice_id: number; invoice_no: string; total_amount: number; invoice_date: string; transaction_status: string; isOnboardingBaseline?: boolean; hasMeteredTransaction?: boolean }[]> {
+export async function fetchInvoicesForCustomer(customerCode?: string): Promise<{
+  invoice_id: number;
+  invoice_no: string;
+  total_amount: number;
+  invoice_date: string;
+  transaction_status: string;
+  sales_order_id?: number | null;
+  sales_order_no?: string | null;
+  isOnboardingBaseline?: boolean;
+  hasMeteredTransaction?: boolean;
+}[]> {
   const filters: Record<string, unknown> = {
     transaction_status: { _eq: "En Route" }
   };
@@ -372,17 +382,38 @@ export async function fetchInvoicesForCustomer(customerCode?: string): Promise<{
     console.warn("Failed to fetch posted transaction invoice IDs", e);
   }
 
-  const url = `/items/sales_invoice?limit=-1&fields=invoice_id,invoice_no,invoice_date,total_amount,transaction_status,customer_code,order_id,salesman_id&filter=${encodeURIComponent(JSON.stringify(filters))}`;
-  const res = await directusFetch<{ data: { invoice_id: number; invoice_no: string; total_amount: number; invoice_date: string; transaction_status: string }[] }>(`${DIRECTUS_URL}${url}`);
+  const url = `/items/sales_invoice?limit=-1&fields=invoice_id,invoice_no,invoice_date,total_amount,transaction_status,customer_code,order_id.order_id,order_id.order_no,salesman_id&filter=${encodeURIComponent(JSON.stringify(filters))}`;
+  const res = await directusFetch<{
+    data: {
+      invoice_id: number;
+      invoice_no: string;
+      total_amount: number;
+      invoice_date: string;
+      transaction_status: string;
+      order_id?: number | { order_id: number; order_no: string } | null;
+    }[];
+  }>(`${DIRECTUS_URL}${url}`);
   
-  const invoices = res.data ?? [];
-  return invoices
+  const rawInvoices = res.data ?? [];
+  return rawInvoices
     .filter(inv => !postedInvoiceIds.has(inv.invoice_id) && !postedTxInvoiceIds.has(inv.invoice_id))
-    .map(inv => ({
-      ...inv,
-      isOnboardingBaseline: onboardingInvoiceIds.has(inv.invoice_id),
-      hasMeteredTransaction: meteredTransactionInvoiceIds.has(inv.invoice_id)
-    }));
+    .map(inv => {
+      const orderObj =
+        inv.order_id && typeof inv.order_id === "object"
+          ? (inv.order_id as { order_id: number; order_no: string })
+          : null;
+      return {
+        invoice_id: inv.invoice_id,
+        invoice_no: inv.invoice_no,
+        total_amount: inv.total_amount,
+        invoice_date: inv.invoice_date,
+        transaction_status: inv.transaction_status,
+        sales_order_id: orderObj ? Number(orderObj.order_id) : inv.order_id ? Number(inv.order_id) : null,
+        sales_order_no: orderObj ? String(orderObj.order_no) : null,
+        isOnboardingBaseline: onboardingInvoiceIds.has(inv.invoice_id),
+        hasMeteredTransaction: meteredTransactionInvoiceIds.has(inv.invoice_id)
+      };
+    });
 }
 
 export async function fetchAvailableCylinders(): Promise<CylinderAsset[]> {

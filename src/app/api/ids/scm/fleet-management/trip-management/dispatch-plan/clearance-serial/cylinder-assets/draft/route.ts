@@ -1,4 +1,22 @@
 import { NextResponse } from 'next/server';
+import { cookies } from "next/headers";
+
+function getUserIdFromToken(token: string | undefined | null): number | null {
+    if (!token) return null;
+    try {
+        const parts = token.split(".");
+        if (parts.length < 2) return null;
+        const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+        const json = Buffer.from(b64, "base64").toString("utf8");
+        const payload = JSON.parse(json);
+        const idValue = payload.user_id ?? payload.userId ?? payload.id ?? payload.sub;
+        if (idValue != null) {
+            const num = Number(idValue);
+            return isNaN(num) ? null : num;
+        }
+    } catch {}
+    return null;
+}
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL + '/items';
 const TOKEN = process.env.DIRECTUS_STATIC_TOKEN;
@@ -24,6 +42,10 @@ async function poster(endpoint: string, data: unknown) {
 export async function POST(request: Request) {
     try {
         const body = await request.json(); // Array of cylinder assets
+        const cookieStore = await cookies();
+        const token = cookieStore.get("vos_access_token")?.value;
+        const userId = getUserIdFromToken(token);
+        const now = new Date().toISOString();
 
         if (!Array.isArray(body)) {
             return NextResponse.json({ error: 'Body must be an array of assets' }, { status: 400 });
@@ -38,7 +60,9 @@ export async function POST(request: Request) {
             expiration_date: asset.expiration_date || null,
             tare_weight: asset.tare_weight ? Number(asset.tare_weight) : null,
             cost: asset.cost ? Number(asset.cost) : null,
-            acquisition_date: new Date().toISOString().split('T')[0]
+            acquisition_date: new Date().toISOString().split('T')[0],
+            ...(userId ? { created_by: userId, modified_by: userId } : {}),
+            modified_date: now
         }));
 
         const res = await poster('/cylinder_assets_draft', payloads);
