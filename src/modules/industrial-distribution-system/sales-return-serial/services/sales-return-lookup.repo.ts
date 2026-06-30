@@ -3,7 +3,7 @@ import { directusGet } from "./sales-return.client";
 
 export async function getRawLinkedInvoice(returnId: number) {
   return directusGet<{ data: Record<string, unknown>[] }>(
-    `/items/sales_invoice_sales_return?filter[return_no][_eq]=${returnId}&fields=invoice_no.invoice_no`,
+    `/items/sales_invoice_sales_return?filter[return_no][_eq]=${returnId}&fields=invoice_no.invoice_id,invoice_no.invoice_no,invoice_no.isPosted`,
   );
 }
 
@@ -59,9 +59,15 @@ export async function getRawSupplierCategoryDiscount(customerCode: string) {
   );
 }
 
+export async function getInvoiceById(invoiceId: number) {
+  return directusGet<{ data: Record<string, unknown> }>(
+    `/items/sales_invoice/${invoiceId}?fields=invoice_id,invoice_no,isPosted`,
+  );
+}
+
 export async function getRawInvoices(salesmanId?: string, customerCode?: string) {
   let url =
-    "/items/sales_invoice?limit=-1&fields=invoice_id,invoice_no,order_id,customer_code,salesman_id,total_amount";
+    "/items/sales_invoice?limit=-1&fields=invoice_id,invoice_no,order_id,customer_code,salesman_id,total_amount,isPosted&filter[isPosted][_neq]=1";
 
   if (salesmanId) {
     url += `&filter[salesman_id][_eq]=${salesmanId}`;

@@ -53,7 +53,15 @@ interface WiwoFormProps {
   onCancel: () => void;
   initialFlowType?: "ROUTINE" | "ONBOARDING";
   transactionHeader: LpgTransactionHeader;
-  salesInvoice?: { invoice_id: number; invoice_no: string; total_amount: number; invoice_date: string; transaction_status: string };
+  salesInvoice?: {
+    invoice_id: number;
+    invoice_no: string;
+    total_amount: number;
+    invoice_date: string;
+    transaction_status: string;
+    sales_order_id?: number | null;
+    sales_order_no?: string | null;
+  };
 }
 
 function getCylinderCapacity(productName?: string): number {
@@ -147,6 +155,9 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   const [weighingOnboardIndex, setWeighingOnboardIndex] = useState<number | null>(null);
   const [onboardingWeighingGross, setOnboardingWeighingGross] = useState("");
   const [replacementModalIndex, setReplacementModalIndex] = useState<number | null>(null);
+  // DEV-CHANGE: States for deploying cylinders without swap in routine check flow
+  const [routineDeployInput, setRoutineDeployInput] = useState("");
+  const [isValidatingRoutineDeploy, setIsValidatingRoutineDeploy] = useState(false);
 
   const [, setSerialFile] = useState<File | null>(null);
   const [serialFileUrl, setSerialFileUrl] = useState<string | null>(null);
@@ -492,7 +503,10 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
 
     setIsValidatingSerial(true);
     try {
-      const res = await fetch(`/api/ids/scm/lpg-billing-management/wiwo-billing?type=validate-serial&serial=${encodeURIComponent(serial)}`);
+      // DEV-CHANGE: Retrieve sales_order_id from salesInvoice if available to validate that it is loaded on the assigned truck
+      const salesOrderId = salesInvoice?.sales_order_id;
+      const url = `/api/ids/scm/lpg-billing-management/wiwo-billing?type=validate-serial&serial=${encodeURIComponent(serial)}${salesOrderId ? `&salesOrderId=${salesOrderId}` : ""}`;
+      const res = await fetch(url);
       const data = await res.json();
 
       if (!res.ok || data.error) {
@@ -552,7 +566,10 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
     });
 
     try {
-      const res = await fetch(`/api/ids/scm/lpg-billing-management/wiwo-billing?type=validate-serial&serial=${encodeURIComponent(s)}`);
+      // DEV-CHANGE: Retrieve sales_order_id from salesInvoice if available to validate that it is loaded on the assigned truck
+      const salesOrderId = salesInvoice?.sales_order_id;
+      const url = `/api/ids/scm/lpg-billing-management/wiwo-billing?type=validate-serial&serial=${encodeURIComponent(s)}${salesOrderId ? `&salesOrderId=${salesOrderId}` : ""}`;
+      const res = await fetch(url);
       const data = await res.json();
 
       if (!res.ok || data.error) {
@@ -589,6 +606,58 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
         };
         return copy;
       });
+    }
+  };
+
+  // DEV-CHANGE: Handler to search, validate, and add cylinders directly to the deployment list in routine swap flow
+  const handleAddRoutineDeploySerial = async () => {
+    const serial = routineDeployInput.trim();
+    if (!serial) return;
+
+    if (selectedReplacementCylinders.some((c) => c.serialNumber.toUpperCase() === serial.toUpperCase())) {
+      alert("This cylinder is already added for deployment/replacement.");
+      setRoutineDeployInput("");
+      return;
+    }
+
+    if (activeSiteCylinders.some((c) => c.cylinder_asset?.serial_number?.toUpperCase() === serial.toUpperCase())) {
+      alert("This cylinder is already connected at the customer site.");
+      setRoutineDeployInput("");
+      return;
+    }
+
+    setIsValidatingRoutineDeploy(true);
+    try {
+      const salesOrderId = salesInvoice?.sales_order_id;
+      const url = `/api/ids/scm/lpg-billing-management/wiwo-billing?type=validate-serial&serial=${encodeURIComponent(serial)}${salesOrderId ? `&salesOrderId=${salesOrderId}` : ""}`;
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "Failed to validate serial number.");
+      }
+
+      const cyl = data.data;
+      const cap = getCylinderCapacity(cyl.product?.product_name);
+      
+      setSelectedReplacementCylinders((prev) => [
+        ...prev,
+        {
+          cylinderAssetId: cyl.id,
+          serialNumber: cyl.serial_number,
+          productName: cyl.product?.product_name || "Unknown Product",
+          tareWeight: cyl.tare_weight || 0,
+          capacity: cap,
+          targetKg: "",
+          swappedOutCylinderId: null, // Pure deployment
+        },
+      ]);
+      setRoutineDeployInput("");
+    } catch (err) {
+      const error = err as Error;
+      alert(error.message || "Invalid serial number.");
+    } finally {
+      setIsValidatingRoutineDeploy(false);
     }
   };
 
@@ -765,10 +834,15 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
     }
   };
 
+  const selectedSite = sites.find((s) => String(s.id) === siteId) || null;
+  const isKiloMode = (selectedSite?.billing_mode ?? transactionHeader.site?.billing_mode) === "KILO";
+
   // ─── Mathematical Calculations (Flow B) ─────────────────────────────────────
-  const meteredKg = draftMeteredKg !== null
-    ? draftMeteredKg
-    : Math.max(0, currentReading - previousReading);
+  const meteredKg = isKiloMode
+    ? 0
+    : (draftMeteredKg !== null
+      ? draftMeteredKg
+      : Math.max(0, currentReading - previousReading));
 
   // Map and calculate returned cylinders
   const calculatedReturnedCylinders = activeSiteCylinders.map((sc) => {
@@ -796,9 +870,9 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
   });
 
   const totalWiwoKg = calculatedReturnedCylinders.reduce((sum, c) => sum + c.consumed, 0);
-  const billableKg = Math.max(meteredKg, totalWiwoKg);
-  const varianceKg = Math.abs(meteredKg - totalWiwoKg);
-  const mismatchExists = meteredKg !== totalWiwoKg;
+  const billableKg = isKiloMode ? totalWiwoKg : Math.max(meteredKg, totalWiwoKg);
+  const varianceKg = isKiloMode ? 0 : Math.abs(meteredKg - totalWiwoKg);
+  const mismatchExists = isKiloMode ? false : meteredKg !== totalWiwoKg;
 
   // Validation boundary: block if weight entries are completely illogical
   const hasNegativeWeightErrors = calculatedReturnedCylinders.some(
@@ -900,12 +974,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
 
         if (selectedReplacementCylinders.length > 0) {
           if (selectedReplacementCylinders.some(c => !c.cylinderAssetId)) {
-            alert("Please verify all replacement cylinder serial numbers.");
-            setLoading(false);
-            return;
-          }
-          if (selectedReplacementCylinders.some(c => c.swappedOutCylinderId === null)) {
-            alert("Please select the swapped-out cylinder for each replacement.");
+            alert("Please verify all replacement/deployment cylinder serial numbers.");
             setLoading(false);
             return;
           }
@@ -958,9 +1027,9 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
           customer_code: customerCode,
           lpg_site_id: Number(siteId),
           transaction_date: transactionDate,
-          previous_reading: previousReading,
-          current_reading: currentReading,
-          metered_kg: meteredKg,
+          previous_reading: isKiloMode ? 0 : previousReading,
+          current_reading: isKiloMode ? 0 : currentReading,
+          metered_kg: isKiloMode ? 0 : meteredKg,
           price_per_kg: pricePerKg,
           returned_cylinders: returnedCylindersPayload,
           new_cylinders: selectedReplacementCylinders.map(c => ({
@@ -1063,7 +1132,6 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
     }
   };
 
-  const selectedSite = sites.find(s => String(s.id) === siteId) || null;
 
   if (loading) {
     return (
@@ -1240,7 +1308,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 border-b border-border">
-              {flowType === "ROUTINE" && !isViewMode && (
+              {flowType === "ROUTINE" && !isViewMode && !isKiloMode && (
                 <div className="space-y-1.5 md:col-span-2">
                   <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
                     Draft Metered Transaction
@@ -1401,64 +1469,66 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
           {flowType === "ROUTINE" && (
             <>
               {/* Meter Sync panel */}
-              <div className="bg-card/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="h-8 w-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-primary">
-                    <Gauge className="h-4 w-4" />
-                  </div>
-                  <h2 className="font-semibold text-sm">Meter Reading Details</h2>
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground h-4 flex items-center">Previous Reading</Label>
-                    <Input
-                      type="number"
-                      value={isViewMode ? txDetail?.meter_reading_id ? (txDetail.meter_reading_id as unknown as MeterReading).previous_reading : 0 : previousReading}
-                      readOnly
-                      className="bg-accent font-mono"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground h-4 flex items-center">Current Reading</Label>
-                    <Input
-                      type="number"
-                      step="0.001"
-                      value={isViewMode ? txDetail?.meter_reading_id ? (txDetail.meter_reading_id as unknown as MeterReading).current_reading : 0 : currentReading}
-                      onChange={(e) => setCurrentReading(parseFloat(e.target.value) || 0)}
-                      readOnly={isReadOnly || isViewMode}
-                      className="font-mono"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-1.5 h-4">
-                      <Label className="text-xs text-muted-foreground">Metered KG</Label>
-                      {draftMeteredKg !== null && !isViewMode && (
-                        <span className="text-[8px] leading-none font-bold bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded uppercase shrink-0">
-                          From Metered Tx
-                        </span>
-                      )}
+              {!isKiloMode && (
+                <div className="bg-card/70 backdrop-blur-md border border-white/20 dark:border-zinc-800/50 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="h-8 w-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-primary">
+                      <Gauge className="h-4 w-4" />
                     </div>
-                    <Input
-                      value={isViewMode
-                        ? txDetail.metered_kg
-                        : draftMeteredKg !== null
-                          ? draftMeteredKg.toFixed(3)
-                          : meteredKg.toFixed(3)}
-                      readOnly
-                      className="font-mono bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 font-bold"
-                    />
+                    <h2 className="font-semibold text-sm">Meter Reading Details</h2>
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground h-4 flex items-center">WIWO KG (computed)</Label>
-                    <Input
-                      value={isViewMode ? txDetail.wiwo_kg : totalWiwoKg.toFixed(3)}
-                      readOnly
-                      className="font-mono bg-emerald-50 dark:bg-emerald-900/20 text-primary font-bold"
-                    />
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground h-4 flex items-center">Previous Reading</Label>
+                      <Input
+                        type="number"
+                        value={isViewMode ? txDetail?.meter_reading_id ? (txDetail.meter_reading_id as unknown as MeterReading).previous_reading : 0 : previousReading}
+                        readOnly
+                        className="bg-accent font-mono"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground h-4 flex items-center">Current Reading</Label>
+                      <Input
+                        type="number"
+                        step="0.001"
+                        value={isViewMode ? txDetail?.meter_reading_id ? (txDetail.meter_reading_id as unknown as MeterReading).current_reading : 0 : currentReading}
+                        onChange={(e) => setCurrentReading(parseFloat(e.target.value) || 0)}
+                        readOnly={isReadOnly || isViewMode}
+                        className="font-mono"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-1.5 h-4">
+                        <Label className="text-xs text-muted-foreground">Metered KG</Label>
+                        {draftMeteredKg !== null && !isViewMode && (
+                          <span className="text-[8px] leading-none font-bold bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded uppercase shrink-0">
+                            From Metered Tx
+                          </span>
+                        )}
+                      </div>
+                      <Input
+                        value={isViewMode
+                          ? txDetail.metered_kg
+                          : draftMeteredKg !== null
+                            ? draftMeteredKg.toFixed(3)
+                            : meteredKg.toFixed(3)}
+                        readOnly
+                        className="font-mono bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 font-bold"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground h-4 flex items-center">WIWO KG (computed)</Label>
+                      <Input
+                        value={isViewMode ? txDetail.wiwo_kg : totalWiwoKg.toFixed(3)}
+                        readOnly
+                        className="font-mono bg-emerald-50 dark:bg-emerald-900/20 text-primary font-bold"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Connected cylinders returns weights table */}
               {(isViewMode || flowType === "ROUTINE") && (
@@ -1495,6 +1565,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                           <tr>
                             <th className="p-2 sm:p-3 sticky left-0 bg-zinc-50 dark:bg-zinc-900 z-10 text-[10px] sm:text-xs">Serial</th>
                             <th className="p-2 sm:p-3 text-[10px] sm:text-xs">Product Name</th>
+                            <th className="p-2 sm:p-3 text-center text-[10px] sm:text-xs">Level</th>
                             <th className="p-2 sm:p-3 text-center text-[10px] sm:text-xs">Status</th>
                           </tr>
                         </thead>
@@ -1507,14 +1578,34 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                 const deploymentLines = details.filter(d => d.line_type === "NEW_DEPLOYMENT");
                                 const matchedDeployment = deploymentLines[idx];
                                 const isSwapped = !!matchedDeployment;
+                                const typedLine = line as typeof line & { product_name?: string; cylinder_asset?: CylinderAsset };
 
                                 return (
                                   <Fragment key={idx}>
                                     <tr className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20">
-                                      <td className="p-2 sm:p-3 font-mono font-bold sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r border-border shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] text-[10px] sm:text-xs">{line.serial_number}</td>
+                                      <td className="p-2 sm:p-3 font-mono font-bold sticky left-0 bg-white dark:bg-zinc-950 z-10 border-r border-border shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] text-[10px] sm:text-xs">{typedLine.serial_number}</td>
                                       <td className="p-2 sm:p-3 font-semibold text-zinc-700 dark:text-zinc-300 text-[10px] sm:text-xs">
-                                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                                        {(line as any).cylinder_asset?.product?.product_name || (line as any).product_name || "LPG Cylinder"}
+                                        {typedLine.cylinder_asset?.product?.product_name || typedLine.product_name || "LPG Cylinder"}
+                                      </td>
+                                      <td className="p-2 sm:p-3 text-center">
+                                        {(() => {
+                                          const capacity = typedLine.cylinder_asset?.product?.unit_of_measurement_count || 50;
+                                          const percentage = Math.min(100, Math.max(0, (typedLine.remaining_lpg_kg / capacity) * 100));
+                                          const isLow = percentage <= 20;
+                                          return (
+                                            <div className="flex flex-col items-center gap-1">
+                                              <div className="w-16 sm:w-20 h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
+                                                <div 
+                                                  className={`h-full rounded-full ${isLow ? 'bg-red-500' : percentage <= 50 ? 'bg-yellow-500' : 'bg-emerald-500'}`}
+                                                  style={{ width: `${percentage}%` }}
+                                                />
+                                              </div>
+                                              <span className={`text-[8px] sm:text-[9px] font-bold ${isLow ? 'text-red-500 animate-pulse' : 'text-muted-foreground'}`}>
+                                                {percentage.toFixed(0)}% {isLow && '(Needs Swap)'}
+                                              </span>
+                                            </div>
+                                          );
+                                        })()}
                                       </td>
                                       <td className="p-2 sm:p-3 text-center">
                                         {isSwapped ? (
@@ -1529,7 +1620,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                       </td>
                                     </tr>
                                     <tr className="bg-zinc-50/20 dark:bg-zinc-900/5">
-                                      <td colSpan={3} className="p-4 border-l-2 border-border dark:border-zinc-700">
+                                      <td colSpan={4} className="p-4 border-l-2 border-border dark:border-zinc-700">
                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-2">
                                           <div>
                                             <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Tare Weight</span>
@@ -1552,7 +1643,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                     </tr>
                                     {isSwapped && (
                                       <tr className="bg-zinc-50/40 dark:bg-zinc-900/10">
-                                        <td colSpan={3} className="p-4 border-l-2 border-primary bg-zinc-50/30 dark:bg-zinc-900/10">
+                                        <td colSpan={4} className="p-4 border-l-2 border-primary bg-zinc-50/30 dark:bg-zinc-900/10">
                                           <div className="flex flex-col sm:flex-row gap-6 text-xs">
                                             <div>
                                               <span className="font-semibold text-muted-foreground uppercase tracking-wider block text-[10px] mb-0.5">Replacement Cylinder Serial</span>
@@ -1576,7 +1667,7 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                           ) : (
                             calculatedReturnedCylinders.length === 0 ? (
                               <tr>
-                                <td colSpan={3} className="p-6 text-center text-muted-foreground">
+                                <td colSpan={4} className="p-6 text-center text-muted-foreground">
                                   No connected cylinders found for this site. Must run onboarding setup first.
                                 </td>
                               </tr>
@@ -1598,6 +1689,26 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                       </td>
                                       <td className="p-2 sm:p-3 font-semibold text-zinc-700 dark:text-zinc-300 text-[10px] sm:text-xs">
                                         {row.cylinder_asset?.product?.product_name || "LPG Cylinder"}
+                                      </td>
+                                      <td className="p-2 sm:p-3 text-center">
+                                        {(() => {
+                                          const capacity = row.cylinder_asset?.product?.unit_of_measurement_count || 50;
+                                          const percentage = Math.min(100, Math.max(0, (row.remaining / capacity) * 100));
+                                          const isLow = percentage <= 20;
+                                          return (
+                                            <div className="flex flex-col items-center gap-1">
+                                              <div className="w-16 sm:w-20 h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
+                                                <div 
+                                                  className={`h-full rounded-full ${isLow ? 'bg-red-500' : percentage <= 50 ? 'bg-yellow-500' : 'bg-emerald-500'}`}
+                                                  style={{ width: `${percentage}%` }}
+                                                />
+                                              </div>
+                                              <span className={`text-[8px] sm:text-[9px] font-bold ${isLow ? 'text-red-500 animate-pulse' : 'text-muted-foreground'}`}>
+                                                {percentage.toFixed(0)}% {isLow && '(Needs Swap)'}
+                                              </span>
+                                            </div>
+                                          );
+                                        })()}
                                       </td>
                                       <td className="p-2 sm:p-3 text-center">
                                         {row.isSwapped ? (
@@ -1624,6 +1735,147 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                       </table>
                     </div>
                   </div>
+
+                  {/* DEV-CHANGE: Add pure deployments (Deploy Additional Cylinders with no swap) in routine billing flow */}
+                  {isViewMode ? (() => {
+                      const details = (txDetail?.wiwo_header_id as unknown as WiwoHeader)?.details ?? [];
+                      const consumptionReturnLines = details.filter(l => l.line_type === "CONSUMPTION_RETURN");
+                      const deploymentLines = details.filter(d => d.line_type === "NEW_DEPLOYMENT");
+                      const pureDeployments = deploymentLines.slice(consumptionReturnLines.length);
+
+                      if (pureDeployments.length === 0) return null;
+
+                      return (
+                        <div className="pt-4 border-t border-border mt-4 space-y-3">
+                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                            Additional Deployed Cylinders (No Swap)
+                          </Label>
+                          <div className="border border-border/80 rounded-xl overflow-hidden text-xs bg-white dark:bg-zinc-955/10">
+                            <table className="w-full text-left border-collapse">
+                              <thead className="bg-zinc-100 dark:bg-zinc-900 border-b border-border font-bold text-muted-foreground text-[10px]">
+                                <tr>
+                                  <th className="p-2">Serial</th>
+                                  <th className="p-2">Product</th>
+                                  <th className="p-2">Tare</th>
+                                  <th className="p-2 font-bold text-primary dark:text-emerald-400">Deployed Gross</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-border text-[11px]">
+                                {pureDeployments.map((line, idx) => {
+                                  const typedLine = line as typeof line & { product_name?: string; cylinder_asset?: CylinderAsset };
+                                  return (
+                                    <tr key={idx} className="hover:bg-accent/10">
+                                      <td className="p-2 font-mono font-bold">{typedLine.serial_number}</td>
+                                      <td className="p-2 text-muted-foreground">
+                                        {typedLine.cylinder_asset?.product?.product_name || "LPG Cylinder"}
+                                      </td>
+                                      <td className="p-2 font-mono">{typedLine.tare_weight_kg} KG</td>
+                                      <td className="p-2 font-mono font-bold text-primary dark:text-emerald-400">
+                                        {typedLine.previous_lpg_kg} KG
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })()
+                  : (
+                    <div className="pt-4 border-t border-border mt-4 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                          Deploy Additional Cylinders (No Swap)
+                        </Label>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="text"
+                          placeholder="Scan or enter serial number for deployment..."
+                          value={routineDeployInput}
+                          onChange={(e) => setRoutineDeployInput(e.target.value)}
+                          disabled={isValidatingRoutineDeploy}
+                          className="font-mono text-xs h-8"
+                          onKeyDown={async (e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              await handleAddRoutineDeploySerial();
+                            }
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={isValidatingRoutineDeploy || !routineDeployInput.trim()}
+                          onClick={handleAddRoutineDeploySerial}
+                          className="h-8 shrink-0 text-xs font-bold"
+                        >
+                          {isValidatingRoutineDeploy ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Plus className="h-3.5 w-3.5 mr-1" />
+                          )}
+                          Deploy
+                        </Button>
+                      </div>
+
+                      {/* List of pure deployments */}
+                      {selectedReplacementCylinders.filter(c => c.swappedOutCylinderId === null).length > 0 && (
+                        <div className="border border-border/60 rounded-xl overflow-hidden bg-zinc-50/15 dark:bg-zinc-955/10">
+                          <table className="w-full text-left border-collapse">
+                            <thead className="bg-zinc-100 dark:bg-zinc-900 border-b border-border font-bold text-muted-foreground text-[10px]">
+                              <tr>
+                                <th className="p-2">Serial</th>
+                                <th className="p-2">Product</th>
+                                <th className="p-2">Tare</th>
+                                <th className="p-2">Starting Gross</th>
+                                <th className="p-2 text-right">Action</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border text-[11px]">
+                              {selectedReplacementCylinders
+                                .map((c, originalIndex) => ({ c, originalIndex }))
+                                .filter(({ c }) => c.swappedOutCylinderId === null)
+                                .map(({ c, originalIndex }) => (
+                                  <tr key={c.cylinderAssetId || originalIndex} className="hover:bg-accent/10">
+                                    <td className="p-2 font-mono font-bold">{c.serialNumber}</td>
+                                    <td className="p-2 text-muted-foreground">{c.productName}</td>
+                                    <td className="p-2 font-mono">{c.tareWeight} KG</td>
+                                    <td className="p-2 font-mono font-bold">
+                                      {c.targetKg ? `${c.targetKg} KG` : <span className="text-red-500 font-bold">Needs Weighing</span>}
+                                    </td>
+                                    <td className="p-2 text-right space-x-1.5 whitespace-nowrap">
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="xs"
+                                        onClick={() => setReplacementModalIndex(originalIndex)}
+                                        className={`h-7 px-2 ${c.serialPhotoId && c.weightPhotoId ? "border-emerald-250 text-primary bg-emerald-50 dark:bg-emerald-955/20" : ""}`}
+                                      >
+                                        <Scale className="h-3 w-3 sm:mr-1" />
+                                        <span className="hidden sm:inline">Weigh</span>
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="xs"
+                                        onClick={() => setSelectedReplacementCylinders(prev => prev.filter((_, idx) => idx !== originalIndex))}
+                                        className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </td>
+                                  </tr>
+                                ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </>
@@ -2730,7 +2982,8 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                 setScannerError("");
                 setScannerInput("");
 
-                // IDS-CHANGE: Do not auto-open the scanner modal if all cylinders have been weighed
+                // IDS-CHANGE: Do not auto-open the scanner modal if all cylinders have been weighed.
+                // If this is a cylinder swap, automatically open the capture cylinder in modal (replacement modal) instead.
                 const nextReturnedWeights = {
                   ...returnedWeights,
                   [weighingCylinderId]: parseFloat(weighingGross),
@@ -2739,7 +2992,11 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                   const wt = nextReturnedWeights[c.id];
                   return wt !== undefined && wt !== null && !isNaN(Number(wt)) && Number(wt) > 0;
                 });
-                if (!allCylsFulfilled) {
+                
+                const repIndex = selectedReplacementCylinders.findIndex(c => c.swappedOutCylinderId === weighingCylinderId);
+                if (swappedCylinders[weighingCylinderId] && repIndex !== -1) {
+                  setReplacementModalIndex(repIndex);
+                } else if (!allCylsFulfilled) {
                   setIsScannerModalOpen(true);
                 }
               }}

@@ -196,10 +196,16 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
 
   const isDraft = selectedHeader.status === "DRAFT";
 
-  // Compute overall totals from child transactions
-  const totalMeteredKg = transactions.reduce((s, tx) => s + tx.metered_kg, 0);
-  const totalWiwoKg = transactions.reduce((s, tx) => s + tx.wiwo_kg, 0);
-  const totalBillableKg = transactions.reduce((s, tx) => s + tx.billable_kg, 0);
+  // Compute overall totals from child transactions (excluding onboarding baseline for billing quantities)
+  const totalMeteredKg = transactions
+    .filter((tx) => tx.transaction_type !== "ONBOARDING_BASELINE")
+    .reduce((s, tx) => s + tx.metered_kg, 0);
+  const totalWiwoKg = transactions
+    .filter((tx) => tx.transaction_type !== "ONBOARDING_BASELINE")
+    .reduce((s, tx) => s + tx.wiwo_kg, 0);
+  const totalBillableKg = transactions
+    .filter((tx) => tx.transaction_type !== "ONBOARDING_BASELINE")
+    .reduce((s, tx) => s + tx.billable_kg, 0);
   const totalGross = transactions.reduce((s, tx) => s + tx.gross_amount, 0);
   const totalDiscount = transactions.reduce((s, tx) => s + tx.discount_amount, 0);
   const totalVat = transactions.reduce((s, tx) => s + (tx.gross_amount - (tx.gross_amount / 1.12)), 0);
@@ -448,7 +454,7 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
                       >
                         <div className="flex items-center justify-between gap-1.5 w-full">
                           <span className="text-xs font-black text-zinc-900 dark:text-zinc-100 truncate">
-                            {tx.sales_invoice_no || "Pending Sales Invoice"}
+                            {tx.transaction_no}
                           </span>
                           <Badge className="text-[8px] px-1.5 py-0 bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700 shrink-0">
                             {tx.transaction_type.replace("_", " ")}
@@ -456,7 +462,7 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
                         </div>
 
                         <div className="text-[10px] text-zinc-500 dark:text-zinc-400 font-bold truncate -mt-1">
-                          {tx.transaction_no}
+                          {tx.sales_invoice_no ? `SI: ${tx.sales_invoice_no}` : "Pending Sales Invoice"}
                         </div>
 
                         <div className="flex items-center justify-between w-full text-[10px] text-muted-foreground">
@@ -536,10 +542,10 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
                     </Button>
                   </div>
 
-                  {/* Detail Panel Content: Split Layout */}
-                  <div className="flex-1 flex min-h-0 overflow-hidden">
+                  {/* Detail Panel Content: Split Layout (responsive stacking below lg to prevent data clumping) */}
+                  <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-y-auto lg:overflow-hidden">
                     {/* Left Side: Scrollable adjustment panels */}
-                    <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
+                    <div className="flex-1 p-5 space-y-4 custom-scrollbar lg:overflow-y-auto">
                       {/* Meter Reading Panel */}
                       {!!activeTx.meter_reading && (
                         <MeterReadingReviewPanel
@@ -574,7 +580,7 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
 
                     {/* Right Side: Static WIWO Billing Summary Card */}
                     {(!!activeTx.meter_reading || !!activeTx.wiwo_header) && (
-                      <div className="w-[340px] border-l border-border bg-zinc-50/10 dark:bg-zinc-950/5 p-4 overflow-y-auto shrink-0 custom-scrollbar flex flex-col justify-start">
+                      <div className="w-full lg:w-[340px] border-t lg:border-t-0 lg:border-l border-border bg-zinc-50/10 dark:bg-zinc-950/5 p-4 shrink-0 lg:overflow-y-auto custom-scrollbar flex flex-col justify-start">
                         <div className="bg-gradient-to-br from-violet-600 via-purple-700 to-indigo-800 rounded-2xl p-4 sm:p-5 text-white shadow-xl space-y-4 w-full">
                           <div className="flex items-center gap-2 mb-1">
                             <div className="h-8 w-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">

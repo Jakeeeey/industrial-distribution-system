@@ -9,6 +9,7 @@ import { ReviewReceiptStep } from "./steps/ReviewReceiptStep";
 
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { ReceivingWorkbenchRefillManual } from "./ReceivingWorkbenchRefillManual";
 
 function StepDot({ active }: { active: boolean }) {
     return (
@@ -20,20 +21,28 @@ function StepDot({ active }: { active: boolean }) {
 
 export function ReceivingWorkbenchManual({ receiverName }: { receiverName?: string }) {
     const { selectedPO, receiptSaved } = useReceivingProductsManual();
+
+    // Hooks must be called unconditionally before any early returns - AG 2026-06-26
     const [step, setStep] = React.useState(0);
 
-    // Reset to step 0 if PO is deselected
+    // Reset to step 0 if PO is deselected - AG 2026-06-26
     React.useEffect(() => {
         if (!selectedPO) setStep(0);
     }, [selectedPO]);
 
-    // If receipt is saved, we usually stay on step 3 or the module handles visibility
+    // If receipt is saved, we usually stay on step 3 or the module handles visibility - AG 2026-06-26
     React.useEffect(() => {
         if (receiptSaved) {
             // Keep on review step (index 3) to show success state
             setStep(3);
         }
     }, [receiptSaved]);
+
+    // Delegate to dedicated refill workbench if selected PO is a refill PO.
+    // Moved after hooks to comply with Rules of Hooks. - AG 2026-06-26
+    if (selectedPO?.isRefill) {
+        return <ReceivingWorkbenchRefillManual receiverName={receiverName} />;
+    }
 
     if (!selectedPO) {
         return (

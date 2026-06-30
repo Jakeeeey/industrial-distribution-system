@@ -24,10 +24,16 @@ interface TotalItem {
 }
 
 export function BillingTotalsBar({ transactions, className }: BillingTotalsBarProps) {
-  // Compute totals from child transactions (mirrors what the server recalculates)
-  const totalMeteredKg = transactions.reduce((s, tx) => s + tx.metered_kg, 0);
-  const totalWiwoKg = transactions.reduce((s, tx) => s + tx.wiwo_kg, 0);
-  const totalBillableKg = transactions.reduce((s, tx) => s + tx.billable_kg, 0);
+  // Compute totals from child transactions (excluding onboarding baseline for billing quantities)
+  const totalMeteredKg = transactions
+    .filter((tx) => tx.transaction_type !== "ONBOARDING_BASELINE")
+    .reduce((s, tx) => s + tx.metered_kg, 0);
+  const totalWiwoKg = transactions
+    .filter((tx) => tx.transaction_type !== "ONBOARDING_BASELINE")
+    .reduce((s, tx) => s + tx.wiwo_kg, 0);
+  const totalBillableKg = transactions
+    .filter((tx) => tx.transaction_type !== "ONBOARDING_BASELINE")
+    .reduce((s, tx) => s + tx.billable_kg, 0);
   const totalGrossAmount = transactions.reduce((s, tx) => s + tx.gross_amount, 0);
 
   const items: TotalItem[] = [

@@ -243,8 +243,8 @@ export function ReturnDetailsModal({
       .filter((p) => {
         const order = unitOrderMap.get(p.unit) ?? 0;
         const isAlreadyInCart = items.some((i) => i.id === p.id);
-        // Manual add in detail modal: only allow order 1 or 2 (small units)
-        return (p.stock > 0 && (order === 1 || order === 2)) || isAlreadyInCart;
+        // Manual add in detail modal: only allow order 0 or 2 (Full and Empty cylinders only)
+        return (p.stock > 0 && (order === 0 || order === 2)) || isAlreadyInCart;
       });
 
     // Group by familyId

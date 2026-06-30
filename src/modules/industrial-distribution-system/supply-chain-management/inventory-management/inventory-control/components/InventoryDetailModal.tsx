@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useReactToPrint } from "react-to-print";
 
 import {
@@ -27,6 +27,7 @@ import {
   Barcode as BarcodeIcon,
   ArrowLeft,
   Search,
+  SlidersHorizontal,
 } from "lucide-react";
 
 import type {
@@ -75,7 +76,28 @@ export function InventoryDetailModal({
   );
   const printRef = useRef<HTMLDivElement>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
-  const [zoom, setZoom] = useState(1.0);
+  const [zoom, setZoom] = useState(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 640) {
+      return 0.45;
+    }
+    return 1.0;
+  });
+
+  const [isMobile, setIsMobile] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      // Auto collapse on mobile, auto expand on desktop initially
+      setShowSettings(!mobile);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   const toggleSelectAll = () => {
     if (selectedSerialIds.size === displayedSerials.length) {
@@ -152,7 +174,7 @@ export function InventoryDetailModal({
   // When a stock filter is active, only one column; otherwise normal split logic
   const effectiveHasBothTypes = activeStockFilter === null && hasBothTypes;
   const shouldSplitSingleType =
-    !effectiveHasBothTypes && displayedSerials.length > 10;
+    !effectiveHasBothTypes && displayedSerials.length > 10 && !isMobile;
   const halfIndex = shouldSplitSingleType
     ? Math.ceil(displayedSerials.length / 2)
     : 0;
@@ -295,12 +317,12 @@ export function InventoryDetailModal({
         id="inventory-detail-modal"
         className={
           activeMode === "choice"
-            ? "sm:max-w-md p-6 bg-background rounded-xl"
+            ? "w-[95vw] sm:max-w-md p-5 sm:p-6 bg-background rounded-xl"
             : activeMode === "list"
-              ? `${
+              ? `w-[95vw] ${
                   isSplit ? "sm:max-w-3xl" : "sm:max-w-xl"
-                } max-h-[90vh] flex flex-col p-6 bg-background rounded-xl overflow-hidden`
-              : "sm:max-w-5xl h-[90vh] flex flex-col p-0 overflow-hidden bg-zinc-100 dark:bg-zinc-950 rounded-xl"
+                } max-h-[90vh] flex flex-col p-4 sm:p-6 bg-background rounded-xl overflow-hidden`
+              : "w-[95vw] sm:max-w-5xl h-[90vh] flex flex-col p-0 overflow-hidden bg-zinc-100 dark:bg-zinc-950 rounded-xl"
         }
       >
         {activeMode === "list" ? (
@@ -316,7 +338,7 @@ export function InventoryDetailModal({
             </DialogHeader>
 
             {/* Stock metrics summary — clickable to filter */}
-            <div className="grid grid-cols-2 gap-3 shrink-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 shrink-0">
               <button
                 type="button"
                 onClick={() => {
@@ -398,7 +420,8 @@ export function InventoryDetailModal({
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Filter serial number or barcode..."
+                // Dev-rule: Modal searchbar is serials only
+                placeholder="Filter serial number..."
                 className="pl-9 pr-10"
               />
 
@@ -413,108 +436,165 @@ export function InventoryDetailModal({
             </div>
 
             {/* List/Table */}
-            {effectiveHasBothTypes ? (
-              <div className="flex-1 min-h-0 grid grid-cols-2 gap-4">
-                {/* LEFT COLUMN: Full Cylinders */}
-                <div className="flex flex-col min-h-0 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-zinc-50/30 dark:bg-zinc-900/30">
-                  <div className="bg-emerald-500/5 px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between shrink-0">
-                    <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                      Full Cylinders ({fullSerials.length})
-                    </span>
-                  </div>
-                  <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
-                    <table className="w-full text-left border-collapse">
-                      <thead className="sticky top-0 bg-card border-b z-10">
-                        <tr className="bg-muted/40 text-muted-foreground text-[10px] uppercase font-black tracking-wider">
-                          <th className="py-2.5 px-4 w-12 text-center">
-                            <Checkbox
-                              checked={
-                                fullSerials.length > 0 &&
-                                fullSerials.every((s) =>
-                                  selectedSerialIds.has(s.id),
-                                )
-                              }
-                              onCheckedChange={toggleSelectAllFull}
-                            />
-                          </th>
-                          <th className="py-2.5 px-4 w-12">#</th>
-                          <th className="py-2.5 px-4">Serial Number</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {fullSerials.length === 0 ? (
-                          <tr>
-                            <td
-                              colSpan={3}
-                              className="text-center py-6 text-xs text-muted-foreground"
-                            >
-                              No full cylinders.
-                            </td>
+            <div key={`${activeStockFilter}-${searchQuery}`} className="flex-1 min-h-0 flex flex-col transition-all duration-300 animate-in fade-in duration-300 slide-in-from-bottom-2">
+              {effectiveHasBothTypes ? (
+                <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-auto md:overflow-visible">
+                  {/* LEFT COLUMN: Full Cylinders */}
+                  <div className="flex flex-col min-h-[250px] md:min-h-0 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-zinc-50/30 dark:bg-zinc-900/30">
+                    <div className="bg-emerald-500/5 px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between shrink-0">
+                      <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                        Full Cylinders ({fullSerials.length})
+                      </span>
+                    </div>
+                    <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
+                      <table className="w-full text-left border-collapse">
+                        <thead className="sticky top-0 bg-card border-b z-10">
+                          <tr className="bg-muted/40 text-muted-foreground text-[10px] uppercase font-black tracking-wider">
+                            <th className="py-2.5 px-4 w-12 text-center">
+                              <Checkbox
+                                checked={
+                                  fullSerials.length > 0 &&
+                                  fullSerials.every((s) =>
+                                    selectedSerialIds.has(s.id),
+                                  )
+                                }
+                                onCheckedChange={toggleSelectAllFull}
+                              />
+                            </th>
+                            <th className="py-2.5 px-4 w-12">#</th>
+                            <th className="py-2.5 px-4">Serial Number</th>
                           </tr>
-                        ) : (
-                          fullSerials.map((s, idx) => (
-                            <tr
-                              key={s.id}
-                              className="border-b last:border-0 hover:bg-muted/30 text-xs"
-                            >
-                              <td className="py-2.5 px-4 text-center">
-                                <Checkbox
-                                  checked={selectedSerialIds.has(s.id)}
-                                  onCheckedChange={() => toggleSelectOne(s.id)}
-                                />
-                              </td>
-                              <td className="py-2.5 px-4 font-mono text-muted-foreground">
-                                {idx + 1}
-                              </td>
-                              <td className="py-2.5 px-4 font-bold font-mono text-foreground">
-                                {s.serialNumber}
+                        </thead>
+                        <tbody>
+                          {fullSerials.length === 0 ? (
+                            <tr>
+                              <td
+                                colSpan={3}
+                                className="text-center py-6 text-xs text-muted-foreground"
+                              >
+                                No full cylinders.
                               </td>
                             </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
+                          ) : (
+                            fullSerials.map((s, idx) => (
+                              <tr
+                                key={s.id}
+                                className="border-b last:border-0 hover:bg-muted/30 text-xs"
+                              >
+                                <td className="py-2.5 px-4 text-center">
+                                  <Checkbox
+                                    checked={selectedSerialIds.has(s.id)}
+                                    onCheckedChange={() => toggleSelectOne(s.id)}
+                                  />
+                                </td>
+                                <td className="py-2.5 px-4 font-mono text-muted-foreground">
+                                  {idx + 1}
+                                </td>
+                                <td className="py-2.5 px-4 font-bold font-mono text-foreground">
+                                  {s.serialNumber}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
 
-                {/* RIGHT COLUMN: Empty Cylinders */}
-                <div className="flex flex-col min-h-0 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-zinc-50/30 dark:bg-zinc-900/30">
-                  <div className="bg-rose-500/5 px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between shrink-0">
-                    <span className="text-xs font-bold text-rose-700 dark:text-rose-400">
-                      Empty Cylinders ({emptySerials.length})
+                  {/* RIGHT COLUMN: Empty Cylinders */}
+                  <div className="flex flex-col min-h-[250px] md:min-h-0 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-zinc-50/30 dark:bg-zinc-900/30">
+                    <div className="bg-rose-500/5 px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between shrink-0">
+                      <span className="text-xs font-bold text-rose-700 dark:text-rose-400">
+                        Empty Cylinders ({emptySerials.length})
+                      </span>
+                    </div>
+                    <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
+                      <table className="w-full text-left border-collapse">
+                        <thead className="sticky top-0 bg-card border-b z-10">
+                          <tr className="bg-muted/40 text-muted-foreground text-[10px] uppercase font-black tracking-wider">
+                            <th className="py-2.5 px-4 w-12 text-center">
+                              <Checkbox
+                                checked={
+                                  emptySerials.length > 0 &&
+                                  emptySerials.every((s) =>
+                                    selectedSerialIds.has(s.id),
+                                  )
+                                }
+                                onCheckedChange={toggleSelectAllEmpty}
+                              />
+                            </th>
+                            <th className="py-2.5 px-4 w-12">#</th>
+                            <th className="py-2.5 px-4">Serial Number</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {emptySerials.length === 0 ? (
+                            <tr>
+                              <td
+                                colSpan={3}
+                                className="text-center py-6 text-xs text-muted-foreground"
+                              >
+                                No empty cylinders.
+                              </td>
+                            </tr>
+                          ) : (
+                            emptySerials.map((s, idx) => (
+                              <tr
+                                key={s.id}
+                                className="border-b last:border-0 hover:bg-muted/30 text-xs"
+                              >
+                                <td className="py-2.5 px-4 text-center">
+                                  <Checkbox
+                                    checked={selectedSerialIds.has(s.id)}
+                                    onCheckedChange={() => toggleSelectOne(s.id)}
+                                  />
+                                </td>
+                                <td className="py-2.5 px-4 font-mono text-muted-foreground">
+                                  {idx + 1}
+                                </td>
+                                <td className="py-2.5 px-4 font-bold font-mono text-foreground">
+                                  {s.serialNumber}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              ) : shouldSplitSingleType ? (
+                <div className="flex-1 min-h-0 flex flex-col border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-zinc-50/30 dark:bg-zinc-900/30">
+                  {/* Single Header for the Card */}
+                  <div className={`${headerBgClass} px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between shrink-0`}>
+                    <span className={`text-xs font-bold ${textThemeClass}`}>
+                      {typeLabel} ({displayedSerials.length})
                     </span>
                   </div>
-                  <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
-                    <table className="w-full text-left border-collapse">
-                      <thead className="sticky top-0 bg-card border-b z-10">
-                        <tr className="bg-muted/40 text-muted-foreground text-[10px] uppercase font-black tracking-wider">
-                          <th className="py-2.5 px-4 w-12 text-center">
-                            <Checkbox
-                              checked={
-                                emptySerials.length > 0 &&
-                                emptySerials.every((s) =>
-                                  selectedSerialIds.has(s.id),
-                                )
-                              }
-                              onCheckedChange={toggleSelectAllEmpty}
-                            />
-                          </th>
-                          <th className="py-2.5 px-4 w-12">#</th>
-                          <th className="py-2.5 px-4">Serial Number</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {emptySerials.length === 0 ? (
-                          <tr>
-                            <td
-                              colSpan={3}
-                              className="text-center py-6 text-xs text-muted-foreground"
-                            >
-                              No empty cylinders.
-                            </td>
+                  {/* Two Columns Inside */}
+                  <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-zinc-200 dark:divide-zinc-800 overflow-y-auto md:overflow-hidden">
+                    {/* Left Column Table */}
+                    <div className="flex-1 overflow-y-auto custom-scrollbar min-h-[250px] md:min-h-0">
+                      <table className="w-full text-left border-collapse">
+                        <thead className="sticky top-0 bg-card border-b z-10">
+                          <tr className="bg-muted/40 text-muted-foreground text-[10px] uppercase font-black tracking-wider">
+                            <th className="py-2.5 px-4 w-12 text-center">
+                              <Checkbox
+                                checked={
+                                  leftHalfSerials.length > 0 &&
+                                  leftHalfSerials.every((s) =>
+                                    selectedSerialIds.has(s.id),
+                                  )
+                                }
+                                onCheckedChange={toggleSelectAllLeftHalf}
+                              />
+                            </th>
+                            <th className="py-2.5 px-4 w-12">#</th>
+                            <th className="py-2.5 px-4">Serial Number</th>
                           </tr>
-                        ) : (
-                          emptySerials.map((s, idx) => (
+                        </thead>
+                        <tbody>
+                          {leftHalfSerials.map((s, idx) => (
                             <tr
                               key={s.id}
                               className="border-b last:border-0 hover:bg-muted/30 text-xs"
@@ -532,45 +612,90 @@ export function InventoryDetailModal({
                                 {s.serialNumber}
                               </td>
                             </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Right Column Table */}
+                    <div className="flex-1 overflow-y-auto custom-scrollbar min-h-[250px] md:min-h-0">
+                      <table className="w-full text-left border-collapse">
+                        <thead className="sticky top-0 bg-card border-b z-10">
+                          <tr className="bg-muted/40 text-muted-foreground text-[10px] uppercase font-black tracking-wider">
+                            <th className="py-2.5 px-4 w-12 text-center">
+                              <Checkbox
+                                checked={
+                                  rightHalfSerials.length > 0 &&
+                                  rightHalfSerials.every((s) =>
+                                    selectedSerialIds.has(s.id),
+                                  )
+                                }
+                                onCheckedChange={toggleSelectAllRightHalf}
+                              />
+                            </th>
+                            <th className="py-2.5 px-4 w-12">#</th>
+                            <th className="py-2.5 px-4">Serial Number</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rightHalfSerials.map((s, idx) => (
+                            <tr
+                              key={s.id}
+                              className="border-b last:border-0 hover:bg-muted/30 text-xs"
+                            >
+                              <td className="py-2.5 px-4 text-center">
+                                <Checkbox
+                                  checked={selectedSerialIds.has(s.id)}
+                                  onCheckedChange={() => toggleSelectOne(s.id)}
+                                />
+                              </td>
+                              <td className="py-2.5 px-4 font-mono text-muted-foreground">
+                                {idx + halfIndex + 1}
+                              </td>
+                              <td className="py-2.5 px-4 font-bold font-mono text-foreground">
+                                {s.serialNumber}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ) : shouldSplitSingleType ? (
-              <div className="flex-1 min-h-0 grid grid-cols-2 gap-4">
-                {/* LEFT HALF COLUMN */}
-                <div className="flex flex-col min-h-0 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-zinc-50/30 dark:bg-zinc-900/30">
-                  <div
-                    className={`${headerBgClass} px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between shrink-0`}
-                  >
-                    <span className={`text-xs font-bold ${textThemeClass}`}>
-                      {typeLabel} (1 - {halfIndex})
-                    </span>
-                  </div>
-                  <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
-                    <table className="w-full text-left border-collapse">
-                      <thead className="sticky top-0 bg-card border-b z-10">
-                        <tr className="bg-muted/40 text-muted-foreground text-[10px] uppercase font-black tracking-wider">
-                          <th className="py-2.5 px-4 w-12 text-center">
-                            <Checkbox
-                              checked={
-                                leftHalfSerials.length > 0 &&
-                                leftHalfSerials.every((s) =>
-                                  selectedSerialIds.has(s.id),
-                                )
-                              }
-                              onCheckedChange={toggleSelectAllLeftHalf}
-                            />
-                          </th>
-                          <th className="py-2.5 px-4 w-12">#</th>
-                          <th className="py-2.5 px-4">Serial Number</th>
+              ) : (
+                <div className="flex-1 min-h-0 overflow-auto border border-zinc-200 dark:border-zinc-800 rounded-xl custom-scrollbar">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="sticky top-0 bg-card border-b z-10">
+                      <tr className="bg-muted/40 text-muted-foreground text-[10px] uppercase font-black tracking-wider">
+                        <th className="py-2.5 px-4 w-12 text-center">
+                          <Checkbox
+                            checked={
+                              displayedSerials.length > 0 &&
+                              displayedSerials.every((s) =>
+                                selectedSerialIds.has(s.id),
+                              )
+                            }
+                            onCheckedChange={toggleSelectAll}
+                          />
+                        </th>
+                        <th className="py-2.5 px-4">#</th>
+                        <th className="py-2.5 px-4">Serial Number</th>
+                        <th className="py-2.5 px-4">Status</th>
+                        <th className="py-2.5 px-4">Condition</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {displayedSerials.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={5}
+                            className="text-center py-10 text-xs text-muted-foreground"
+                          >
+                            No serial numbers found for this product.
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {leftHalfSerials.map((s, idx) => (
+                      ) : (
+                        displayedSerials.map((s, idx) => (
                           <tr
                             key={s.id}
                             className="border-b last:border-0 hover:bg-muted/30 text-xs"
@@ -587,160 +712,51 @@ export function InventoryDetailModal({
                             <td className="py-2.5 px-4 font-bold font-mono text-foreground">
                               {s.serialNumber}
                             </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* RIGHT HALF COLUMN */}
-                <div className="flex flex-col min-h-0 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-zinc-50/30 dark:bg-zinc-900/30">
-                  <div
-                    className={`${headerBgClass} px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between shrink-0`}
-                  >
-                    <span className={`text-xs font-bold ${textThemeClass}`}>
-                      {typeLabel} ({halfIndex + 1} - {displayedSerials.length})
-                    </span>
-                  </div>
-                  <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
-                    <table className="w-full text-left border-collapse">
-                      <thead className="sticky top-0 bg-card border-b z-10">
-                        <tr className="bg-muted/40 text-muted-foreground text-[10px] uppercase font-black tracking-wider">
-                          <th className="py-2.5 px-4 w-12 text-center">
-                            <Checkbox
-                              checked={
-                                rightHalfSerials.length > 0 &&
-                                rightHalfSerials.every((s) =>
-                                  selectedSerialIds.has(s.id),
-                                )
-                              }
-                              onCheckedChange={toggleSelectAllRightHalf}
-                            />
-                          </th>
-                          <th className="py-2.5 px-4 w-12">#</th>
-                          <th className="py-2.5 px-4">Serial Number</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rightHalfSerials.map((s, idx) => (
-                          <tr
-                            key={s.id}
-                            className="border-b last:border-0 hover:bg-muted/30 text-xs"
-                          >
-                            <td className="py-2.5 px-4 text-center">
-                              <Checkbox
-                                checked={selectedSerialIds.has(s.id)}
-                                onCheckedChange={() => toggleSelectOne(s.id)}
-                              />
+                            <td className="py-2.5 px-4">
+                              <span
+                                className={`inline-block text-[9px] font-extrabold px-2 py-0.5 rounded-full border ${
+                                  s.isFull
+                                    ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20"
+                                    : "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20"
+                                }`}
+                              >
+                                {s.status}
+                              </span>
                             </td>
-                            <td className="py-2.5 px-4 font-mono text-muted-foreground">
-                              {idx + halfIndex + 1}
-                            </td>
-                            <td className="py-2.5 px-4 font-bold font-mono text-foreground">
-                              {s.serialNumber}
+                            <td className="py-2.5 px-4">
+                              <span
+                                className={`inline-block text-[9px] font-extrabold px-2 py-0.5 rounded-full border ${
+                                  s.cylinderCondition?.toLowerCase() === "good"
+                                    ? "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20"
+                                    : s.cylinderCondition?.toLowerCase() === "damaged"
+                                      ? "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20"
+                                      : "bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 border-zinc-500/20"
+                                }`}
+                              >
+                                {s.cylinderCondition || "—"}
+                              </span>
                             </td>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
-              </div>
-            ) : (
-              <div className="flex-1 min-h-0 overflow-y-auto border border-zinc-200 dark:border-zinc-800 rounded-xl custom-scrollbar">
-                <table className="w-full text-left border-collapse">
-                  <thead className="sticky top-0 bg-card border-b z-10">
-                    <tr className="bg-muted/40 text-muted-foreground text-[10px] uppercase font-black tracking-wider">
-                      <th className="py-2.5 px-4 w-12 text-center">
-                        <Checkbox
-                          checked={
-                            displayedSerials.length > 0 &&
-                            displayedSerials.every((s) =>
-                              selectedSerialIds.has(s.id),
-                            )
-                          }
-                          onCheckedChange={toggleSelectAll}
-                        />
-                      </th>
-                      <th className="py-2.5 px-4">#</th>
-                      <th className="py-2.5 px-4">Serial Number</th>
-                      <th className="py-2.5 px-4">Status</th>
-                      <th className="py-2.5 px-4">Condition</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {displayedSerials.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={5}
-                          className="text-center py-10 text-xs text-muted-foreground"
-                        >
-                          No serial numbers found for this product.
-                        </td>
-                      </tr>
-                    ) : (
-                      displayedSerials.map((s, idx) => (
-                        <tr
-                          key={s.id}
-                          className="border-b last:border-0 hover:bg-muted/30 text-xs"
-                        >
-                          <td className="py-2.5 px-4 text-center">
-                            <Checkbox
-                              checked={selectedSerialIds.has(s.id)}
-                              onCheckedChange={() => toggleSelectOne(s.id)}
-                            />
-                          </td>
-                          <td className="py-2.5 px-4 font-mono text-muted-foreground">
-                            {idx + 1}
-                          </td>
-                          <td className="py-2.5 px-4 font-bold font-mono text-foreground">
-                            {s.serialNumber}
-                          </td>
-                          <td className="py-2.5 px-4">
-                            <span
-                              className={`inline-block text-[9px] font-extrabold px-2 py-0.5 rounded-full border ${
-                                s.isFull
-                                  ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20"
-                                  : "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20"
-                              }`}
-                            >
-                              {s.status}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-4">
-                            <span
-                              className={`inline-block text-[9px] font-extrabold px-2 py-0.5 rounded-full border ${
-                                s.cylinderCondition?.toLowerCase() === "good"
-                                  ? "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20"
-                                  : s.cylinderCondition?.toLowerCase() === "damaged"
-                                    ? "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20"
-                                    : "bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 border-zinc-500/20"
-                              }`}
-                            >
-                              {s.cylinderCondition || "—"}
-                            </span>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
+              )}
+            </div>
 
-            <div className="flex justify-end gap-2.5 pt-3 border-t mt-1">
+            <div className="flex flex-col sm:flex-row justify-end gap-2 pt-3 border-t mt-1 w-full">
               <Button
                 variant="outline"
                 onClick={onClose}
-                className="h-10 px-4 text-xs font-bold"
+                className="h-10 w-full sm:w-auto text-xs font-bold"
               >
                 Close
               </Button>
               <Button
                 onClick={() => setActiveMode("choice")}
                 disabled={selectedSerialIds.size === 0}
-                className="bg-blue-600 hover:bg-blue-700 text-white h-10 px-5 text-xs font-bold"
+                className="bg-blue-600 hover:bg-blue-700 text-white h-10 w-full sm:w-auto text-xs font-bold"
               >
                 Show Printables ({selectedSerialIds.size})
               </Button>
@@ -749,21 +765,23 @@ export function InventoryDetailModal({
         ) : activeMode === "choice" ? (
           // ── Mode Choice Screen ──────────────────────────────────
           <div className="flex flex-col items-center justify-center py-4 gap-6">
-            <DialogHeader className="text-center w-full relative">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setActiveMode("list")}
-                className="absolute left-0 top-0 h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-              <DialogTitle className="text-center text-xl font-bold tracking-tight">
-                LPG Inventory Printables
-              </DialogTitle>
+            <DialogHeader className="w-full">
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setActiveMode("list")}
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <DialogTitle className="text-left text-lg font-bold tracking-tight">
+                  LPG Inventory Printables
+                </DialogTitle>
+              </div>
             </DialogHeader>
 
-            <div className="grid grid-cols-2 gap-4 w-full mt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full mt-2">
               {/* Serial List Card */}
               <div
                 onClick={() => {
@@ -818,9 +836,9 @@ export function InventoryDetailModal({
           // ── Paper Print Preview Screen ──────────────────────────────
           <>
             {/* Header controls */}
-            <DialogHeader className="p-4 bg-white dark:bg-zinc-900 shrink-0">
-              {/* ROW 1: Title + Back */}
-              <div className="flex items-start justify-between gap-4">
+            <DialogHeader className="p-4 bg-white dark:bg-zinc-900 shrink-0 border-b">
+              {/* Row 1: Back Button, Title, and Action Buttons */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 min-w-0">
                 <div className="flex items-center gap-3 min-w-0">
                   <Button
                     variant="ghost"
@@ -835,7 +853,6 @@ export function InventoryDetailModal({
                     <DialogTitle className="text-base font-bold truncate">
                       {product.productName}
                     </DialogTitle>
-
                     <p className="text-xs text-muted-foreground truncate">
                       {product.categoryName} ·{" "}
                       {activeMode === "serial"
@@ -844,110 +861,27 @@ export function InventoryDetailModal({
                     </p>
                   </div>
                 </div>
-              </div>
 
-              {/* ROW 2: Controls */}
-              <div className="flex items-center gap-3 justify-end flex-wrap">
-                {/* Layout */}
-                <div className="flex items-center gap-1.5">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
-                    Layout
-                  </Label>
-
-                  <Select
-                    value={printOptions.orientation}
-                    onValueChange={(v) => {
-                      const newOrientation = v as "portrait" | "landscape";
-                      setPrintOptions({ orientation: newOrientation });
-                      setZoom(newOrientation === "landscape" ? 0.8 : 1.2);
-                    }}
+                {/* Actions: Print, Options, Close */}
+                <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowSettings(!showSettings)}
+                    className={`h-8 gap-1.5 transition-all ${
+                      showSettings
+                        ? "bg-accent text-accent-foreground border-zinc-400 dark:border-zinc-600"
+                        : "text-muted-foreground"
+                    }`}
                   >
-                    <SelectTrigger className="w-[100px] h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="portrait">Portrait</SelectItem>
-                      <SelectItem value="landscape">Landscape</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                    <SlidersHorizontal className="h-3.5 w-3.5" />
+                    <span className="text-xs font-bold">Options</span>
+                  </Button>
 
-                {/* Size */}
-                <div className="flex items-center gap-1.5">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
-                    Size
-                  </Label>
-
-                  <Select
-                    value={printOptions.paperSize}
-                    onValueChange={(v) =>
-                      setPrintOptions({ paperSize: v as "A4" | "Letter" })
-                    }
-                  >
-                    <SelectTrigger className="w-[85px] h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="A4">A4</SelectItem>
-                      <SelectItem value="Letter">Letter</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Columns */}
-                <div className="flex items-center gap-1.5">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
-                    Cols
-                  </Label>
-
-                  <Select
-                    value={String(printOptions.columns || 3)}
-                    onValueChange={(v) =>
-                      setPrintOptions({ columns: Number(v) })
-                    }
-                  >
-                    <SelectTrigger className="w-[80px] h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="2">2 Col</SelectItem>
-                      <SelectItem value="3">3 Col</SelectItem>
-                      <SelectItem value="4">4 Col</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Zoom */}
-                <div className="flex items-center gap-1.5">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
-                    Zoom
-                  </Label>
-
-                  <Select
-                    value={String(zoom)}
-                    onValueChange={(v) => setZoom(Number(v))}
-                  >
-                    <SelectTrigger className="w-[85px] h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="0.5">50%</SelectItem>
-                      <SelectItem value="0.6">60%</SelectItem>
-                      <SelectItem value="0.7">70%</SelectItem>
-                      <SelectItem value="0.8">80%</SelectItem>
-                      <SelectItem value="0.9">90%</SelectItem>
-                      <SelectItem value="1">100%</SelectItem>
-                      <SelectItem value="1.2">120%</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Actions */}
-                <div className="flex gap-2">
                   <Button
                     onClick={onGeneratePrint}
                     size="sm"
-                    className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white h-8"
+                    className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white h-8 text-xs font-bold"
                   >
                     <Printer className="h-3.5 w-3.5" />
                     Print
@@ -957,91 +891,183 @@ export function InventoryDetailModal({
                     variant="outline"
                     size="sm"
                     onClick={onClose}
-                    className="h-8"
+                    className="h-8 text-xs font-bold"
                   >
                     Close
                   </Button>
                 </div>
               </div>
 
-              {/* ROW 3: Card Display Options */}
-              <div className="flex items-center gap-4 pt-2 border-t border-border/40 flex-wrap justify-end">
-                {/* <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider shrink-0">
-                                    Card Shows:
-                                </span> */}
+              {/* Row 2: Collapsible Settings and Card Options */}
+              {showSettings && (
+                <div className="mt-3 p-3.5 bg-zinc-50 dark:bg-zinc-900/40 border border-zinc-200 dark:border-zinc-800/80 rounded-lg flex flex-col gap-3.5 transition-all duration-200 animate-in fade-in slide-in-from-top-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {/* Layout */}
+                    <div className="flex flex-col gap-1 text-left">
+                      <Label className="text-[10px] uppercase font-black text-muted-foreground tracking-wider">
+                        Layout
+                      </Label>
+                      <Select
+                        value={printOptions.orientation}
+                        onValueChange={(v) => {
+                          const newOrientation = v as "portrait" | "landscape";
+                          setPrintOptions({ orientation: newOrientation });
+                          setZoom(newOrientation === "landscape" ? 0.8 : 1.2);
+                        }}
+                      >
+                        <SelectTrigger className="w-full h-8 text-xs bg-background border-zinc-200 dark:border-zinc-800">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="portrait">Portrait</SelectItem>
+                          <SelectItem value="landscape">Landscape</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                {/* Barcode number — only relevant in barcode mode */}
-                {activeMode === "barcode" && (
-                  <label
-                    htmlFor="card-show-barcode-number"
-                    className="flex items-center gap-1.5 cursor-pointer select-none"
-                  >
-                    <Checkbox
-                      id="card-show-barcode-number"
-                      checked={cardDisplay.showBarcodeNumber}
-                      onCheckedChange={(v) =>
-                        updateCardDisplay("showBarcodeNumber", !!v)
-                      }
-                    />
-                    <span className="text-xs font-semibold text-foreground">
-                      Barcode Number
+                    {/* Size */}
+                    <div className="flex flex-col gap-1 text-left">
+                      <Label className="text-[10px] uppercase font-black text-muted-foreground tracking-wider">
+                        Size
+                      </Label>
+                      <Select
+                        value={printOptions.paperSize}
+                        onValueChange={(v) =>
+                          setPrintOptions({ paperSize: v as "A4" | "Letter" })
+                        }
+                      >
+                        <SelectTrigger className="w-full h-8 text-xs bg-background border-zinc-200 dark:border-zinc-800">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="A4">A4</SelectItem>
+                          <SelectItem value="Letter">Letter</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Columns */}
+                    <div className="flex flex-col gap-1 text-left">
+                      <Label className="text-[10px] uppercase font-black text-muted-foreground tracking-wider">
+                        Cols
+                      </Label>
+                      <Select
+                        value={String(printOptions.columns || 3)}
+                        onValueChange={(v) =>
+                          setPrintOptions({ columns: Number(v) })
+                        }
+                      >
+                        <SelectTrigger className="w-full h-8 text-xs bg-background border-zinc-200 dark:border-zinc-800">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="2">2 Col</SelectItem>
+                          <SelectItem value="3">3 Col</SelectItem>
+                          <SelectItem value="4">4 Col</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Zoom */}
+                    <div className="flex flex-col gap-1 text-left">
+                      <Label className="text-[10px] uppercase font-black text-muted-foreground tracking-wider">
+                        Zoom
+                      </Label>
+                      <Select
+                        value={String(zoom)}
+                        onValueChange={(v) => setZoom(Number(v))}
+                      >
+                        <SelectTrigger className="w-full h-8 text-xs bg-background border-zinc-200 dark:border-zinc-800">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="0.3">30%</SelectItem>
+                          <SelectItem value="0.4">40%</SelectItem>
+                          <SelectItem value="0.45">45%</SelectItem>
+                          <SelectItem value="0.5">50%</SelectItem>
+                          <SelectItem value="0.6">60%</SelectItem>
+                          <SelectItem value="0.7">70%</SelectItem>
+                          <SelectItem value="0.8">80%</SelectItem>
+                          <SelectItem value="0.9">90%</SelectItem>
+                          <SelectItem value="1">100%</SelectItem>
+                          <SelectItem value="1.2">120%</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {/* Card Display Checkboxes */}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-2.5 border-t border-zinc-200 dark:border-zinc-800/80">
+                    <span className="text-[9px] uppercase font-black text-muted-foreground tracking-wider shrink-0 mr-1">
+                      Card Shows:
                     </span>
-                  </label>
-                )}
 
-                {/* Serial Number */}
-                {activeMode === "serial" && (
-                  <label
-                    htmlFor="card-show-serial-number"
-                    className="flex items-center gap-1.5 cursor-pointer select-none"
-                  >
-                    <Checkbox
-                      id="card-show-serial-number"
-                      checked={cardDisplay.showSerialNumber}
-                      onCheckedChange={(v) =>
-                        updateCardDisplay("showSerialNumber", !!v)
-                      }
-                    />
-                    <span className="text-xs font-semibold text-foreground">
-                      Serial Number
-                    </span>
-                  </label>
-                )}
+                    {/* Barcode number — only relevant in barcode mode */}
+                    {activeMode === "barcode" && (
+                      <label
+                        htmlFor="card-show-barcode-number"
+                        className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-semibold text-foreground hover:opacity-80"
+                      >
+                        <Checkbox
+                          id="card-show-barcode-number"
+                          checked={cardDisplay.showBarcodeNumber}
+                          onCheckedChange={(v) =>
+                            updateCardDisplay("showBarcodeNumber", !!v)
+                          }
+                        />
+                        <span>Barcode Number</span>
+                      </label>
+                    )}
 
-                {/* Product Name */}
-                <label
-                  htmlFor="card-show-product-name"
-                  className="flex items-center gap-1.5 cursor-pointer select-none"
-                >
-                  <Checkbox
-                    id="card-show-product-name"
-                    checked={cardDisplay.showProductName}
-                    onCheckedChange={(v) =>
-                      updateCardDisplay("showProductName", !!v)
-                    }
-                  />
-                  <span className="text-xs font-semibold text-foreground">
-                    Product Name
-                  </span>
-                </label>
+                    {/* Serial Number */}
+                    {activeMode === "serial" && (
+                      <label
+                        htmlFor="card-show-serial-number"
+                        className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-semibold text-foreground hover:opacity-80"
+                      >
+                        <Checkbox
+                          id="card-show-serial-number"
+                          checked={cardDisplay.showSerialNumber}
+                          onCheckedChange={(v) =>
+                            updateCardDisplay("showSerialNumber", !!v)
+                          }
+                        />
+                        <span>Serial Number</span>
+                      </label>
+                    )}
 
-                {/* Full / Empty Badge */}
-                <label
-                  htmlFor="card-show-status-badge"
-                  className="flex items-center gap-1.5 cursor-pointer select-none"
-                >
-                  <Checkbox
-                    id="card-show-status-badge"
-                    checked={cardDisplay.showStatusBadge}
-                    onCheckedChange={(v) =>
-                      updateCardDisplay("showStatusBadge", !!v)
-                    }
-                  />
-                  <span className="text-xs font-semibold text-foreground">
-                    Full/Empty Badge
-                  </span>
-                </label>
-              </div>
+                    {/* Product Name */}
+                    <label
+                      htmlFor="card-show-product-name"
+                      className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-semibold text-foreground hover:opacity-80"
+                    >
+                      <Checkbox
+                        id="card-show-product-name"
+                        checked={cardDisplay.showProductName}
+                        onCheckedChange={(v) =>
+                          updateCardDisplay("showProductName", !!v)
+                        }
+                      />
+                      <span>Product Name</span>
+                    </label>
+
+                    {/* Full / Empty Badge */}
+                    <label
+                      htmlFor="card-show-status-badge"
+                      className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-semibold text-foreground hover:opacity-80"
+                    >
+                      <Checkbox
+                        id="card-show-status-badge"
+                        checked={cardDisplay.showStatusBadge}
+                        onCheckedChange={(v) =>
+                          updateCardDisplay("showStatusBadge", !!v)
+                        }
+                      />
+                      <span>Full/Empty Badge</span>
+                    </label>
+                  </div>
+                </div>
+              )}
             </DialogHeader>
 
             {/* Preview canvas */}

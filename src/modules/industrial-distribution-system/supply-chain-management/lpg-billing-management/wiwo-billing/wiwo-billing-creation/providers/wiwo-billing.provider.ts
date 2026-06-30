@@ -46,7 +46,7 @@ export async function fetchTransactionHeaders(params: {
   let qs =
     `fields=*,customer_site_id.id,customer_site_id.site_name,` +
     `customer_site_id.customer_code,customer_site_id.default_price_per_kg,` +
-    `customer_site_id.last_meter_reading,customer_site_id.default_target_lpg_kg` +
+    `customer_site_id.last_meter_reading,customer_site_id.default_target_lpg_kg,customer_site_id.billing_mode` +
     `&sort=-period_from,-header_id&limit=${limit}`;
   if (Object.keys(filters).length) {
     qs += `&filter=${encodeURIComponent(JSON.stringify(filters))}`;
@@ -83,7 +83,7 @@ export async function fetchTransactionHeaders(params: {
     try {
       const filterObj = { id: { _in: siteIds } };
       const siteRes = await directusFetch<{ data: CustomerSite[] }>(
-        `${DIRECTUS_URL}/items/lpg_customer_lpg_sites?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg&filter=${encodeURIComponent(JSON.stringify(filterObj))}`
+        `${DIRECTUS_URL}/items/lpg_customer_lpg_sites?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg,billing_mode&filter=${encodeURIComponent(JSON.stringify(filterObj))}`
       );
       siteMap = Object.fromEntries((siteRes.data ?? []).map(s => [s.id, s]));
     } catch (e) {
@@ -118,7 +118,7 @@ export async function createTransactionHeader(payload: {
   }
 
   const siteRes = await directusFetch<{ data: CustomerSite }>(
-    `${DIRECTUS_URL}/items/lpg_customer_lpg_sites/${payload.siteId}?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg`
+    `${DIRECTUS_URL}/items/lpg_customer_lpg_sites/${payload.siteId}?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg,billing_mode`
   );
   const site = siteRes.data;
   if (!site?.customer_code) throw new Error("Customer site not found.");
@@ -187,7 +187,7 @@ async function hydrateTransactions(txs: MeteredWiwoTransaction[]): Promise<Meter
     try {
       const filterObj = { id: { _in: siteIds } };
       const siteRes = await directusFetch<{ data: CustomerSite[] }>(
-        `${DIRECTUS_URL}/items/lpg_customer_lpg_sites?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg&filter=${encodeURIComponent(JSON.stringify(filterObj))}`
+        `${DIRECTUS_URL}/items/lpg_customer_lpg_sites?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg,billing_mode&filter=${encodeURIComponent(JSON.stringify(filterObj))}`
       );
       siteMap = Object.fromEntries((siteRes.data ?? []).map(s => [s.id, s]));
     } catch (e) {
@@ -286,7 +286,7 @@ export async function fetchCustomers(): Promise<{ customer_code: string; custome
 }
 
 export async function fetchSites(customerCode?: string): Promise<CustomerSite[]> {
-  let qs = "fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg&filter[is_active][_eq]=1&sort=site_name&limit=-1";
+  let qs = "fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg,billing_mode&filter[is_active][_eq]=1&sort=site_name&limit=-1";
   if (customerCode) qs += `&filter[customer_code][_eq]=${encodeURIComponent(customerCode)}`;
   const res = await directusFetch<{ data: CustomerSite[] }>(`${DIRECTUS_URL}/items/lpg_customer_lpg_sites?${qs}`);
   return res.data ?? [];
@@ -304,7 +304,17 @@ export async function checkSiteOnboarded(siteId: number): Promise<boolean> {
   return (res.data ?? []).length > 0;
 }
 
-export async function fetchInvoicesForCustomer(customerCode?: string): Promise<{ invoice_id: number; invoice_no: string; total_amount: number; invoice_date: string; transaction_status: string; isOnboardingBaseline?: boolean; hasMeteredTransaction?: boolean }[]> {
+export async function fetchInvoicesForCustomer(customerCode?: string): Promise<{
+  invoice_id: number;
+  invoice_no: string;
+  total_amount: number;
+  invoice_date: string;
+  transaction_status: string;
+  sales_order_id?: number | null;
+  sales_order_no?: string | null;
+  isOnboardingBaseline?: boolean;
+  hasMeteredTransaction?: boolean;
+}[]> {
   const filters: Record<string, unknown> = {
     transaction_status: { _eq: "En Route" }
   };
@@ -372,17 +382,38 @@ export async function fetchInvoicesForCustomer(customerCode?: string): Promise<{
     console.warn("Failed to fetch posted transaction invoice IDs", e);
   }
 
-  const url = `/items/sales_invoice?limit=-1&fields=invoice_id,invoice_no,invoice_date,total_amount,transaction_status,customer_code,order_id,salesman_id&filter=${encodeURIComponent(JSON.stringify(filters))}`;
-  const res = await directusFetch<{ data: { invoice_id: number; invoice_no: string; total_amount: number; invoice_date: string; transaction_status: string }[] }>(`${DIRECTUS_URL}${url}`);
+  const url = `/items/sales_invoice?limit=-1&fields=invoice_id,invoice_no,invoice_date,total_amount,transaction_status,customer_code,order_id.order_id,order_id.order_no,salesman_id&filter=${encodeURIComponent(JSON.stringify(filters))}`;
+  const res = await directusFetch<{
+    data: {
+      invoice_id: number;
+      invoice_no: string;
+      total_amount: number;
+      invoice_date: string;
+      transaction_status: string;
+      order_id?: number | { order_id: number; order_no: string } | null;
+    }[];
+  }>(`${DIRECTUS_URL}${url}`);
   
-  const invoices = res.data ?? [];
-  return invoices
+  const rawInvoices = res.data ?? [];
+  return rawInvoices
     .filter(inv => !postedInvoiceIds.has(inv.invoice_id) && !postedTxInvoiceIds.has(inv.invoice_id))
-    .map(inv => ({
-      ...inv,
-      isOnboardingBaseline: onboardingInvoiceIds.has(inv.invoice_id),
-      hasMeteredTransaction: meteredTransactionInvoiceIds.has(inv.invoice_id)
-    }));
+    .map(inv => {
+      const orderObj =
+        inv.order_id && typeof inv.order_id === "object"
+          ? (inv.order_id as { order_id: number; order_no: string })
+          : null;
+      return {
+        invoice_id: inv.invoice_id,
+        invoice_no: inv.invoice_no,
+        total_amount: inv.total_amount,
+        invoice_date: inv.invoice_date,
+        transaction_status: inv.transaction_status,
+        sales_order_id: orderObj ? Number(orderObj.order_id) : inv.order_id ? Number(inv.order_id) : null,
+        sales_order_no: orderObj ? String(orderObj.order_no) : null,
+        isOnboardingBaseline: onboardingInvoiceIds.has(inv.invoice_id),
+        hasMeteredTransaction: meteredTransactionInvoiceIds.has(inv.invoice_id)
+      };
+    });
 }
 
 export async function fetchAvailableCylinders(): Promise<CylinderAsset[]> {
@@ -433,13 +464,68 @@ export async function fetchAvailableCylinders(): Promise<CylinderAsset[]> {
   return cylinders;
 }
 
-export async function validateSerialForOnboarding(serialNumber: string): Promise<CylinderAsset | null> {
-  // 1. Check if it exists in consolidator_serial_mappings
-  const mappingRes = await directusFetch<{ data: { serial_number: string }[] }>(
-    `${DIRECTUS_URL}/items/consolidator_serial_mappings?filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&limit=1`
-  );
-  if (!mappingRes.data || mappingRes.data.length === 0) {
-    throw new Error(`Serial ${serialNumber} not found in consolidator serial mappings.`);
+export async function validateSerialForOnboarding(serialNumber: string, salesOrderId?: number): Promise<CylinderAsset | null> {
+  // DEV-CHANGE: Added delivery truck query traversal logic if salesOrderId is supplied
+  if (salesOrderId) {
+    // 1. Fetch dispatch plan details for this Sales Order
+    const dpdRes = await directusFetch<{ data: { dispatch_id: number | { id: number } }[] }>(
+      `${DIRECTUS_URL}/items/dispatch_plan_details?filter[sales_order_id][_eq]=${salesOrderId}&fields=dispatch_id`
+    );
+    const dpd = dpdRes.data?.[0];
+    if (!dpd) {
+      throw new Error(`Serial ${serialNumber} not found on the delivery truck assigned to this order (no dispatch plan details found).`);
+    }
+
+    // 2. Fetch dispatch plan to get the dispatch_no
+    const dispatchId = typeof dpd.dispatch_id === "object" && dpd.dispatch_id !== null ? dpd.dispatch_id.id : dpd.dispatch_id;
+    const dpRes = await directusFetch<{ data: { dispatch_no: string } }>(
+      `${DIRECTUS_URL}/items/dispatch_plan/${dispatchId}?fields=dispatch_no`
+    );
+    const dispatchNo = dpRes.data?.dispatch_no;
+    if (!dispatchNo) {
+      throw new Error(`Dispatch plan ${dispatchId} does not have a valid dispatch number.`);
+    }
+
+    // 3. Fetch consolidator linked to this dispatch
+    const cdispRes = await directusFetch<{ data: { consolidator_id: number | { id: number } }[] }>(
+      `${DIRECTUS_URL}/items/consolidator_dispatches?filter[dispatch_no][_eq]=${encodeURIComponent(dispatchNo)}&fields=consolidator_id`
+    );
+    const cdisp = cdispRes.data?.[0];
+    if (!cdisp) {
+      throw new Error(`No loading sheet linked to dispatch number ${dispatchNo}.`);
+    }
+    const consolidatorId = typeof cdisp.consolidator_id === "object" && cdisp.consolidator_id !== null
+      ? cdisp.consolidator_id.id
+      : cdisp.consolidator_id;
+    if (!consolidatorId) {
+      throw new Error(`Loading sheet for dispatch ${dispatchNo} does not have a valid consolidator ID.`);
+    }
+
+    // 4. Fetch consolidator details to get the detail IDs
+    const cdRes = await directusFetch<{ data: { id: number; product_id: number }[] }>(
+      `${DIRECTUS_URL}/items/consolidator_details?filter[consolidator_id][_eq]=${consolidatorId}&fields=id,product_id`
+    );
+    const consolidatorDetails = cdRes.data || [];
+    const detailIds = consolidatorDetails.map((cd) => cd.id);
+    if (detailIds.length === 0) {
+      throw new Error(`No loaded products found on the loading sheet (consolidator #${consolidatorId}).`);
+    }
+
+    // 5. Fetch serial mappings associated with these details for the scanned serial number
+    const mappingRes = await directusFetch<{ data: { serial_number: string }[] }>(
+      `${DIRECTUS_URL}/items/consolidator_serial_mappings?filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&filter[detail_id][_in]=${detailIds.join(",")}&limit=1`
+    );
+    if (!mappingRes.data || mappingRes.data.length === 0) {
+      throw new Error(`Serial ${serialNumber} not found on the loading sheet of delivery truck for this order.`);
+    }
+  } else {
+    // Fallback: Check if it exists in consolidator_serial_mappings globally
+    const mappingRes = await directusFetch<{ data: { serial_number: string }[] }>(
+      `${DIRECTUS_URL}/items/consolidator_serial_mappings?filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&limit=1`
+    );
+    if (!mappingRes.data || mappingRes.data.length === 0) {
+      throw new Error(`Serial ${serialNumber} not found in consolidator serial mappings.`);
+    }
   }
 
   // 2. Fetch from cylinder_assets
@@ -453,6 +539,11 @@ export async function validateSerialForOnboarding(serialNumber: string): Promise
 
   if (asset.cylinder_condition !== "GOOD") {
     throw new Error(`Cylinder ${serialNumber} condition is ${asset.cylinder_condition}, must be GOOD.`);
+  }
+
+  // DEV-CHANGE: Specifically check if status is WITH_CUSTOMER to indicate it is already tagged/delivered
+  if (asset.cylinder_status === "WITH_CUSTOMER") {
+    throw new Error(`Cylinder ${serialNumber} has already been tagged/delivered under another order or truck.`);
   }
 
   if (asset.cylinder_status !== "AVAILABLE" && asset.cylinder_status !== "LOADED") {
@@ -648,6 +739,12 @@ export async function processOnboardingBaseline(payload: {
   salesInvoiceNo?: string | null;
   userId?: number;
 }): Promise<MeteredWiwoTransaction> {
+  // Fetch site details to check the billing mode
+  const siteRes = await directusFetch<{ data: CustomerSite }>(
+    `${DIRECTUS_URL}/items/lpg_customer_lpg_sites/${payload.siteId}?fields=id,billing_mode`
+  );
+  const isKiloMode = siteRes.data?.billing_mode === "KILO";
+
   // 1. Monogamy validation
   // DEV-CHANGE: Only serial (cylinder asset selection/verification) is required for onboarding. Photo evidence is not enforced.
   for (const cyl of payload.cylinders) {
@@ -739,7 +836,7 @@ export async function processOnboardingBaseline(payload: {
         total_returned_cylinders: 0,
         total_deployed_cylinders: assets.length,
         total_billable_kg: 0.000,
-        wiwo_status: "DRAFT",
+        wiwo_status: isKiloMode ? "POSTED" : "DRAFT",
         sales_invoice_id: invoiceId,
         sales_invoice_no: invoiceNo,
         remarks: "Onboarding baseline initial setup",
@@ -810,8 +907,8 @@ export async function processOnboardingBaseline(payload: {
         variance_kg: 0,
         billable_source: "NONE",
         billable_kg: 0,
-        status: "DRAFT",
-        remarks: "Onboarding baseline initial setup draft.",
+        status: isKiloMode ? "POSTED" : "DRAFT",
+        remarks: isKiloMode ? "Onboarding baseline initial setup posted." : "Onboarding baseline initial setup draft.",
         ...withUser(payload.userId, ["created_by", "posted_by"]),
         posted_date: new Date().toISOString(),
       }),
@@ -946,9 +1043,18 @@ export async function processRegularSwap(payload: {
       }
     }
   }
+  // Fetch site details to check the billing mode
+  const siteRes = await directusFetch<{ data: CustomerSite }>(
+    `${DIRECTUS_URL}/items/lpg_customer_lpg_sites/${payload.siteId}?fields=id,site_name,customer_code,default_price_per_kg,last_meter_reading,default_target_lpg_kg,billing_mode`
+  );
+  const site = siteRes.data;
+  const isKiloMode = site?.billing_mode === "KILO";
+
   // Input validations:
   // Completeness Checks & Negative Boundaries
-  const meteredKg = payload.meteredKg !== undefined ? payload.meteredKg : Math.max(0, payload.currentMeterReading - payload.previousMeterReading);
+  const meteredKg = isKiloMode
+    ? 0
+    : (payload.meteredKg !== undefined ? payload.meteredKg : Math.max(0, payload.currentMeterReading - payload.previousMeterReading));
 
   // Gather returned cylinder records
   const returnedDetails: {
@@ -1041,10 +1147,10 @@ export async function processRegularSwap(payload: {
   // Sum WIWO Consumed KG
   const totalWiwoKg = returnedDetails.reduce((sum, item) => sum + item.consumed, 0);
 
-  // Exec MAX Rule
-  const billableKg = Math.max(meteredKg, totalWiwoKg);
-  const varianceKg = Math.abs(meteredKg - totalWiwoKg);
-  const billableSource = meteredKg >= totalWiwoKg ? "METERED" : "WIWO";
+  // Exec MAX Rule (Or force WIWO for Kilo mode)
+  const billableKg = isKiloMode ? totalWiwoKg : Math.max(meteredKg, totalWiwoKg);
+  const varianceKg = isKiloMode ? 0 : Math.abs(meteredKg - totalWiwoKg);
+  const billableSource = isKiloMode ? "WIWO" : (meteredKg >= totalWiwoKg ? "METERED" : "WIWO");
 
   // IDS-CHANGE: Compute final transaction amounts based on the consolidated billableKg
   // VAT is absorbed / inclusive: gross = vatable amount, net = vatable sales, vat = gross - net.
@@ -1052,13 +1158,15 @@ export async function processRegularSwap(payload: {
   const txNetAmount = Number((txGrossAmount / 1.12).toFixed(2));
   const txVatAmount = Number((txGrossAmount - txNetAmount).toFixed(2));
 
-  // Mismatch remarks requirement (2% Tolerance)
-  const referenceKg = Math.max(meteredKg, totalWiwoKg, 0.0001);
-  const diffPercentage = varianceKg / referenceKg;
-  if (diffPercentage > 0.02 && !payload.remarks?.trim()) {
-    throw new Error(
-      `Metered KG (${meteredKg}) differs from WIWO KG (${totalWiwoKg}) by more than 2%. An explanation is required in the remarks field.`
-    );
+  // Mismatch remarks requirement (2% Tolerance) - only check if NOT Kilo mode
+  if (!isKiloMode) {
+    const referenceKg = Math.max(meteredKg, totalWiwoKg, 0.0001);
+    const diffPercentage = varianceKg / referenceKg;
+    if (diffPercentage > 0.02 && !payload.remarks?.trim()) {
+      throw new Error(
+        `Metered KG (${meteredKg}) differs from WIWO KG (${totalWiwoKg}) by more than 2%. An explanation is required in the remarks field.`
+      );
+    }
   }
 
   // Create zero-amount Sales Order for logistical cylinder actions
@@ -1162,7 +1270,7 @@ export async function processRegularSwap(payload: {
     }
   }
 
-  if (!meterReadingId) {
+  if (!meterReadingId && !isKiloMode) {
     // Create Meter reading
     const meterReadingRes = await directusFetch<{ data: { id: number } }>(
       `${DIRECTUS_URL}/items/lpg_meter_readings`,
@@ -1186,7 +1294,8 @@ export async function processRegularSwap(payload: {
   }
 
   // Create WIWO Header
-  const wiwoNo = `WIWO-${Date.now().toString().slice(-6)}`;
+  // IDS-CHANGE: Updated regular prefix from WIWO- to WIWO-REG- per user instruction
+  const wiwoNo = `WIWO-REG-${Date.now().toString().slice(-6)}`;
   // IDS-CHANGE: VAT is absorbed / inclusive: gross = vatable amount, net = vatable sales, vat = gross - net.
   const grossAmount = Number((totalWiwoKg * payload.pricePerKg).toFixed(2));
   const netAmount = Number((grossAmount / 1.12).toFixed(2));
@@ -1290,12 +1399,15 @@ export async function processRegularSwap(payload: {
   }
 
   // Update site reading status
+  const sitePatchBody: Record<string, unknown> = {
+    last_reading_date: payload.transactionDate,
+  };
+  if (!isKiloMode) {
+    sitePatchBody.last_meter_reading = payload.currentMeterReading;
+  }
   await directusFetch(`${DIRECTUS_URL}/items/lpg_customer_lpg_sites/${payload.siteId}`, {
     method: "PATCH",
-    body: JSON.stringify({
-      last_meter_reading: payload.currentMeterReading,
-      last_reading_date: payload.transactionDate,
-    }),
+    body: JSON.stringify(sitePatchBody),
   });
 
   let parentTxData: MeteredWiwoTransaction;

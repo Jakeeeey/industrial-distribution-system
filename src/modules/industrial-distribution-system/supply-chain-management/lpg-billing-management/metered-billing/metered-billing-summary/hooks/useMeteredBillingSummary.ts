@@ -107,7 +107,9 @@ export function useMeteredBillingSummaryList(initialParams: MeteredListParams = 
     setLoading(true);
     try {
       const res = await fetchSummaryList(params);
-      setRows((res.data ?? []).map(mapMeteredTransaction));
+      const mapped = (res.data ?? []).map(mapMeteredTransaction);
+      const filtered = mapped.filter((r) => r.site?.billing_mode !== "KILO");
+      setRows(filtered);
       setTotal(res.total ?? 0);
     } catch (e) {
       console.error("[useMeteredBillingSummaryList] fetchList error:", e);
