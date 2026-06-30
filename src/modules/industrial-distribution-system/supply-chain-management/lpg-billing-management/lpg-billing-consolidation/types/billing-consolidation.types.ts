@@ -38,12 +38,25 @@ export interface ConsolidationHeader {
   created_at: string;
   updated_at: string;
 
+  // DEV-CHANGE: New columns added to lpg_transaction_headers for billing history tracking
+  /** Total billed kilograms persisted at the time of posting (for inter-period reference) */
+  total_billed_kg?: number | null;
+  /** Total billed cubic meters (metered M3 only) persisted at the time of posting */
+  total_billed_m3?: number | null;
+
+  // DEV-CHANGE: Previous period snapshot — populated at workspace fetch time from the most recent
+  // prior POSTED header for this customer_site_id. NOT stored in DB; injected by service layer.
+  prev_total_billed_kg?: number | null;
+  prev_total_billed_m3?: number | null;
+
   // --- Expanded relations (joined by repo) ---
   customer?: { customer_name: string; store_name?: string | null };
   site?: {
     id: number;
     site_name: string | null;
     site_address: string | null;
+    // DEV-CHANGE: Added billing_mode field to site relation for sorting/filtering
+    billing_mode?: "BOTH" | "KILO" | "METERED" | null;
   };
   /** Computed from child transactions by the service layer */
   total_metered_kg?: number;
@@ -229,6 +242,10 @@ export interface ConsolidationAuditEntry {
 export interface ConsolidationHeaderListParams {
   search?: string;
   status?: HeaderStatus | "ALL";
+  // DEV-CHANGE: Added filter and sort properties to mirror wiwo billing creation parameters
+  billing_mode?: "ALL" | "BOTH" | "KILO";
+  sortField?: "period_from" | "site" | "customer" | "status" | "billing_mode";
+  sortDir?: "asc" | "desc";
   page?: number;
   limit?: number;
 }

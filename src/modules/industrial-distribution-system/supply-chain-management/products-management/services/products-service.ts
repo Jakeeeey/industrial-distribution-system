@@ -1,8 +1,15 @@
 import { Product, Category, Brand } from "../types";
 
 export const productsService = {
-  async getProducts(params?: { q?: string; category?: string; brand?: string; status?: string; page?: number; limit?: number }) {
-    const sp = new URLSearchParams(params as Record<string, string>);
+  async getProducts(params?: { q?: string; category?: string; brand?: string; status?: string; page?: number; limit?: number; sort?: string }) {
+    const sp = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== "") {
+          sp.set(key, String(value));
+        }
+      });
+    }
     const res = await fetch(`/api/ids/scm/product-management/products?${sp.toString()}`);
     if (!res.ok) {
       const err = await res.text();

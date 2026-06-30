@@ -17,7 +17,7 @@ export default async function Page() {
     const cookieStore = await cookies();
     const token = cookieStore.get("vos_access_token")?.value;
     const payload = token ? decodeJwtPayload(token) : null;
-    
+
     const headerUser = {
         name: payload ? `${payload.FirstName} ${payload.LastName}`.trim() : "System User",
         email: payload?.email || "user@vos.com",
@@ -51,7 +51,7 @@ export default async function Page() {
                 </div>
 
                 <div className="ml-auto">
-                     <NavUser user={headerUser} />
+                    <NavUser user={headerUser} />
                 </div>
             </header>
 

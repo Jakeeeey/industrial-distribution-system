@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Plus, Trash2, X } from "lucide-react";
 
 type SerialSavedPayload = {
     updatedDetail: PhysicalInventoryDetailRow;
@@ -660,10 +660,21 @@ export function PhysicalInventorySerialDialog(props: Props) {
                                             Register All
                                         </Button>
                                     </div>
-                                    <div className="flex flex-wrap gap-1">
+                                    <div className="flex flex-wrap gap-2">
                                         {pendingSerials.map((s) => (
-                                            <span key={s} className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-medium border border-amber-200">
+                                            <span key={s} className="pl-2 pr-1 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-medium border border-amber-200 flex items-center gap-1">
                                                 {s}
+                                                <button
+                                                    type="button"
+                                                    className="rounded-full p-0.5 hover:bg-amber-200/80 transition-colors text-amber-700 hover:text-amber-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setPendingSerials((prev) => prev.filter((item) => item !== s));
+                                                    }}
+                                                >
+                                                    <X className="h-3 w-3" />
+                                                    <span className="sr-only">Remove {s}</span>
+                                                </button>
                                             </span>
                                         ))}
                                     </div>

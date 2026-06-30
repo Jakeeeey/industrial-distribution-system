@@ -61,6 +61,8 @@ export interface CustomerSite {
   default_price_per_kg: number;
   last_meter_reading?: number | null;
   default_target_lpg_kg?: number | null;
+  // AG-CHANGE: Added billing_mode to identify KILO sites and support metered transaction filtering
+  billing_mode?: string | null;
 }
 
 // ─── LPG Transaction Header ───────────────────────────────────────────────────
@@ -165,6 +167,7 @@ export interface MeteredWiwoTransaction {
     default_pressure_line?: number | null;
     default_psi?: number | null;
     default_atmospheric_pressure?: number | null;
+    billing_mode?: string | null;
   };
   meter_reading?: MeterReading;
   wiwo_header?: WiwoHeaderRef;
@@ -176,7 +179,8 @@ export interface MeteredWiwoTransactionAttachment {
   transaction_id?: number;
   site_cylinder_id?: number | null;
   cylinder_asset_id?: number | null;
-  attachment_type: "SERIAL_IMAGE" | "WEIGHT_IMAGE" | "GENERAL_PHOTO";
+  // IDS-CHANGE: Added "PSI_IMAGE" and "MTRD_READING_IMAGE" for metered billing screenshots
+  attachment_type: "SERIAL_IMAGE" | "WEIGHT_IMAGE" | "GENERAL_PHOTO" | "PSI_IMAGE" | "MTRD_READING_IMAGE";
   directus_file_id: string;
   created_by?: number | null;
   created_at?: string;

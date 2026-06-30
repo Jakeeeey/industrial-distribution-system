@@ -1,9 +1,9 @@
 import { fetchItems, createItems, updateItem, bulkUpdateItems } from "./api";
-import { getCached, setCache } from "@/modules/industrial-distribution-system/supply-chain-management/transfers/stock-conversion/utils/cache";
-import type {
-  BranchRow,
-  StockTransferRow,
-  StockTransferRfidRow,
+import { getCached, setCache } from "../../../transfers/stock-conversion/utils/cache";
+import type { 
+  BranchRow, 
+  StockTransferRow, 
+  StockTransferRfidRow, 
   ProductRow,
   StockTransferInsertPayload
 } from "../types/stock-transfer.types";
@@ -59,7 +59,7 @@ export async function fetchBranches(): Promise<BranchRow[]> {
  */
 export async function fetchDispatchedRfids(transferIds: number[]): Promise<StockTransferRfidRow[]> {
   if (transferIds.length === 0) return [];
-
+  
   const CHUNK_SIZE = 100;
   const allRfids: StockTransferRfidRow[] = [];
 
@@ -111,6 +111,47 @@ export async function fetchProducts(search?: string, limit: number = 100, offset
   return res.data;
 }
 
+type SupplierRecord = { product_id: number; supplier_id: { supplier_shortcut: string } };
+
+/**
+ * Fetches the product_per_supplier relationships for an array of product IDs.
+ * Since product_per_supplier is not available directly on the products collection 
+ * as an alias, we must fetch it directly from the junction table.
+ */
+export async function fetchProductSuppliers(productIds: number[]): Promise<Record<number, SupplierRecord[]>> {
+  if (productIds.length === 0) return {};
+
+  const uniqueIds = Array.from(new Set(productIds)).filter(id => id > 0);
+  if (uniqueIds.length === 0) return {};
+
+  // Fetch in chunks to avoid URL length limits
+  const CHUNK_SIZE = 100;
+  const allRecords: SupplierRecord[] = [];
+
+  for (let i = 0; i < uniqueIds.length; i += CHUNK_SIZE) {
+    const chunk = uniqueIds.slice(i, i + CHUNK_SIZE);
+    const params = {
+      "filter[product_id][_in]": chunk.join(","),
+      fields: "product_id,supplier_id.supplier_shortcut",
+      limit: -1,
+    };
+    const res = await fetchItems<SupplierRecord>("items/product_per_supplier", params);
+    allRecords.push(...(res.data || []));
+  }
+
+  // Group by product_id
+  const supplierMap: Record<number, SupplierRecord[]> = {};
+  for (const record of allRecords) {
+    const pId = record.product_id;
+    if (!supplierMap[pId]) supplierMap[pId] = [];
+    supplierMap[pId].push(record);
+  }
+
+  return supplierMap;
+}
+
+
+
 /**
  * Fetches a single product by its ID with full details.
  */
@@ -137,7 +178,7 @@ export async function fetchProductById(id: number): Promise<ProductRow | null> {
   };
 
   const res = await fetchItems<ProductRow>(`items/products/${id}`, params);
-
+  
   // Directus returns a single object if ID is provided in path, but if we used filter it would be an array.
   // Our fetchItems likely expects data to be an array or object based on internal implementation.
   // Let's assume it handles single record fetch correctly based on the common pattern.
@@ -163,7 +204,7 @@ export async function fetchBranchInventory(branchId: number, token?: string, byp
   }
 
   const url = `${SPRING_API_BASE_URL}/api/view-rfid-onhand?branch_id=${branchId}`;
-
+  
   try {
     const res = await fetch(url, {
       headers: {
@@ -175,7 +216,7 @@ export async function fetchBranchInventory(branchId: number, token?: string, byp
     if (!res.ok) return [];
     const data = await res.json();
     const result = Array.isArray(data) ? data : (data.data || []);
-
+    
     setCache(CACHE_KEY, result, TTL);
     return result;
   } catch (err) {
@@ -196,11 +237,14 @@ export async function createStockTransfers(payloads: StockTransferInsertPayload[
  * Updates status and allocated quantity for a batch of items.
  */
 export async function updateTransfersStatus(
-  items: {
-    id: number;
-    status: string;
-    allocated_quantity?: number;
-    date_received?: string | null;
+  items: { 
+    id: number; 
+    status: string; 
+    allocated_quantity?: number; 
+    picked_quantity?: number;
+    scanned_quantity?: number;
+    received_quantity?: number;
+    date_received?: string | null; 
     receiver_id?: number | null;
     dispatched_by?: number | null;
     dispatched_at?: string | null;
@@ -215,6 +259,9 @@ export async function updateTransfersStatus(
     const key = JSON.stringify({
       status: item.status,
       ...(item.allocated_quantity !== undefined ? { allocated_quantity: item.allocated_quantity } : {}),
+      ...(item.picked_quantity !== undefined ? { picked_quantity: item.picked_quantity } : {}),
+      ...(item.scanned_quantity !== undefined ? { scanned_quantity: item.scanned_quantity } : {}),
+      ...(item.received_quantity !== undefined ? { received_quantity: item.received_quantity } : {}),
       ...(item.date_received !== undefined ? { date_received: item.date_received } : {}),
       ...(item.receiver_id !== undefined ? { receiver_id: item.receiver_id } : {}),
       ...(item.dispatched_by !== undefined ? { dispatched_by: item.dispatched_by } : {}),

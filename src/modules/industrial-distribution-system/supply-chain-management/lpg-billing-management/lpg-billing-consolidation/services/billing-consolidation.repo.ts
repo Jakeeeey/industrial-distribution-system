@@ -47,10 +47,15 @@ const HEADER_FIELDS = [
   "cancelled_reason",
   "created_at",
   "updated_at",
+  // DEV-CHANGE: New columns for billing history tracking
+  "total_billed_kg",
+  "total_billed_m3",
   // Expanded relations
   "customer_site_id.id",
   "customer_site_id.site_name",
   "customer_site_id.site_address",
+  // DEV-CHANGE: Pull site billing_mode for filtering/sorting
+  "customer_site_id.billing_mode",
 ].join(",");
 
 /** Fields to pull for child transactions under a header */
@@ -114,11 +119,16 @@ function mapHeader(raw: Record<string, unknown>): ConsolidationHeader {
     cancelled_reason: raw["cancelled_reason"] ? String(raw["cancelled_reason"]) : null,
     created_at: String(raw["created_at"] ?? ""),
     updated_at: String(raw["updated_at"] ?? ""),
+    // DEV-CHANGE: Map new billing-history columns; nullish when not yet persisted
+    total_billed_kg: raw["total_billed_kg"] != null ? Number(raw["total_billed_kg"]) : null,
+    total_billed_m3: raw["total_billed_m3"] != null ? Number(raw["total_billed_m3"]) : null,
     site: siteObj
       ? {
           id: Number(siteObj["id"]),
           site_name: siteObj["site_name"] ? String(siteObj["site_name"]) : null,
           site_address: siteObj["site_address"] ? String(siteObj["site_address"]) : null,
+          // DEV-CHANGE: Map site billing_mode property
+          billing_mode: siteObj["billing_mode"] ? (String(siteObj["billing_mode"]) as "BOTH" | "KILO" | "METERED") : null,
         }
       : undefined,
   };
@@ -201,7 +211,8 @@ export async function repoFetchHeaders(params: ConsolidationHeaderListParams): P
   total: number;
 }> {
   const page = params.page ?? 1;
-  const limit = params.limit ?? 15;
+  // IDS-CHANGE: Default fallback limit changed from 15 to 5 to align pagination
+  const limit = params.limit ?? 5;
   const offset = (page - 1) * limit;
 
   const filterList: Record<string, unknown>[] = [];
@@ -213,11 +224,21 @@ export async function repoFetchHeaders(params: ConsolidationHeaderListParams): P
     filterList.push({ status: { _neq: "CANCELLED" } });
   }
 
+  // DEV-CHANGE: Filter by site billing mode if specified
+  if (params.billing_mode && params.billing_mode !== "ALL") {
+    filterList.push({
+      customer_site_id: {
+        billing_mode: { _eq: params.billing_mode },
+      },
+    });
+  }
+
   if (params.search) {
     filterList.push({
       _or: [
         { header_no: { _icontains: params.search } },
         { customer_id: { _icontains: params.search } },
+        { customer_site_id: { site_name: { _icontains: params.search } } },
       ],
     });
   }
@@ -226,9 +247,26 @@ export async function repoFetchHeaders(params: ConsolidationHeaderListParams): P
     ? encodeURIComponent(JSON.stringify(filterList.length === 1 ? filterList[0] : { _and: filterList }))
     : "";
 
+  // DEV-CHANGE: Dynamic sorting based on parameter
+  let sortParam = "-created_at";
+  if (params.sortField) {
+    const dirSign = params.sortDir === "desc" ? "-" : "";
+    if (params.sortField === "period_from") {
+      sortParam = `${dirSign}period_from`;
+    } else if (params.sortField === "site") {
+      sortParam = `${dirSign}customer_site_id.site_name`;
+    } else if (params.sortField === "customer") {
+      sortParam = `${dirSign}customer_id`;
+    } else if (params.sortField === "status") {
+      sortParam = `${dirSign}status`;
+    } else if (params.sortField === "billing_mode") {
+      sortParam = `${dirSign}customer_site_id.billing_mode`;
+    }
+  }
+
   const qs = [
     `fields=${HEADER_FIELDS}`,
-    `sort=-created_at`,
+    `sort=${sortParam}`,
     `limit=${limit}`,
     `offset=${offset}`,
     `meta=total_count`,
@@ -262,7 +300,31 @@ export async function repoFetchHeaderById(headerId: number): Promise<Consolidati
   return hydrated;
 }
 
-// ─── Transaction Queries ──────────────────────────────────────────────────────
+/**
+ * Fetches the most recent POSTED billing header for the same customer site
+ * that precedes the given header (by period_from desc, header_id desc).
+ * Used to populate the prev_total_billed_kg / prev_total_billed_m3 snapshot
+ * on the current workspace header for period-over-period invoice comparison.
+ * DEV-CHANGE: Added for inter-period consumption tracking feature.
+ */
+export async function repoFetchPreviousPostedHeader(
+  siteId: number,
+  excludeHeaderId: number
+): Promise<ConsolidationHeader | null> {
+  const filter = encodeURIComponent(
+    JSON.stringify({
+      customer_site_id: { _eq: siteId },
+      status: { _eq: "POSTED" },
+      header_id: { _neq: excludeHeaderId },
+    })
+  );
+  const res = await directusFetch<{ data: Record<string, unknown>[] }>(
+    `${DIRECTUS_URL}/items/lpg_transaction_headers?fields=${HEADER_FIELDS}&filter=${filter}&sort=-period_from,-header_id&limit=1`
+  );
+  if (!res.data || res.data.length === 0) return null;
+  return mapHeader(res.data[0]);
+}
+
 
 /**
  * Fetches all child transactions for a given billing header.
@@ -276,6 +338,58 @@ export async function repoFetchTransactionsByHeader(headerId: number): Promise<C
     `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions?fields=${TX_FIELDS}&filter=${filter}&sort=billing_period_from,id&limit=-1`
   );
   return (res.data ?? []).map(mapTransaction);
+}
+
+// ─── Domino-Effect Cascade Queries ────────────────────────────────────────────
+
+/**
+ * DOMINO-EFFECT: Fetches the next chronological metered transaction after
+ * `currentTxId` within the same billing header.
+ *
+ * Filters only transactions with a meter_reading_id (metered transactions).
+ * Sorted by billing_period_from ASC, id ASC — same order as the reviewer UI.
+ * Returns null if no subsequent metered transaction exists in the sequence.
+ *
+ * NOTE: lpg_site_id filter was intentionally removed. A billing header belongs
+ * to a single site already, so transaction_header_id alone is sufficient scope.
+ * The old siteId filter was causing silent cascade failures when lpg_site_id
+ * was 0 or null on meter readings / transactions.
+ */
+export async function repoFetchNextMeterTransaction(
+  currentTxId: number,
+  headerId: number
+): Promise<{ id: number; meter_reading_id: number; status: string } | null> {
+  // Fetch all metered transactions in the same header, sorted chronologically
+  const filter = encodeURIComponent(
+    JSON.stringify({
+      _and: [
+        { transaction_header_id: { _eq: headerId } },
+        { meter_reading_id: { _nnull: true } },
+      ],
+    })
+  );
+  const res = await directusFetch<{ data: Record<string, unknown>[] }>(
+    `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions?fields=id,meter_reading_id,billing_period_from,status&filter=${filter}&sort=billing_period_from,id&limit=-1`
+  );
+
+  const rows = res.data ?? [];
+  // Find the current transaction's position in the sorted list
+  const currentIndex = rows.findIndex((row) => Number(row["id"]) === currentTxId);
+
+  console.log(
+    `[DOMINO-REPO] repoFetchNextMeterTransaction: headerId=${headerId} currentTxId=${currentTxId} ` +
+    `rows=${rows.length} currentIndex=${currentIndex}`
+  );
+
+  // If not found or already the last in sequence, no next transaction exists
+  if (currentIndex === -1 || currentIndex >= rows.length - 1) return null;
+
+  const next = rows[currentIndex + 1];
+  return {
+    id: Number(next["id"]),
+    meter_reading_id: Number(next["meter_reading_id"]),
+    status: String(next["status"] ?? "DRAFT"),
+  };
 }
 
 // ─── Meter Reading Queries ────────────────────────────────────────────────────

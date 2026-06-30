@@ -43,3 +43,8 @@ next-env.d.ts
 # agent workflow
 /.agent
 # assets/audio/*.mp3
+lint.log
+
+# personal implementation plan for modules & test
+zdocs/
+ztest/

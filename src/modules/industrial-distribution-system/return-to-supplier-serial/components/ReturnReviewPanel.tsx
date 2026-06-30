@@ -1,7 +1,5 @@
-"use client";
-
 import React, { useState, useMemo } from "react";
-import { Trash2, ScanLine, Plus, Loader2, X as CloseIcon } from "lucide-react";
+import { Trash2, ScanLine, Plus, Loader2, X as CloseIcon, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +30,7 @@ import type {
   LinePerDiscountType 
 } from "../types/rts.schema";
 import { validateSerialNumber as apiValidateSerial } from "../providers/fetchProviders";
+import { BulkRegisterModal } from "./BulkRegisterModal";
 
 interface ReturnReviewPanelProps {
   items: CartItem[];
@@ -63,6 +62,8 @@ export function ReturnReviewPanel({
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [serialInput, setSerialInput] = useState("");
   const [isValidating, setIsValidating] = useState(false);
+  const [unregisteredSerials, setUnregisteredSerials] = useState<string[]>([]);
+  const [isBulkRegisterOpen, setIsBulkRegisterOpen] = useState(false);
 
   // Unified calculation
   const { totalAmount, totalQuantity, totalDiscountAmount, grossAmount } =
@@ -103,7 +104,7 @@ export function ReturnReviewPanel({
     const normalizedSn = sn.toLowerCase();
     const isDuplicateInSession = items.some(item => 
       item.serials.some(s => s.trim().toLowerCase() === normalizedSn)
-    );
+    ) || unregisteredSerials.some(s => s.trim().toLowerCase() === normalizedSn);
     
     if (isDuplicateInSession) {
       toast.error(`Serial Number "${sn}" is already added to this transaction.`);
@@ -113,8 +114,18 @@ export function ReturnReviewPanel({
     setIsValidating(true);
     try {
       // 2. Database & Inventory Check
-      await apiValidateSerial(sn, selectedItem.productId, branchId);
+      const res = await apiValidateSerial(sn, selectedItem.productId, branchId);
       
+      if (res && res.isUnregistered) {
+        setUnregisteredSerials((prev) => {
+          if (prev.includes(sn)) return prev;
+          return [...prev, sn];
+        });
+        toast.info(`Serial ${sn} is unregistered. Please register it.`);
+        setSerialInput("");
+        return;
+      }
+
       const newSerials = [...selectedItem.serials, sn];
       onUpdateItem(selectedItemId, "serials", newSerials);
       onUpdateItem(selectedItemId, "quantity", newSerials.length);
@@ -285,6 +296,31 @@ export function ReturnReviewPanel({
       {/* 2. SERIAL MANAGEMENT COMPONENT (Shows when an item is selected) */}
       {selectedItem && (
         <div className="bg-[#fcfaff] rounded-xl border border-[#e0d7f7] p-6 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+          {/* Unregistered Serials Alert Banner */}
+          {unregisteredSerials.length > 0 && (
+            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-5">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-amber-500 rounded-lg text-white font-bold text-xs shrink-0">
+                  <AlertTriangle className="h-4 w-4" />
+                </div>
+                <div>
+                  <h5 className="font-bold text-sm text-amber-900 dark:text-amber-400">{unregisteredSerials.length} UNREGISTERED SERIALS</h5>
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {unregisteredSerials.map(sn => (
+                      <Badge key={sn} variant="outline" className="bg-amber-100/80 border-amber-300 text-amber-800 flex items-center gap-1 py-0.5 px-2 font-mono text-[10px]">
+                        {sn}
+                        <CloseIcon className="h-3 w-3 cursor-pointer text-amber-600 hover:text-amber-900" onClick={() => setUnregisteredSerials(prev => prev.filter(s => s !== sn))} />
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <Button onClick={() => setIsBulkRegisterOpen(true)} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9 px-4 shrink-0">
+                REGISTER ALL
+              </Button>
+            </div>
+          )}
+
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <div className="bg-white border border-[#e0d7f7] p-2.5 rounded-xl shadow-sm">
@@ -408,6 +444,23 @@ export function ReturnReviewPanel({
           </div>
         </div>
       </div>
+
+      <BulkRegisterModal
+        open={isBulkRegisterOpen}
+        onOpenChange={setIsBulkRegisterOpen}
+        serials={unregisteredSerials}
+        productId={selectedItem ? Number(selectedItem.productId) : 0}
+        branchId={Number(branchId || 0)}
+        onSuccess={(registeredSerials) => {
+          if (selectedItem && selectedItemId) {
+            const newSerials = [...selectedItem.serials, ...registeredSerials.map(r => r.serialNumber)];
+            onUpdateItem(selectedItemId, "serials", newSerials);
+            onUpdateItem(selectedItemId, "quantity", newSerials.length);
+          }
+          setUnregisteredSerials([]);
+          toast.success("All cylinders registered and added to list");
+        }}
+      />
     </div>
   );
 }

@@ -7,7 +7,7 @@ const COOKIE_NAME = "vos_access_token";
 // Strict Payload Schema
 const JwtPayloadSchema = z.object({
     id: z.union([z.number(), z.string()]).optional(),
-    user_id: z.union([z.number(), z.string() ]).optional(),
+    user_id: z.union([z.number(), z.string()]).optional(),
     sub: z.union([z.number(), z.string()]).optional(),
     role: z.string().optional(),
     subsystems: z.array(z.string()).optional(),
@@ -106,13 +106,13 @@ export default async function ERPMainDashboardPage() {
         const url = `${directusBase?.replace(/\/+$/, "")}/items/subsystems?fields=*,modules.*,modules.subModules.*&limit=-1`;
         const res = await fetch(url, {
             headers: { "Authorization": `Bearer ${process.env.DIRECTUS_STATIC_TOKEN}` },
-            next: { revalidate: 60 } 
+            next: { revalidate: 60 }
         });
 
         if (res.ok) {
             const jsonResponse = await res.json();
             const validatedData = z.array(DashboardSubsystemSchema).parse(jsonResponse.data || []);
-            
+
             subsystems = validatedData
                 .filter((s) => isAdmin || allowedSubsystems.has(s.slug))
                 .map((s): MappedSubsystem => ({
@@ -140,8 +140,8 @@ export default async function ERPMainDashboardPage() {
     const userEmail = payload.email || "";
 
     return (
-        <MainDashboardClient 
-            initialSubsystems={subsystems} 
+        <MainDashboardClient
+            initialSubsystems={subsystems}
             userFullName={userFullName}
             userEmail={userEmail}
         />

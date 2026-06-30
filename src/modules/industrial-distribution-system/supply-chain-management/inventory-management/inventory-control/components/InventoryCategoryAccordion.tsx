@@ -44,7 +44,7 @@ export function InventoryCategoryAccordion({
                     "
                 >
                     <AccordionTrigger className="px-5 py-4 hover:no-underline hover:bg-muted/40 transition-colors [&>svg]:ml-4 [&>svg]:text-muted-foreground/80">
-                        <div className="flex items-center justify-between flex-1 min-w-0">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between flex-1 min-w-0 gap-2">
                             {/* Left Grouping: Icon, Name and Total count */}
                             <div className="flex items-center gap-3 min-w-0">
                                 {/* Debossed Icon Box */}
@@ -66,16 +66,16 @@ export function InventoryCategoryAccordion({
                             </div>
 
                             {/* Right Grouping: Counter-sunk Summary Status Metrics */}
-                            <div className="hidden sm:flex items-center gap-2.5 shrink-0 mr-2">
+                            <div className="flex items-center gap-2 mr-2 ml-11 sm:ml-0">
                                 <span className="
-                                    text-[11px] font-extrabold text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full 
+                                    text-[10px] sm:text-[11px] font-extrabold text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 px-2 sm:px-2.5 py-0.5 rounded-full 
                                     border border-emerald-500/10 shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.06)] dark:shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.2)]
                                     drop-shadow-[0_0.5px_0px_rgba(255,255,255,0.4)] dark:drop-shadow-none
                                 ">
                                     {cat.totalFull.toLocaleString()} Full
                                 </span>
                                 <span className="
-                                    text-[11px] font-extrabold text-rose-700 dark:text-rose-400 bg-rose-500/10 px-2.5 py-0.5 rounded-full 
+                                    text-[10px] sm:text-[11px] font-extrabold text-rose-700 dark:text-rose-400 bg-rose-500/10 px-2 sm:px-2.5 py-0.5 rounded-full 
                                     border border-rose-500/10 shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.06)] dark:shadow-[inset_0_1.5px_3px_rgba(0,0,0,0.2)]
                                     drop-shadow-[0_0.5px_0px_rgba(255,255,255,0.4)] dark:drop-shadow-none
                                 ">
