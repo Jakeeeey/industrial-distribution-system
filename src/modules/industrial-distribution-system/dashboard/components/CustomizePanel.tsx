@@ -48,10 +48,21 @@ const WIDGET_CATEGORIES: {
         name: "CRM Orders Status Flow",
         description: "Counts of sales orders grouped by status (Consolidation, Picking, Dispatch).",
       },
+      // hide for now but dont delete
+      // {
+      //   id: "sales-performance",
+      //   name: "Monthly Revenue Tracker",
+      //   description: "Target tracking comparison vs current monthly revenue.",
+      // },
       {
-        id: "sales-performance",
-        name: "Monthly Revenue Tracker",
-        description: "Target tracking comparison vs current monthly revenue.",
+        id: "top-salesman",
+        name: "Top Sales Performers",
+        description: "Leaderboard of top 5 salesmen ranked by total IDS division revenue.",
+      },
+      {
+        id: "top-customer",
+        name: "Top Customer Revenue",
+        description: "Ranking of top 5 customers by total IDS division purchase revenue.",
       },
     ],
   },
@@ -89,11 +100,6 @@ const WIDGET_CATEGORIES: {
     category: "Utilities & System",
     widgets: [
       {
-        id: "alerts-feed",
-        name: "Critical Operations Alerts",
-        description: "High priority alerts (credit limit breaches, inventory mismatches).",
-      },
-      {
         id: "activity-feed",
         name: "Live Audit Logs Timeline",
         description: "Real-time scrollable feed of system-wide transactions.",
@@ -111,6 +117,7 @@ const WIDGET_CATEGORIES: {
     ],
   },
 ];
+
 
 export const CustomizePanel: React.FC<CustomizePanelProps> = ({
   isOpen,
@@ -211,9 +218,10 @@ export const CustomizePanel: React.FC<CustomizePanelProps> = ({
             </div>
 
             {/* Footer */}
-            <div className="border-t border-border/60 p-4 bg-muted/20 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80">
-              Drag & resize widgets freely on the dashboard.
+            <div className="border-t border-border/60 p-4 bg-muted/20 text-center text-[9px] font-bold uppercase tracking-widest text-muted-foreground/80">
+              Widgets auto-align and rearrange sequentially to fit your workspace.
             </div>
+
           </motion.div>
         </>
       )}

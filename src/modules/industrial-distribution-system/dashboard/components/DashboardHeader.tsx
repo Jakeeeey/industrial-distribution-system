@@ -22,12 +22,14 @@ import {
   Calendar,
   Layers,
   MapPin,
+  Bell,
 } from "lucide-react";
 
 interface DashboardHeaderProps {
   activePreset: PresetId;
   onChangePreset: (id: PresetId) => void;
   onToggleCustomize: () => void;
+  onToggleNotifications: () => void;
   onResetLayout: () => void;
   onExportDashboard: () => void;
 }
@@ -36,13 +38,29 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   activePreset,
   onChangePreset,
   onToggleCustomize,
+  onToggleNotifications,
   onResetLayout,
   onExportDashboard,
 }) => {
-  const { filters, setBranchId, setDateRange, branches, loading, refreshAll } = useDashboard();
+  const { filters, setBranchId, setDateRange, branches, loading, refreshAll, rtoData } = useDashboard();
   const [refreshSpin, setRefreshSpin] = useState(false);
 
+  const alertCount = React.useMemo(() => {
+    let count = 3; // 3 default stock/ops/sys alerts
+    const branchIdStr = String(filters.branchId);
+    const filteredRto = branchIdStr === "all"
+      ? rtoData
+      : rtoData.filter((r) => String(r.branchId) === branchIdStr);
+
+    filteredRto.forEach((r) => {
+      if (r.missingStatus === "critical" && r.financialExposure > 500000) count++;
+      if (r.unpaidBalance > 200000) count++;
+    });
+    return count;
+  }, [rtoData, filters.branchId]);
+
   const handleRefresh = async () => {
+
     setRefreshSpin(true);
     await refreshAll();
     setTimeout(() => setRefreshSpin(false), 800);
@@ -116,6 +134,22 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
           >
             <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="hidden xs:inline">Customize</span>
+          </Button>
+
+          {/* Notifications sidebar button */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 px-2.5 text-xs font-bold gap-1.5 cursor-pointer rounded-lg border border-border/50 hover:bg-muted relative"
+            onClick={onToggleNotifications}
+          >
+            <Bell className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="hidden xs:inline">Alerts</span>
+            {alertCount > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[8px] font-black text-white ring-2 ring-background animate-pulse">
+                {alertCount}
+              </span>
+            )}
           </Button>
 
           {/* Reset layout button */}
