@@ -1340,7 +1340,9 @@ async function propagateWiwoDetailDomino(
   }
 
   const oldPreviousLpgKg = nextDetail.previous_lpg_kg;
-  const newPreviousLpgKg = newRemainingLpgKg; // Corrected remaining LPG → becomes next detail's previous
+  // DOMINO-FIX: previous_lpg_kg stores the GROSS cylinder weight.
+  // We must add the cylinder's tare weight to the net remaining LPG weight to get the gross weight.
+  const newPreviousLpgKg = parseFloat((newRemainingLpgKg + nextDetail.tare_weight_kg).toFixed(3));
 
   // 6. Recompute the detail line with the updated previous_lpg_kg
   // remaining_lpg_kg is unchanged (determined by the physical returned gross weight)
