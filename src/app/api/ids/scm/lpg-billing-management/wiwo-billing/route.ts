@@ -83,8 +83,11 @@ export async function GET(request: NextRequest) {
 
     if (type === "validate-serial") {
       const serial = searchParams.get("serial");
+      // DEV-CHANGE: Retrieve optional salesOrderId from searchParams
+      const salesOrderIdParam = searchParams.get("salesOrderId");
+      const salesOrderId = salesOrderIdParam ? Number(salesOrderIdParam) : undefined;
       if (!serial) return NextResponse.json({ error: "Serial number is required" }, { status: 400 });
-      const data = await validateSerialForOnboarding(serial);
+      const data = await validateSerialForOnboarding(serial, salesOrderId);
       return NextResponse.json({ data });
     }
 
