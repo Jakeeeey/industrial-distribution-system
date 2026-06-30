@@ -2777,7 +2777,8 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                 setScannerError("");
                 setScannerInput("");
 
-                // IDS-CHANGE: Do not auto-open the scanner modal if all cylinders have been weighed
+                // IDS-CHANGE: Do not auto-open the scanner modal if all cylinders have been weighed.
+                // If this is a cylinder swap, automatically open the capture cylinder in modal (replacement modal) instead.
                 const nextReturnedWeights = {
                   ...returnedWeights,
                   [weighingCylinderId]: parseFloat(weighingGross),
@@ -2786,7 +2787,11 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                   const wt = nextReturnedWeights[c.id];
                   return wt !== undefined && wt !== null && !isNaN(Number(wt)) && Number(wt) > 0;
                 });
-                if (!allCylsFulfilled) {
+                
+                const repIndex = selectedReplacementCylinders.findIndex(c => c.swappedOutCylinderId === weighingCylinderId);
+                if (swappedCylinders[weighingCylinderId] && repIndex !== -1) {
+                  setReplacementModalIndex(repIndex);
+                } else if (!allCylsFulfilled) {
                   setIsScannerModalOpen(true);
                 }
               }}
