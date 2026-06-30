@@ -2,13 +2,15 @@
 import { LpgSite, SiteCylinder } from "../types";
 
 export const lpgSiteService = {
-  async fetchSites(params?: { search?: string; customer_code?: string; page?: number; limit?: number; sort?: string }) {
+  async fetchSites(params?: { search?: string; customer_code?: string; page?: number; limit?: number; sort?: string; billing_mode?: string; is_active?: string }) {
     const query = new URLSearchParams();
     if (params?.search) query.append("search", params.search);
     if (params?.customer_code) query.append("customer_code", params.customer_code);
     if (params?.page) query.append("page", params.page.toString());
     if (params?.limit) query.append("limit", params.limit.toString());
     if (params?.sort) query.append("sort", params.sort);
+    if (params?.billing_mode && params?.billing_mode !== "ALL") query.append("billing_mode", params.billing_mode);
+    if (params?.is_active !== undefined && params?.is_active !== "ALL") query.append("is_active", params.is_active);
 
     const res = await fetch(`/api/ids/scm/inventory-management/lpg-site-management?${query}`);
     return await res.json();

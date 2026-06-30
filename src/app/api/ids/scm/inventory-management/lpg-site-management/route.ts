@@ -12,6 +12,8 @@ export async function GET(request: NextRequest) {
       page: searchParams.get("page") ? Number(searchParams.get("page")) : 1,
       limit: searchParams.get("limit") ? Number(searchParams.get("limit")) : 10,
       sort: searchParams.get("sort") || undefined,
+      billing_mode: searchParams.get("billing_mode") || undefined,
+      is_active: searchParams.get("is_active") || undefined,
     };
 
     const { data, total } = await lpgSiteServerService.fetchSites(params);
