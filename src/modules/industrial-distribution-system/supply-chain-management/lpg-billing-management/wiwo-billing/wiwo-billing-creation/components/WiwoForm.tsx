@@ -1761,21 +1761,18 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-border text-[11px]">
-                                {pureDeployments.map((line, idx) => {
-                                  const typedLine = line as typeof line & { product_name?: string; cylinder_asset?: CylinderAsset };
-                                  return (
-                                    <tr key={idx} className="hover:bg-accent/10">
-                                      <td className="p-2 font-mono font-bold">{typedLine.serial_number}</td>
-                                      <td className="p-2 text-muted-foreground">
-                                        {typedLine.cylinder_asset?.product?.product_name || "LPG Cylinder"}
-                                      </td>
-                                      <td className="p-2 font-mono">{typedLine.tare_weight_kg} KG</td>
-                                      <td className="p-2 font-mono font-bold text-primary dark:text-emerald-400">
-                                        {typedLine.previous_lpg_kg} KG
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
+                                {pureDeployments.map((line: any, idx) => (
+                                  <tr key={idx} className="hover:bg-accent/10">
+                                    <td className="p-2 font-mono font-bold">{line.serial_number}</td>
+                                    <td className="p-2 text-muted-foreground">
+                                      {line.cylinder_asset?.product?.product_name || "LPG Cylinder"}
+                                    </td>
+                                    <td className="p-2 font-mono">{line.tare_weight_kg} KG</td>
+                                    <td className="p-2 font-mono font-bold text-primary dark:text-emerald-400">
+                                      {line.previous_lpg_kg} KG
+                                    </td>
+                                  </tr>
+                                ))}
                               </tbody>
                             </table>
                           </div>
