@@ -252,7 +252,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
           <Layers className="h-5 w-5 text-primary shrink-0 animate-pulse" />
           <div className="min-w-0">
             <h1 className="text-base font-black uppercase italic tracking-tighter text-slate-800 dark:text-slate-100 leading-none truncate">
-              IDS Command Dashboard
+              IDS Command Dashboards
             </h1>
             <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 leading-none mt-0.5 hidden sm:block">
               Customizable Operational Workspace
