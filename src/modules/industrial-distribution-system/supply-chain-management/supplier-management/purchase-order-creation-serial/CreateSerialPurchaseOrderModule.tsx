@@ -27,9 +27,9 @@ export default function CreateSerialPurchaseOrderModule({
     const hook = useSerialTagging();
 
     return (
-        <div className="w-full min-w-0 space-y-4">
+        <div className="w-full h-full min-w-0 flex flex-col space-y-4">
             {/* ── Page Header ── */}
-            <div className="space-y-1">
+            <div className="space-y-1 shrink-0">
                 <div className="text-2xl font-black">Cylinder Refill — Serial Tagging</div>
                 <div className="text-sm text-muted-foreground">
                     Select an approved Refill PO to register cylinder serial numbers
@@ -38,13 +38,13 @@ export default function CreateSerialPurchaseOrderModule({
 
             {/* ── Error Banner ── */}
             {hook.listError && (
-                <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+                <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive shrink-0">
                     {hook.listError}
                 </div>
             )}
 
             {/* ── 2-Column Grid Layout ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-4 min-w-0 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-4 min-w-0 flex-1 min-h-0">
                 {/* ── Left: PO List (Master) ── */}
                 <RefillPOList
                     items={hook.poList}

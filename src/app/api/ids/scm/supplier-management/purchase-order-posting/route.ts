@@ -149,7 +149,15 @@ const POR_ITEMS_COLLECTION = "purchase_order_receiving_items";
 type POStatus = "OPEN" | "PARTIAL" | "RECEIVED" | "CLOSED";
 interface Supplier { id: number; supplier_name: string; }
 interface Branch { id: number; branch_name: string; branch_description: string; }
-interface Product { product_id: number; product_name: string; barcode: string; product_code: string; cost_per_unit?: number; is_serialized?: boolean; }
+interface Product {
+    product_id: number;
+    product_name: string;
+    barcode: string;
+    product_code: string;
+    cost_per_unit?: number;
+    is_serialized?: boolean;
+    parent_id?: number | null;
+}
 interface POHeader {
     purchase_order_id: number;
     purchase_order_no: string;
@@ -192,6 +200,7 @@ interface ReceivingItem {
     serial_no?: string;
     tare_weight?: number | string;
     expiry_date?: string;
+    sourceTable?: 'items' | 'serial';
 }
 
 const POR_SAFE_FIELDS =
@@ -293,7 +302,7 @@ async function fetchProductsMap(base: string, productIds: number[]) {
         const url =
             `${base}/items/${PRODUCTS_COLLECTION}?limit=-1` +
             `&filter[product_id][_in]=${encodeURIComponent(ids.join(","))}` +
-            `&fields=product_id,product_name,barcode,product_code,cost_per_unit,is_serialized`;
+            `&fields=product_id,product_name,barcode,product_code,cost_per_unit,is_serialized,parent_id`;
         const j = await fetchJson(url) as { data: (Product & { id?: number; is_serialized?: unknown })[] };
         rows.push(...(Array.isArray(j?.data) ? j.data : []));
     }
@@ -308,6 +317,7 @@ async function fetchProductsMap(base: string, productIds: number[]) {
             product_code: toStr(p?.product_code),
             cost_per_unit: toNum(p?.cost_per_unit),
             is_serialized: !!(p?.is_serialized),
+            parent_id: p?.parent_id ? toNum(p.parent_id) : null,
         } as Product);
     }
     return map;
@@ -377,6 +387,7 @@ async function fetchPORByPOIds(base: string, poIds: number[]) {
 }
 
 async function fetchReceivingItems(base: string, filterPorIds?: number[]) {
+    // 1. Fetch from purchase_order_receiving_items
     const qs: string[] = [
         "limit=-1",
         "fields=receiving_item_id,purchase_order_product_id,product_id,rfid_code,created_at,serial_no,tare_weight,expiry_date",
@@ -386,7 +397,62 @@ async function fetchReceivingItems(base: string, filterPorIds?: number[]) {
     }
     const url = `${base}/items/${POR_ITEMS_COLLECTION}?${qs.join("&")}`;
     const j = await fetchJson(url) as { data: ReceivingItem[] };
-    return Array.isArray(j?.data) ? j.data : [];
+    const items1 = (Array.isArray(j?.data) ? j.data : []).map(item => ({
+        ...item,
+        sourceTable: 'items' as const
+    }));
+
+    // 2. Fetch from purchase_order_receiving_serial
+    const qsSerial: string[] = [
+        "limit=-1",
+        "fields=receiving_item_id,purchase_order_product_id,product_id,created_at,serial_number,tare_weight",
+    ];
+    if (filterPorIds && filterPorIds.length) {
+        qsSerial.push(`filter[purchase_order_product_id][_in]=${encodeURIComponent(filterPorIds.join(","))}`);
+    }
+    const urlSerial = `${base}/items/purchase_order_receiving_serial?${qsSerial.join("&")}`;
+    
+    let items2: ReceivingItem[] = [];
+    try {
+        // Defined RawSerialItem interface to avoid typescript-eslint no-explicit-any error.
+        interface RawSerialItem {
+            receiving_item_id: unknown;
+            purchase_order_product_id: unknown;
+            product_id: unknown;
+            serial_number: unknown;
+            created_at: unknown;
+            tare_weight: unknown;
+        }
+        const jSerial = await fetchJson(urlSerial) as { data: RawSerialItem[] };
+        const rawItems = Array.isArray(jSerial?.data) ? jSerial.data : [];
+        items2 = rawItems.map(r => ({
+            receiving_item_id: toNum(r.receiving_item_id),
+            purchase_order_product_id: toNum(r.purchase_order_product_id),
+            product_id: toNum(r.product_id),
+            rfid_code: `M-${toStr(r.serial_number)}`,
+            created_at: toStr(r.created_at),
+            serial_no: toStr(r.serial_number),
+            tare_weight: toNum(r.tare_weight) || undefined,
+            sourceTable: 'serial' as const
+        }));
+    } catch (e) {
+        // Handled catch block with unknown type instead of any to satisfy eslint rules.
+        console.error("Failed to fetch from purchase_order_receiving_serial:", e instanceof Error ? e.message : String(e));
+    }
+
+    // 3. Combine them ensuring no duplicate serial_no
+    const combined: ReceivingItem[] = [...items1];
+    const existingSerials = new Set(items1.map(i => toStr(i.serial_no).toUpperCase()).filter(Boolean));
+
+    for (const item of items2) {
+        const snUpper = toStr(item.serial_no).toUpperCase();
+        if (snUpper && !existingSerials.has(snUpper)) {
+            combined.push(item);
+            existingSerials.add(snUpper);
+        }
+    }
+
+    return combined;
 }
 
 async function patchPO(base: string, poId: number, payload: unknown) {
@@ -654,8 +720,22 @@ function branchesLabelFromLines(lines: PoProductRow[], branchesMap: Map<number, 
 }
 
 // =====================
+// CYLINDER ASSETS REGISTRATION HELPERS
+// =====================
+// Comments: Added helper function to fetch expected returning serial numbers for a list of purchase order product lines.
+async function fetchExpectedSerials(base: string, purchaseOrderProductIds: number[]) {
+    if (!purchaseOrderProductIds.length) return [];
+    const url = `${base}/items/purchase_order_serial?limit=-1&filter[purchase_order_product_id][_in]=${encodeURIComponent(purchaseOrderProductIds.join(","))}&fields=id,serial_number,product_id,purchase_order_product_id`;
+    const j = await fetchJson<{ data: { id: number; serial_number: string; product_id: number; purchase_order_product_id: number }[] }>(url);
+    return Array.isArray(j?.data) ? j.data : [];
+}
+
+// =====================
 // CYLINDER ASSETS REGISTRATION
 // =====================
+// Comments: Refactored registerCylinders to distinguish between Refill POs and Normal POs.
+// Refill POs will set matching expected/replacement serials product_id to parent_id and status to "AVAILABLE", 
+// and update unreceived expected serials status to "UNRECEIVED/REPLACED".
 async function registerCylinders(
     base: string,
     porRows: PORRow[],
@@ -669,49 +749,199 @@ async function registerCylinders(
     // Filter receiving items that belong to the posted POR rows
     const porIds = new Set(porRows.map(r => toNum(r.purchase_order_product_id)));
     const targetItems = receivingItems.filter(item => porIds.has(toNum(item.purchase_order_product_id)));
-    
+
+    // Fetch PO to determine if it is a Refill PO
+    let isRefill = false;
+    try {
+        const poCheck = await fetchJson<{ data?: { is_refill?: unknown } }>(
+            `${base}/items/${PO_COLLECTION}/${poId}?fields=is_refill`
+        );
+        const val = poCheck?.data?.is_refill;
+        // Comments: Safe boolean resolution since toNum(true) evaluates to 0.
+        isRefill = val === true || val === 1 || String(val) === "true" || Number(val) === 1;
+        console.log(`[registerCylinders] PO ID: ${poId}, is_refill value from DB:`, val, `-> resolved isRefill:`, isRefill);
+    } catch (e) {
+        console.error(`[registerCylinders] Failed to check is_refill for PO ${poId}:`, e);
+    }
+
     let successCount = 0;
-    
-    for (const item of targetItems) {
-        const pid = toNum(item.product_id);
-        const p = productsMap.get(pid);
-        
-        // Only register if the product is serialized
-        if (!p || !p.is_serialized) continue;
-        
-        // Find the POR row to get branch and price
-        const porId = toNum(item.purchase_order_product_id);
-        const por = porRows.find(r => toNum(r.purchase_order_product_id) === porId);
-        
-        if (!item.serial_no) continue; // Skip if no serial number is recorded
 
-        const payload = {
-            product_id: pid,
-            serial_number: item.serial_no,
-            cylinder_status: "AVAILABLE",
-            cylinder_condition: "GOOD",
-            current_branch_id: por ? toNum(por.branch_id) : null,
-            acquisition_date: nowISO().split("T")[0],
-            expiration_date: item.expiry_date ? new Date(item.expiry_date).toISOString().split("T")[0] : null,
-            tare_weight: item.tare_weight ? toNum(item.tare_weight) : null,
-            cost: por ? toNum(por.unit_price) : toNum(p.cost_per_unit),
-            created_by: userId || null
-        };
+    if (!isRefill) {
+        console.log(`[registerCylinders] Running NORMAL PO posting logic for PO ${poId}`);
+        // --- NORMAL PO POSTING LOGIC ---
+        for (const item of targetItems) {
+            const pid = toNum(item.product_id);
+            const p = productsMap.get(pid);
+            
+            // Only register if the product is serialized
+            if (!p || !p.is_serialized) continue;
+            
+            // Find the POR row to get branch and price
+            const porId = toNum(item.purchase_order_product_id);
+            const por = porRows.find(r => toNum(r.purchase_order_product_id) === porId);
+            
+            if (!item.serial_no) continue; // Skip if no serial number is recorded
 
-        try {
-            await fetchJson(`${base}/items/cylinder_assets`, {
-                method: "POST",
-                body: JSON.stringify(payload)
-            });
-            successCount++;
-        } catch (e) {
-            console.error(`[registerCylinders] Error registering serial ${item.serial_no}:`, e);
-            // Ignore duplicates or other errors, continue to the next one
+            const payload = {
+                product_id: pid,
+                serial_number: item.serial_no,
+                cylinder_status: "AVAILABLE",
+                cylinder_condition: "GOOD",
+                current_branch_id: por ? toNum(por.branch_id) : null,
+                acquisition_date: nowISO().split("T")[0],
+                expiration_date: item.expiry_date ? new Date(item.expiry_date).toISOString().split("T")[0] : null,
+                tare_weight: item.tare_weight ? toNum(item.tare_weight) : null,
+                cost: por ? toNum(por.unit_price) : toNum(p.cost_per_unit),
+                created_by: userId || null
+            };
+
+            try {
+                await fetchJson(`${base}/items/cylinder_assets`, {
+                    method: "POST",
+                    body: JSON.stringify(payload)
+                });
+                successCount++;
+            } catch (e) {
+                console.error(`[registerCylinders] Error registering serial ${item.serial_no}:`, e);
+            }
+        }
+    } else {
+        console.log(`[registerCylinders] Running REFILL PO posting logic for PO ${poId}`);
+        // --- REFILL PO POSTING LOGIC ---
+        // Comments: Fetch expected serials only for the POP lines (purchase_order_products) matching the POR rows currently being posted.
+        // This is necessary because purchase_order_serial references POP IDs, whereas targetItems references POR IDs (which auto-increment independently).
+        const popLines = await fetchPOProductsByPOId(base, poId);
+        const popIdByProductBranch = new Map<string, number>();
+        for (const ln of popLines) {
+            const k = `${toNum(ln.product_id)}::${toNum(ln.branch_id ?? 0)}`;
+            popIdByProductBranch.set(k, toNum(ln.purchase_order_product_id));
+        }
+
+        const postedPopIds = new Set<number>();
+        for (const item of targetItems) {
+            const porRow = porRows.find(r => toNum(r.purchase_order_product_id) === toNum(item.purchase_order_product_id));
+            if (porRow) {
+                const k = `${toNum(porRow.product_id)}::${toNum(porRow.branch_id)}`;
+                const popId = popIdByProductBranch.get(k);
+                if (popId) {
+                    postedPopIds.add(popId);
+                }
+            }
+        }
+
+        const expectedSerials = await fetchExpectedSerials(base, Array.from(postedPopIds));
+        console.log(`[registerCylinders] Scoped POP IDs:`, Array.from(postedPopIds), `-> Expected serials count:`, expectedSerials.length);
+
+        // Normalize received serials set for quick lookup
+        const receivedSerialsSet = new Set(
+            targetItems.map(item => toStr(item.serial_no).toUpperCase().trim()).filter(Boolean)
+        );
+        console.log(`[registerCylinders] Received serials set:`, Array.from(receivedSerialsSet));
+
+        // 1. Identify expected serials that were NOT received
+        const unreceivedExpectedSerials = expectedSerials.filter(
+            s => !receivedSerialsSet.has(toStr(s.serial_number).toUpperCase().trim())
+        );
+        console.log(`[registerCylinders] Unreceived expected serials count:`, unreceivedExpectedSerials.length, `-> Serials:`, unreceivedExpectedSerials.map(s => s.serial_number));
+
+        // 2. Mark unreceived expected serials as "UNRECEIVED/REPLACED" in cylinder_assets
+        for (const unreceived of unreceivedExpectedSerials) {
+            const sn = toStr(unreceived.serial_number).toUpperCase().trim();
+            if (!sn) continue;
+
+            try {
+                const assetCheck = await fetchJson<{ data?: Array<{ id: number }> }>(
+                    `${base}/items/cylinder_assets?filter[serial_number][_eq]=${encodeURIComponent(sn)}&limit=1`
+                );
+                const asset = assetCheck?.data?.[0];
+                if (asset?.id) {
+                    console.log(`[registerCylinders] Updating unreceived serial ${sn} (ID: ${asset.id}) status to UNRECEIVED/REPLACED`);
+                    await fetchJson(`${base}/items/cylinder_assets/${asset.id}`, {
+                        method: "PATCH",
+                        body: JSON.stringify({
+                            cylinder_status: "UNRECEIVED/REPLACED",
+                            modified_by: userId || null
+                        })
+                    });
+                } else {
+                    console.warn(`[registerCylinders] Expected unreceived serial ${sn} not found in cylinder_assets`);
+                }
+            } catch (err) {
+                console.error(`[registerCylinders] Error updating unreceived serial ${sn} status to UNRECEIVED/REPLACED:`, err);
+            }
+        }
+
+        // 3. Post / update received serials
+        for (const item of targetItems) {
+            const sn = toStr(item.serial_no).toUpperCase().trim();
+            if (!sn) continue;
+
+            const pid = toNum(item.product_id);
+            const p = productsMap.get(pid);
+
+            // Only register if the product is serialized
+            if (!p || !p.is_serialized) continue;
+
+            // Resolve target product_id (use parent_id if available)
+            const resolvedProductId = p.parent_id ? p.parent_id : pid;
+
+            const porId = toNum(item.purchase_order_product_id);
+            const por = porRows.find(r => toNum(r.purchase_order_product_id) === porId);
+
+            try {
+                // Check if cylinder already exists in assets
+                const assetCheck = await fetchJson<{ data?: Array<{ id: number }> }>(
+                    `${base}/items/cylinder_assets?filter[serial_number][_eq]=${encodeURIComponent(sn)}&limit=1`
+                );
+                const asset = assetCheck?.data?.[0];
+
+                if (asset?.id) {
+                    console.log(`[registerCylinders] Updating received serial ${sn} (ID: ${asset.id}) in cylinder_assets to product_id: ${resolvedProductId}, status: AVAILABLE`);
+                    // Update existing cylinder
+                    const patchPayload = {
+                        product_id: resolvedProductId,
+                        cylinder_status: "AVAILABLE",
+                        current_branch_id: por ? toNum(por.branch_id) : null,
+                        expiration_date: item.expiry_date ? new Date(item.expiry_date).toISOString().split("T")[0] : null,
+                        tare_weight: item.tare_weight ? toNum(item.tare_weight) : null,
+                        cost: por ? toNum(por.unit_price) : toNum(p.cost_per_unit),
+                        modified_by: userId || null
+                    };
+
+                    await fetchJson(`${base}/items/cylinder_assets/${asset.id}`, {
+                        method: "PATCH",
+                        body: JSON.stringify(patchPayload)
+                    });
+                } else {
+                    console.log(`[registerCylinders] Registering new received serial ${sn} in cylinder_assets with product_id: ${resolvedProductId}, status: AVAILABLE`);
+                    // Create new cylinder asset
+                    const postPayload = {
+                        product_id: resolvedProductId,
+                        serial_number: sn,
+                        cylinder_status: "AVAILABLE",
+                        cylinder_condition: "GOOD",
+                        current_branch_id: por ? toNum(por.branch_id) : null,
+                        acquisition_date: nowISO().split("T")[0],
+                        expiration_date: item.expiry_date ? new Date(item.expiry_date).toISOString().split("T")[0] : null,
+                        tare_weight: item.tare_weight ? toNum(item.tare_weight) : null,
+                        cost: por ? toNum(por.unit_price) : toNum(p.cost_per_unit),
+                        created_by: userId || null
+                    };
+
+                    await fetchJson(`${base}/items/cylinder_assets`, {
+                        method: "POST",
+                        body: JSON.stringify(postPayload)
+                    });
+                }
+                successCount++;
+            } catch (err) {
+                console.error(`[registerCylinders] Error registering/updating received serial ${sn}:`, err);
+            }
         }
     }
 
     if (successCount > 0) {
-        console.log(`[registerCylinders] Successfully registered ${successCount} cylinders for PO ${poId}`);
+        console.log(`[registerCylinders] Successfully processed ${successCount} cylinders for PO ${poId}`);
     }
 }
 
@@ -1589,7 +1819,7 @@ export async function POST(req: NextRequest) {
             if (allLinkIds.length > 0) {
                 try {
                     const linkedItems = await fetchReceivingItems(base, allLinkIds);
-                    const itemIdsToDelete = linkedItems.map(it => toNum(it.receiving_item_id)).filter(id => id > 0);
+                    const itemIdsToDelete = linkedItems.filter(it => it.sourceTable === 'items').map(it => toNum(it.receiving_item_id)).filter(id => id > 0);
                     if (itemIdsToDelete.length > 0) {
                         const deleteUrl = `${base}/items/${POR_ITEMS_COLLECTION}`;
                         await fetch(deleteUrl, {
@@ -1598,8 +1828,18 @@ export async function POST(req: NextRequest) {
                             body: JSON.stringify(itemIdsToDelete),
                         });
                     }
+
+                    const serialIdsToDelete = linkedItems.filter(it => it.sourceTable === 'serial').map(it => toNum(it.receiving_item_id)).filter(id => id > 0);
+                    if (serialIdsToDelete.length > 0) {
+                        const deleteUrl = `${base}/items/purchase_order_receiving_serial`;
+                        await fetch(deleteUrl, {
+                            method: "DELETE",
+                            headers: directusHeaders(),
+                            body: JSON.stringify(serialIdsToDelete),
+                        });
+                    }
                 } catch (err) {
-                    console.error("Failed to delete RFID tags during receipt revert:", err);
+                    console.error("Failed to delete RFID tags/serials during receipt revert:", err);
                 }
             }
 

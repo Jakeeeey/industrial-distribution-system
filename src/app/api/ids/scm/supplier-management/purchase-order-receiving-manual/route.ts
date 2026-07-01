@@ -200,7 +200,7 @@ async function fetchApprovedNotReceivedPOs(base: string): Promise<POHeaderRow[]>
 
     const baseQs = [
         "limit=-1", "sort=-purchase_order_id",
-        "fields=purchase_order_id,purchase_order_no,date,date_encoded,approver_id,date_approved,payment_status,inventory_status,date_received,supplier_name,total_amount,price_type",
+        "fields=purchase_order_id,purchase_order_no,date,date_encoded,approver_id,date_approved,payment_status,inventory_status,date_received,supplier_name,total_amount,price_type,is_refill,is_tagged",
         "filter[_or][0][inventory_status][_eq]=13", "filter[_or][1][inventory_status][_eq]=9",
         "filter[_or][2][inventory_status][_eq]=11", "filter[_or][3][inventory_status][_eq]=12",
         "filter[_or][4][inventory_status][_eq]=3",
@@ -420,7 +420,9 @@ export async function GET() {
                 totalAmount: toNum(po.total_amount), currency: "PHP",
                 itemsCount: new Set(lines.map(l => l.product_id)).size,
                 branchesCount: new Set(lines.map(l => l.branch_id)).size,
-                priceType: toStr(po.price_type, "Cost Per Unit")
+                priceType: toStr(po.price_type, "Cost Per Unit"),
+                isRefill: Number(po.is_refill ?? 0) === 1,
+                isTagged: Number(po.is_tagged ?? 0) === 1
             };
         }).filter(Boolean);
         return ok(list);
@@ -439,6 +441,11 @@ export async function POST(req: NextRequest) {
             const pj = await fetchJson<{ data: POHeaderRow }>(poUrl).catch(() => null);
             const po = pj?.data;
             if (!po) return bad("PO not found", 404);
+
+            // Block receiving if refill PO and not tagged
+            if (Number(po.is_refill ?? 0) === 1 && Number(po.is_tagged ?? 0) !== 1) {
+                return bad("This refill Purchase Order is not tagged. Serials must be tagged before receiving.", 400);
+            }
 
             const lines = await fetchPOProductsByPOId(base, toNum(po.purchase_order_id));
             const porRows = await fetchPORByPOIds(base, [toNum(po.purchase_order_id)]);
@@ -482,6 +489,7 @@ export async function POST(req: NextRequest) {
                     const existing = allocationsMap.get(bid) || [];
                     allocationsMap.set(bid, [...existing, {
                         id: pors[0] ? String(pors[0]) : `${pid}-${bid}`, porId: String(pors[0] || ""),
+                        purchaseOrderProductId: String(ln.purchase_order_product_id), // Passed to align serial tagging correctly
                         productId: String(pid), branchId: String(bid), name: toStr(p?.product_name, `Product #${pid}`),
                         barcode: productDisplayCode(p, pid), uom: String(p?.unit_of_measurement?.unit_shortcut ?? "BOX").toUpperCase(),
                         expectedQty: remainingQty, receivedQty: 0, requiresRfid: false,
@@ -508,7 +516,9 @@ export async function POST(req: NextRequest) {
                           (toNum(getVal(po, "vat_amount", "vatAmount", "val_amount", "valAmount")) > 0) || 
                           (toNum(getVal(po, "withholding_tax_amount", "withholdingTaxAmount")) > 0),
                 createdAt: po.date_encoded ? new Date(po.date_encoded).toISOString() : new Date().toISOString(),
-                history
+                history,
+                isRefill: Number(po.is_refill ?? 0) === 1,
+                isTagged: Number(po.is_tagged ?? 0) === 1
             });
         }
 
@@ -555,9 +565,14 @@ export async function POST(req: NextRequest) {
             const thePoId = toNum(poId);
             if (!thePoId) return bad("Missing PO ID");
 
-            const poUrl = `${base}/items/${PO_COLLECTION}/${thePoId}?fields=purchase_order_id,purchase_order_no,supplier_name,discount_type.*,discount_type.line_per_discount_type.line_id.*,inventory_status,price_type,date_encoded,receiving_type,vat_amount,withholding_tax_amount`;
+            const poUrl = `${base}/items/${PO_COLLECTION}/${thePoId}?fields=purchase_order_id,purchase_order_no,supplier_name,discount_type.*,discount_type.line_per_discount_type.line_id.*,inventory_status,price_type,date_encoded,receiving_type,vat_amount,withholding_tax_amount,is_refill,is_tagged`;
             const pj = await fetchJson<{ data: POHeaderRow }>(poUrl);
             const po = pj?.data;
+
+            // Block saving receipt if refill PO and not tagged
+            if (Number(po?.is_refill ?? 0) === 1 && Number(po?.is_tagged ?? 0) !== 1) {
+                return bad("This refill Purchase Order is not tagged. Serials must be tagged before receiving.", 400);
+            }
             let poDiscountPercent = 0;
             const dType = po?.discount_type;
             if (dType?.line_per_discount_type?.length) poDiscountPercent = calculateDiscountFromLines(dType.line_per_discount_type);
@@ -633,8 +648,10 @@ export async function POST(req: NextRequest) {
                 const vatAmtTotal = Number((lineNet - vatExclTotal).toFixed(2));
                 const ewtAmtTotal = Number((vatExclTotal * 0.01).toFixed(2));
 
+                const isRefill = Number(po?.is_refill ?? 0) === 1;
                 const patch: Record<string, unknown> = {
-                    receipt_no: receiptNo, receipt_date: receiptDate, received_quantity: newQty, received_date: nowISO(), isPosted: 0,
+                    receipt_no: receiptNo, receipt_date: receiptDate, received_quantity: newQty, received_date: nowISO(), 
+                    isPosted: isRefill ? 0 : 1,
                     discount_type: dtId || null, discounted_amount: lineDisc,
                     vat_amount: vatAmtTotal, withholding_amount: ewtAmtTotal,
                     total_amount: Number(lineGross.toFixed(2))
@@ -674,6 +691,23 @@ export async function POST(req: NextRequest) {
                             // If it fails, we might want to try with a unique RFID fallback if it's critical
                             // but usually we want to respect the uniqueness constraint
                         });
+
+                        // ✅ NEW: Save to purchase_order_receiving_serial table for all POs (dev-rule.md requirement)
+                        const recSerialPayload: Record<string, unknown> = {
+                            purchase_order_product_id: Number(porId),
+                            product_id: Number(pId),
+                            serial_number: String(snValue).trim(),
+                        };
+                        if (typeof sObj === 'object' && sObj.tareWeight) {
+                            recSerialPayload.tare_weight = toNum(sObj.tareWeight);
+                        }
+
+                        await fetchJson(`${base}/items/purchase_order_receiving_serial`, {
+                            method: "POST",
+                            body: JSON.stringify(recSerialPayload)
+                        }).catch(e => {
+                            console.error(`Failed to insert into purchase_order_receiving_serial for ${snValue}:`, e.message);
+                        });
                     }
                 }
             }
@@ -681,9 +715,10 @@ export async function POST(req: NextRequest) {
             const fLines = await fetchPOProductsByPOId(base, thePoId), fPors = await fetchPORByPOIds(base, [thePoId]);
             const updatedPorIdsByKey = buildPorIdsByKey(fPors);
 
+            const isRefill = Number(po?.is_refill ?? 0) === 1;
             const fully = isFullyReceived(thePoId, fLines, fPors);
             const hasRec = fPors.some(r => toStr(r.receipt_no) || toNum(r.received_quantity) > 0);
-            const nextStatus = fully ? 6 : (hasRec ? 9 : po.inventory_status);
+            const nextStatus = fully ? (isRefill ? 13 : 6) : (hasRec ? 9 : po.inventory_status);
             const sMap: Record<string, string> = { "1": "Requested", "3": "Approved", "6": "Received", "9": "Partially Received", "13": "For Receiving" };
             const nStatusKey = String(nextStatus);
             const currStatusKey = String(toNum(po.inventory_status));
@@ -799,6 +834,7 @@ export async function POST(req: NextRequest) {
                 const dAmt = toNum(ln.unit_price) * (lineDiscountPercent / 100);
                 updatedAllocationsMap.set(bid, [...(updatedAllocationsMap.get(bid) ?? []), {
                     id: pors[0] ? String(pors[0]) : `${pid}-${bid}`, porId: String(pors[0] || ""),
+                    purchaseOrderProductId: String(ln.purchase_order_product_id), // Passed to align serial tagging correctly
                     productId: String(pid), branchId: String(bid), name: toStr(p?.product_name, `Product #${pid}`),
                     barcode: productDisplayCode(p, pid), uom: String(p?.unit_of_measurement?.unit_shortcut ?? "BOX").toUpperCase(),
                     expectedQty: startingBalance, receivedQty: currRecQty, requiresRfid: false,
@@ -847,6 +883,8 @@ export async function POST(req: NextRequest) {
                 priceType: toStr(getVal(po, "price_type", "priceType"), "Cost Per Unit"),
                 isInvoice: poIsInvoice,
                 createdAt: po.date_encoded ? new Date(po.date_encoded).toISOString() : new Date().toISOString(),
+                isRefill: Number(po.is_refill ?? 0) === 1,
+                isTagged: Number(po.is_tagged ?? 0) === 1,
             };
 
             return ok({ success: true, detail });
@@ -912,6 +950,115 @@ export async function POST(req: NextRequest) {
             return ok(j?.data ?? []);
         }
 
+        // =====================
+        // REFILL RECEIVING ACTIONS
+        // =====================
+
+        // Fetch pre-tagged serials from purchase_order_serial for a given purchase_order_product_id (porId) or list of ids (porIds)
+        // Comments: Updated to support batch-fetching for showing expected returning serials inline in Step 3 workbench.
+        if (action === "get_tagged_serials") {
+            const porId = toNum(body.porId);
+            const porIds: number[] = Array.isArray(body.porIds) ? body.porIds.map((val: unknown) => toNum(val)).filter((n: number) => n > 0) : [];
+
+            if (!porId && porIds.length === 0) return bad("Missing porId or porIds", 400);
+
+            let filterStr = "";
+            if (porIds.length > 0) {
+                filterStr = `filter[purchase_order_product_id][_in]=${porIds.join(",")}`;
+            } else {
+                filterStr = `filter[purchase_order_product_id][_eq]=${porId}`;
+            }
+
+            const url = `${base}/items/purchase_order_serial?limit=-1&${filterStr}&fields=id,serial_number,product_id,purchase_order_product_id`;
+            const j = await fetchJson<{ data: { id: number; serial_number: string; product_id: number; purchase_order_product_id: number }[] }>(url);
+            return ok(j?.data ?? []);
+        }
+
+        // Three-tier serial validation for refill rapid scan:
+        // 1. purchase_order_serial (pre-tagged) → source: "tagged"
+        // 2. cylinder_assets (known asset) → source: "asset"
+        // 3. Not found → requiresRegistration: true
+        // Three-tier serial validation for refill rapid scan:
+        // 1. purchase_order_serial (pre-tagged inside this PO) -> source: "tagged"
+        // 2. cylinder_assets (known asset) -> source: "asset"
+        // 3. Not found -> requiresRegistration: true
+        // Comments: Updated check to query PO-wide for auto-allocation routing.
+        if (action === "validate_scan_serial") {
+            const serialNumber = toStr(body.serialNumber).toUpperCase();
+            const poId = toNum(body.poId);
+            if (!serialNumber) return bad("Missing serialNumber", 400);
+
+            // Step 1: Check purchase_order_serial (PO-wide check for auto-allocation)
+            if (poId) {
+                // Get all purchase_order_product_ids for this PO via purchase_order_products table
+                const allPorUrl = `${base}/items/${PO_PRODUCTS_COLLECTION}?limit=-1&filter[purchase_order_id][_eq]=${poId}&fields=purchase_order_product_id,product_id`;
+                const allPorJ = await fetchJson<{ data: { purchase_order_product_id: number; product_id: number }[] }>(allPorUrl).catch(() => null);
+                const allPorIds = (allPorJ?.data ?? []).map(r => r.purchase_order_product_id);
+                
+                if (allPorIds.length > 0) {
+                    const taggedUrl = `${base}/items/purchase_order_serial?limit=1&filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&filter[purchase_order_product_id][_in]=${allPorIds.join(",")}&fields=id,serial_number,product_id,purchase_order_product_id`;
+                    const taggedJ = await fetchJson<{ data: { id: number; serial_number: string; product_id: number; purchase_order_product_id: number }[] }>(taggedUrl).catch(() => null);
+                    
+                    if (taggedJ?.data?.length) {
+                        const matched = taggedJ.data[0];
+                        return ok({
+                            valid: true,
+                            source: "tagged",
+                            serial: serialNumber,
+                            purchaseOrderProductId: matched.purchase_order_product_id
+                        });
+                    }
+                }
+            }
+
+            // Step 2: Check cylinder_assets
+            const assetUrl = `${base}/items/cylinder_assets?limit=1&filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&filter[is_deleted][_eq]=0&fields=id,serial_number,product_id,cylinder_status,cylinder_condition,tare_weight,expiration_date,current_supplier_id`;
+            const assetJ = await fetchJson<{ data: Record<string, unknown>[] }>(assetUrl).catch(() => null);
+            if (assetJ?.data?.length) {
+                const asset = assetJ.data[0];
+                return ok({
+                    valid: true,
+                    source: "asset",
+                    serial: serialNumber,
+                    asset: {
+                        id: asset.id,
+                        cylinder_status: asset.cylinder_status,
+                        cylinder_condition: asset.cylinder_condition,
+                        tare_weight: asset.tare_weight,
+                        expiration_date: asset.expiration_date,
+                        product_id: asset.product_id,
+                    }
+                });
+            }
+
+            // Step 3: Not found — requires new registration
+            return ok({ valid: false, requiresRegistration: true, serial: serialNumber });
+        }
+
+        // Register a new cylinder into cylinder_assets with status WITH_SUPPLIER
+        if (action === "register_cylinder") {
+            const { productId, serialNumber, tareWeight, expirationDate, currentSupplierId } = body;
+            if (!productId || !serialNumber) return bad("Missing productId or serialNumber", 400);
+
+            const payload: Record<string, unknown> = {
+                product_id: toNum(productId),
+                serial_number: toStr(serialNumber).toUpperCase(),
+                cylinder_status: "WITH_SUPPLIER",
+                cylinder_condition: "GOOD",
+                is_deleted: 0,
+            };
+            if (tareWeight) payload.tare_weight = parseFloat(String(tareWeight));
+            if (expirationDate) payload.expiration_date = toStr(expirationDate);
+            if (currentSupplierId) payload.current_supplier_id = toNum(currentSupplierId);
+
+            const created = await fetchJson<{ data: Record<string, unknown> }>(`${base}/items/cylinder_assets`, {
+                method: "POST",
+                body: JSON.stringify(payload),
+            });
+            return ok({ id: created?.data?.id, serial_number: created?.data?.serial_number });
+        }
+
         return bad("Unknown action");
+
     } catch (e: unknown) { return bad((e as Error).message, 500); }
 }

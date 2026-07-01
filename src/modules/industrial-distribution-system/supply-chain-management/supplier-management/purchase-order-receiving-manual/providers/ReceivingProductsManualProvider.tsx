@@ -14,11 +14,14 @@ export type ReceivingListItem = {
     currency: "PHP";
     itemsCount: number;
     branchesCount: number;
+    isRefill?: boolean;
+    isTagged?: boolean; // Purchase Order tag status
 };
 
 export type ReceivingPOItem = {
     id: string; // unique identifier (porId or placeholder)
     porId?: string;
+    purchaseOrderProductId?: string; // target purchase_order_product_id from DB
     productId: string;
     branchId?: string;
     name: string;
@@ -73,6 +76,8 @@ export type ReceivingPODetail = {
     createdAt: string;
     priceType?: string;
     isInvoice?: boolean;
+    isRefill?: boolean;
+    isTagged?: boolean;
 };
 
 export type SavedItem = {
@@ -162,8 +167,8 @@ type Ctx = {
     lotsLoading: boolean;
 
     // ✅ SERIALS
-    serialsByPorId: Record<string, { sn: string; tareWeight?: string; expiryDate?: string }[]>;
-    setSerialsByPorId: React.Dispatch<React.SetStateAction<Record<string, { sn: string; tareWeight?: string; expiryDate?: string }[]>>>;
+    serialsByPorId: Record<string, { sn: string; tareWeight?: string; expiryDate?: string; isNew?: boolean }[]>;
+    setSerialsByPorId: React.Dispatch<React.SetStateAction<Record<string, { sn: string; tareWeight?: string; expiryDate?: string; isNew?: boolean }[]>>>;
 
     // ✅ UNITS
     units: UnitOption[];
@@ -201,7 +206,7 @@ type DraftState = {
     receiptType: string;
     receiptDate: string;
     metaDataByPorId?: Record<string, { batchNo?: string; lotNo?: string; lotId?: string; expiryDate?: string }>;
-    serialsByPorId?: Record<string, { sn: string; tareWeight?: string; expiryDate?: string }[]>;
+    serialsByPorId?: Record<string, { sn: string; tareWeight?: string; expiryDate?: string; isNew?: boolean }[]>;
     savedAt: number;
 };
 
@@ -250,7 +255,7 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
     const [metaDataByPorId, setMetaDataByPorId] = React.useState<Record<string, { batchNo?: string; lotNo?: string; lotId?: string; expiryDate?: string }>>({});
 
     // ✅ SERIALS
-    const [serialsByPorId, setSerialsByPorId] = React.useState<Record<string, { sn: string; tareWeight?: string; expiryDate?: string }[]>>({});
+    const [serialsByPorId, setSerialsByPorId] = React.useState<Record<string, { sn: string; tareWeight?: string; expiryDate?: string; isNew?: boolean }[]>>({});
 
     // ✅ LOTS
     const [lots, setLots] = React.useState<LotOption[]>([]);
@@ -337,8 +342,8 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
     React.useEffect(() => {
         const poId = selectedPO?.id;
         if (!poId) return;
-        // Only save if there's meaningful data
-        if (Object.keys(manualCounts).length === 0) return;
+        // Only save if there's meaningful data (either counts or serials)
+        if (Object.keys(manualCounts).length === 0 && Object.keys(serialsByPorId).length === 0) return;
         saveDraft(poId, {
             manualCounts,
             verifiedProductIds,
@@ -389,6 +394,16 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
                 const j = await asJson(r);
 
                 const detail = (j?.data ?? null) as ReceivingPODetail | null;
+                
+                // Double safety client check for untagged refill PO
+                if (detail && detail.isRefill && !detail.isTagged) {
+                    const err = "This refill Purchase Order is not tagged. Serials must be tagged before receiving.";
+                    setVerifyError(err);
+                    toast.error(err);
+                    setSelectedPO(null);
+                    return;
+                }
+
                 setSelectedPO(detail);
 
                 // ✅ PERSISTENCE: Restore draft if available
@@ -396,7 +411,8 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
                 const hasDraftData = draft ? (
                     Object.keys(draft.manualCounts || {}).length > 0 ||
                     (draft.verifiedProductIds && draft.verifiedProductIds.length > 0) ||
-                    Object.keys(draft.metaDataByPorId || {}).length > 0
+                    Object.keys(draft.metaDataByPorId || {}).length > 0 ||
+                    Object.keys(draft.serialsByPorId || {}).length > 0
                 ) : false;
 
                 if (hasDraftData && draft) {
@@ -451,18 +467,32 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
                 const j = await asJson(r);
 
                 const detail = (j?.data ?? null) as ReceivingPODetail | null;
+                
+                // Double safety client check for untagged refill PO
+                if (detail && detail.isRefill && !detail.isTagged) {
+                    const err = "This refill Purchase Order is not tagged. Serials must be tagged before receiving.";
+                    setVerifyError(err);
+                    toast.error(err);
+                    setSelectedPO(null);
+                    return;
+                }
+
                 setSelectedPO(detail);
 
                 // ✅ PERSISTENCE: Restore draft if available
                 const draft = detail?.id ? loadDraft(detail.id) : null;
                 const hasDraftData = draft ? (
                     Object.keys(draft.manualCounts || {}).length > 0 ||
-                    (draft.verifiedProductIds && draft.verifiedProductIds.length > 0)
+                    (draft.verifiedProductIds && draft.verifiedProductIds.length > 0) ||
+                    Object.keys(draft.metaDataByPorId || {}).length > 0 ||
+                    Object.keys(draft.serialsByPorId || {}).length > 0
                 ) : false;
 
                 if (hasDraftData && draft) {
                     setManualCounts(draft.manualCounts || {});
                     setVerifiedProductIds(draft.verifiedProductIds || []);
+                    setMetaDataByPorId(draft.metaDataByPorId || {});
+                    setSerialsByPorId(draft.serialsByPorId || {});
                     setReceiptNo(draft.receiptNo || "");
                     setReceiptType(draft.receiptType || "");
                     setReceiptDate(draft.receiptDate || todayYMD());
