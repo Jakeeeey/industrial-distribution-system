@@ -308,7 +308,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     // ── Step 2: Fetch all movement rows from Spring Boot ────────────────────
-    const springUrl = `${SPRING_API_BASE}/api/v-rto-operation`;
+    const springUrl = `${SPRING_API_BASE}/api/v-rto-operation/all`;
     const springRes = await fetch(springUrl, {
       headers: {
         Authorization: `Bearer ${token}`,

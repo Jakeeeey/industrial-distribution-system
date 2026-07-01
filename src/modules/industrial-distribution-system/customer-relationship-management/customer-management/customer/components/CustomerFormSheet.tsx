@@ -388,7 +388,15 @@ const customerSchema = z.object({
   type: z.enum(["Regular", "Employee"]),
   user_id: z.coerce.number().nullable(),
   tel_number: z.string(),
-  customer_tin: z.string(),
+  customer_tin: z
+    .string()
+    .refine(
+      (val) => !val || /^\d{3}-\d{3}-\d{3}(-\d{3}|-\d{5})?$/.test(val),
+      {
+        message:
+          "TIN must follow the format: 000-000-000, 000-000-000-000, or 000-000-000-00000",
+      }
+    ),
   payment_term: z.coerce.number(),
   store_type: z.coerce.number().nullable(),
   classification: z.coerce.number().nullable(),

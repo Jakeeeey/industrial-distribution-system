@@ -125,7 +125,7 @@ export async function GET(req: NextRequest) {
     const productId = searchParams.get("productId");
 
     const url = new URL(
-      `${SPRING_API_BASE}/api/v-serial-onhand-inventory`,
+      `${SPRING_API_BASE}/api/view-serial-onhand-inventory/filter`,
     );
 
     if (branchId) url.searchParams.append("branchId", branchId);

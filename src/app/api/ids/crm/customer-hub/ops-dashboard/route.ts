@@ -14,7 +14,7 @@ export async function GET() {
     }
 
     try {
-        const response = await fetch(`${SPRING_API_BASE_URL}/api/v-ids-ops-dashboard`, {
+        const response = await fetch(`${SPRING_API_BASE_URL}/api/view-ops-dashboard/all`, {
             method: "GET",
             headers: {
                 "Content-Type": "application/json",

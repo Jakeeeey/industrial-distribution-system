@@ -230,13 +230,14 @@ export async function GET(req: NextRequest) {
         }
 
         // Fetch Sales Order details line items
-        const detailsRes = await fetchDirectus(`/items/sales_order_details?filter[order_id][_eq]=${orderId}&fields=detail_id,product_id,ordered_quantity,allocated_quantity&limit=-1`);
+        const detailsRes = await fetchDirectus(`/items/sales_order_details?filter[order_id][_eq]=${orderId}&fields=detail_id,product_id,ordered_quantity,allocated_quantity,served_quantity&limit=-1`);
         
         interface RawOrderDetailItem {
           detail_id: number;
           product_id: number | { product_id: number } | null;
           ordered_quantity?: number | string;
           allocated_quantity?: number | string;
+          served_quantity?: number | string;
         }
 
         const rawItems = (detailsRes.data || []) as RawOrderDetailItem[];
@@ -326,6 +327,7 @@ export async function GET(req: NextRequest) {
             unit: unit || "Pcs",
             ordered_qty: Number(item.ordered_quantity || 0),
             allocated_qty: Number(item.allocated_quantity || 0),
+            served_qty: Number(item.served_quantity || 0),
             tagged_qty: taggedSerialsList.length,
             tagged_serials: taggedSerialsList,
           });

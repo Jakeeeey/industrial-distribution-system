@@ -60,7 +60,7 @@ export const NotificationsPanel: React.FC<NotificationsPanelProps> = ({
         list.push({
           id: `inv-low-${item.productCode}`,
           severity: "critical",
-          message: `LOW STOCK: ${item.productName} — ${item.stockOnHand} units remaining (reorder threshold: ${item.reorderPoint}).`,
+          message: `LOW STOCK ALERT: ${item.productName} has only ${item.stockOnHand} units remaining, well below the maintaining quantity of ${item.reorderPoint} units.`,
           timestamp: "Live",
           category: "inventory",
         });
@@ -73,7 +73,7 @@ export const NotificationsPanel: React.FC<NotificationsPanelProps> = ({
         list.push({
           id: `inv-warn-${item.productCode}`,
           severity: "warning",
-          message: `STOCK WARNING: ${item.productName} — ${item.stockOnHand} units nearing reorder threshold (${item.reorderPoint}).`,
+          message: `STOCK WARNING: ${item.productName} is below the maintaining quantity. Current stock: ${item.stockOnHand} units (Maintaining quantity: ${item.reorderPoint} units).`,
           timestamp: "Live",
           category: "inventory",
         });
