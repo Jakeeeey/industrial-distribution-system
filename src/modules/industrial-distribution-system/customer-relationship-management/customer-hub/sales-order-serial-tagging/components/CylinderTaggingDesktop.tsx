@@ -330,8 +330,9 @@ export default function CylinderTaggingDesktop({
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-[45%] font-bold py-2 px-4 text-xs">Product</TableHead>
+                  <TableHead className="w-[35%] font-bold py-2 px-4 text-xs">Product</TableHead>
                   <TableHead className="text-center font-bold py-2 px-2 text-xs">Target Qty</TableHead>
+                  <TableHead className="text-center font-bold py-2 px-2 text-xs">Invoiced Qty</TableHead>
                   <TableHead className="text-center font-bold py-2 px-2 text-xs">Tagged</TableHead>
                   <TableHead className="text-right font-bold py-2 px-4 text-xs">Status</TableHead>
                 </TableRow>
@@ -339,7 +340,7 @@ export default function CylinderTaggingDesktop({
               <TableBody>
                 {items.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-4 text-muted-foreground font-semibold text-xs">
+                    <TableCell colSpan={5} className="text-center py-4 text-muted-foreground font-semibold text-xs">
                       No line items found in this Sales Order.
                     </TableCell>
                   </TableRow>
@@ -350,7 +351,7 @@ export default function CylinderTaggingDesktop({
                     // Current session scans for this item
                     const sessionScans = scannedList.filter((s) => s.sales_order_detail_id === item.detail_id);
                     const totalTagged = item.tagged_qty + sessionScans.length;
-                    const percent = Math.min(100, Math.round((totalTagged / targetQty) * 100));
+                    const percent = Math.min(100, Math.round((totalTagged / item.served_qty) * 100));
                     const isComplete = totalTagged >= targetQty;
 
                     return (
@@ -373,6 +374,11 @@ export default function CylinderTaggingDesktop({
                               <p className="text-[9px] text-primary font-bold leading-none mt-0.5">(Allocated)</p>
                             )}
                           </TableCell>
+                          {/* Invoiced Qty Column (maps to served_qty) */}
+                          <TableCell className="text-center py-2 px-2 text-xs">
+                            <span className="font-bold text-foreground">{item.served_qty}</span>
+                            <span className="text-[10px] text-muted-foreground ml-0.5">{item.unit}</span>
+                          </TableCell>
                           <TableCell className="text-center py-2 px-2 text-xs">
                             <div className="flex flex-col items-center">
                               <span className="font-bold text-foreground">{totalTagged}</span>
@@ -390,7 +396,7 @@ export default function CylinderTaggingDesktop({
                               </Badge>
                             ) : (
                               <Badge variant="secondary" className="font-bold w-fit ml-auto py-0 px-1.5 text-[10px]">
-                                Pending {targetQty - totalTagged}
+                                Pending {item.served_qty - totalTagged}
                               </Badge>
                             )}
                           </TableCell>
@@ -406,7 +412,7 @@ export default function CylinderTaggingDesktop({
 
                           return (
                             <TableRow className="bg-secondary/5 border-b hover:bg-secondary/5">
-                              <TableCell colSpan={4} className="py-2 px-4">
+                              <TableCell colSpan={5} className="py-2 px-4">
                                 <LineItemSerialsList
                                   productMappedSerials={productMappedSerials}
                                   taggedSerials={item.tagged_serials}
