@@ -21,7 +21,6 @@ import {
   AlertTriangle,
   ShieldAlert,
   CheckCircle2,
-  Users,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import {
@@ -65,6 +64,7 @@ type SortKey =
   | "branchName"
   | "missingTanks"
   | "fullsDelivered"
+  | "emptiesReturned" // Added for Returned Tanks sorting capability
   | "financialExposure"
   | "unpaidBalance"
   | "lastDeliveryDate";
@@ -209,11 +209,13 @@ export function RTODealerTable() {
               <TableHead className="hidden md:table-cell py-2 px-1.5">
                 <SortHeader label="Branch" sortKey="branchName" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
               </TableHead>
-              <TableHead className="hidden lg:table-cell py-2 px-1.5">
-                <span className="font-bold text-[10px] uppercase tracking-wider text-muted-foreground/80 whitespace-nowrap">Network</span>
-              </TableHead>
+              {/* Given Tanks (formerly Cyls. w/ Dealer, sorting maps to fullsDelivered) */}
               <TableHead className="text-center py-2 px-1.5">
-                <SortHeader label="Cyls. w/ Dealer" sortKey="fullsDelivered" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                <SortHeader label="Given Tanks" sortKey="fullsDelivered" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+              </TableHead>
+              {/* Returned Tanks (sorting maps to emptiesReturned) */}
+              <TableHead className="text-center py-2 px-1.5">
+                <SortHeader label="Returned Tanks" sortKey="emptiesReturned" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
               </TableHead>
               <TableHead className="text-center py-2 px-1.5">
                 <SortHeader label="Missing Tanks" sortKey="missingTanks" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
@@ -221,11 +223,13 @@ export function RTODealerTable() {
               <TableHead className="py-2 px-1.5">
                 <span className="font-bold text-[10px] uppercase tracking-wider text-muted-foreground/80 whitespace-nowrap">Risk</span>
               </TableHead>
-              <TableHead className="hidden md:table-cell py-2 px-1.5">
-                <SortHeader label="Fin. Exposure" sortKey="financialExposure" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-              </TableHead>
+              {/* Balance (moved to match the requested layout order) */}
               <TableHead className="hidden lg:table-cell py-2 px-1.5">
                 <SortHeader label="Balance" sortKey="unpaidBalance" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+              </TableHead>
+              {/* Financial Exposure (renamed from Fin. Exposure, moved to the end) */}
+              <TableHead className="hidden md:table-cell py-2 px-1.5">
+                <SortHeader label="Financial Exposure" sortKey="financialExposure" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -296,40 +300,14 @@ export function RTODealerTable() {
                       )}
                     </TableCell>
 
-                    {/* Network (agents) */}
-                    <TableCell className="hidden lg:table-cell py-2 px-1.5 max-w-[140px]">
-                      {row.assignedAgents.length > 0 ? (
-                        <TooltipProvider delayDuration={300}>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className="flex items-center gap-1 cursor-default">
-                                <Users className="h-3 w-3 text-muted-foreground/60 shrink-0" />
-                                <span className="text-[10px] text-muted-foreground truncate">
-                                  {row.assignedAgents[0].name}
-                                  {row.assignedAgents.length > 1
-                                    ? ` +${row.assignedAgents.length - 1}`
-                                    : ""}
-                                </span>
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="max-w-[200px]">
-                              <div className="text-xs font-semibold mb-1">Assigned Agents</div>
-                              {row.assignedAgents.map((a) => (
-                                <div key={a.id} className="text-xs">
-                                  {a.name}
-                                </div>
-                              ))}
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground/60">No agents</span>
-                      )}
+                    {/* Given Tanks (formerly Cylinders with dealer, using fullsDelivered) */}
+                    <TableCell className="py-2 px-1.5 text-center font-bold text-xs text-foreground">
+                      {row.fullsDelivered}
                     </TableCell>
 
-                    {/* Cylinders with dealer */}
+                    {/* Returned Tanks (using emptiesReturned) */}
                     <TableCell className="py-2 px-1.5 text-center font-bold text-xs text-foreground">
-                      {row.activeCylindersWithDealer}
+                      {row.emptiesReturned}
                     </TableCell>
 
                     {/* Missing tanks */}
@@ -358,14 +336,14 @@ export function RTODealerTable() {
                       </Badge>
                     </TableCell>
 
-                    {/* Financial exposure */}
-                    <TableCell className="hidden md:table-cell py-2 px-1.5 font-mono text-xs text-foreground whitespace-nowrap">
-                      {formatCurrency(row.financialExposure)}
-                    </TableCell>
-
-                    {/* Balance */}
+                    {/* Balance (moved to match the requested layout order) */}
                     <TableCell className="hidden lg:table-cell py-2 px-1.5 font-mono text-xs text-foreground whitespace-nowrap">
                       {formatCurrency(row.unpaidBalance)}
+                    </TableCell>
+
+                    {/* Financial exposure (renamed to match header, moved to the end) */}
+                    <TableCell className="hidden md:table-cell py-2 px-1.5 font-mono text-xs text-foreground whitespace-nowrap">
+                      {formatCurrency(row.financialExposure)}
                     </TableCell>
                   </TableRow>
                 );
@@ -446,17 +424,27 @@ export function RTODealerTable() {
                   </Badge>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 pt-2.5 text-center border-t border-border/40 text-[10px]">
+                <div className="grid grid-cols-4 gap-1 pt-2.5 text-center border-t border-border/40 text-[10px]">
+                  {/* Given Tanks (formerly Cyls. w/ Dealer, using fullsDelivered) */}
                   <div>
-                    <div className="text-muted-foreground uppercase font-bold tracking-wider text-[8px]">
-                      Cyls. w/ Dealer
+                    <div className="text-muted-foreground uppercase font-bold tracking-wider text-[7px]">
+                      Given
                     </div>
                     <div className="font-extrabold text-xs mt-0.5 text-foreground">
-                      {row.activeCylindersWithDealer}
+                      {row.fullsDelivered}
+                    </div>
+                  </div>
+                  {/* Returned Tanks (using emptiesReturned) */}
+                  <div>
+                    <div className="text-muted-foreground uppercase font-bold tracking-wider text-[7px]">
+                      Returned
+                    </div>
+                    <div className="font-extrabold text-xs mt-0.5 text-foreground">
+                      {row.emptiesReturned}
                     </div>
                   </div>
                   <div>
-                    <div className="text-muted-foreground uppercase font-bold tracking-wider text-[8px]">
+                    <div className="text-muted-foreground uppercase font-bold tracking-wider text-[7px]">
                       Missing
                     </div>
                     <div className="font-extrabold text-xs mt-0.5 text-red-600">
@@ -464,7 +452,7 @@ export function RTODealerTable() {
                     </div>
                   </div>
                   <div>
-                    <div className="text-muted-foreground uppercase font-bold tracking-wider text-[8px]">
+                    <div className="text-muted-foreground uppercase font-bold tracking-wider text-[7px]">
                       Balance
                     </div>
                     <div className="font-bold text-xs mt-0.5 text-foreground font-mono">
