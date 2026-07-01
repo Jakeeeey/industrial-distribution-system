@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useMemo } from "react";
 import { useDashboard } from "../providers/DashboardProvider";
-import { PresetId, WidgetLayout } from "../types";
+import { PresetId, WidgetLayout, CriticalAlert } from "../types";
 import { PRESETS } from "../utils/presets";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+
+
 import {
   Select,
   SelectContent,
@@ -42,7 +44,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   onExportDashboard,
   onImportLayouts,
 }) => {
-  const { filters, loading, refreshAll, rtoData } = useDashboard();
+  const { filters, loading, refreshAll, rtoData, lowStock, activeDispatches } = useDashboard();
   const [refreshSpin, setRefreshSpin] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -194,19 +196,85 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
     e.target.value = "";
   };
 
-  const alertCount = React.useMemo(() => {
-    let count = 3; // 3 default stock/ops/sys alerts
+  const alerts = useMemo((): CriticalAlert[] => {
+    const list: CriticalAlert[] = [];
     const branchIdStr = String(filters.branchId);
+
+    // ── 1. RTO high-risk customer alerts ────────────────────────────────────
     const filteredRto = branchIdStr === "all"
       ? rtoData
       : rtoData.filter((r) => String(r.branchId) === branchIdStr);
 
     filteredRto.forEach((r) => {
-      if (r.missingStatus === "critical" && r.financialExposure > 500000) count++;
-      if (r.unpaidBalance > 200000) count++;
+      if (r.missingStatus === "critical" && r.financialExposure > 500000) {
+        list.push({
+          id: `rto-exp-${r.customerCode}`,
+          severity: "critical",
+          message: `HIGH EXPOSURE: ${r.customerName} holds ${r.missingTanks} overdue cylinders. Net exposure: ₱${(r.financialExposure / 1000).toFixed(0)}K.`,
+          timestamp: "Live",
+          category: "rto",
+        });
+      }
+      if (r.unpaidBalance > 200000) {
+        list.push({
+          id: `fin-bal-${r.customerCode}`,
+          severity: "warning",
+          message: `OVER CREDIT LIMIT: ${r.customerName} has ₱${(r.unpaidBalance / 1000).toFixed(0)}K unpaid balances. Delivery on hold.`,
+          timestamp: "Live",
+          category: "finance",
+        });
+      }
     });
-    return count;
-  }, [rtoData, filters.branchId]);
+
+    // ── 2. Low stock threshold alerts ───────────────────────────────────────
+    lowStock
+      .filter((item) => item.status === "Critical")
+      .slice(0, 3)
+      .forEach((item) => {
+        list.push({
+          id: `inv-low-${item.productCode}`,
+          severity: "critical",
+          message: `LOW STOCK ALERT: ${item.productName} has only ${item.stockOnHand} units remaining, well below the maintaining quantity of ${item.reorderPoint} units.`,
+          timestamp: "Live",
+          category: "inventory",
+        });
+      });
+
+    lowStock
+      .filter((item) => item.status === "Warning")
+      .slice(0, 2)
+      .forEach((item) => {
+        list.push({
+          id: `inv-warn-${item.productCode}`,
+          severity: "warning",
+          message: `STOCK WARNING: ${item.productName} is below the maintaining quantity. Current stock: ${item.stockOnHand} units (Maintaining quantity: ${item.reorderPoint} units).`,
+          timestamp: "Live",
+          category: "inventory",
+        });
+      });
+
+    // ── 3. Late / pending dispatch alerts ───────────────────────────────────
+    const filteredDispatches = branchIdStr === "all"
+      ? activeDispatches
+      : activeDispatches.filter((d) => d.route?.includes(branchIdStr));
+
+    filteredDispatches
+      .filter((d) => d.status === "Pending" || d.priority === "Critical")
+      .slice(0, 2)
+      .forEach((d) => {
+        list.push({
+          id: `dispatch-pending-${d.dispatchNo}`,
+          severity: d.priority === "Critical" ? "critical" : "warning",
+          message: `DISPATCH PENDING: Trip ${d.dispatchNo} (Driver: ${d.driverName}, ${d.vehiclePlate}) awaiting clearance.`,
+          timestamp: d.time || "Live",
+          category: "operations",
+        });
+      });
+
+    // Sort: critical → warning → info
+    const priority: Record<string, number> = { critical: 3, warning: 2, info: 1 };
+    return list.sort((a, b) => priority[b.severity] - priority[a.severity]);
+  }, [rtoData, lowStock, activeDispatches, filters.branchId]);
 
   const handleRefresh = async () => {
 
@@ -327,9 +395,9 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
           >
             <Bell className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="hidden xs:inline">Alerts</span>
-            {alertCount > 0 && (
+            {alerts.length > 0 && (
               <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[8px] font-black text-white ring-2 ring-background animate-pulse">
-                {alertCount}
+                {alerts.length}
               </span>
             )}
           </Button>
