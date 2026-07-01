@@ -57,6 +57,7 @@ export function BulkRegisterModal({
   const [data, setData] = useState<RegisterData[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [showErrors, setShowErrors] = useState(false);
 
   // Bulk fields
   const [bulkCondition, setBulkCondition] = useState("GOOD");
@@ -109,6 +110,18 @@ export function BulkRegisterModal({
       return;
     }
 
+    // Check if any serial is missing an expiration date or a valid tare weight
+    const hasMissingFields = data.some(
+      (item) => !item.expiration || !item.tare || parseFloat(item.tare) <= 0
+    );
+
+    if (hasMissingFields) {
+      setShowErrors(true);
+      toast.error("Expiration date and tare weight are required for all serials.");
+      return;
+    }
+
+    setShowErrors(false);
     setIsConfirmOpen(true);
   };
 
@@ -242,8 +255,8 @@ export function BulkRegisterModal({
           <div className="grid grid-cols-5 gap-4 px-6 py-2 bg-slate-100 dark:bg-slate-800/50 rounded-lg text-[10px] font-black uppercase tracking-widest text-muted-foreground border border-border/50">
             <div>Serial Number</div>
             <div>Cylinder Condition</div>
-            <div>Expiration Date</div>
-            <div>Tare Weight (KG)</div>
+            <div>Expiration Date <span className="text-destructive">*</span></div>
+            <div>Tare Weight (KG) <span className="text-destructive">*</span></div>
             <div>Remarks</div>
           </div>
 
@@ -277,8 +290,11 @@ export function BulkRegisterModal({
                     <Input
                       type="date"
                       value={item.expiration}
-                      onChange={(e) => setData(prev => prev.map((d, i) => i === idx ? { ...d, expiration: e.target.value } : d))}
-                      className="h-9 bg-background"
+                      onChange={(e) => {
+                        setData(prev => prev.map((d, i) => i === idx ? { ...d, expiration: e.target.value } : d));
+                        if (showErrors && e.target.value) setShowErrors(false);
+                      }}
+                      className={`h-9 bg-background ${showErrors && !item.expiration ? 'border-destructive focus-visible:ring-destructive' : ''}`}
                     />
                   </div>
 
@@ -286,9 +302,12 @@ export function BulkRegisterModal({
                     <Input
                       type="number"
                       value={item.tare}
-                      onChange={(e) => setData(prev => prev.map((d, i) => i === idx ? { ...d, tare: e.target.value } : d))}
+                      onChange={(e) => {
+                        setData(prev => prev.map((d, i) => i === idx ? { ...d, tare: e.target.value } : d));
+                        if (showErrors && e.target.value && parseFloat(e.target.value) > 0) setShowErrors(false);
+                      }}
                       placeholder="0.00"
-                      className="h-9"
+                      className={`h-9 ${showErrors && (!item.tare || parseFloat(item.tare) <= 0) ? 'border-destructive focus-visible:ring-destructive' : ''}`}
                     />
                   </div>
 
