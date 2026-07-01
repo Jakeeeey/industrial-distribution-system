@@ -13,3 +13,18 @@ export {
   adjustWiwoDetail,
   approveConsolidationHeader,
 } from "./billing-consolidation.service";
+
+// Adjusted: Re-exporting parameter and payload types for consumers of the service functions
+export type {
+  ConsolidationHeader,
+  ConsolidationTransaction,
+  ConsolidationWiwoHeader,
+  ConsolidationMeterReading,
+  ConsolidationAttachment,
+  ConsolidationAuditEntry,
+  ConsolidationHeaderListParams,
+  MeterReadingAdjustPayload,
+  WiwoDetailAdjustPayload,
+  ApproveHeaderPayload,
+  WiwoLineType,
+} from "./billing-consolidation.service";
