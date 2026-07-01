@@ -51,7 +51,7 @@ export const AlertsFeedWidget: React.FC = () => {
         list.push({
           id: `inv-low-${item.productCode}`,
           severity: "critical",
-          message: `LOW STOCK: ${item.productName} — ${item.stockOnHand} units remaining (reorder threshold: ${item.reorderPoint}).`,
+         message: `LOW STOCK ALERT: ${item.productName} has ${item.stockOnHand} units remaining, which is below the maintaining quantity of ${item.reorderPoint} units.`,
           timestamp: "Live",
           category: "inventory",
         });
@@ -64,7 +64,7 @@ export const AlertsFeedWidget: React.FC = () => {
         list.push({
           id: `inv-warn-${item.productCode}`,
           severity: "warning",
-          message: `STOCK WARNING: ${item.productName} — ${item.stockOnHand} units nearing reorder threshold (${item.reorderPoint}).`,
+         message: `STOCK WARNING: ${item.productName} has ${item.stockOnHand} units remaining and is approaching the maintaining quantity of ${item.reorderPoint} units.`,
           timestamp: "Live",
           category: "inventory",
         });
