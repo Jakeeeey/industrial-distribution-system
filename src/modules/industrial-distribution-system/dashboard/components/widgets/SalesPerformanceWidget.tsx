@@ -1,9 +1,13 @@
 // src/modules/industrial-distribution-system/dashboard/components/widgets/SalesPerformanceWidget.tsx
+// NOTE: Replaced hardcoded target and daily coordinate arrays with live database values from useDashboard context.
+// Renders dynamic monthly targets, actual revenues, and day-by-day trend area charts.
 
 "use client";
 
-import React, { useMemo } from "react";
+import React from "react";
+import { useDashboard } from "../../providers/DashboardProvider";
 import { formatCurrency, formatPercent } from "../../utils/kpiCalculations";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   AreaChart,
   Area,
@@ -15,23 +19,25 @@ import {
 } from "recharts";
 
 export const SalesPerformanceWidget: React.FC = () => {
-  // Mock monthly target and revenue metrics for dashboard visualization
-  const targetAmount = 60000000;
-  const actualAmount = 54250000;
-  const progressPercent = (actualAmount / targetAmount) * 100;
+  const { revenueData, loading } = useDashboard();
 
-  // Daily revenue tracking data
-  const revenueTrendData = useMemo(() => {
-    return [
-      { day: "Jun 01", sales: 1200000 },
-      { day: "Jun 05", sales: 1550000 },
-      { day: "Jun 10", sales: 2450000 },
-      { day: "Jun 15", sales: 1800000 },
-      { day: "Jun 20", sales: 3200000 },
-      { day: "Jun 25", sales: 2840000 },
-      { day: "Jun 29", sales: 4100000 },
-    ];
-  }, []);
+  if (loading || !revenueData) {
+    return (
+      <div className="flex flex-col lg:flex-row gap-4 h-full items-center justify-between p-2">
+        <div className="w-full lg:w-[180px] shrink-0 space-y-3">
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-20 w-20 rounded-full mx-auto" />
+          <Skeleton className="h-6 w-3/4 mx-auto" />
+        </div>
+        <div className="flex-1 w-full h-[140px]">
+          <Skeleton className="h-full w-full" />
+        </div>
+      </div>
+    );
+  }
+
+  const { targetAmount, actualAmount, revenueTrend } = revenueData;
+  const progressPercent = targetAmount > 0 ? (actualAmount / targetAmount) * 100 : 0;
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 h-full items-center justify-between">
@@ -58,7 +64,7 @@ export const SalesPerformanceWidget: React.FC = () => {
               className="stroke-indigo-500 fill-transparent"
               strokeWidth="8"
               strokeDasharray={`${2 * Math.PI * 40}`}
-              strokeDashoffset={`${2 * Math.PI * 40 * (1 - progressPercent / 100)}`}
+              strokeDashoffset={`${2 * Math.PI * 40 * (1 - Math.min(progressPercent, 100) / 100)}`}
               strokeLinecap="round"
             />
           </svg>
@@ -85,9 +91,9 @@ export const SalesPerformanceWidget: React.FC = () => {
 
         <div className="flex-1 w-full min-h-[140px]">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={revenueTrendData} margin={{ top: 5, right: 5, left: -15, bottom: 0 }}>
+            <AreaChart data={revenueTrend} margin={{ top: 5, right: 5, left: -15, bottom: 0 }}>
               <defs>
-                <linearGradient id="colorSales" cx="50%" cy="50%" r="50%">
+                <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#6366f1" stopOpacity={0.25} />
                   <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0} />
                 </linearGradient>

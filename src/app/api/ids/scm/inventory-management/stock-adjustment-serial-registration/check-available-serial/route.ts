@@ -18,13 +18,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "No access token found" }, { status: 401 });
     }
 
-    const { exists, location } = await stockAdjustmentService.checkSerialExists(
+    const { exists, location, productId } = await stockAdjustmentService.checkSerialExists(
       serial, 
       token, 
       branchId ? Number(branchId) : undefined
     );
     
-    return NextResponse.json({ exists, location });
+    return NextResponse.json({ exists, location, productId });
   } catch (error) {
     return handleApiError(error);
   }

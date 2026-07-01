@@ -447,7 +447,6 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
                     <SelectContent className="rounded-xl border-zinc-200 dark:border-zinc-800">
                       <SelectItem value="BOTH">BOTH (KILO & METERED)</SelectItem>
                       <SelectItem value="KILO">KILO (By Weight)</SelectItem>
-                      <SelectItem value="METERED">METERED (By Volume)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

@@ -169,7 +169,7 @@ export function useStockAdjustmentSerialForm() {
     }
   }, []);
 
-  const validateSerialAvailability = useCallback(async (serial: string, branchId?: number): Promise<{ exists: boolean; location?: string }> => {
+  const validateSerialAvailability = useCallback(async (serial: string, branchId?: number): Promise<{ exists: boolean; location?: string; productId?: number }> => {
     try {
       const params = new URLSearchParams();
       params.set("serial", serial);
@@ -180,7 +180,7 @@ export function useStockAdjustmentSerialForm() {
       );
       if (!response.ok) return { exists: false };
       const result = await response.json();
-      return { exists: !!result.exists, location: result.location };
+      return { exists: !!result.exists, location: result.location, productId: result.productId };
     } catch (err) {
       console.error("Failed to validate Serial availability:", err);
       return { exists: false };

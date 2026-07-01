@@ -50,10 +50,10 @@ export const CylinderAgingWidget: React.FC = () => {
 
   // Aggregate into buckets
   const chartData = useMemo(() => {
-    let bucket0_30 = 0;
+    let bucket0_15 = 0;
+    let bucket16_30 = 0;
     let bucket31_60 = 0;
-    let bucket61_90 = 0;
-    let bucket90Plus = 0;
+    let bucket61Plus = 0;
 
     if (data.length > 0) {
       data.forEach((r: any) => {
@@ -63,31 +63,31 @@ export const CylinderAgingWidget: React.FC = () => {
         const total = r.totalCylinders || 0;
         const avgDays = r.averageDaysWithCustomer || 0;
 
-        if (avgDays <= 30) {
-          bucket0_30 += total;
+        if (avgDays <= 15) {
+          bucket0_15 += total;
+        } else if (avgDays <= 30) {
+          bucket16_30 += total;
         } else if (avgDays <= 60) {
           bucket31_60 += total;
-        } else if (avgDays <= 90) {
-          bucket61_90 += total;
         } else {
-          bucket90Plus += total;
+          bucket61Plus += total;
         }
       });
     }
 
     // Default mock data seed if actual database has no cylinders checked out yet
-    if (bucket0_30 === 0 && bucket31_60 === 0 && bucket61_90 === 0 && bucket90Plus === 0) {
-      bucket0_30 = 120;
-      bucket31_60 = 45;
-      bucket61_90 = 24;
-      bucket90Plus = 15;
+    if (bucket0_15 === 0 && bucket16_30 === 0 && bucket31_60 === 0 && bucket61Plus === 0) {
+      bucket0_15 = 85;
+      bucket16_30 = 45;
+      bucket31_60 = 30;
+      bucket61Plus = 15;
     }
 
     return [
-      { name: "0-30 Days", count: bucket0_30, color: "#10b981", status: "Active" },
-      { name: "31-60 Days", count: bucket31_60, color: "#f59e0b", status: "Overdue" },
-      { name: "61-90 Days", count: bucket61_90, color: "#f97316", status: "Critical" },
-      { name: "90+ Days", count: bucket90Plus, color: "#ef4444", status: "Severely Overdue" },
+      { name: "0-15 Days", count: bucket0_15, color: "#10b981", status: "Active" },
+      { name: "16-30 Days", count: bucket16_30, color: "#f59e0b", status: "Overdue" },
+      { name: "31-60 Days", count: bucket31_60, color: "#f97316", status: "Critical" },
+      { name: "61+ Days", count: bucket61Plus, color: "#ef4444", status: "Severely Overdue" },
     ];
   }, [data]);
 
