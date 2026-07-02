@@ -101,45 +101,47 @@ export const priceListColumns: ColumnDef<CompetitorPriceEntry>[] = [
 	{
 		accessorKey: "competitor_id",
 		id: "competitor",
-		header: ({ column }) => <SortableHeader column={column} label="Competitor" />,
+		header: "Competitor",
 		cell: ({ row }) => (
 			<span className="font-medium">{resolveCompetitorName(row.original)}</span>
 		),
-		sortingFn: (a, b) =>
-			resolveCompetitorName(a.original).localeCompare(
-				resolveCompetitorName(b.original)
-			),
+		enableSorting: false,
 	},
 	{
 		accessorKey: "product_id",
-		header: ({ column }) => <SortableHeader column={column} label="Product" />,
+		header: "Product",
 		cell: ({ row }) => (
 			<span className="font-semibold text-sm">
 				{row.original.product_name || `Product #${row.original.product_id}`}
 			</span>
 		),
+		enableSorting: false,
 	},
 	{
 		accessorKey: "province",
-		header: ({ column }) => <SortableHeader column={column} label="Province" />,
+		header: "Province",
 		cell: ({ row }) => row.original.province || <span className="text-muted-foreground">—</span>,
+		enableSorting: false,
 	},
 	{
 		accessorKey: "municipality",
-		header: ({ column }) => <SortableHeader column={column} label="Municipality" />,
+		header: "Municipality",
 		cell: ({ row }) =>
 			row.original.municipality || <span className="text-muted-foreground">—</span>,
+		enableSorting: false,
 	},
 	{
 		accessorKey: "barangay",
-		header: ({ column }) => <SortableHeader column={column} label="Barangay" />,
+		header: "Barangay",
 		cell: ({ row }) =>
 			row.original.barangay || <span className="text-muted-foreground">—</span>,
+		enableSorting: false,
 	},
 	{
 		accessorKey: "source_type",
-		header: ({ column }) => <SortableHeader column={column} label="Source" />,
+		header: "Source",
 		cell: ({ row }) => <SourceBadge value={row.original.source_type} />,
+		enableSorting: false,
 	},
 	{
 		accessorKey: "size",
