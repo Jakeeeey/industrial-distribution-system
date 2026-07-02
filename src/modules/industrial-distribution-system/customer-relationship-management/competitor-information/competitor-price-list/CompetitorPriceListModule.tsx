@@ -30,8 +30,10 @@ function CompetitorPriceListContent() {
     error,
     refetch,
     filters,
+    appliedFilters,
     setFilter,
     resetFilters,
+    applyFilters,
     hasActiveFilters,
     filteredEntries,
     chartFilteredEntries,
@@ -56,32 +58,32 @@ function CompetitorPriceListContent() {
     "competitor" | "product" | null
   >(null);
 
-  // Sync chartFocusCompetitorId with filters.competitorId when filter is set explicitly
+  // Sync chartFocusCompetitorId with appliedFilters.competitorId when filter is set explicitly
   React.useEffect(() => {
-    if (filters.competitorId) {
-      setChartFocusCompetitorId(filters.competitorId);
+    if (appliedFilters.competitorId) {
+      setChartFocusCompetitorId(appliedFilters.competitorId);
     }
-  }, [filters.competitorId]);
+  }, [appliedFilters.competitorId]);
 
-  // Sync chartFocusProductId with filters.productId when filter is set explicitly
+  // Sync chartFocusProductId with appliedFilters.productId when filter is set explicitly
   React.useEffect(() => {
-    if (filters.productId) {
-      setChartFocusProductId(filters.productId);
+    if (appliedFilters.productId) {
+      setChartFocusProductId(appliedFilters.productId);
     }
-  }, [filters.productId]);
+  }, [appliedFilters.productId]);
 
   // Clear focus when filters are reset
   React.useEffect(() => {
-    if (!filters.competitorId && !filters.productId && !filters.search) {
+    if (!appliedFilters.competitorId && !appliedFilters.productId && !appliedFilters.search) {
       setChartFocusCompetitorId("");
       setChartFocusProductId("");
       setChartFocusMode(null);
     }
-  }, [filters.competitorId, filters.productId, filters.search]);
+  }, [appliedFilters.competitorId, appliedFilters.productId, appliedFilters.search]);
 
   const selectedCompetitorId = React.useMemo(() => {
-    return filters.competitorId || chartFocusCompetitorId || "";
-  }, [filters.competitorId, chartFocusCompetitorId]);
+    return appliedFilters.competitorId || chartFocusCompetitorId || "";
+  }, [appliedFilters.competitorId, chartFocusCompetitorId]);
 
   const selectedCompetitorName = React.useMemo(() => {
     if (!selectedCompetitorId) return undefined;
@@ -89,8 +91,8 @@ function CompetitorPriceListContent() {
   }, [selectedCompetitorId, competitors]);
 
   const selectedProductName = React.useMemo(() => {
-    return filters.productId || chartFocusProductId;
-  }, [filters.productId, chartFocusProductId]);
+    return appliedFilters.productId || chartFocusProductId;
+  }, [appliedFilters.productId, chartFocusProductId]);
 
   // Filter down entries for the Chart and Snapshot Panel based on focused product and competitor
   const chartAndAnalyticsEntries = React.useMemo(() => {
@@ -103,7 +105,7 @@ function CompetitorPriceListContent() {
     }
 
     // 2. Filter by focused competitor
-    const activeCompId = filters.competitorId || chartFocusCompetitorId;
+    const activeCompId = appliedFilters.competitorId || chartFocusCompetitorId;
     if (activeCompId) {
       result = result.filter((entry) => {
         const id =
@@ -119,7 +121,7 @@ function CompetitorPriceListContent() {
   }, [
     filteredEntries,
     selectedProductName,
-    filters.competitorId,
+    appliedFilters.competitorId,
     chartFocusCompetitorId,
   ]);
 
@@ -232,9 +234,10 @@ function CompetitorPriceListContent() {
         <div className="flex-1 min-w-0 space-y-4 w-full">
           <PriceListFilters
             filters={filters}
-            activeProductId={selectedProductName}
+            activeProductId={filters.productId || ""}
             setFilter={setFilter}
             resetFilters={resetFilters}
+            applyFilters={applyFilters}
             hasActiveFilters={hasActiveFilters}
             competitors={competitors}
             products={products}
@@ -247,8 +250,8 @@ function CompetitorPriceListContent() {
             data={chartEntries}
             competitorId={selectedCompetitorId}
             competitorName={selectedCompetitorName}
-            dateFrom={filters.dateFrom}
-            dateTo={filters.dateTo}
+            dateFrom={appliedFilters.dateFrom}
+            dateTo={appliedFilters.dateTo}
             focusMode={chartFocusMode}
           />
 
