@@ -4,7 +4,8 @@
 import * as React from "react";
 import { fetchCylinderMovements, fetchCylinderProducts } from "./providers/fetchProvider";
 import { groupMovementsBySerial, detectExceptions } from "./service";
-import { SerialMovement, CylinderSummary, ExceptionDetail } from "./types";
+// Comment: Removed unused type imports CylinderSummary, ExceptionDetail
+import { SerialMovement } from "./types";
 import { CylinderListTable } from "./components/CylinderListTable";
 import { MovementLedgerTable } from "./components/MovementLedgerTable";
 import { ExceptionsPanel } from "./components/ExceptionsPanel";
@@ -14,16 +15,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+// Comment: Removed unused icons Layers, ShieldAlert, ArrowUpRight, ArrowDownLeft, AlertTriangle
 import { 
     Search, 
     RefreshCw, 
-    Layers, 
-    ShieldAlert, 
     ScanLine,
     Database,
-    ArrowUpRight,
-    ArrowDownLeft,
-    AlertTriangle,
     HelpCircle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -63,17 +60,21 @@ export function CylinderMovementsModule() {
                 const defaultProd = productsData.find(p => p.product_name.includes("50KG")) || productsData[0];
                 setSelectedProductName(defaultProd.product_name);
             }
-        } catch (err: any) {
+        // Comment: Avoid explicit any by typing err as unknown and checking instanceof Error
+        } catch (err) {
             console.error("[Cylinder Movements] Initial fetch error:", err);
-            setError(err.message || "Failed to establish secure connection to serial movement view.");
+            const errorMessage = err instanceof Error ? err.message : "Failed to establish secure connection to serial movement view.";
+            setError(errorMessage);
             toast.error("Could not load serial movements data.");
         } finally {
             setIsLoading(false);
         }
     };
 
+    // Comment: Disable react-hooks/exhaustive-deps warning since loadData should run strictly on mount
     React.useEffect(() => {
         loadData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Filter product list options dynamically from movements unique list OR directus master

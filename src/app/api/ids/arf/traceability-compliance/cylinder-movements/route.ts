@@ -9,21 +9,48 @@ export const dynamic = "force-dynamic";
 const SPRING_API_BASE_URL = process.env.SPRING_API_BASE_URL;
 const COOKIE_NAME = "vos_access_token";
 
+interface RawSerialMovement {
+    movementAt?: unknown;
+    ts?: unknown;
+    productId?: unknown;
+    product_id?: unknown;
+    productName?: unknown;
+    product_name?: unknown;
+    serialNumber?: unknown;
+    serial_number?: unknown;
+    branchId?: unknown;
+    branch_id?: unknown;
+    branchName?: unknown;
+    branch_name?: unknown;
+    documentNo?: unknown;
+    docNo?: unknown;
+    doc_no?: unknown;
+    documentType?: unknown;
+    docType?: unknown;
+    doc_type?: unknown;
+    inQty?: unknown;
+    in_qty?: unknown;
+    outQty?: unknown;
+    out_qty?: unknown;
+}
+
 /**
  * Normalizes snake_case or camelCase properties from Spring Boot to a strict camelCase SerialMovement object.
  */
-function normalizeRow(raw: any): SerialMovement {
+// Comment: Normalized shape from Spring Boot API response avoiding explicit any
+function normalizeRow(raw: unknown): SerialMovement {
+    const r = raw as RawSerialMovement;
     return {
-        movementAt: String(raw.movementAt ?? raw.ts ?? "").trim(),
-        productId: Number(raw.productId ?? raw.product_id ?? 0),
-        productName: String(raw.productName ?? raw.product_name ?? "").trim(),
-        serialNumber: String(raw.serialNumber ?? raw.serial_number ?? "").trim(),
-        branchId: Number(raw.branchId ?? raw.branch_id ?? 0),
-        branchName: String(raw.branchName ?? raw.branch_name ?? "").trim(),
-        documentNo: String(raw.documentNo ?? raw.docNo ?? raw.doc_no ?? "").trim(),
-        documentType: String(raw.documentType ?? raw.docType ?? raw.doc_type ?? "").trim(),
-        inQty: Number(raw.inQty ?? raw.in_qty ?? 0),
-        outQty: Number(raw.outQty ?? raw.out_qty ?? 0),
+        movementAt: String(r.movementAt ?? r.ts ?? "").trim(),
+        productId: Number(r.productId ?? r.product_id ?? 0),
+        productName: String(r.productName ?? r.product_name ?? "").trim(),
+        serialNumber: String(r.serialNumber ?? r.serial_number ?? "").trim(),
+        branchId: Number(r.branchId ?? r.branch_id ?? 0),
+        branchName: String(r.branchName ?? r.branch_name ?? "").trim(),
+        documentNo: String(r.documentNo ?? r.docNo ?? r.doc_no ?? "").trim(),
+        documentType: String(r.documentType ?? r.docType ?? r.doc_type ?? "").trim(),
+        inQty: Number(r.inQty ?? r.in_qty ?? 0),
+        outQty: Number(r.outQty ?? r.out_qty ?? 0),
     };
 }
 
@@ -70,17 +97,19 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
             );
         }
 
-        const rawData = await springRes.json();
+        // Comment: Avoid explicit 'any' for incoming raw json data
+        const rawData = (await springRes.json()) as unknown;
 
         // Extract array from either raw list or wrapped envelopes
-        let dataArray: any[] = [];
+        let dataArray: unknown[] = [];
         if (Array.isArray(rawData)) {
             dataArray = rawData;
         } else if (rawData && typeof rawData === "object") {
-            if (Array.isArray(rawData.v_serial_movements)) {
-                dataArray = rawData.v_serial_movements;
-            } else if (Array.isArray(rawData.data)) {
-                dataArray = rawData.data;
+            const obj = rawData as Record<string, unknown>;
+            if (Array.isArray(obj.v_serial_movements)) {
+                dataArray = obj.v_serial_movements;
+            } else if (Array.isArray(obj.data)) {
+                dataArray = obj.data;
             }
         }
 

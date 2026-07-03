@@ -58,7 +58,7 @@ export function SerialEntryPanel({ line, isReadOnly, onAddSerial, onRemoveDraft 
     // Border color by status
     const borderClass = {
         complete: "border-emerald-500/60 ring-1 ring-emerald-500/20",
-        incomplete: "border-orange-400/40",
+        incomplete: "border-border",
         excess: "border-red-500/60 ring-1 ring-red-500/20",
     }[status];
 
@@ -353,9 +353,9 @@ export function SerialEntryPanel({ line, isReadOnly, onAddSerial, onRemoveDraft 
                                 {line.draftSerials.map((s, idx) => (
                                     <div
                                         key={`draft-${s.serial_number}-${idx}`}
-                                        className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 group"
+                                        className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md bg-primary/10 border border-primary/20 group"
                                     >
-                                        <span className="text-[11px] font-mono font-medium text-blue-700 dark:text-blue-300">
+                                        <span className="text-[11px] font-mono font-medium text-primary">
                                             {String(line.savedSerials.length + idx + 1).padStart(2, "0")}. {s.serial_number}
                                         </span>
                                         <Button

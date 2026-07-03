@@ -88,7 +88,7 @@ export function SerialTaggingSummary({
                         serialsComplete && totalOrderedCount > 0
                             ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800"
                             : totalEntered > 0
-                            ? "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800"
+                            ? "bg-primary/10 border-primary/20"
                             : "bg-background border-border/50"
                     )}>
                         <div className="flex items-center gap-1 text-muted-foreground">
@@ -98,7 +98,7 @@ export function SerialTaggingSummary({
                         <div className="flex items-center gap-2">
                             <span className={cn(
                                 "text-xl font-black tabular-nums",
-                                serialsComplete ? "text-emerald-600" : totalEntered > 0 ? "text-blue-600" : "text-foreground"
+                                serialsComplete ? "text-emerald-600" : totalEntered > 0 ? "text-primary" : "text-foreground"
                             )}>
                                 {totalEntered}
                             </span>
@@ -109,7 +109,7 @@ export function SerialTaggingSummary({
                                         "text-[8px] font-black px-1.5 h-4",
                                         serialsComplete
                                             ? "border-emerald-500/30 text-emerald-600 bg-emerald-500/10"
-                                            : "border-blue-400/30 text-blue-600 bg-blue-500/10"
+                                            : "border-primary/30 text-primary bg-primary/10"
                                     )}
                                 >
                                     {serialsComplete ? "COMPLETE" : `${totalOrderedCount - totalEntered} REMAINING`}
@@ -130,7 +130,7 @@ export function SerialTaggingSummary({
                         </div>
                         <div className="flex justify-between text-xs">
                             <span className="text-muted-foreground font-medium flex items-center gap-2">
-                                <div className="h-2 w-2 rounded-full bg-blue-500" />
+                                <div className="h-2 w-2 rounded-full bg-primary" />
                                 Draft (Unsaved)
                             </span>
                             <span className="font-bold text-foreground">{totalDraftCount}</span>
