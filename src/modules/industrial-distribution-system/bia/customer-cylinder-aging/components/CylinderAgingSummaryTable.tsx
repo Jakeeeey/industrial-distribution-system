@@ -15,13 +15,13 @@
 
 import * as React from "react";
 import {
-  ChevronUp,
-  ChevronDown,
-  ChevronsUpDown,
   Search,
   FileDown,
   Loader2,
   Building,
+  ArrowUp,
+  ArrowDown,
+  SlidersHorizontal,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -103,7 +103,7 @@ function SkeletonRow() {
   // Spaced cell padding and 12 columns matching the customer summary table
   return (
     <TableRow className="border-b border-border/40">
-      {Array.from({ length: 12 }).map((_, i) => (
+      {Array.from({ length: 10 }).map((_, i) => (
         <TableCell key={i} className="py-4 px-4">
           <Skeleton className="h-4 w-full" />
         </TableCell>
@@ -112,42 +112,7 @@ function SkeletonRow() {
   );
 }
 
-// ── Sort header button ────────────────────────────────────────────────────────
-interface SortHeaderProps {
-  label: string;
-  sortKey: SortKey;
-  currentKey: SortKey;
-  currentDir: SortDir;
-  onSort: (key: SortKey) => void;
-}
 
-function SortHeader({
-  label,
-  sortKey,
-  currentKey,
-  currentDir,
-  onSort,
-}: SortHeaderProps) {
-  const isActive = currentKey === sortKey;
-  return (
-    <button
-      // text-[10px] for compact but readable laptop display
-      className="flex items-center gap-1 font-bold text-[10px] uppercase tracking-wider text-muted-foreground/80 hover:text-foreground transition-colors whitespace-nowrap"
-      onClick={() => onSort(sortKey)}
-    >
-      {label}
-      {isActive ? (
-        currentDir === "asc" ? (
-          <ChevronUp className="h-3 w-3 text-foreground" />
-        ) : (
-          <ChevronDown className="h-3 w-3 text-foreground" />
-        )
-      ) : (
-        <ChevronsUpDown className="h-3 w-3 text-muted-foreground/50 group-hover:text-muted-foreground/80" />
-      )}
-    </button>
-  );
-}
 
 // ── PDF Export ────────────────────────────────────────────────────────────────
 async function exportToPdf(rows: CustomerCylinderAgingSummary[]): Promise<void> {
@@ -326,15 +291,7 @@ export function CylinderAgingSummaryTable() {
   // Segment Filter state
   const [segmentFilter, setSegmentFilter] = React.useState<"ALL" | CustomerSegment>("ALL");
 
-  const handleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
-    setPage(1);
-  };
+
 
   // Filter → Sort → Paginate pipeline
   const filtered = React.useMemo(() => {
@@ -394,7 +351,7 @@ export function CylinderAgingSummaryTable() {
       {/* ── Toolbar ────────────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-2 p-3 border-b border-border/50 sm:flex-row sm:items-center sm:justify-between bg-muted/10">
         {/* Search & Segment Filter */}
-        <div className="flex flex-col sm:flex-row gap-2 w-full sm:max-w-md">
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:max-w-xl">
           <div className="relative w-full sm:max-w-[200px]">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
             <Input
@@ -416,7 +373,7 @@ export function CylinderAgingSummaryTable() {
               setPage(1);
             }}
           >
-            <SelectTrigger className="h-8 text-xs rounded-lg w-full sm:w-[140px] font-medium bg-background">
+            <SelectTrigger className="h-8 text-xs rounded-lg w-full sm:w-[140px] font-medium bg-background whitespace-nowrap overflow-hidden text-ellipsis flex items-center justify-between">
               <SelectValue placeholder="All Segments" />
             </SelectTrigger>
             <SelectContent>
@@ -426,6 +383,45 @@ export function CylinderAgingSummaryTable() {
               <SelectItem value="RESIDENTIAL" className="text-xs font-medium">Residential</SelectItem>
             </SelectContent>
           </Select>
+
+          <Select
+            value={sortKey}
+            onValueChange={(v: SortKey) => {
+              setSortKey(v);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="h-8 text-xs rounded-lg w-full sm:w-[145px] font-medium bg-background whitespace-nowrap overflow-hidden text-ellipsis flex items-center justify-between gap-1.5">
+              <div className="flex items-center gap-1.5 truncate">
+                <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <SelectValue placeholder="Sort Column" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="totalCylinders" className="text-xs font-medium">Total Cyls</SelectItem>
+              <SelectItem value="averageDaysWithCustomer" className="text-xs font-medium">Avg Days</SelectItem>
+              <SelectItem value="maxDaysWithCustomer" className="text-xs font-medium">Max Days</SelectItem>
+              <SelectItem value="lastTransactionDate" className="text-xs font-medium">Last Transaction</SelectItem>
+              <SelectItem value="daysSinceLastTransaction" className="text-xs font-medium">Days Idle</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 shrink-0 rounded-lg hover:bg-muted bg-background border border-input flex items-center justify-center"
+            onClick={() => {
+              setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+              setPage(1);
+            }}
+            title={sortDir === "asc" ? "Sorted Ascending (Click to sort Descending)" : "Sorted Descending (Click to sort Ascending)"}
+          >
+            {sortDir === "asc" ? (
+              <ArrowUp className="h-3.5 w-3.5" />
+            ) : (
+              <ArrowDown className="h-3.5 w-3.5" />
+            )}
+          </Button>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
@@ -460,45 +456,23 @@ export function CylinderAgingSummaryTable() {
               {/* # - always visible */}
               <TableHead className="w-8 text-center text-[9px] font-bold uppercase tracking-wider text-muted-foreground/80 py-2 px-1">#</TableHead>
               {/* Customer Code - always visible */}
-              <TableHead className="py-2 px-1.5">
-                <SortHeader label="Cust. Code" sortKey="customerCode" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-              </TableHead>
+              <TableHead className="py-2 px-1.5 font-bold text-[10px] uppercase tracking-wider text-muted-foreground/80">Cust. Code</TableHead>
               {/* Customer / Store - always visible */}
-              <TableHead className="py-2 px-1.5">
-                <SortHeader label="Customer / Store" sortKey="customerName" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-              </TableHead>
+              <TableHead className="py-2 px-1.5 font-bold text-[10px] uppercase tracking-wider text-muted-foreground/80">Customer / Store</TableHead>
               {/* Branch - hidden on small screens */}
-              <TableHead className="hidden md:table-cell py-2 px-1.5">
-                <SortHeader label="Branch" sortKey="branchName" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-              </TableHead>
-              {/* Products Deployed - hidden on small screens */}
-              <TableHead className="hidden lg:table-cell py-2 px-1.5">
-                <span className="font-bold text-[10px] uppercase tracking-wider text-muted-foreground/80">Products Deployed</span>
-              </TableHead>
+              <TableHead className="hidden md:table-cell py-2 px-1.5 font-bold text-[10px] uppercase tracking-wider text-muted-foreground/80">Branch</TableHead>
               {/* Total Cylinders - always visible */}
-              <TableHead className="text-center py-2 px-1.5">
-                <SortHeader label="Total Cyls" sortKey="totalCylinders" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-              </TableHead>
+              <TableHead className="text-center py-2 px-1.5 font-bold text-[10px] uppercase tracking-wider text-muted-foreground/80">Total Cyls</TableHead>
               {/* Avg Days - always visible */}
-              <TableHead className="text-center py-2 px-1.5">
-                <SortHeader label="Avg Days" sortKey="averageDaysWithCustomer" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-              </TableHead>
+              <TableHead className="text-center py-2 px-1.5 font-bold text-[10px] uppercase tracking-wider text-muted-foreground/80">Avg Days</TableHead>
               {/* Max Days - always visible */}
-              <TableHead className="text-center py-2 px-1.5">
-                <SortHeader label="Max Days" sortKey="maxDaysWithCustomer" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-              </TableHead>
+              <TableHead className="text-center py-2 px-1.5 font-bold text-[10px] uppercase tracking-wider text-muted-foreground/80">Max Days</TableHead>
               {/* Last Transaction Date - hidden on small screens */}
-              <TableHead className="hidden md:table-cell py-2 px-1.5">
-                <SortHeader label="Last Transaction" sortKey="lastTransactionDate" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-              </TableHead>
+              <TableHead className="hidden md:table-cell py-2 px-1.5 font-bold text-[10px] uppercase tracking-wider text-muted-foreground/80">Last Transaction</TableHead>
               {/* Days Idle - hidden on small screens */}
-              <TableHead className="hidden md:table-cell text-center py-2 px-1.5">
-                <SortHeader label="Days Idle" sortKey="daysSinceLastTransaction" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-              </TableHead>
+              <TableHead className="hidden md:table-cell text-center py-2 px-1.5 font-bold text-[10px] uppercase tracking-wider text-muted-foreground/80">Days Idle</TableHead>
               {/* Activity - always visible */}
-              <TableHead className="py-2 px-1.5">
-                <SortHeader label="Activity" sortKey="customerActivityStatus" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
-              </TableHead>
+              <TableHead className="py-2 px-1.5 font-bold text-[10px] uppercase tracking-wider text-muted-foreground/80">Activity</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -506,7 +480,7 @@ export function CylinderAgingSummaryTable() {
               Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} />)
             ) : paginated.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={12} className="h-20 text-center text-xs text-muted-foreground py-4 px-4">
+                <TableCell colSpan={10} className="h-20 text-center text-xs text-muted-foreground py-4 px-4">
                   {summaries.length === 0
                     ? "No customer summaries loaded. Click apply filters to load."
                     : "No customers match your search."}
@@ -586,23 +560,7 @@ export function CylinderAgingSummaryTable() {
                         <div className="text-[9px] text-muted-foreground mt-0.5 font-mono">{row.branchCode}</div>
                       )}
                     </TableCell>
-                    {/* Products Deployed - hidden on small screens */}
-                    <TableCell className="hidden lg:table-cell py-1.5 px-1.5 max-w-[120px]">
-                      <TooltipProvider delayDuration={300}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="block text-[10px] text-muted-foreground truncate cursor-default">
-                              {(row.productsDeployed || []).join(", ") || "—"}
-                            </span>
-                          </TooltipTrigger>
-                          {(row.productsDeployed || []).length > 0 && (
-                            <TooltipContent side="top">
-                              {(row.productsDeployed || []).join(", ")}
-                            </TooltipContent>
-                          )}
-                        </Tooltip>
-                      </TooltipProvider>
-                    </TableCell>
+
                     {/* Total Cylinders */}
                     <TableCell className="py-1.5 px-1.5 text-center font-bold text-xs text-foreground">
                       {row.totalCylinders}

@@ -1761,17 +1761,21 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-border text-[11px]">
-                                {pureDeployments.map((line, idx) => {
-                                  const typedLine = line as typeof line & { product_name?: string; cylinder_asset?: CylinderAsset };
+                                {pureDeployments.map((lineItem, idx) => {
+                                  // Comment: Avoid explicit any in map callback by casting lineItem to Record<string, unknown>
+                                  const line = lineItem as unknown as Record<string, unknown>;
+                                  const cylinderAsset = line.cylinder_asset as Record<string, unknown> | undefined;
+                                  const product = cylinderAsset?.product as Record<string, unknown> | undefined;
+                                  const productName = String(product?.product_name || "LPG Cylinder");
                                   return (
                                     <tr key={idx} className="hover:bg-accent/10">
-                                      <td className="p-2 font-mono font-bold">{typedLine.serial_number}</td>
+                                      <td className="p-2 font-mono font-bold">{String(line.serial_number ?? "")}</td>
                                       <td className="p-2 text-muted-foreground">
-                                        {typedLine.cylinder_asset?.product?.product_name || "LPG Cylinder"}
+                                        {productName}
                                       </td>
-                                      <td className="p-2 font-mono">{typedLine.tare_weight_kg} KG</td>
+                                      <td className="p-2 font-mono">{Number(line.tare_weight_kg ?? 0)} KG</td>
                                       <td className="p-2 font-mono font-bold text-primary dark:text-emerald-400">
-                                        {typedLine.previous_lpg_kg} KG
+                                        {Number(line.previous_lpg_kg ?? 0)} KG
                                       </td>
                                     </tr>
                                   );

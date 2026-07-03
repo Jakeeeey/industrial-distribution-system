@@ -166,24 +166,24 @@ export function RapidScanModal({ poId, open, onClose, lines, onAddSerial }: Rapi
                 className="!max-w-[1000px] !w-[95vw] h-[90vh] max-h-[800px] p-0 bg-background rounded-2xl border-none shadow-2xl overflow-hidden flex flex-col"
             >
                 {/* Header Banner */}
-                <div className="p-4 sm:p-5 bg-primary text-primary-foreground relative shrink-0">
+                <div className="p-4 sm:p-5 bg-background border-b border-border text-foreground relative shrink-0">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <div className="p-2 bg-white/15 rounded-xl shrink-0">
-                                <Scan className="w-6 h-6 text-white" />
+                            <div className="p-2 bg-primary/10 text-primary rounded-xl shrink-0">
+                                <Scan className="w-6 h-6" />
                             </div>
                             <div>
-                                <DialogTitle className="text-xl font-bold tracking-tight text-white">
+                                <DialogTitle className="text-xl font-bold tracking-tight text-foreground">
                                     Rapid Scan Allocator
                                 </DialogTitle>
-                                <DialogDescription className="text-white/80 text-xs">
+                                <DialogDescription className="text-muted-foreground text-xs">
                                     Scan serials consecutively — auto-routes to matching product line.
                                 </DialogDescription>
                             </div>
                         </div>
                         <button
                             onClick={onClose}
-                            className="p-1.5 rounded-lg hover:bg-white/10 text-white/80 hover:text-white transition-colors"
+                            className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                         >
                             <X className="w-5 h-5" />
                         </button>
@@ -247,7 +247,7 @@ export function RapidScanModal({ poId, open, onClose, lines, onAddSerial }: Rapi
                                                         "text-[9px] font-black",
                                                         done
                                                             ? "bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/20"
-                                                            : "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20"
+                                                            : "bg-primary/10 text-primary border-primary/20"
                                                     )}
                                                 >
                                                     {l.productName.split(" ").slice(0, 2).join(" ")} — {l.currentCount}/{l.orderedQty}
