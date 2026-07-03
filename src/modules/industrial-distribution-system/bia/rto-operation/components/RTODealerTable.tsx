@@ -218,7 +218,7 @@ export function RTODealerTable() {
                 <SortHeader label="Returned Tanks" sortKey="emptiesReturned" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
               </TableHead>
               <TableHead className="text-center py-2 px-1.5">
-                <SortHeader label="Missing Tanks" sortKey="missingTanks" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
+                <SortHeader label="Unreturned Cylinders" sortKey="missingTanks" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} />
               </TableHead>
               <TableHead className="py-2 px-1.5">
                 <span className="font-bold text-[10px] uppercase tracking-wider text-muted-foreground/80 whitespace-nowrap">Risk</span>
