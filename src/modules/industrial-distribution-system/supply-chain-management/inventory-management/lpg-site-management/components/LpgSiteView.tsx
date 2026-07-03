@@ -9,7 +9,6 @@ import {
   CreditCard,
   Cylinder,
   Loader2,
-  ChevronLeft,
   Gauge
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -95,24 +94,23 @@ export function LpgSiteView({ id, onBack }: LpgSiteViewProps) {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 pb-32 animate-in fade-in slide-in-from-bottom-4 duration-700 px-4 sm:px-0">
+    <div className="flex flex-col h-full w-full animate-in fade-in slide-in-from-bottom-4 duration-700 bg-zinc-50 dark:bg-zinc-950">
       
-      {/* Responsive Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between sticky top-0 z-20 bg-zinc-50/80 dark:bg-zinc-950/80 backdrop-blur-md py-4 border-b border-zinc-200/50 dark:border-zinc-800/50 -mx-4 sm:mx-0 px-4 sm:px-0 mb-4 gap-4">
+      {/* Modal Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between sticky top-0 z-20 bg-zinc-50 dark:bg-zinc-950 px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 mb-6 gap-4">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={onBack} className="rounded-xl h-10 w-10 shrink-0">
-            <ChevronLeft className="h-5 w-5" />
-          </Button>
           <h2 className="text-xl sm:text-2xl font-black tracking-tight truncate">
-            View LPG Site Details
+            LPG Site Details
           </h2>
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
           <Button variant="outline" onClick={onBack} className="rounded-xl px-6 border-zinc-200 dark:border-zinc-800 flex-1 sm:flex-none">
-            Back
+            Close
           </Button>
         </div>
       </div>
+
+      <div className="px-6 pb-10 space-y-8">
 
       <div className="grid grid-cols-1 gap-6">
         <div className="space-y-6">
@@ -365,6 +363,7 @@ export function LpgSiteView({ id, onBack }: LpgSiteViewProps) {
           stagedCylinders={formData?.cylinders}
           readOnly={true}
         />
+      </div>
       </div>
     </div>
   );
