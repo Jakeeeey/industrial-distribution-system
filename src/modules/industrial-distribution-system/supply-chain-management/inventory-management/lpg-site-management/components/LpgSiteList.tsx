@@ -8,7 +8,6 @@ import {
   Search,
   MoreVertical,
   Edit2,
-  Trash2,
   MapPin,
   ChevronLeft,
   ChevronRight,
@@ -85,17 +84,6 @@ export function LpgSiteList({ onEdit, onCreate, onView }: LpgSiteListProps) {
     }, 300);
     return () => clearTimeout(timer);
   }, [loadSites]);
-
-  const handleDelete = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this site?")) return;
-    try {
-      await lpgSiteService.deleteSite(id);
-      toast.success("Site deleted successfully");
-      loadSites();
-    } catch {
-      toast.error("Failed to delete site");
-    }
-  };
 
   const totalPages = Math.ceil(total / limit);
 
@@ -224,10 +212,6 @@ export function LpgSiteList({ onEdit, onCreate, onView }: LpgSiteListProps) {
                           <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(site.id); }} className="gap-2 cursor-pointer">
                             <Edit2 className="h-3.5 w-3.5" />
                             Edit Details
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDelete(site.id); }} className="gap-2 cursor-pointer text-red-600 focus:text-red-600">
-                            <Trash2 className="h-3.5 w-3.5" />
-                            Delete
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
