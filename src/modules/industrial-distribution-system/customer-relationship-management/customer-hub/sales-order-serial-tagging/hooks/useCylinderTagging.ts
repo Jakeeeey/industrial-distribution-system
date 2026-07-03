@@ -118,7 +118,7 @@ export function useCylinderTagging(orderId: string | null) {
     // 2b. Check if already in the customer's custody (current holdings)
     const currentCustomerAssets = customerAssetsRef.current;
     if (currentCustomerAssets.some((asset) => (asset.serial_number || "").trim().toUpperCase() === serial)) {
-      toast.error(`Serial "${serial}" is already in this customer's custody.`);
+      toast.error(`Serial "${serial}" is already in the customer's custody.`);
       return;
     }
 
@@ -126,6 +126,12 @@ export function useCylinderTagging(orderId: string | null) {
     const mapping = mappedSerialsMap.get(serial);
     if (!mapping) {
       toast.error(`Serial "${serial}" is not allocated or loaded for this delivery.`);
+      return;
+    }
+
+    // 3b. Check if already tagged/delivered under another order (cylinder_status is WITH_CUSTOMER)
+    if (mapping.cylinder_status === "WITH_CUSTOMER") {
+      toast.error(`Serial "${serial}" has already been delivered (Other Order).`);
       return;
     }
 

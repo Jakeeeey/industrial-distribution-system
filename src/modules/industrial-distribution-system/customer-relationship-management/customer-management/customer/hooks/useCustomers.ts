@@ -160,10 +160,19 @@ export function useCustomers(): UseCustomersReturn {
           customerData.price_type = customerData.price_type.split("-")[0].trim();
         }
 
+        // Set date_entered using browser local time in standard SQL format
+        const tzoffset = (new Date()).getTimezoneOffset() * 60000;
+        const localISOTime = (new Date(Date.now() - tzoffset)).toISOString().slice(0, 19).replace('T', ' ');
+
+        const payload = {
+          ...customerData,
+          date_entered: localISOTime,
+        };
+
         const res = await fetch("/api/ids/crm/customer", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(customerData),
+          body: JSON.stringify(payload),
         });
 
         if (!res.ok) {

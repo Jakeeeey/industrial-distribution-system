@@ -17,6 +17,7 @@
 // =============================================================================
 
 import * as React from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Activity,
   AlertCircle,
@@ -30,7 +31,13 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -270,6 +277,40 @@ export default function PriceMonitoringModule({userName}: {userName?: string}) {
     [filteredEnrichedRows],
   );
 
+  // ── Date parameters computed for the selected year ─────────────────────
+  const tabDateFrom = React.useMemo(() => {
+    if (!selectedYear) return undefined;
+    const yearStart = new Date(selectedYear, 0, 1, 0, 0, 0, 0);
+    return filterDateFrom && filterDateFrom.getFullYear() === selectedYear
+      ? filterDateFrom > yearStart
+        ? filterDateFrom
+        : yearStart
+      : yearStart;
+  }, [selectedYear, filterDateFrom]);
+
+  const tabDateTo = React.useMemo(() => {
+    if (!selectedYear) return undefined;
+    const yearEnd = new Date(selectedYear, 11, 31, 23, 59, 59, 999);
+    return filterDateTo && filterDateTo.getFullYear() === selectedYear
+      ? filterDateTo < yearEnd
+        ? filterDateTo
+        : yearEnd
+      : yearEnd;
+  }, [selectedYear, filterDateTo]);
+
+  const tabRows = React.useMemo(() => {
+    if (!selectedYear || !tabDateFrom || !tabDateTo) return [];
+    return enrichedRows.filter((row) => {
+      const dt = row.priceChangeDatetime ?? row.approvedAt;
+      if (!dt) return false;
+      const rowTime = new Date(dt).getTime();
+      return (
+        rowTime >= tabDateFrom.getTime() &&
+        rowTime <= tabDateTo.getTime()
+      );
+    });
+  }, [enrichedRows, selectedYear, tabDateFrom, tabDateTo]);
+
   // ── Render states ───────────────────────────────────────────────────────
   const hasData = rows.length > 0;
   const hasYears = derivedAvailableYears.length > 0;
@@ -360,201 +401,162 @@ export default function PriceMonitoringModule({userName}: {userName?: string}) {
           <KpiBar overallSummary={overallSummary} loading={loading} />
         )}
 
-        {/* Year Tabs & Content cards */}
-        {(hasData || loading) && hasYears && selectedYear && (
-          <Tabs
-            value={String(selectedYear)}
-            onValueChange={(val) => setSelectedYear(Number(val))}
-          >
-            {derivedAvailableYears.length > 1 && (
-              <div className="flex items-center justify-between mb-3 sm:mb-4">
-                {/* Scrollable tabs on mobile if many years */}
-                <div className="overflow-x-auto w-full">
-                  <TabsList className="flex-nowrap sm:flex-wrap h-auto gap-1 w-max sm:w-auto">
-                    {derivedAvailableYears.map((year) => (
-                      <TabsTrigger
-                        key={year}
-                        value={String(year)}
-                        className="text-xs sm:text-sm"
-                      >
-                        {year}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
+        {/* Year Content cards — refactored from Tabs to single container controlled by Year Dropdown */}
+        <AnimatePresence mode="wait">
+          {(hasData || loading) && hasYears && selectedYear ? (
+            <motion.div
+              key={selectedYear}
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.25, ease: "easeInOut" }}
+              className="space-y-4"
+            >
+            {/* Trend chart card */}
+            <Card className="border shadow-sm">
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3">
+                <div className="space-y-0.5">
+                  <CardTitle className="text-sm sm:text-base font-bold">
+                    Price Trend — {selectedYear}
+                  </CardTitle>
+                  <CardDescription className="text-xs text-muted-foreground">
+                    One line per price type. X-axis ={" "}
+                    {granularity === "daily"
+                      ? "day"
+                      : granularity === "weekly"
+                        ? "week"
+                        : granularity === "monthly"
+                          ? "month"
+                          : "year"}
+                    . Carry-forward pricing applied.
+                  </CardDescription>
                 </div>
-              </div>
-            )}
 
-            {derivedAvailableYears.map((year) => {
-              const yearStart = new Date(year, 0, 1, 0, 0, 0, 0);
-              const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
-              const tabDateFrom =
-                filterDateFrom && filterDateFrom.getFullYear() === year
-                  ? filterDateFrom > yearStart
-                    ? filterDateFrom
-                    : yearStart
-                  : yearStart;
-              const tabDateTo =
-                filterDateTo && filterDateTo.getFullYear() === year
-                  ? filterDateTo < yearEnd
-                    ? filterDateTo
-                    : yearEnd
-                  : yearEnd;
+                {/* Controls — wrap on mobile */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Year Select Dropdown (replacing the top tabs) */}
+                  {derivedAvailableYears.length > 1 && (
+                    <Select
+                      value={String(selectedYear)}
+                      onValueChange={(val) => setSelectedYear(Number(val))}
+                    >
+                      <SelectTrigger className="h-8 w-[100px] text-xs">
+                        <SelectValue placeholder="Year" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {derivedAvailableYears.map((y) => (
+                          <SelectItem key={y} value={String(y)}>
+                            {y}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
 
-              const tabRows = enrichedRows.filter((row) => {
-                const dt = row.priceChangeDatetime ?? row.approvedAt;
-                if (!dt) return false;
-                const rowTime = new Date(dt).getTime();
-                return (
-                  rowTime >= tabDateFrom.getTime() &&
-                  rowTime <= tabDateTo.getTime()
-                );
-              });
+                  {/* Chart Type Toggle */}
+                  <div className="flex items-center border rounded-md p-0.5 bg-muted/40 text-xs">
+                    <Button
+                      variant={chartType === "line" ? "secondary" : "ghost"}
+                      size="sm"
+                      className="h-7 px-2 sm:px-2.5 text-xs font-medium gap-1"
+                      onClick={() => setChartType("line")}
+                      title="Line Chart View"
+                    >
+                      <LineChartIcon className="h-3.5 w-3.5" />
+                      <span className="hidden xs:inline">Line</span>
+                    </Button>
+                    <Button
+                      variant={chartType === "bar" ? "secondary" : "ghost"}
+                      size="sm"
+                      className="h-7 px-2 sm:px-2.5 text-xs font-medium gap-1"
+                      onClick={() => setChartType("bar")}
+                      title="Bar Chart View"
+                    >
+                      <BarChart2 className="h-3.5 w-3.5" />
+                      <span className="hidden xs:inline">Bar</span>
+                    </Button>
+                  </div>
 
-              return (
-                <TabsContent
-                  key={year}
-                  value={String(year)}
-                  className="space-y-4 focus-visible:outline-none"
-                >
-                  {/* Trend chart card */}
-                  <Card className="border shadow-sm">
-                    <CardHeader className="flex justify-between gap-3 pb-3">
-                      <div className="space-y-0.5">
-                        <CardTitle className="text-sm sm:text-base font-bold">
-                          Price Trend — {year}
-                        </CardTitle>
-                        <CardDescription className="text-xs text-muted-foreground">
-                          One line per price type. X-axis ={" "}
-                          {granularity === "daily"
-                            ? "day"
-                            : granularity === "weekly"
-                              ? "week"
-                              : granularity === "monthly"
-                                ? "month"
-                                : "year"}
-                          . Carry-forward pricing applied.
-                        </CardDescription>
-                      </div>
+                  {/* Granularity Selector */}
+                  <div className="flex items-center border rounded-md p-0.5 bg-muted/40 text-xs">
+                    {(
+                      ["daily", "weekly", "monthly", "yearly"] as const
+                    ).map((g) => (
+                      <Button
+                        key={g}
+                        variant={granularity === g ? "secondary" : "ghost"}
+                        size="sm"
+                        className="h-7 px-2 sm:px-2.5 text-xs font-medium capitalize"
+                        onClick={() => setGranularity(g)}
+                        title={`${g.charAt(0).toUpperCase() + g.slice(1)} View`}
+                      >
+                        <span>{g}</span>
+                      </Button>
+                    ))}
+                  </div>
+                </div>
 
-                      {/* Controls — wrap on mobile */}
-                      <div className="flex flex-wrap items-center gap-2 ">
-                        {/* Chart Type Toggle */}
-                        <div className="flex items-center border rounded-md p-0.5 bg-muted/40 text-xs">
-                          <Button
-                            variant={chartType === "line" ? "secondary" : "ghost"}
-                            size="sm"
-                            className="h-7 px-2 sm:px-2.5 text-xs font-medium gap-1"
-                            onClick={() => setChartType("line")}
-                            title="Line Chart View"
-                          >
-                            <LineChartIcon className="h-3.5 w-3.5" />
-                            <span className="hidden xs:inline">Line</span>
-                          </Button>
-                          <Button
-                            variant={chartType === "bar" ? "secondary" : "ghost"}
-                            size="sm"
-                            className="h-7 px-2 sm:px-2.5 text-xs font-medium gap-1"
-                            onClick={() => setChartType("bar")}
-                            title="Bar Chart View"
-                          >
-                            <BarChart2 className="h-3.5 w-3.5" />
-                            <span className="hidden xs:inline">Bar</span>
-                          </Button>
-                        </div>
+              </CardHeader>
+              <CardContent className="pb-4">
+                <PriceTrendChart
+                  allRows={enrichedRows}
+                  filteredRows={tabRows}
+                  selectedYear={selectedYear}
+                  loading={loading}
+                  dateFrom={tabDateFrom}
+                  dateTo={tabDateTo}
+                  granularity={granularity}
+                  chartType={chartType}
+                />
+              </CardContent>
+            </Card>
 
-                        {/* Granularity Selector */}
-                        <div className="flex items-center border rounded-md p-0.5 bg-muted/40 text-xs ">
-                          {(
-                            ["daily", "weekly", "monthly", "yearly"] as const
-                          ).map((g) => (
-                            <Button
-                              key={g}
-                              variant={granularity === g ? "secondary" : "ghost"}
-                              size="sm"
-                              className="h-7 px-2 sm:px-2.5 text-xs font-medium capitalize"
-                              onClick={() => setGranularity(g)}
-                              title={`${g.charAt(0).toUpperCase() + g.slice(1)} View`}
-                            >
-                              {/* Abbreviate on very small screens */}
-                              {/* <span className="sm:hidden">
-                                {g === "daily"
-                                  ? "D"
-                                  : g === "weekly"
-                                    ? "W"
-                                    : g === "monthly"
-                                      ? "M"
-                                      : "Y"}
-                              </span> */}
-                              <span>{g}</span>
-                            </Button>
-                          ))}
-                        </div>
-                      </div>
+            {/* Monthly matrix Table card */}
+            <Card className="border shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm sm:text-base font-bold">
+                  Monthly Price Matrix — {selectedYear}
+                </CardTitle>
+                <CardDescription className="text-xs text-muted-foreground">
+                  Highlighted cells indicate a price change occurred that month.
+                  Outlines show the current live price.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pb-4">
+                <MonthlyMatrixTable
+                  matrixEntries={matrixEntries}
+                  selectedYear={selectedYear}
+                  loading={loading}
+                  onSelectRow={setSelectedRow}
+                />
+              </CardContent>
+            </Card>
 
-                    </CardHeader>
-                    <CardContent className="pb-4">
-                      <PriceTrendChart
-                        allRows={enrichedRows}
-                        filteredRows={tabRows}
-                        selectedYear={year}
-                        loading={loading}
-                        dateFrom={tabDateFrom}
-                        dateTo={tabDateTo}
-                        granularity={granularity}
-                        chartType={chartType}
-                      />
-                    </CardContent>
-                  </Card>
-
-                  {/* Monthly matrix Table card */}
-                  <Card className="border shadow-sm">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm sm:text-base font-bold">
-                        Monthly Price Matrix — {year}
-                      </CardTitle>
-                      <CardDescription className="text-xs text-muted-foreground">
-                        Highlighted cells indicate a price change occurred that month.
-                        Outlines show the current live price.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="pb-4">
-                      <MonthlyMatrixTable
-                        matrixEntries={matrixEntries}
-                        selectedYear={year}
-                        loading={loading}
-                        onSelectRow={setSelectedRow}
-                      />
-                    </CardContent>
-                  </Card>
-
-                  {/* Audit detail grid card */}
-                  <Card className="border shadow-sm">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm sm:text-base font-bold">
-                        Audit Detail — {year}
-                      </CardTitle>
-                      <CardDescription className="text-xs text-muted-foreground">
-                        All approved price change events. Unmapped supplier warnings
-                        are shown but records are never hidden.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="pb-4">
-                      <AuditDetailGrid
-                        rows={tabRows}
-                        allRows={enrichedRows}
-                        selectedYear={year}
-                        loading={loading}
-                        selectedRow={selectedRow}
-                        onSelectedRowChange={setSelectedRow}
-                      />
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-              );
-            })}
-          </Tabs>
-        )}
+            {/* Audit detail grid card */}
+            <Card className="border shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm sm:text-base font-bold">
+                  Audit Detail — {selectedYear}
+                </CardTitle>
+                <CardDescription className="text-xs text-muted-foreground">
+                  All approved price change events. Unmapped supplier warnings
+                  are shown but records are never hidden.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pb-4">
+                <AuditDetailGrid
+                  rows={tabRows}
+                  allRows={enrichedRows}
+                  selectedYear={selectedYear}
+                  loading={loading}
+                  selectedRow={selectedRow}
+                  onSelectedRowChange={setSelectedRow}
+                />
+              </CardContent>
+            </Card>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
         {loading && !hasYears && (
           <div className="space-y-4">

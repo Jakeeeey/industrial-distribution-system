@@ -35,6 +35,7 @@ export type Product = {
     sku: string;
     brand: string;
     category: string;
+    parent_id?: number | null;
 
     // ✅ Price per ORDERING UNIT
     price: number;

@@ -6,8 +6,8 @@ import type { TransactionType, WiwoDetailRef, BillableSource } from "../types";
  * Generates a transaction number based on type.
  *
  * Format:
- *   ONBOARDING_BASELINE → TXO-RB-{6-digit random number}
- *   REGULAR_BILLING     → TX-REG-{6-digit random number}
+ *   ONBOARDING_BASELINE → MTR-ONB-{6-digit random number}
+ *   REGULAR_BILLING     → MTR-REG-{6-digit random number}
  * 
  * Developer Comment: Changed from sequential/date/site components to a random 6-digit identifier.
  */
@@ -18,7 +18,7 @@ export function generateTxNo(
   date?: string,
   seq?: number
 ): string {
-  const prefix = type === "ONBOARDING_BASELINE" ? "TXO-RB" : "TX-REG";
+  const prefix = type === "ONBOARDING_BASELINE" ? "MTR-ONB" : "MTR-REG";
   const num = Math.floor(100000 + Math.random() * 900000);
   return `${prefix}-${num}`;
 }
