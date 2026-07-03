@@ -118,7 +118,7 @@ export function useCylinderTagging(orderId: string | null) {
     // 2b. Check if already in the customer's custody (current holdings)
     const currentCustomerAssets = customerAssetsRef.current;
     if (currentCustomerAssets.some((asset) => (asset.serial_number || "").trim().toUpperCase() === serial)) {
-      toast.error(`Serial "${serial}" is already in this customer's custody.`);
+      toast.error(`Serial "${serial}" is already in the customer's custody.`);
       return;
     }
 

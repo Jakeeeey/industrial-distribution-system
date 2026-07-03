@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
     const branchId = searchParams.get("branchId") || "all";
 
     // Query the Spring Boot view endpoint
-    const springUrl = `${SPRING_API_BASE}/api/views/ids-dashboard-activity-feed`;
+    const springUrl = `${SPRING_API_BASE}/api/v-ids-dashboard-activity-feed`;
 
     const res = await fetch(springUrl, {
       method: "GET",

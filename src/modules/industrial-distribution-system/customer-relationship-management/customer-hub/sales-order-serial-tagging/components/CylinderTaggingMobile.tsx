@@ -394,6 +394,10 @@ export default function CylinderTaggingMobile({
                       </span>
                       <span>{percent}%</span>
                     </div>
+                    <div className="text-[11px] font-semibold text-muted-foreground px-2 -mt-1 flex items-center justify-between">
+                      <span>Invoiced Quantity:</span>
+                      <span className="text-foreground font-bold">{item.served_qty} {item.unit}</span>
+                    </div>
                     <Progress value={percent} className="h-2 mx-2" />
                     
                     {/* Tagged list */}

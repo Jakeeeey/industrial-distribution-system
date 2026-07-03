@@ -12,6 +12,8 @@ interface DirectusProduct {
   product_code: string | null;
   product_name: string | null;
   is_serialized?: number | string | boolean | null;
+  parent_id?: number | null;
+  maintaining_quantity?: number | null;
   product_category?: {
     category_name: string | null;
   } | null;
@@ -64,8 +66,8 @@ export async function GET(req: NextRequest) {
     const base = getDirectusBase();
     const headers = getDirectusHeaders();
 
-    // 1. Fetch all products to resolve codes and categories
-    const productsUrl = `${base}/items/products?limit=-1&fields=product_id,product_code,product_name,is_serialized,product_category.category_name`;
+    // 1. Fetch all products to resolve codes, categories, parents, and maintaining_quantity
+    const productsUrl = `${base}/items/products?limit=-1&fields=product_id,product_code,product_name,is_serialized,parent_id,maintaining_quantity,product_category.category_name&filter[is_serialized][_eq]=1&filter[parent_id][_null]=true`;
     const productsRes = await fetch(productsUrl, { headers, cache: "no-store" });
     
     let products: DirectusProduct[] = [];
@@ -78,7 +80,7 @@ export async function GET(req: NextRequest) {
       console.warn(`[Low Stock BFF] Failed to fetch products: ${productsRes.status}`);
     }
 
-    // 2. Fetch all cylinder assets that are currently 'AVAILABLE'
+    // 2. Fetch all cylinder assets that are currently 'AVAILABLE' (as per user "only available" comment)
     const assetsUrl = `${base}/items/cylinder_assets?limit=-1&fields=id,cylinder_status,current_branch_id,product_id,is_deleted&filter[cylinder_status][_eq]=AVAILABLE`;
     const assetsRes = await fetch(assetsUrl, { headers, cache: "no-store" });
 
@@ -113,7 +115,13 @@ export async function GET(req: NextRequest) {
       return row.is_deleted === true || row.is_deleted === 1;
     };
 
-    // 3. Count 'AVAILABLE' cylinders in memory grouped by product ID
+    // 3. Map products by ID for fast lookup
+    const productMap = new Map<number, DirectusProduct>();
+    products.forEach((prod) => {
+      productMap.set(prod.product_id, prod);
+    });
+
+    // 4. Count 'AVAILABLE' cylinders in memory grouped strictly by direct product ID
     const countsMap = new Map<string, number>();
     
     assets.forEach((asset) => {
@@ -124,13 +132,13 @@ export async function GET(req: NextRequest) {
         return;
       }
 
-      const pId = getProductIdStr(asset);
-      if (pId) {
-        countsMap.set(pId, (countsMap.get(pId) || 0) + 1);
+      const pIdStr = getProductIdStr(asset);
+      if (pIdStr) {
+        countsMap.set(pIdStr, (countsMap.get(pIdStr) || 0) + 1);
       }
     });
 
-    // 4. Evaluate stock count for each product against threshold limits
+    // 5. Evaluate stock count for each product against threshold limits (parent products only)
     interface StockAlertItem {
       productCode: string;
       productName: string;
@@ -142,7 +150,12 @@ export async function GET(req: NextRequest) {
 
     const alerts: StockAlertItem[] = [];
 
-    products.forEach((prod) => {
+    // Filter to only parent products (where parent_id is null/undefined/0/empty)
+    const parentProducts = products.filter(
+      (prod) => !prod.parent_id || prod.parent_id <= 0
+    );
+
+    parentProducts.forEach((prod) => {
       // Cylinder products are serialized products
       const isSerialized = prod.is_serialized === 1 || prod.is_serialized === "1" || prod.is_serialized === true;
       if (!isSerialized) {
@@ -150,27 +163,18 @@ export async function GET(req: NextRequest) {
       }
 
       const code = prod.product_code || "";
-      if (!code.toUpperCase().includes("IDS")) {
-        return;
-      }
-
       const pIdStr = String(prod.product_id);
       const stockOnHand = countsMap.get(pIdStr) || 0;
       
       const name = prod.product_name || "Unknown Product";
       const category = prod.product_category?.category_name || "LPG";
 
-      // Reorder limit thresholds based on product name profiles
-      let reorderPoint = 35;
-      const lowerName = name.toLowerCase();
-      if (lowerName.includes("50kg") || lowerName.includes("50-kg")) reorderPoint = 35;
-      else if (lowerName.includes("11kg") || lowerName.includes("11-kg")) reorderPoint = 40;
-      else if (lowerName.includes("regulator")) reorderPoint = 15;
-      else if (lowerName.includes("valve")) reorderPoint = 20;
-      else reorderPoint = 25;
+      // Reorder limit thresholds based on maintaining_quantity
+      const mq = Number(prod.maintaining_quantity ?? 0);
+      const reorderPoint = mq > 0 ? mq : 25;
 
       if (stockOnHand < reorderPoint) {
-        const isCritical = stockOnHand <= reorderPoint * 0.4;
+        const isCritical = mq > 0 ? (stockOnHand < mq * 0.20) : (stockOnHand < 10);
         alerts.push({
           productCode: code,
           productName: name,

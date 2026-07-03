@@ -21,6 +21,7 @@ export interface SalesOrderItem {
   unit: string;
   ordered_qty: number;
   allocated_qty: number;
+  served_qty: number; // Added: Invoiced / Served quantity column
   tagged_qty: number;
   tagged_serials: TaggedSerial[];
 }

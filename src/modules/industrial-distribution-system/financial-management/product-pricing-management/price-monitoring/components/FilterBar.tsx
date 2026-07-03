@@ -9,7 +9,7 @@
 import * as React from "react";
 import { Search, RefreshCw, X, Loader2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+// import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { PriceMonitoringQuery } from "../types";
 import type { ProductOption, SupplierOption } from "../providers/priceMonitoringApi";
@@ -253,7 +253,7 @@ export function FilterBar({
       </div>
 
       {/* Active filter badges */}
-      {(query.productId || query.supplierId || query.dateFrom || query.dateTo) && (
+      {/* {(query.productId || query.supplierId || query.dateFrom || query.dateTo) && (
         <div className="flex flex-wrap gap-1.5 items-center">
           <span className="text-xs text-muted-foreground">Filters:</span>
           {query.productId && (
@@ -321,7 +321,7 @@ export function FilterBar({
             </Badge>
           )}
         </div>
-      )}
+      )} */}
     </div>
   );
 }

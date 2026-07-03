@@ -45,5 +45,6 @@ next-env.d.ts
 # assets/audio/*.mp3
 lint.log
 
-# personal implementation plan
+# personal implementation plan for modules & test
 zdocs/
+ztest/

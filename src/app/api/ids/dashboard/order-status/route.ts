@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
     // Fetch all sales_order rows with just the two fields we need.
     // Use limit=-1 to get all records. We aggregate in memory to avoid
     // relying on Directus aggregation quirks across versions.
-    let url = `${base}/items/sales_order?limit=-1&fields=order_status,branch_id`;
+    let url = `${base}/items/sales_order?limit=-1&fields=order_status,branch_id&filter[branch_id]=196`;
 
     // Filter to pipeline-relevant statuses only
     PIPELINE_STATUSES.forEach((s, i) => {
