@@ -1,22 +1,12 @@
 "use client";
 
 import React from "react";
-import { Calendar as CalendarIcon, Search, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { format } from "date-fns";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
 
 import type {
 	CompetitorRef,
@@ -24,12 +14,14 @@ import type {
 	PriceListFilters,
 	ProductRef,
 } from "../types";
+import { SearchableSelect } from "./SearchableSelect";
 
 interface PriceListFiltersProps {
 	filters: PriceListFilters;
 	activeProductId: string;
 	setFilter: <K extends keyof PriceListFilters>(key: K, value: PriceListFilters[K]) => void;
 	resetFilters: () => void;
+	applyFilters: () => void;
 	hasActiveFilters: boolean;
 	competitors: CompetitorRef[];
 	products: ProductRef[];
@@ -45,6 +37,7 @@ export function PriceListFilters({
 	activeProductId,
 	setFilter,
 	resetFilters,
+	applyFilters,
 	hasActiveFilters,
 	competitors,
 	products,
@@ -52,211 +45,205 @@ export function PriceListFilters({
 	municipalities,
 	barangays,
 }: PriceListFiltersProps) {
+	const dateFromVal = filters.dateFrom ? format(filters.dateFrom, "yyyy-MM-dd") : "";
+	const dateToVal = filters.dateTo ? format(filters.dateTo, "yyyy-MM-dd") : "";
+
+	const handleDateFromChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const val = e.target.value;
+		if (!val) {
+			setFilter("dateFrom", undefined);
+			return;
+		}
+		const [year, month, day] = val.split("-").map(Number);
+		setFilter("dateFrom", new Date(year, month - 1, day));
+	};
+
+	const handleDateToChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const val = e.target.value;
+		if (!val) {
+			setFilter("dateTo", undefined);
+			return;
+		}
+		const [year, month, day] = val.split("-").map(Number);
+		setFilter("dateTo", new Date(year, month - 1, day));
+	};
+
 	return (
 		<Card className="border shadow-sm">
 			<CardContent className="pt-4 pb-4 space-y-4">
-				{/* Row 1: Search + Date Range*/}
-				<div className="flex flex-wrap items-center gap-2">
+				{/* Row 1: Search + Date Range + Actions */}
+				<div className="flex flex-wrap items-end gap-3">
 					{/* Search */}
-					<div className="relative flex-1 min-w-[220px]">
-						<Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-						<Input
-							placeholder="Search competitor, location, product..."
-							value={filters.search}
-							onChange={(e) => setFilter("search", e.target.value)}
-							className="pl-8 h-9"
-						/>
+					<div className="flex-1 min-w-[220px] flex flex-col gap-1.5">
+						<label className="text-xs font-semibold text-muted-foreground px-0.5">
+							Search
+						</label>
+						<div className="relative">
+							<Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+							<Input
+								placeholder="Search competitor, location, product..."
+								value={filters.search}
+								onChange={(e) => setFilter("search", e.target.value)}
+								className="pl-8 h-9"
+							/>
+						</div>
 					</div>
 
 					{/* Date From */}
-					<Popover>
-						<PopoverTrigger asChild>
-							<Button
-								variant="outline"
-								size="sm"
-								className={cn(
-									"h-9 w-36 justify-start text-left font-normal",
-									!filters.dateFrom && "text-muted-foreground"
-								)}
-							>
-								<CalendarIcon className="mr-2 h-3.5 w-3.5" />
-								{filters.dateFrom
-									? format(filters.dateFrom, "MMM dd, yyyy")
-									: "From date"}
-							</Button>
-						</PopoverTrigger>
-						<PopoverContent className="w-auto p-0" align="start">
-							<Calendar
-								mode="single"
-								selected={filters.dateFrom}
-								onSelect={(d) => setFilter("dateFrom", d ?? undefined)}
-								initialFocus
-							/>
-						</PopoverContent>
-					</Popover>
+					<div className="flex flex-col gap-1.5">
+						<label className="text-xs font-semibold text-muted-foreground px-0.5">
+							Date From
+						</label>
+						<Input
+							type="date"
+							className="h-9 w-40 text-sm shadow-sm px-2 bg-background border-input"
+							value={dateFromVal}
+							onChange={handleDateFromChange}
+						/>
+					</div>
 
 					{/* Date To */}
-					<Popover>
-						<PopoverTrigger asChild>
-							<Button
-								variant="outline"
-								size="sm"
-								className={cn(
-									"h-9 w-36 justify-start text-left font-normal",
-									!filters.dateTo && "text-muted-foreground"
-								)}
-							>
-								<CalendarIcon className="mr-2 h-3.5 w-3.5" />
-								{filters.dateTo
-									? format(filters.dateTo, "MMM dd, yyyy")
-									: "To date"}
-							</Button>
-						</PopoverTrigger>
-						<PopoverContent className="w-auto p-0" align="start">
-							<Calendar
-								mode="single"
-								selected={filters.dateTo}
-								onSelect={(d) => setFilter("dateTo", d ?? undefined)}
-								initialFocus
-							/>
-						</PopoverContent>
-					</Popover>
+					<div className="flex flex-col gap-1.5">
+						<label className="text-xs font-semibold text-muted-foreground px-0.5">
+							Date To
+						</label>
+						<Input
+							type="date"
+							className="h-9 w-40 text-sm shadow-sm px-2 bg-background border-input"
+							value={dateToVal}
+							onChange={handleDateToChange}
+						/>
+					</div>
 
-					{/* Reset */}
-					{hasActiveFilters && (
+					{/* Reset & Apply Actions */}
+					<div className="flex items-center gap-2 h-9 pb-[1px]">
+						{hasActiveFilters && (
+							<Button
+								variant="ghost"
+								size="sm"
+								onClick={resetFilters}
+								className="h-9 px-3 text-muted-foreground hover:text-foreground"
+							>
+								<X className="mr-1.5 h-3.5 w-3.5" />
+								Reset
+							</Button>
+						)}
 						<Button
-							variant="ghost"
+							variant="default"
 							size="sm"
-							onClick={resetFilters}
-							className="h-9 px-3 text-muted-foreground hover:text-foreground"
+							onClick={applyFilters}
+							className="h-9 px-4 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
 						>
-							<X className="mr-1.5 h-3.5 w-3.5" />
-							Reset
+							Apply
 						</Button>
-					)}
+					</div>
 				</div>
 
 				{/* Row 2: Product + Competitors + Sources */}
-				<div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+				<div className="grid grid-cols-1 md:grid-cols-3 gap-3">
 					{/* Product */}
-					<Select
-						value={activeProductId || "all"}
-						onValueChange={(v) => setFilter("productId", v === "all" ? "" : v)}
-					>
-						<SelectTrigger className="h-9 w-full">
-							<SelectValue placeholder="Select Product" />
-						</SelectTrigger>
-						<SelectContent>
-							<SelectItem value="all">All Products</SelectItem>
-							{products.map((p) => (
-								<SelectItem key={p.product_name} value={p.product_name}>
-									{p.product_name}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
+					<div className="flex flex-col gap-1.5">
+						<label className="text-xs font-semibold text-muted-foreground px-0.5">
+							Product
+						</label>
+						<SearchableSelect
+							placeholder="Select Product"
+							value={activeProductId || "all"}
+							onValueChange={(v) => setFilter("productId", v === "all" ? "" : v)}
+							options={[
+								{ value: "all", label: "All Products" },
+								...products.map((p) => ({ value: p.product_name, label: p.product_name })),
+							]}
+						/>
+					</div>
 
 					{/* Competitor */}
-					<Select
-						value={filters.competitorId || "all"}
-						onValueChange={(v) => setFilter("competitorId", v === "all" ? "" : v)}
-					>
-						<SelectTrigger className="h-9 w-full">
-							<SelectValue placeholder="All Competitors" />
-						</SelectTrigger>
-						<SelectContent>
-							<SelectItem value="all">All Competitors</SelectItem>
-							{competitors.map((c) => (
-								<SelectItem key={c.id} value={String(c.id)}>
-									{c.name}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
+					<div className="flex flex-col gap-1.5">
+						<label className="text-xs font-semibold text-muted-foreground px-0.5">
+							Competitor
+						</label>
+						<SearchableSelect
+							placeholder="All Competitors"
+							value={filters.competitorId || "all"}
+							onValueChange={(v) => setFilter("competitorId", v === "all" ? "" : v)}
+							options={[
+								{ value: "all", label: "All Competitors" },
+								...competitors.map((c) => ({ value: String(c.id), label: c.name })),
+							]}
+						/>
+					</div>
 
 					{/* Source Type */}
-					<Select
-						value={filters.sourceType || "all"}
-						onValueChange={(v) => setFilter("sourceType", v === "all" ? "" : v)}
-					>
-						<SelectTrigger className="h-9 w-full">
-							<SelectValue placeholder="All Sources" />
-						</SelectTrigger>
-						<SelectContent>
-							<SelectItem value="all">All Sources</SelectItem>
-							{SOURCE_TYPES.map((s) => (
-								<SelectItem key={s} value={s}>
-									{s}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
+					<div className="flex flex-col gap-1.5">
+						<label className="text-xs font-semibold text-muted-foreground px-0.5">
+							Source Type
+						</label>
+						<SearchableSelect
+							placeholder="All Sources"
+							value={filters.sourceType || "all"}
+							onValueChange={(v) => setFilter("sourceType", v === "all" ? "" : v)}
+							options={[
+								{ value: "all", label: "All Sources" },
+								...SOURCE_TYPES.map((s) => ({ value: s, label: s })),
+							]}
+						/>
+					</div>
 				</div>
 
 				{/* Row 3: Address Cascade (Province, Municipality, Barangay) */}
-				<div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+				<div className="grid grid-cols-1 md:grid-cols-3 gap-3">
 					{/* Province */}
-					<Select
-						value={filters.province || "all"}
-						onValueChange={(v) => setFilter("province", v === "all" ? "" : v)}
-					>
-						<SelectTrigger className="h-9 w-full">
-							<SelectValue placeholder="All Provinces" />
-						</SelectTrigger>
-						<SelectContent>
-							{provinces.map((p) => (
-								<SelectItem key={p.value || "__all"} value={p.value || "all"}>
-									{p.label}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
+					<div className="flex flex-col gap-1.5">
+						<label className="text-xs font-semibold text-muted-foreground px-0.5">
+							Province
+						</label>
+						<SearchableSelect
+							placeholder="All Provinces"
+							value={filters.province || "all"}
+							onValueChange={(v) => setFilter("province", v === "all" ? "" : v)}
+							options={provinces.map((p) => ({
+								value: p.value || "all",
+								label: p.label,
+							}))}
+						/>
+					</div>
 
 					{/* Municipality */}
-					<Select
-						value={filters.municipality || "all"}
-						onValueChange={(v) => setFilter("municipality", v === "all" ? "" : v)}
-						disabled={!filters.province}
-					>
-						<SelectTrigger className="h-9 w-full">
-							<SelectValue
-								placeholder={
-									filters.province ? "All Municipalities" : "Select province first"
-								}
-							/>
-						</SelectTrigger>
-						<SelectContent>
-							{municipalities.map((m) => (
-								<SelectItem key={m.value || "__all"} value={m.value || "all"}>
-									{m.label}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
+					<div className="flex flex-col gap-1.5">
+						<label className="text-xs font-semibold text-muted-foreground px-0.5">
+							Municipality
+						</label>
+						<SearchableSelect
+							placeholder={filters.province ? "All Municipalities" : "Select province first"}
+							value={filters.municipality || "all"}
+							onValueChange={(v) => setFilter("municipality", v === "all" ? "" : v)}
+							disabled={!filters.province}
+							options={municipalities.map((m) => ({
+								value: m.value || "all",
+								label: m.label,
+							}))}
+						/>
+					</div>
 
 					{/* Barangay */}
-					<Select
-						value={filters.barangay || "all"}
-						onValueChange={(v) => setFilter("barangay", v === "all" ? "" : v)}
-						disabled={!filters.municipality}
-					>
-						<SelectTrigger className="h-9 w-full">
-							<SelectValue
-								placeholder={
-									filters.municipality ? "All Barangays" : "Select municipality first"
-								}
-							/>
-						</SelectTrigger>
-						<SelectContent>
-							{barangays.map((b) => (
-								<SelectItem key={b.value || "__all"} value={b.value || "all"}>
-									{b.label}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
+					<div className="flex flex-col gap-1.5">
+						<label className="text-xs font-semibold text-muted-foreground px-0.5">
+							Barangay
+						</label>
+						<SearchableSelect
+							placeholder={filters.municipality ? "All Barangays" : "Select municipality first"}
+							value={filters.barangay || "all"}
+							onValueChange={(v) => setFilter("barangay", v === "all" ? "" : v)}
+							disabled={!filters.municipality}
+							options={barangays.map((b) => ({
+								value: b.value || "all",
+								label: b.label,
+							}))}
+						/>
+					</div>
 				</div>
 			</CardContent>
 		</Card>
 	);
 }
+

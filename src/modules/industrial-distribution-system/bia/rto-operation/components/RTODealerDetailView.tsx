@@ -34,7 +34,7 @@ import {
   resolveMissingStatusBadgeClass,
   formatMissingStatus,
 } from "../utils/rto-operation.utils";
-import type { MissingStatus } from "../types";
+import type { MissingStatus, SerialWithProduct } from "../types";
 
 // ── Status icon ───────────────────────────────────────────────────────────────
 
@@ -54,7 +54,7 @@ function MissingStatusIcon({ status }: { status: MissingStatus }) {
 
 interface CylinderSerialsSectionProps {
   title: string;
-  serials: string[];
+  serials: SerialWithProduct[];
   type: "in" | "out";
   customerName: string;
 }
@@ -67,16 +67,7 @@ function CylinderSerialsSection({
 }: CylinderSerialsSectionProps) {
   const [isOpen, setIsOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
-
-  const limit = 15;
-  const hasMore = serials.length > limit;
-  const visibleSerials = hasMore ? serials.slice(0, limit - 1) : serials;
-
-  const filteredSerials = React.useMemo(() => {
-    if (!search.trim()) return serials;
-    const s = search.trim().toLowerCase();
-    return serials.filter((x) => x.toLowerCase().includes(s));
-  }, [serials, search]);
+  const [selectedProductFilter, setSelectedProductFilter] = React.useState<string | null>(null);
 
   const badgeStyles =
     type === "out"
@@ -85,11 +76,68 @@ function CylinderSerialsSection({
 
   const triggerColor =
     type === "out"
-      ? "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300 border-orange-200 cursor-pointer font-bold hover:bg-orange-200"
-      : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200 cursor-pointer font-bold hover:bg-emerald-200";
+      ? "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300 border-orange-200 cursor-pointer font-bold hover:bg-orange-200 shadow-sm"
+      : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200 cursor-pointer font-bold hover:bg-emerald-200 shadow-sm";
 
   const headerIconColor =
     type === "out" ? "text-orange-500" : "text-emerald-500";
+
+  // Group all serials by product
+  const groupedProducts = React.useMemo(() => {
+    const map = new Map<string, SerialWithProduct[]>();
+    for (const item of serials) {
+      const prodName = item.productName || "Unknown Product";
+      if (!map.has(prodName)) {
+        map.set(prodName, []);
+      }
+      map.get(prodName)!.push(item);
+    }
+    return Array.from(map.entries());
+  }, [serials]);
+
+  // Compute preview limits per product group
+  const productPreviews = React.useMemo(() => {
+    return groupedProducts.map(([productName, list]) => {
+      const limit = 12;
+      const hasMore = list.length > limit;
+      const visible = hasMore ? list.slice(0, limit - 1) : list;
+      return {
+        productName,
+        totalCount: list.length,
+        visible,
+        hasMore,
+        moreCount: list.length - (limit - 1),
+      };
+    });
+  }, [groupedProducts]);
+
+  // Filter and search serials for Dialog list
+  const filteredSerials = React.useMemo(() => {
+    let list = serials;
+    if (selectedProductFilter) {
+      list = serials.filter((x) => (x.productName || "Unknown Product") === selectedProductFilter);
+    }
+    if (!search.trim()) return list;
+    const s = search.trim().toLowerCase();
+    return list.filter((x) => x.serialNumber.toLowerCase().includes(s));
+  }, [serials, selectedProductFilter, search]);
+
+  // Group dialog serials by product for rendering
+  const dialogGrouped = React.useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const item of filteredSerials) {
+      const prodName = item.productName || "Unknown Product";
+      if (!map.has(prodName)) {
+        map.set(prodName, []);
+      }
+      map.get(prodName)!.push(item.serialNumber);
+    }
+    return Array.from(map.entries());
+  }, [filteredSerials]);
+
+  const dialogTitle = selectedProductFilter 
+    ? `${title} (${selectedProductFilter}) — ${customerName}`
+    : `${title} — ${customerName}`;
 
   return (
     <div className="space-y-3">
@@ -102,32 +150,54 @@ function CylinderSerialsSection({
           No cylinders recorded.
         </p>
       ) : (
-        <div className="flex flex-wrap gap-2 p-2 border border-border/40 rounded-lg">
-          {visibleSerials.map((serial) => (
-            <Badge
-              key={serial}
-              variant="secondary"
-              className={`text-[10px] font-mono py-1 px-2.5 ${badgeStyles}`}
+        <div className="space-y-3">
+          {productPreviews.map(({ productName, totalCount, visible, hasMore, moreCount }) => (
+            <div
+              key={productName}
+              className="space-y-1.5 border border-border/40 rounded-lg p-3 bg-muted/5 shadow-sm"
             >
-              {serial}
-            </Badge>
+              <div className="text-[10px] font-black text-muted-foreground uppercase tracking-wider flex justify-between">
+                <span>{productName}</span>
+                <span>{totalCount}</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {visible.map((item, idx) => (
+                  <Badge
+                    key={`${item.serialNumber}-${idx}`}
+                    variant="secondary"
+                    className={`text-[10px] font-mono py-1 px-2.5 ${badgeStyles}`}
+                  >
+                    {item.serialNumber}
+                  </Badge>
+                ))}
+                {hasMore && (
+                  <Badge
+                    variant="secondary"
+                    className={`text-[10px] font-mono py-1 px-2.5 border ${triggerColor}`}
+                    onClick={() => {
+                      setSelectedProductFilter(productName);
+                      setIsOpen(true);
+                    }}
+                  >
+                    + View More ({moreCount})
+                  </Badge>
+                )}
+              </div>
+            </div>
           ))}
-          {hasMore && (
-            <Badge
-              variant="secondary"
-              className={`text-[10px] font-mono py-1 px-2.5 border ${triggerColor}`}
-              onClick={() => setIsOpen(true)}
-            >
-              + View More ({serials.length - (limit - 1)})
-            </Badge>
-          )}
         </div>
       )}
 
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <Dialog open={isOpen} onOpenChange={(open) => {
+        setIsOpen(open);
+        if (!open) {
+          setSelectedProductFilter(null);
+          setSearch("");
+        }
+      }}>
         <DialogContent className="max-w-md max-h-[80vh] flex flex-col p-5 bg-background">
           <DialogTitle className="text-sm font-black uppercase tracking-wider text-foreground">
-            {title} — {customerName}
+            {dialogTitle}
           </DialogTitle>
 
           <div className="relative mt-2">
@@ -146,22 +216,35 @@ function CylinderSerialsSection({
                 No serial numbers match your search.
               </p>
             ) : (
-              <div className="flex flex-wrap gap-1.5 p-1">
-                {filteredSerials.map((serial) => (
-                  <Badge
-                    key={serial}
-                    variant="secondary"
-                    className={`text-[10px] font-mono py-1 px-2.5 ${badgeStyles}`}
+              <div className="space-y-4">
+                {dialogGrouped.map(([productName, serialList]) => (
+                  <div
+                    key={productName}
+                    className="space-y-1.5 border border-border/40 rounded-lg p-3 bg-muted/5"
                   >
-                    {serial}
-                  </Badge>
+                    <div className="text-[10px] font-black text-muted-foreground uppercase tracking-wider flex justify-between">
+                      <span>{productName}</span>
+                      <span>{serialList.length}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {serialList.map((serial, idx) => (
+                        <Badge
+                          key={`${serial}-${idx}`}
+                          variant="secondary"
+                          className={`text-[10px] font-mono py-1 px-2.5 ${badgeStyles}`}
+                        >
+                          {serial}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
           </ScrollArea>
 
           <div className="flex justify-between items-center text-[10px] text-muted-foreground pt-3 border-t border-border/40 mt-3 font-semibold">
-            <span>Total: {serials.length} serials</span>
+            <span>Total: {filteredSerials.length} serials</span>
             {search && <span>Filtered: {filteredSerials.length}</span>}
           </div>
         </DialogContent>
@@ -282,7 +365,7 @@ export function RTODealerDetailView() {
                   <div className="rounded-xl border border-border bg-card p-5 shadow-sm space-y-4">
                     <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-muted-foreground">
                       <ShieldAlert className="h-4 w-4 text-sky-600 shrink-0" />
-                      Missing Tank Monitor
+                      Unreturned Cylinders Monitor
                     </div>
                     <div className="space-y-3 text-xs">
                       <div className="flex justify-between items-center">
@@ -308,7 +391,7 @@ export function RTODealerDetailView() {
                             ? "text-amber-800 dark:text-amber-400"
                             : "text-emerald-800 dark:text-emerald-400"
                           }`}>
-                          Missing Tanks:
+                          Unreturned Cylinders:
                         </span>
                         <span className={`text-3xl font-black ${isOverallCritical
                           ? "text-red-600 dark:text-red-400"
