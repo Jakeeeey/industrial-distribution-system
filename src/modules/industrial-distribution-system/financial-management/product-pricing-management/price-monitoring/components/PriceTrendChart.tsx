@@ -594,7 +594,6 @@ export function PriceTrendChart({
                   fill={getPriceTypeColor(group.priceTypeSort)}
                   radius={[4, 4, 0, 0]}
                   maxBarSize={40}
-                  isAnimationActive={false}
                 />
               ))}
             </BarChart>
@@ -634,7 +633,6 @@ export function PriceTrendChart({
                   dot={{ r: 3, strokeWidth: 0 }}
                   activeDot={{ r: 5 }}
                   connectNulls={false}
-                  isAnimationActive={false}
                 />
               ))}
             </LineChart>

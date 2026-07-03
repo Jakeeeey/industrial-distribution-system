@@ -9,6 +9,7 @@
 // =============================================================================
 
 import * as React from "react";
+import { motion } from "framer-motion";
 import {
   ChevronUp,
   ChevronDown,
@@ -46,6 +47,14 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Check } from "lucide-react";
+import { Input } from "@/components/ui/input";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -64,7 +73,7 @@ export interface AuditDetailGridProps {
 // Sort state
 // ---------------------------------------------------------------------------
 
-type SortKey = "priceChangeDatetime" | "priceTypeName" | "newPrice" | "priceMovement";
+type SortKey = "priceChangeDatetime" | "newPrice";
 type SortDir = "asc" | "desc";
 
 // ---------------------------------------------------------------------------
@@ -130,6 +139,89 @@ function SortableHeader({
   );
 }
 
+function DropdownSortHeader({
+  label,
+  valueSort,
+  onValueSortChange,
+  uniqueValues,
+  showSearch,
+  className,
+}: {
+  label: string;
+  valueSort: string | null;
+  onValueSortChange: (val: string | null) => void;
+  uniqueValues: string[];
+  showSearch?: boolean;
+  className?: string;
+}) {
+  const [searchQuery, setSearchQuery] = React.useState("");
+
+  const filteredValues = React.useMemo(() => {
+    if (!showSearch) return uniqueValues;
+    return uniqueValues.filter((val) =>
+      val.toLowerCase().includes(searchQuery.toLowerCase()),
+    );
+  }, [uniqueValues, searchQuery, showSearch]);
+
+  return (
+    <th
+      className={cn(
+        "px-3 py-1.5 text-left font-semibold text-muted-foreground whitespace-nowrap",
+        className,
+      )}
+    >
+      <DropdownMenu onOpenChange={(open) => !open && setSearchQuery("")}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="-ml-2 h-8 px-2 text-xs font-semibold hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none data-[state=open]:bg-accent text-muted-foreground gap-1.5 flex items-center justify-between"
+          >
+            <span>{label}</span>
+            <ChevronDown className="h-3.5 w-3.5 opacity-55 shrink-0" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="max-h-60 overflow-y-auto w-48 bg-popover text-popover-foreground border shadow-md rounded-md p-1">
+          {showSearch && (
+            <div className="p-1 border-b sticky top-0 bg-popover z-10">
+              <Input
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-7 text-xs px-2"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              />
+            </div>
+          )}
+          <DropdownMenuItem
+            onClick={() => onValueSortChange(null)}
+            className="flex items-center justify-between px-2 py-1.5 text-xs rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground"
+          >
+            <span>Default</span>
+            {!valueSort && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
+          </DropdownMenuItem>
+          {filteredValues.length === 0 && showSearch && (
+            <div className="px-2 py-1.5 text-xs text-muted-foreground text-center">
+              No results found
+            </div>
+          )}
+          {filteredValues.map((val) => (
+            <DropdownMenuItem
+              key={val}
+              onClick={() => onValueSortChange(val)}
+              className="flex items-center justify-between px-2 py-1.5 text-xs rounded-sm cursor-pointer hover:bg-accent hover:text-accent-foreground"
+            >
+              <span className="truncate max-w-[150px]" title={val}>{val}</span>
+              {valueSort === val && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </th>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -156,6 +248,10 @@ export function AuditDetailGrid({
     dir: "desc",
   });
   const [page, setPage] = React.useState(1);
+  const [priceTypeSortValue, setPriceTypeSortValue] = React.useState<string | null>(null);
+  const [movementSortValue, setMovementSortValue] = React.useState<string | null>(null);
+  const [requestedBySortValue, setRequestedBySortValue] = React.useState<string | null>(null);
+  const [approvedBySortValue, setApprovedBySortValue] = React.useState<string | null>(null);
   
   // Responsive page size: default to 10 for desktop, 5 for mobile
   // Added as per user request to use 5 on mobile and 10 on desktop.
@@ -271,8 +367,71 @@ export function AuditDetailGrid({
     [computedRows, selectedYear],
   );
 
+  const uniquePriceTypes = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const r of yearRows) {
+      const name = mapPriceTypeName(r.priceTypeName);
+      if (name) set.add(name);
+    }
+    return Array.from(set).sort();
+  }, [yearRows]);
+
+  const uniqueMovements = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const r of yearRows) {
+      if (r.priceMovement) set.add(r.priceMovement);
+    }
+    return Array.from(set).sort();
+  }, [yearRows]);
+
+  const uniqueRequesters = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const r of yearRows) {
+      if (r.requestedByName) set.add(r.requestedByName);
+    }
+    return Array.from(set).sort();
+  }, [yearRows]);
+
+  const uniqueApprovers = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const r of yearRows) {
+      if (r.approvedByName) set.add(r.approvedByName);
+    }
+    return Array.from(set).sort();
+  }, [yearRows]);
+
   const sorted = React.useMemo(() => {
     return [...yearRows].sort((a, b) => {
+      // 1. Priority sort based on selected column values (highest priority)
+      const matchesA_priceType = priceTypeSortValue ? mapPriceTypeName(a.priceTypeName) === priceTypeSortValue : false;
+      const matchesB_priceType = priceTypeSortValue ? mapPriceTypeName(b.priceTypeName) === priceTypeSortValue : false;
+      
+      const matchesA_movement = movementSortValue ? a.priceMovement === movementSortValue : false;
+      const matchesB_movement = movementSortValue ? b.priceMovement === movementSortValue : false;
+
+      const matchesA_requested = requestedBySortValue ? a.requestedByName === requestedBySortValue : false;
+      const matchesB_requested = requestedBySortValue ? b.requestedByName === requestedBySortValue : false;
+
+      const matchesA_approved = approvedBySortValue ? a.approvedByName === approvedBySortValue : false;
+      const matchesB_approved = approvedBySortValue ? b.approvedByName === approvedBySortValue : false;
+
+      let scoreA = 0;
+      if (matchesA_priceType) scoreA += 1000;
+      if (matchesA_movement) scoreA += 100;
+      if (matchesA_requested) scoreA += 10;
+      if (matchesA_approved) scoreA += 1;
+
+      let scoreB = 0;
+      if (matchesB_priceType) scoreB += 1000;
+      if (matchesB_movement) scoreB += 100;
+      if (matchesB_requested) scoreB += 10;
+      if (matchesB_approved) scoreB += 1;
+
+      if (scoreA !== scoreB) {
+        return scoreB - scoreA;
+      }
+
+      // 2. Fallback to normal column sorting (Date or New Price)
       let valA: string | number | null;
       let valB: string | number | null;
 
@@ -281,17 +440,9 @@ export function AuditDetailGrid({
           valA = a.priceChangeDatetime ?? a.approvedAt ?? "";
           valB = b.priceChangeDatetime ?? b.approvedAt ?? "";
           break;
-        case "priceTypeName":
-          valA = mapPriceTypeName(a.priceTypeName);
-          valB = mapPriceTypeName(b.priceTypeName);
-          break;
         case "newPrice":
           valA = a.newPrice ?? -Infinity;
           valB = b.newPrice ?? -Infinity;
-          break;
-        case "priceMovement":
-          valA = a.priceMovement ?? "";
-          valB = b.priceMovement ?? "";
           break;
         default:
           return 0;
@@ -301,7 +452,14 @@ export function AuditDetailGrid({
       const cmp = valA < valB ? -1 : 1;
       return sort.dir === "asc" ? cmp : -cmp;
     });
-  }, [yearRows, sort]);
+  }, [
+    yearRows,
+    priceTypeSortValue,
+    movementSortValue,
+    requestedBySortValue,
+    approvedBySortValue,
+    sort,
+  ]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const paged = sorted.slice((page - 1) * pageSize, page * pageSize);
@@ -317,6 +475,10 @@ export function AuditDetailGrid({
 
   React.useEffect(() => {
     setPage(1);
+    setPriceTypeSortValue(null);
+    setMovementSortValue(null);
+    setRequestedBySortValue(null);
+    setApprovedBySortValue(null);
   }, [selectedYear]);
 
   if (loading) {
@@ -348,8 +510,11 @@ export function AuditDetailGrid({
           const color = getPriceTypeColor(row.priceTypeSort);
 
           return (
-            <div
-              key={`card-${row.requestId}-${idx}`}
+            <motion.div
+              key={`card-${row.requestId}`}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25, delay: idx * 0.03, ease: "easeOut" }}
               onClick={() => onSelectedRowChange(row)}
               className={cn(
                 "rounded-lg border p-3 cursor-pointer transition-colors bg-background",
@@ -477,7 +642,7 @@ export function AuditDetailGrid({
                   </Badge>
                 )}
               </div>
-            </div>
+            </motion.div>
           );
         })}
       </div>
@@ -497,12 +662,12 @@ export function AuditDetailGrid({
               <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground min-w-[140px]">
                 Supplier
               </th>
-              <SortableHeader
+              <DropdownSortHeader
                 label="Price Type"
-                sortKey="priceTypeName"
-                currentSort={sort}
-                onSort={handleSort}
-                className="min-w-[90px]"
+                valueSort={priceTypeSortValue}
+                onValueSortChange={setPriceTypeSortValue}
+                uniqueValues={uniquePriceTypes}
+                className="min-w-[115px]"
               />
               <th className="px-3 py-2.5 text-right font-semibold text-muted-foreground min-w-[90px]">
                 Old Price
@@ -517,22 +682,32 @@ export function AuditDetailGrid({
               <th className="px-3 py-2.5 text-right font-semibold text-muted-foreground min-w-[80px]">
                 Difference
               </th>
-              <SortableHeader
+              <DropdownSortHeader
                 label="Movement"
-                sortKey="priceMovement"
-                currentSort={sort}
-                onSort={handleSort}
-                className="min-w-[100px]"
+                valueSort={movementSortValue}
+                onValueSortChange={setMovementSortValue}
+                uniqueValues={uniqueMovements}
+                className="min-w-[115px]"
               />
               <th className="px-3 py-2.5 text-right font-semibold text-muted-foreground min-w-[70px]">
                 % Change
               </th>
-              <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground min-w-[140px]">
-                Requested By
-              </th>
-              <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground min-w-[140px]">
-                Approved By
-              </th>
+              <DropdownSortHeader
+                label="Requested By"
+                valueSort={requestedBySortValue}
+                onValueSortChange={setRequestedBySortValue}
+                uniqueValues={uniqueRequesters}
+                showSearch={true}
+                className="min-w-[140px]"
+              />
+              <DropdownSortHeader
+                label="Approved By"
+                valueSort={approvedBySortValue}
+                onValueSortChange={setApprovedBySortValue}
+                uniqueValues={uniqueApprovers}
+                showSearch={true}
+                className="min-w-[140px]"
+              />
               <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground min-w-[80px]">
                 Validation
               </th>
@@ -544,8 +719,11 @@ export function AuditDetailGrid({
                 row.supplierProductValidation !== "SUPPLIER NOT MAPPED TO PRODUCT";
 
               return (
-                <tr
-                  key={`${row.requestId}-${idx}`}
+                <motion.tr
+                  key={row.requestId}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2, delay: idx * 0.025, ease: "easeOut" }}
                   onClick={() => onSelectedRowChange(row)}
                   className={cn(
                     "border-b last:border-b-0 transition-colors cursor-pointer",
@@ -664,7 +842,7 @@ export function AuditDetailGrid({
                       </Badge>
                     )}
                   </td>
-                </tr>
+                </motion.tr>
               );
             })}
           </tbody>

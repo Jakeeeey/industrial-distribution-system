@@ -132,7 +132,7 @@ export function RTOKPICards() {
       <KPICard
         label="Critical"
         value={isLoading ? "—" : kpis.criticalDealers}
-        subLabel="> 100 missing tanks"
+        subLabel="> 100 unreturned cylinders"
         icon={ShieldAlert}
         accentColor="text-red-400"
         bgColor="bg-[#3d1515]"
@@ -143,16 +143,16 @@ export function RTOKPICards() {
       <KPICard
         label="Warning"
         value={isLoading ? "—" : kpis.warningDealers}
-        subLabel="51–100 missing tanks"
+        subLabel="51–100 unreturned cylinders"
         icon={AlertTriangle}
         accentColor="text-amber-400"
         bgColor="bg-[#3d2b00]"
         isLoading={isLoading}
       />
 
-      {/* Total Missing Tanks */}
+      {/* Total Unreturned Cylinders */}
       <KPICard
-        label="Missing Tanks"
+        label="Unreturned Cylinders"
         value={isLoading ? "—" : kpis.totalMissingTanks.toLocaleString()}
         subLabel="Across all dealers"
         icon={PackageX}
@@ -165,7 +165,7 @@ export function RTOKPICards() {
       <KPICard
         label="Fin. Exposure"
         value={isLoading ? "—" : formatCurrency(kpis.totalFinancialExposure)}
-        subLabel="Missing tanks × unit cost"
+        subLabel="Unreturned cylinders × unit cost"
         icon={CircleDollarSign}
         accentColor="text-purple-400"
         bgColor="bg-[#2a1a50]"
