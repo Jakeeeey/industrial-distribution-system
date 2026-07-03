@@ -145,35 +145,7 @@ function toDateStr(dt: string | null | undefined): string | null {
   return dt.split(/[ T]/)[0];
 }
 
-// ── Spring Boot response row shape ────────────────────────────────────────────
 
-/**
- * One movement row returned by /api/views/rto-operation.
- * Each row represents a single serial number in a single movement event.
- */
-interface RTOMovementRow {
-  id: string;
-  movementDatetime: string | null;
-  customerCode: string | null;
-  customerName: string | null;
-  productId: number | null;
-  productName: string | null;
-  serialNumber: string | null;
-  branchId: number | null;
-  sourceId: number | null;
-  docNo: string | null;
-  docType: string | null;
-  movementDirection: "IN" | "OUT" | string;
-  inQty: number;
-  outQty: number;
-  movementQty: number;
-  documentStatus: string | null;
-  linkedSalesInvoiceId: number | null;
-  dispatchPlanId: number | null;
-  vehicleId: number | null;
-  driverId: number | null;
-  deliveryDate: string | null;
-}
 
 // ── Directus raw shapes ───────────────────────────────────────────────────────
 
@@ -210,10 +182,10 @@ interface GroupedDealer {
   customerCode: string;
   customerName: string | null;
   branchId: number | null;
-  fullsDelivered: number;     // sum outQty where direction = OUT
-  emptiesReturned: number;    // sum inQty where direction = IN
-  serialsOut: Set<string>;    // unique serials from OUT movements (currently with dealer)
-  serialsIn: Set<string>;     // unique serials from IN movements (returned from dealer)
+  fullsDelivered: number;
+  emptiesReturned: number;
+  serialsOut: string[];
+  serialsIn: string[];
   lastDeliveryDate: string | null;
 }
 
@@ -281,18 +253,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     ).catch(() => null);
     const allCustomers = custJson?.data || [];
 
-    // Filter relevant dealers: price classifications A, B, C (Dealer, Sub-Dealer, RTO)
+    // Filter relevant dealers: price classification C (RTO) only
     const dealerCustomers = requestedCustomerCode
       ? allCustomers // Bypass filter if a specific code was requested to let it load
       : allCustomers.filter((c) => {
           const ptName = (c.price_type_id as any)?.price_type_name || c.price_type;
           if (!ptName) return false;
           const mapped = mapPriceTypeName(ptName);
-          return (
-            mapped.startsWith("A -") ||
-            mapped.startsWith("B -") ||
-            mapped.startsWith("C -")
-          );
+          return mapped.startsWith("C -");
         });
 
     const customersMap = new Map<string, DirectusCustomer>();
@@ -307,94 +275,90 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json([], { status: 200 });
     }
 
-    // ── Step 2: Fetch all movement rows from Spring Boot ────────────────────
-    const springUrl = `${SPRING_API_BASE}/api/v-rto-operation/all`;
-    const springRes = await fetch(springUrl, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Cookie: `vos_access_token=${token}`,
-        "Content-Type": "application/json",
-      },
-      cache: "no-store",
-    });
-
-    const springText = await springRes.text();
-    if (!springRes.ok) {
-      console.error(
-        `[BFF:RTOOperation] Spring Boot returned ${springRes.status}:`,
-        springText
-      );
-      return NextResponse.json(
-        { error: "Backend request failed" },
-        { status: springRes.status }
-      );
+    // ── Step 2: Fetch given and returned serials from Directus ──────────────
+    const salesOrderSerials: any[] = [];
+    for (const chunkCodes of chunk(dealerCodes, 100)) {
+      const encoded = encodeURIComponent(chunkCodes.join(","));
+      const url = `${base}/items/sales_order_details_serial?limit=-1` +
+        `&filter[customer_code][_in]=${encoded}` +
+        `&fields=customer_code,serial_number,product_id,product_name,branch_id,delivery_date`;
+      const res = await fetchJson<DirectusListResponse<any>>(url).catch(() => null);
+      if (res?.data) salesOrderSerials.push(...res.data);
     }
 
-    let springData: any = null;
-    try {
-      springData = springText ? JSON.parse(springText) : null;
-    } catch {
-      return NextResponse.json(
-        {
-          error: "Unexpected non-JSON response from Spring Boot View API",
-        },
-        { status: 502 }
-      );
-    }
-
-    let rows: RTOMovementRow[] = [];
-    if (Array.isArray(springData)) {
-      rows = springData as RTOMovementRow[];
-    } else if (springData && typeof springData === "object") {
-      const d = (springData as Record<string, unknown>).data;
-      if (Array.isArray(d)) {
-        rows = d as RTOMovementRow[];
-      }
+    const postDispatchSerials: any[] = [];
+    for (const chunkCodes of chunk(dealerCodes, 100)) {
+      const encoded = encodeURIComponent(chunkCodes.join(","));
+      const url = `${base}/items/post_dispatch_invoices_serial?limit=-1` +
+        `&filter[post_dispatch_invoice_id][invoice_id][customer_code][_in]=${encoded}` +
+        `&fields=serial_number,product_id.product_name,created_at,post_dispatch_invoice_id.invoice_id.customer_code`;
+      const res = await fetchJson<DirectusListResponse<any>>(url).catch(() => null);
+      if (res?.data) postDispatchSerials.push(...res.data);
     }
 
     // Filter by customer code if requested
+    let filteredSalesOrderSerials = salesOrderSerials;
+    let filteredPostDispatchSerials = postDispatchSerials;
     if (requestedCustomerCode) {
       const normRequested = requestedCustomerCode.toLowerCase();
-      rows = rows.filter((r) => r.customerCode?.toLowerCase() === normRequested);
+      filteredSalesOrderSerials = salesOrderSerials.filter(
+        (s) => s.customer_code?.toLowerCase() === normRequested
+      );
+      filteredPostDispatchSerials = postDispatchSerials.filter(
+        (r) => r.post_dispatch_invoice_id?.invoice_id?.customer_code?.toLowerCase() === normRequested
+      );
     }
 
-    // ── Step 3: Aggregate movement rows into per-customerCode groups ────────
+    // ── Step 3: Seed and aggregate records into grouped Map ──────────────────
     const groupedMap = new Map<string, GroupedDealer>();
 
-    for (const r of rows) {
-      const code = (r.customerCode || "").trim();
-      if (!code) continue;
-
-      const serial = r.serialNumber ? r.serialNumber.trim() : null;
-      const direction = (r.movementDirection || "").toUpperCase();
-
-      let existing = groupedMap.get(code);
-      if (!existing) {
-        existing = {
-          customerCode: code,
-          customerName: r.customerName ?? null,
-          branchId: r.branchId ?? null,
-          fullsDelivered: 0,
-          emptiesReturned: 0,
-          serialsOut: new Set<string>(),
-          serialsIn: new Set<string>(),
-          lastDeliveryDate: null,
-        };
-        groupedMap.set(code, existing);
+    for (const code of dealerCodes) {
+      if (requestedCustomerCode && code.toLowerCase() !== requestedCustomerCode.toLowerCase()) {
+        continue;
       }
+      const cust = customersMap.get(code);
+      groupedMap.set(code, {
+        customerCode: code,
+        customerName: cust?.customer_name || cust?.store_name || null,
+        branchId: null,
+        fullsDelivered: 0,
+        emptiesReturned: 0,
+        serialsOut: [],
+        serialsIn: [],
+        lastDeliveryDate: null,
+      });
+    }
 
-      if (direction === "OUT") {
-        existing.fullsDelivered += coalesceNum(r.outQty, r.movementQty, 1);
-        if (serial) existing.serialsOut.add(serial);
-        if (r.deliveryDate || r.movementDatetime) {
-          const d = toDateStr(r.deliveryDate || r.movementDatetime);
+    for (const s of filteredSalesOrderSerials) {
+      const code = (s.customer_code || "").trim();
+      if (!code) continue;
+      const existing = groupedMap.get(code);
+      if (existing) {
+        existing.fullsDelivered++;
+        if (s.serial_number) {
+          existing.serialsOut.push(s.serial_number.trim());
+        }
+        if (s.branch_id && !existing.branchId) {
+          existing.branchId = Number(s.branch_id);
+        }
+        if (s.delivery_date) {
+          const d = toDateStr(s.delivery_date);
           if (d && (!existing.lastDeliveryDate || d > existing.lastDeliveryDate)) {
             existing.lastDeliveryDate = d;
           }
         }
-      } else if (direction === "IN") {
-        existing.emptiesReturned += coalesceNum(r.inQty, r.movementQty, 1);
-        if (serial) existing.serialsIn.add(serial);
+      }
+    }
+
+    for (const r of filteredPostDispatchSerials) {
+      const code = (r.post_dispatch_invoice_id?.invoice_id?.customer_code || "").trim();
+      if (!code) continue;
+      const existing = groupedMap.get(code);
+      if (existing) {
+        existing.emptiesReturned++;
+        if (r.serial_number) {
+          existing.serialsIn.push(r.serial_number.trim());
+        }
       }
     }
 
@@ -440,17 +404,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const allSerials = Array.from(
       new Set(
         Array.from(groupedMap.values()).flatMap((g) => [
-          ...Array.from(g.serialsOut),
-          ...Array.from(g.serialsIn),
+          ...g.serialsOut,
+          ...g.serialsIn,
         ])
       )
     );
 
-    // Map: serial → details (cost, branchId, branchName, branchCode)
+    // Map: serial → details (cost, productName, branchId, branchName, branchCode)
     const cylinderAssetsMap = new Map<
       string,
       {
         cost: number;
+        productName: string | null;
         branchId: number | null;
         branchName: string | null;
         branchCode: string | null;
@@ -463,7 +428,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         const cyUrl =
           `${base}/items/cylinder_assets?limit=-1` +
           `&filter[serial_number][_in]=${encoded}` +
-          `&fields=serial_number,cost,current_branch_id.id,current_branch_id.branch_name,current_branch_id.branch_code`;
+          `&fields=serial_number,cost,product_id.product_name,current_branch_id.id,current_branch_id.branch_name,current_branch_id.branch_code`;
         const cyJson = await fetchJson<DirectusListResponse<any>>(
           cyUrl
         ).catch(() => null);
@@ -471,9 +436,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           for (const cy of cyJson.data) {
             if (cy.serial_number) {
               const cost = coalesceNum(cy.cost);
+              let productName: string | null = null;
               let branchId: number | null = null;
               let branchName: string | null = null;
               let branchCode: string | null = null;
+
+              if (cy.product_id && typeof cy.product_id === "object") {
+                productName = cy.product_id.product_name ?? null;
+              }
 
               if (cy.current_branch_id && typeof cy.current_branch_id === "object") {
                 branchId = cy.current_branch_id.id ?? null;
@@ -483,6 +453,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
               cylinderAssetsMap.set(cy.serial_number, {
                 cost,
+                productName,
                 branchId,
                 branchName,
                 branchCode,
@@ -588,7 +559,25 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         // Cylinder accounting
         const fullsDelivered = g.fullsDelivered;
         const emptiesReturned = g.emptiesReturned;
-        const missingTanks = Math.max(0, fullsDelivered - emptiesReturned);
+
+        // Pair given and returned serial numbers: if they don't match, it is missing
+        const returnedPool = new Map<string, number>();
+        for (const serial of g.serialsIn) {
+          const norm = serial.trim().toUpperCase();
+          returnedPool.set(norm, (returnedPool.get(norm) ?? 0) + 1);
+        }
+
+        let missingTanks = 0;
+        for (const serial of g.serialsOut) {
+          const norm = serial.trim().toUpperCase();
+          const count = returnedPool.get(norm) ?? 0;
+          if (count > 0) {
+            returnedPool.set(norm, count - 1);
+          } else {
+            missingTanks++;
+          }
+        }
+
         const tempMissingStatus = computeMissingStatus(missingTanks);
 
         // Unpaid balance from sales_invoice (payment_status = Unpaid)
@@ -596,7 +585,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         const balanceStatus = computeBalanceStatus(unpaidBalance);
 
         // Financial exposure = (missingTanks × average cylinder cost) + unpaid balance
-        const serialsArr = Array.from(g.serialsOut);
+        const serialsArr = g.serialsOut;
         const costsForDealer = serialsArr
           .map((s) => cylinderAssetsMap.get(s)?.cost ?? 0)
           .filter((c) => c > 0);
@@ -615,10 +604,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           missingStatus = "warning";
         }
 
-        // Active cylinders with dealer = serials from OUT movements
-        // (those that haven't come back yet as IN movements)
-        const outCylinderSerials = serialsArr;
-        const inCylinderSerials = Array.from(g.serialsIn);
+        // Active cylinders with dealer = count of missing tanks
+        const outCylinderSerials = g.serialsOut.map((serial) => ({
+          serialNumber: serial,
+          productName: cylinderAssetsMap.get(serial)?.productName || null,
+        }));
+        const inCylinderSerials = g.serialsIn.map((serial) => ({
+          serialNumber: serial,
+          productName: cylinderAssetsMap.get(serial)?.productName || null,
+        }));
         const activeCylindersWithDealer = missingTanks;
 
         return {
@@ -653,7 +647,17 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // Sort by missingTanks descending (highest risk first)
     records.sort((a, b) => b.missingTanks - a.missingTanks);
 
-    return NextResponse.json(records, {
+    // Apply branch filter if provided
+    const requestedBranchId = searchParams.get("branchId")?.trim();
+    let finalRecords = records;
+    if (requestedBranchId) {
+      const bid = Number(requestedBranchId);
+      if (!isNaN(bid)) {
+        finalRecords = records.filter((r) => r.branchId === bid);
+      }
+    }
+
+    return NextResponse.json(finalRecords, {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
