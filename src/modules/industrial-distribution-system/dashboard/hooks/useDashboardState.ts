@@ -180,18 +180,18 @@ export function useDashboardState() {
 
       // 2. Load the target preset's layouts
       const targetLayout = loadPresetLayout(presetId);
-      
+
       // 3. Update states
       setActivePreset(presetId);
       setLayouts(targetLayout);
-      
+
       // 4. Update the active preset selection key
       try {
         localStorage.setItem(ACTIVE_PRESET_KEY, presetId);
       } catch (e) {
         console.error("Failed to save active preset key:", e);
       }
-      
+
       toast.info(`Switched to ${PRESETS.find(p => p.id === presetId)?.name} preset.`);
     }
   }, [activePreset, layouts]);
