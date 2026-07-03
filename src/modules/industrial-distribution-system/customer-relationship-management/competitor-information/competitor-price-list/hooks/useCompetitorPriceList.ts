@@ -42,9 +42,11 @@ export interface UseCompetitorPriceListReturn {
 
 	// Filter state
 	filters: PriceListFilters;
+	appliedFilters: PriceListFilters;
 	activeProductId: string;
 	setFilter: <K extends keyof PriceListFilters>(key: K, value: PriceListFilters[K]) => void;
 	resetFilters: () => void;
+	applyFilters: () => void;
 	hasActiveFilters: boolean;
 
 	// Computed
@@ -63,6 +65,7 @@ export function useCompetitorPriceList(): UseCompetitorPriceListReturn {
 		useCompetitorPriceListContext();
 
 	const [filters, setFilters] = useState<PriceListFilters>(getInitialFilters);
+	const [appliedFilters, setAppliedFilters] = useState<PriceListFilters>(getInitialFilters);
 
 	const activeProductId = filters.productId;
 
@@ -85,29 +88,35 @@ export function useCompetitorPriceList(): UseCompetitorPriceListReturn {
 		});
 	};
 
+	const applyFilters = () => {
+		setAppliedFilters(filters);
+	};
+
 	const resetFilters = () => {
 		const now = new Date();
 		const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-		setFilters({
+		const defaults = {
 			...DEFAULT_FILTERS,
 			dateFrom: startOfMonth,
 			dateTo: now,
-		});
+		};
+		setFilters(defaults);
+		setAppliedFilters(defaults);
 	};
 
 	const hasActiveFilters = useMemo(() => {
 		const hasNonDateFilters =
-			!!filters.search ||
-			!!filters.competitorId ||
-			!!filters.province ||
-			!!filters.municipality ||
-			!!filters.barangay ||
-			!!filters.sourceType;
+			!!appliedFilters.search ||
+			!!appliedFilters.competitorId ||
+			!!appliedFilters.province ||
+			!!appliedFilters.municipality ||
+			!!appliedFilters.barangay ||
+			!!appliedFilters.sourceType;
 
 		if (hasNonDateFilters) return true;
 
 		// If no other filters, check if the dates are different from "this month" default
-		if (!filters.dateFrom || !filters.dateTo) {
+		if (!appliedFilters.dateFrom || !appliedFilters.dateTo) {
 			return true;
 		}
 
@@ -115,31 +124,31 @@ export function useCompetitorPriceList(): UseCompetitorPriceListReturn {
 		const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 		startOfMonth.setHours(0, 0, 0, 0);
 
-		const from = new Date(filters.dateFrom);
+		const from = new Date(appliedFilters.dateFrom);
 		from.setHours(0, 0, 0, 0);
 
 		if (from.getTime() !== startOfMonth.getTime()) return true;
 
-		const to = new Date(filters.dateTo);
+		const to = new Date(appliedFilters.dateTo);
 		const isToToday =
 			to.getFullYear() === now.getFullYear() &&
 			to.getMonth() === now.getMonth() &&
 			to.getDate() === now.getDate();
 
 		return !isToToday;
-	}, [filters]);
+	}, [appliedFilters]);
 
 	// ─── Filter Entries (client-side post-fetch) ──────────────────────────────
 
 	const filteredEntries = useMemo<CompetitorPriceEntry[]>(() => {
 		let result = entries;
 
-		if (activeProductId) {
-			result = result.filter((e) => e.product_name === activeProductId);
+		if (appliedFilters.productId) {
+			result = result.filter((e) => e.product_name === appliedFilters.productId);
 		}
 
-		if (filters.search) {
-			const s = filters.search.toLowerCase();
+		if (appliedFilters.search) {
+			const s = appliedFilters.search.toLowerCase();
 			result = result.filter((entry) => {
 				const competitorName =
 					typeof entry.competitor_id === "object" && entry.competitor_id !== null
@@ -159,45 +168,45 @@ export function useCompetitorPriceList(): UseCompetitorPriceListReturn {
 			});
 		}
 
-		if (filters.competitorId) {
+		if (appliedFilters.competitorId) {
 			result = result.filter((entry) => {
 				const id =
 					typeof entry.competitor_id === "object" && entry.competitor_id !== null
 						? String(entry.competitor_id.id)
 						: String(entry.competitor_id);
-				return id === filters.competitorId;
+				return id === appliedFilters.competitorId;
 			});
 		}
 
-		if (filters.province) {
-			result = result.filter((e) => e.province === filters.province);
+		if (appliedFilters.province) {
+			result = result.filter((e) => e.province === appliedFilters.province);
 		}
-		if (filters.municipality) {
-			result = result.filter((e) => e.municipality === filters.municipality);
+		if (appliedFilters.municipality) {
+			result = result.filter((e) => e.municipality === appliedFilters.municipality);
 		}
-		if (filters.barangay) {
-			result = result.filter((e) => e.barangay === filters.barangay);
+		if (appliedFilters.barangay) {
+			result = result.filter((e) => e.barangay === appliedFilters.barangay);
 		}
-		if (filters.sourceType) {
-			result = result.filter((e) => e.source_type === filters.sourceType);
+		if (appliedFilters.sourceType) {
+			result = result.filter((e) => e.source_type === appliedFilters.sourceType);
 		}
 
 		result = result.filter((e) =>
-			isWithinDateRange(e, filters.dateFrom, filters.dateTo)
+			isWithinDateRange(e, appliedFilters.dateFrom, appliedFilters.dateTo)
 		);
 
 		return result;
-	}, [entries, filters, activeProductId]);
+	}, [entries, appliedFilters]);
 
 	const chartFilteredEntries = useMemo<CompetitorPriceEntry[]>(() => {
 		let result = entries;
 
-		if (activeProductId) {
-			result = result.filter((e) => e.product_name === activeProductId);
+		if (appliedFilters.productId) {
+			result = result.filter((e) => e.product_name === appliedFilters.productId);
 		}
 
-		if (filters.search) {
-			const s = filters.search.toLowerCase();
+		if (appliedFilters.search) {
+			const s = appliedFilters.search.toLowerCase();
 			result = result.filter((entry) => {
 				const competitorName =
 					typeof entry.competitor_id === "object" && entry.competitor_id !== null
@@ -217,25 +226,25 @@ export function useCompetitorPriceList(): UseCompetitorPriceListReturn {
 			});
 		}
 
-		if (filters.province) {
-			result = result.filter((e) => e.province === filters.province);
+		if (appliedFilters.province) {
+			result = result.filter((e) => e.province === appliedFilters.province);
 		}
-		if (filters.municipality) {
-			result = result.filter((e) => e.municipality === filters.municipality);
+		if (appliedFilters.municipality) {
+			result = result.filter((e) => e.municipality === appliedFilters.municipality);
 		}
-		if (filters.barangay) {
-			result = result.filter((e) => e.barangay === filters.barangay);
+		if (appliedFilters.barangay) {
+			result = result.filter((e) => e.barangay === appliedFilters.barangay);
 		}
-		if (filters.sourceType) {
-			result = result.filter((e) => e.source_type === filters.sourceType);
+		if (appliedFilters.sourceType) {
+			result = result.filter((e) => e.source_type === appliedFilters.sourceType);
 		}
 
 		result = result.filter((e) =>
-			isWithinDateRange(e, filters.dateFrom, filters.dateTo)
+			isWithinDateRange(e, appliedFilters.dateFrom, appliedFilters.dateTo)
 		);
 
 		return result;
-	}, [entries, filters, activeProductId]);
+	}, [entries, appliedFilters]);
 
 	// ─── Analytics (derived from filtered data) ───────────────────────────────
 
@@ -268,9 +277,11 @@ export function useCompetitorPriceList(): UseCompetitorPriceListReturn {
 		error,
 		refetch,
 		filters,
+		appliedFilters,
 		activeProductId,
 		setFilter,
 		resetFilters,
+		applyFilters,
 		hasActiveFilters,
 		filteredEntries,
 		chartFilteredEntries,

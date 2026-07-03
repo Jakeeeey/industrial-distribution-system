@@ -1761,18 +1761,25 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-border text-[11px]">
-                                {pureDeployments.map((line: any, idx) => (
-                                  <tr key={idx} className="hover:bg-accent/10">
-                                    <td className="p-2 font-mono font-bold">{line.serial_number}</td>
-                                    <td className="p-2 text-muted-foreground">
-                                      {line.cylinder_asset?.product?.product_name || "LPG Cylinder"}
-                                    </td>
-                                    <td className="p-2 font-mono">{line.tare_weight_kg} KG</td>
-                                    <td className="p-2 font-mono font-bold text-primary dark:text-emerald-400">
-                                      {line.previous_lpg_kg} KG
-                                    </td>
-                                  </tr>
-                                ))}
+                                {pureDeployments.map((lineItem, idx) => {
+                                  // Comment: Avoid explicit any in map callback by casting lineItem to Record<string, unknown>
+                                  const line = lineItem as unknown as Record<string, unknown>;
+                                  const cylinderAsset = line.cylinder_asset as Record<string, unknown> | undefined;
+                                  const product = cylinderAsset?.product as Record<string, unknown> | undefined;
+                                  const productName = String(product?.product_name || "LPG Cylinder");
+                                  return (
+                                    <tr key={idx} className="hover:bg-accent/10">
+                                      <td className="p-2 font-mono font-bold">{String(line.serial_number ?? "")}</td>
+                                      <td className="p-2 text-muted-foreground">
+                                        {productName}
+                                      </td>
+                                      <td className="p-2 font-mono">{Number(line.tare_weight_kg ?? 0)} KG</td>
+                                      <td className="p-2 font-mono font-bold text-primary dark:text-emerald-400">
+                                        {Number(line.previous_lpg_kg ?? 0)} KG
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
                               </tbody>
                             </table>
                           </div>

@@ -19,6 +19,11 @@
  */
 export type MissingStatus = "normal" | "warning" | "critical";
 
+export interface SerialWithProduct {
+  serialNumber: string;
+  productName: string | null;
+}
+
 /**
  * Unpaid balance risk tier.
  *   paid → balance === 0
@@ -87,9 +92,9 @@ export interface RTODealerRecord {
   /** Number of cylinders currently WITH_CUSTOMER status in cylinder_assets */
   activeCylindersWithDealer: number;
   /** Serial numbers of cylinders delivered (OUT movements) */
-  outCylinderSerials: string[];
+  outCylinderSerials: SerialWithProduct[];
   /** Serial numbers of cylinders returned (IN movements) */
-  inCylinderSerials: string[];
+  inCylinderSerials: SerialWithProduct[];
 
   // ── Lifecycle ────────────────────────────────────────────────────────────────
   /** ISO date of most recent delivery to this dealer */
