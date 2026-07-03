@@ -21,6 +21,7 @@ export interface SalesOrderItem {
   unit: string;
   ordered_qty: number;
   allocated_qty: number;
+  served_qty: number; // Added: Invoiced / Served quantity column
   tagged_qty: number;
   tagged_serials: TaggedSerial[];
 }
@@ -33,6 +34,7 @@ export interface SalesOrderTaggingDetails {
 export interface MappedSerial {
   serial_number: string;
   product_id: number;
+  cylinder_status?: string;
 }
 
 export interface CustomerAsset {

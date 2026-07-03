@@ -304,7 +304,17 @@ export async function checkSiteOnboarded(siteId: number): Promise<boolean> {
   return (res.data ?? []).length > 0;
 }
 
-export async function fetchInvoicesForCustomer(customerCode?: string): Promise<{ invoice_id: number; invoice_no: string; total_amount: number; invoice_date: string; transaction_status: string; isOnboardingBaseline?: boolean; hasMeteredTransaction?: boolean }[]> {
+export async function fetchInvoicesForCustomer(customerCode?: string): Promise<{
+  invoice_id: number;
+  invoice_no: string;
+  total_amount: number;
+  invoice_date: string;
+  transaction_status: string;
+  sales_order_id?: number | null;
+  sales_order_no?: string | null;
+  isOnboardingBaseline?: boolean;
+  hasMeteredTransaction?: boolean;
+}[]> {
   const filters: Record<string, unknown> = {
     transaction_status: { _eq: "En Route" }
   };
@@ -372,17 +382,38 @@ export async function fetchInvoicesForCustomer(customerCode?: string): Promise<{
     console.warn("Failed to fetch posted transaction invoice IDs", e);
   }
 
-  const url = `/items/sales_invoice?limit=-1&fields=invoice_id,invoice_no,invoice_date,total_amount,transaction_status,customer_code,order_id,salesman_id&filter=${encodeURIComponent(JSON.stringify(filters))}`;
-  const res = await directusFetch<{ data: { invoice_id: number; invoice_no: string; total_amount: number; invoice_date: string; transaction_status: string }[] }>(`${DIRECTUS_URL}${url}`);
+  const url = `/items/sales_invoice?limit=-1&fields=invoice_id,invoice_no,invoice_date,total_amount,transaction_status,customer_code,order_id.order_id,order_id.order_no,salesman_id&filter=${encodeURIComponent(JSON.stringify(filters))}`;
+  const res = await directusFetch<{
+    data: {
+      invoice_id: number;
+      invoice_no: string;
+      total_amount: number;
+      invoice_date: string;
+      transaction_status: string;
+      order_id?: number | { order_id: number; order_no: string } | null;
+    }[];
+  }>(`${DIRECTUS_URL}${url}`);
   
-  const invoices = res.data ?? [];
-  return invoices
+  const rawInvoices = res.data ?? [];
+  return rawInvoices
     .filter(inv => !postedInvoiceIds.has(inv.invoice_id) && !postedTxInvoiceIds.has(inv.invoice_id))
-    .map(inv => ({
-      ...inv,
-      isOnboardingBaseline: onboardingInvoiceIds.has(inv.invoice_id),
-      hasMeteredTransaction: meteredTransactionInvoiceIds.has(inv.invoice_id)
-    }));
+    .map(inv => {
+      const orderObj =
+        inv.order_id && typeof inv.order_id === "object"
+          ? (inv.order_id as { order_id: number; order_no: string })
+          : null;
+      return {
+        invoice_id: inv.invoice_id,
+        invoice_no: inv.invoice_no,
+        total_amount: inv.total_amount,
+        invoice_date: inv.invoice_date,
+        transaction_status: inv.transaction_status,
+        sales_order_id: orderObj ? Number(orderObj.order_id) : inv.order_id ? Number(inv.order_id) : null,
+        sales_order_no: orderObj ? String(orderObj.order_no) : null,
+        isOnboardingBaseline: onboardingInvoiceIds.has(inv.invoice_id),
+        hasMeteredTransaction: meteredTransactionInvoiceIds.has(inv.invoice_id)
+      };
+    });
 }
 
 export async function fetchAvailableCylinders(): Promise<CylinderAsset[]> {
@@ -433,13 +464,68 @@ export async function fetchAvailableCylinders(): Promise<CylinderAsset[]> {
   return cylinders;
 }
 
-export async function validateSerialForOnboarding(serialNumber: string): Promise<CylinderAsset | null> {
-  // 1. Check if it exists in consolidator_serial_mappings
-  const mappingRes = await directusFetch<{ data: { serial_number: string }[] }>(
-    `${DIRECTUS_URL}/items/consolidator_serial_mappings?filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&limit=1`
-  );
-  if (!mappingRes.data || mappingRes.data.length === 0) {
-    throw new Error(`Serial ${serialNumber} not found in consolidator serial mappings.`);
+export async function validateSerialForOnboarding(serialNumber: string, salesOrderId?: number): Promise<CylinderAsset | null> {
+  // DEV-CHANGE: Added delivery truck query traversal logic if salesOrderId is supplied
+  if (salesOrderId) {
+    // 1. Fetch dispatch plan details for this Sales Order
+    const dpdRes = await directusFetch<{ data: { dispatch_id: number | { id: number } }[] }>(
+      `${DIRECTUS_URL}/items/dispatch_plan_details?filter[sales_order_id][_eq]=${salesOrderId}&fields=dispatch_id`
+    );
+    const dpd = dpdRes.data?.[0];
+    if (!dpd) {
+      throw new Error(`Serial ${serialNumber} not found on the delivery truck assigned to this order (no dispatch plan details found).`);
+    }
+
+    // 2. Fetch dispatch plan to get the dispatch_no
+    const dispatchId = typeof dpd.dispatch_id === "object" && dpd.dispatch_id !== null ? dpd.dispatch_id.id : dpd.dispatch_id;
+    const dpRes = await directusFetch<{ data: { dispatch_no: string } }>(
+      `${DIRECTUS_URL}/items/dispatch_plan/${dispatchId}?fields=dispatch_no`
+    );
+    const dispatchNo = dpRes.data?.dispatch_no;
+    if (!dispatchNo) {
+      throw new Error(`Dispatch plan ${dispatchId} does not have a valid dispatch number.`);
+    }
+
+    // 3. Fetch consolidator linked to this dispatch
+    const cdispRes = await directusFetch<{ data: { consolidator_id: number | { id: number } }[] }>(
+      `${DIRECTUS_URL}/items/consolidator_dispatches?filter[dispatch_no][_eq]=${encodeURIComponent(dispatchNo)}&fields=consolidator_id`
+    );
+    const cdisp = cdispRes.data?.[0];
+    if (!cdisp) {
+      throw new Error(`No loading sheet linked to dispatch number ${dispatchNo}.`);
+    }
+    const consolidatorId = typeof cdisp.consolidator_id === "object" && cdisp.consolidator_id !== null
+      ? cdisp.consolidator_id.id
+      : cdisp.consolidator_id;
+    if (!consolidatorId) {
+      throw new Error(`Loading sheet for dispatch ${dispatchNo} does not have a valid consolidator ID.`);
+    }
+
+    // 4. Fetch consolidator details to get the detail IDs
+    const cdRes = await directusFetch<{ data: { id: number; product_id: number }[] }>(
+      `${DIRECTUS_URL}/items/consolidator_details?filter[consolidator_id][_eq]=${consolidatorId}&fields=id,product_id`
+    );
+    const consolidatorDetails = cdRes.data || [];
+    const detailIds = consolidatorDetails.map((cd) => cd.id);
+    if (detailIds.length === 0) {
+      throw new Error(`No loaded products found on the loading sheet (consolidator #${consolidatorId}).`);
+    }
+
+    // 5. Fetch serial mappings associated with these details for the scanned serial number
+    const mappingRes = await directusFetch<{ data: { serial_number: string }[] }>(
+      `${DIRECTUS_URL}/items/consolidator_serial_mappings?filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&filter[detail_id][_in]=${detailIds.join(",")}&limit=1`
+    );
+    if (!mappingRes.data || mappingRes.data.length === 0) {
+      throw new Error(`Serial ${serialNumber} not found on the loading sheet of delivery truck for this order.`);
+    }
+  } else {
+    // Fallback: Check if it exists in consolidator_serial_mappings globally
+    const mappingRes = await directusFetch<{ data: { serial_number: string }[] }>(
+      `${DIRECTUS_URL}/items/consolidator_serial_mappings?filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&limit=1`
+    );
+    if (!mappingRes.data || mappingRes.data.length === 0) {
+      throw new Error(`Serial ${serialNumber} not found in consolidator serial mappings.`);
+    }
   }
 
   // 2. Fetch from cylinder_assets
@@ -453,6 +539,11 @@ export async function validateSerialForOnboarding(serialNumber: string): Promise
 
   if (asset.cylinder_condition !== "GOOD") {
     throw new Error(`Cylinder ${serialNumber} condition is ${asset.cylinder_condition}, must be GOOD.`);
+  }
+
+  // DEV-CHANGE: Specifically check if status is WITH_CUSTOMER to indicate it is already tagged/delivered
+  if (asset.cylinder_status === "WITH_CUSTOMER") {
+    throw new Error(`Cylinder ${serialNumber} has already been tagged/delivered under another order or truck.`);
   }
 
   if (asset.cylinder_status !== "AVAILABLE" && asset.cylinder_status !== "LOADED") {
@@ -1203,7 +1294,8 @@ export async function processRegularSwap(payload: {
   }
 
   // Create WIWO Header
-  const wiwoNo = `WIWO-${Date.now().toString().slice(-6)}`;
+  // IDS-CHANGE: Updated regular prefix from WIWO- to WIWO-REG- per user instruction
+  const wiwoNo = `WIWO-REG-${Date.now().toString().slice(-6)}`;
   // IDS-CHANGE: VAT is absorbed / inclusive: gross = vatable amount, net = vatable sales, vat = gross - net.
   const grossAmount = Number((totalWiwoKg * payload.pricePerKg).toFixed(2));
   const netAmount = Number((grossAmount / 1.12).toFixed(2));

@@ -26,7 +26,6 @@ import { Input } from '@/components/ui/input';
 import { getJoinedDispatchData } from './providers/fetchProviders';
 import { DispatchRow } from './types';
 import ClearanceModal from './components/ClearanceModal';
-import CylinderTaggingModal from './components/CylinderTaggingModal';
 
 const DispatchClearanceSerialModule = () => {
   const [data, setData] = useState<DispatchRow[]>([]);
@@ -39,7 +38,6 @@ const DispatchClearanceSerialModule = () => {
 
   const [selectedDispatch, setSelectedDispatch] = useState<DispatchRow | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isCylinderModalOpen, setIsCylinderModalOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   // Date Filter State
@@ -219,13 +217,6 @@ const DispatchClearanceSerialModule = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <Button
-            variant="default"
-            onClick={() => setIsCylinderModalOpen(true)}
-            className="h-10 px-5 rounded-xl font-bold bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm transition-all shrink-0"
-          >
-            Cylinder Tagging
-          </Button>
         </div>
       </div>
 
@@ -363,11 +354,6 @@ const DispatchClearanceSerialModule = () => {
           dispatch={selectedDispatch}
         />
       )}
-
-      <CylinderTaggingModal
-        isOpen={isCylinderModalOpen}
-        onClose={() => setIsCylinderModalOpen(false)}
-      />
     </div>
   );
 };

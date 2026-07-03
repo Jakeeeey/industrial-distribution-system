@@ -516,7 +516,7 @@ export const stockAdjustmentService = {
     }
   },
 
-  async checkSerialExists(serial: string, token: string, branchId?: number): Promise<{ exists: boolean; location?: string }> {
+  async checkSerialExists(serial: string, token: string, branchId?: number): Promise<{ exists: boolean; location?: string; productId?: number }> {
     try {
       // 1. Check Spring API (Inventory On Hand)
       const springUrl = new URL(`${SPRING_API_URL}/api/v-serial-onhand/all`);
@@ -538,7 +538,7 @@ export const stockAdjustmentService = {
 
         if (exactMatch) {
           const locationName = exactMatch.branch_name || "Inventory";
-          return { exists: true, location: locationName };
+          return { exists: true, location: locationName, productId: Number(exactMatch.productId || exactMatch.product_id) };
         }
       }
 
@@ -1130,4 +1130,41 @@ export const stockAdjustmentService = {
 
     return `${searchPrefix}${nextNumber.toString().padStart(3, "0")}`;
   },
+
+  async fetchProductById(productId: number): Promise<StockAdjustmentProduct | null> {
+    try {
+      const res = await directusFetch<{
+        data: {
+          product_id: number;
+          product_name?: string | null;
+          product_code?: string | null;
+          price_per_unit?: number | null;
+          cost_per_unit?: number | null;
+          barcode?: string | null;
+          description?: string | null;
+          unit_of_measurement?: { unit_name?: string; order?: number; unit_id?: number } | null;
+          product_brand?: { brand_name?: string } | null;
+          unit_name?: string | null;
+          unit_id?: number | null;
+          brand_name?: string | null;
+        };
+      }>(
+        `${DIRECTUS_URL}/items/products/${productId}?fields=product_id,product_name,product_code,price_per_unit,cost_per_unit,barcode,description,unit_of_measurement.unit_name,unit_of_measurement.order,product_brand.brand_name`
+      );
+      const p = res.data;
+      if (!p) return null;
+      const uom = p.unit_of_measurement;
+      const brand = p.product_brand;
+      return {
+        ...p,
+        id: p.product_id,
+        unit_name: uom?.unit_name || p.unit_name || "pcs",
+        unit_id: uom?.unit_id || p.unit_id || null,
+        brand_name: brand?.brand_name || p.brand_name || "N/A"
+      } as unknown as StockAdjustmentProduct;
+    } catch (err) {
+      console.error("Error fetching product by id:", err);
+      return null;
+    }
+  }
 };

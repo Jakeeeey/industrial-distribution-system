@@ -340,6 +340,58 @@ export async function repoFetchTransactionsByHeader(headerId: number): Promise<C
   return (res.data ?? []).map(mapTransaction);
 }
 
+// ─── Domino-Effect Cascade Queries ────────────────────────────────────────────
+
+/**
+ * DOMINO-EFFECT: Fetches the next chronological metered transaction after
+ * `currentTxId` within the same billing header.
+ *
+ * Filters only transactions with a meter_reading_id (metered transactions).
+ * Sorted by billing_period_from ASC, id ASC — same order as the reviewer UI.
+ * Returns null if no subsequent metered transaction exists in the sequence.
+ *
+ * NOTE: lpg_site_id filter was intentionally removed. A billing header belongs
+ * to a single site already, so transaction_header_id alone is sufficient scope.
+ * The old siteId filter was causing silent cascade failures when lpg_site_id
+ * was 0 or null on meter readings / transactions.
+ */
+export async function repoFetchNextMeterTransaction(
+  currentTxId: number,
+  headerId: number
+): Promise<{ id: number; meter_reading_id: number; status: string } | null> {
+  // Fetch all metered transactions in the same header, sorted chronologically
+  const filter = encodeURIComponent(
+    JSON.stringify({
+      _and: [
+        { transaction_header_id: { _eq: headerId } },
+        { meter_reading_id: { _nnull: true } },
+      ],
+    })
+  );
+  const res = await directusFetch<{ data: Record<string, unknown>[] }>(
+    `${DIRECTUS_URL}/items/lpg_metered_wiwo_transactions?fields=id,meter_reading_id,billing_period_from,status&filter=${filter}&sort=billing_period_from,id&limit=-1`
+  );
+
+  const rows = res.data ?? [];
+  // Find the current transaction's position in the sorted list
+  const currentIndex = rows.findIndex((row) => Number(row["id"]) === currentTxId);
+
+  console.log(
+    `[DOMINO-REPO] repoFetchNextMeterTransaction: headerId=${headerId} currentTxId=${currentTxId} ` +
+    `rows=${rows.length} currentIndex=${currentIndex}`
+  );
+
+  // If not found or already the last in sequence, no next transaction exists
+  if (currentIndex === -1 || currentIndex >= rows.length - 1) return null;
+
+  const next = rows[currentIndex + 1];
+  return {
+    id: Number(next["id"]),
+    meter_reading_id: Number(next["meter_reading_id"]),
+    status: String(next["status"] ?? "DRAFT"),
+  };
+}
+
 // ─── Meter Reading Queries ────────────────────────────────────────────────────
 
 /**

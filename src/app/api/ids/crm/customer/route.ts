@@ -436,6 +436,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Fallback: If client did not provide date_entered, set to Philippine local time (UTC+8)
+    if (!newCustomerData.date_entered) {
+      const phOffset = 8 * 60; // Manila is UTC+8
+      const now = new Date();
+      const phTime = new Date(now.getTime() + (phOffset + now.getTimezoneOffset()) * 60000);
+      newCustomerData.date_entered = phTime.toISOString().slice(0, 19).replace("T", " ");
+    }
+
     // console.log("[POST] Creating customer with payload:", JSON.stringify(newCustomerData, null, 2));
 
     const createRes = await fetchWithRetry(
