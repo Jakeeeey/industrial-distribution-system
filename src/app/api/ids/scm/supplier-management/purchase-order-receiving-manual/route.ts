@@ -80,7 +80,18 @@ function deriveDiscountPercentFromCode(codeRaw: string): number {
 }
 
 function keyLine(poId: number, productId: number, branchId: number) { return `${poId}::${productId}::${branchId}`; }
-function nowISO() { return new Date().toISOString(); }
+function nowISO() {
+    const d = new Date();
+    const datePart = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(d);
+    const timePart = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Manila",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+    }).format(d);
+    return `${datePart} ${timePart}`;
+}
 
 interface DiscountLine {
     id?: string | number;
@@ -590,6 +601,7 @@ export async function POST(req: NextRequest) {
             Object.keys(porCounts).forEach(k => { if (k.includes("-")) productIdsSet.add(toNum(k.split("-")[0])); });
             
             const linksMap = await fetchProductSupplierLinks(base, Array.from(productIdsSet), toNum(po?.supplier_name));
+            const productsMap = await fetchProductsMap(base, Array.from(productIdsSet));
 
             for (const [key, qtyNum] of Object.entries(porCounts)) {
                 const qty = toNum(qtyNum);
@@ -649,9 +661,10 @@ export async function POST(req: NextRequest) {
                 const ewtAmtTotal = Number((vatExclTotal * 0.01).toFixed(2));
 
                 const isRefill = Number(po?.is_refill ?? 0) === 1;
+                const isSerialized = !!(productsMap.get(pId)?.is_serialized);
                 const patch: Record<string, unknown> = {
                     receipt_no: receiptNo, receipt_date: receiptDate, received_quantity: newQty, received_date: nowISO(), 
-                    isPosted: isRefill ? 0 : 1,
+                    isPosted: (isRefill || isSerialized) ? 0 : 1,
                     discount_type: dtId || null, discounted_amount: lineDisc,
                     vat_amount: vatAmtTotal, withholding_amount: ewtAmtTotal,
                     total_amount: Number(lineGross.toFixed(2))
