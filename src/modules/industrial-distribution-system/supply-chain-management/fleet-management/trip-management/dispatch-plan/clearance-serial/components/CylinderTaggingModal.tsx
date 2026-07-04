@@ -110,7 +110,10 @@ const CylinderTaggingModal: React.FC<CylinderTaggingModalProps> = ({
             }
             const data = await response.json();
 
-            if (data.exists) {
+            // Check if the serial number is flagged as duplicate (e.g. on hand or already cleared)
+            if (data.isDuplicate) {
+                toast.error(`Cannot add serial "${trimmed}": ${data.reason || 'Duplicate serial detected.'}`);
+            } else if (data.exists) {
                 setSerials(prev => [trimmed, ...prev]);
                 toast.success(`Serial verified and added: ${trimmed}`);
             } else {
