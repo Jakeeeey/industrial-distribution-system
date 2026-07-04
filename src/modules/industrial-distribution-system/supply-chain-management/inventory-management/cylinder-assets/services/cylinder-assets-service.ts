@@ -10,7 +10,8 @@ export const cylinderAssetsService = {
     const offset = (page - 1) * limit;
     const sort = params?.sort || "-id";
 
-    let query = `fields=id,product_id,serial_number,cylinder_status,cylinder_condition,current_branch_id,current_customer_code,acquisition_date,expiration_date,tare_weight,cost,remarks,created_date,created_by.user_fname,created_by.user_lname&sort=${sort}&limit=${limit}&offset=${offset}&meta=total_count`;
+    // Change meta parameter from total_count to filter_count to fetch correct matching records count for pagination
+    let query = `fields=id,product_id,serial_number,cylinder_status,cylinder_condition,current_branch_id,current_customer_code,acquisition_date,expiration_date,tare_weight,cost,remarks,created_date,created_by.user_fname,created_by.user_lname&sort=${sort}&limit=${limit}&offset=${offset}&meta=filter_count`;
 
     const filters: Record<string, unknown> = {};
 
@@ -33,9 +34,10 @@ export const cylinderAssetsService = {
       query += `&filter=${encodeURIComponent(JSON.stringify(filters))}`;
     }
 
-    const res = await directusFetch<{ data: CylinderAsset[]; meta?: { total_count: number } }>(`${DIRECTUS_URL}/items/cylinder_assets?${query}`);
+    const res = await directusFetch<{ data: CylinderAsset[]; meta?: { filter_count?: number; total_count?: number } }>(`${DIRECTUS_URL}/items/cylinder_assets?${query}`);
     const assets = res.data;
-    const total = res.meta?.total_count || assets.length;
+    // Fallback to filter_count, then total_count, then data length
+    const total = res.meta?.filter_count ?? res.meta?.total_count ?? assets.length;
 
     if (assets.length === 0) return { data: [], total: 0 };
 
