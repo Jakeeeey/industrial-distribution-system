@@ -1,6 +1,8 @@
 // src/modules/.../purchase-order-creation-serial/components/RefillPOList.tsx
 // Purpose: PO selection list for the Cylinder Refill Serial Tagging module.
 // Side-by-side Master panel layout.
+// Note: Draft counts are already injected into po.totalSerials by the hook (poListWithDrafts),
+// so no direct store subscription is needed here.
 
 "use client";
 
@@ -192,6 +194,7 @@ export function RefillPOList({ items, loading, selectedId, onSelectPO, onRefresh
                     paginated.map((po) => {
                         const selected = selectedId === po.poId;
                         const cardType = getCardType(po);
+                        // totalSerials already includes draft counts (injected by hook via poListWithDrafts)
                         const displaySerials = po.isTagged ? Math.max(po.totalSerials, po.totalOrderedQty) : po.totalSerials;
                         const progress = po.totalOrderedQty > 0 ? Math.round((displaySerials / po.totalOrderedQty) * 100) : 0;
                         const isCardDisabled = cardType !== "ready" && cardType !== "tagged";
@@ -200,7 +203,13 @@ export function RefillPOList({ items, loading, selectedId, onSelectPO, onRefresh
                             <button
                                 key={po.poId}
                                 type="button"
-                                onClick={() => onSelectPO(po.poId)}
+                                // Disable button if status is "pending" (for approval) to prevent selecting it
+                                disabled={isCardDisabled}
+                                onClick={() => {
+                                    if (!isCardDisabled) {
+                                        onSelectPO(po.poId);
+                                    }
+                                }}
                                 className={cn(
                                     "w-full text-left rounded-lg border border-border bg-background p-3 transition focus:outline-none",
                                     !isCardDisabled && "hover:bg-muted/40 cursor-pointer",

@@ -67,6 +67,16 @@ export function SerialEntryPanel({ line, isReadOnly, onAddSerial, onRemoveDraft 
         const sn = raw.trim().toUpperCase();
         if (!sn) return;
 
+        // Check capacity limit: do not exceed ordered quantity
+        const totalEntered = line.savedSerials.length + line.draftSerials.length;
+        const required = line.orderedQty;
+        if (totalEntered >= required) {
+            toast.error("Limit reached", {
+                description: `Quantity cannot exceed the ordered quantity of ${required} for this product.`,
+            });
+            return;
+        }
+
         // Local duplicate check (saved + draft)
         const existing = [
             ...line.savedSerials.map((s) => s.serial_number.toUpperCase()),
@@ -116,7 +126,7 @@ export function SerialEntryPanel({ line, isReadOnly, onAddSerial, onRemoveDraft 
         } finally {
             setIsValidating(false);
         }
-    }, [line.savedSerials, line.draftSerials, line.productId, line.productName, line.lineId, onAddSerial]);
+    }, [line.savedSerials, line.draftSerials, line.productId, line.productName, line.lineId, line.orderedQty, onAddSerial]);
 
     // ── Keyboard: Enter submits ────────────────────────────────────────────────
     const handleKeyDown = React.useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -129,11 +139,27 @@ export function SerialEntryPanel({ line, isReadOnly, onAddSerial, onRemoveDraft 
     // ── Bulk paste (newline / comma / semicolon) ───────────────────────────────
     const processBulkTokens = React.useCallback(async (tokens: string[]) => {
         if (tokens.length === 0) return;
+
+        const totalEntered = line.savedSerials.length + line.draftSerials.length;
+        const required = line.orderedQty;
+        let remaining = Math.max(0, required - totalEntered);
+        if (remaining === 0) {
+            toast.error("Limit reached", {
+                description: `Quantity cannot exceed the ordered quantity of ${required} for this product.`,
+            });
+            return;
+        }
+
         setIsValidating(true);
         let added = 0;
         let skipped = 0;
+        let limitSkipped = 0;
         try {
             for (const t of tokens) {
+                if (remaining <= 0) {
+                    limitSkipped++;
+                    continue;
+                }
                 const sn = t.trim().toUpperCase();
                 if (!sn) continue;
                 const existing = [
@@ -151,23 +177,32 @@ export function SerialEntryPanel({ line, isReadOnly, onAddSerial, onRemoveDraft 
                 const assetProductId = Number(data.asset?.product_id);
                 if (assetProductId && assetProductId !== line.productId) continue;
                 if (!data.is_empty) { skipped++; continue; }
+                
                 onAddSerial(line.lineId, sn);
                 added++;
+                remaining--;
             }
             if (added > 0) {
-                toast.success(
-                    skipped > 0
-                        ? `Added ${added} serials. Skipped ${skipped} non-EMPTY.`
-                        : `Added ${added} serials.`
-                );
+                let desc = `Added ${added} serials.`;
+                if (skipped > 0 || limitSkipped > 0) {
+                    const parts = [];
+                    if (skipped > 0) parts.push(`${skipped} non-EMPTY`);
+                    if (limitSkipped > 0) parts.push(`${limitSkipped} exceeded capacity`);
+                    desc += ` Skipped ${parts.join(" and ")}.`;
+                }
+                toast.success(desc);
             } else {
-                toast.warning(skipped > 0 ? `Skipped ${skipped} non-EMPTY serials.` : "No valid serials added.");
+                if (limitSkipped > 0) {
+                    toast.warning(`Skipped ${limitSkipped} serials due to capacity limit of ${required}.`);
+                } else {
+                    toast.warning(skipped > 0 ? `Skipped ${skipped} non-EMPTY serials.` : "No valid serials added.");
+                }
             }
             setInputValue("");
         } finally {
             setIsValidating(false);
         }
-    }, [line.savedSerials, line.draftSerials, line.productId, line.lineId, onAddSerial]);
+    }, [line.savedSerials, line.draftSerials, line.productId, line.lineId, line.orderedQty, onAddSerial]);
 
     const handlePaste = React.useCallback(async (e: React.ClipboardEvent<HTMLInputElement>) => {
         const pasted = e.clipboardData.getData("text");
