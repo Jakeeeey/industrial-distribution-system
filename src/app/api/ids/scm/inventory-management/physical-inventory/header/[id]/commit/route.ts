@@ -209,7 +209,7 @@ export async function POST(_req: NextRequest, context: RouteContext) {
       {
         isComitted: 1,
         isCancelled: 0,
-        committed_at: new Date().toISOString(),
+        committed_at: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().replace('Z', '+08:00'),
         total_amount,
       },
     );
