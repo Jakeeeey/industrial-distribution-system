@@ -13,9 +13,16 @@ export function formatMoney(amount: number, currency = "PHP") {
 
 export function formatDate(dateISO: string) {
     try {
-        const d = new Date(dateISO);
+        if (!dateISO) return "";
+        let iso = dateISO.trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+            iso = `${iso}T00:00:00Z`;
+        } else if (!iso.endsWith("Z") && !iso.includes("+") && !iso.includes("-", 10)) {
+            iso = iso.replace(" ", "T") + "Z";
+        }
+        const d = new Date(iso);
         if (Number.isNaN(d.getTime())) return dateISO;
-        return d.toLocaleDateString("en-US");
+        return d.toLocaleDateString("en-US", { timeZone: "Asia/Manila" });
     } catch {
         return dateISO;
     }

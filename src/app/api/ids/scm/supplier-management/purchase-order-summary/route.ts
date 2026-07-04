@@ -428,20 +428,19 @@ export async function POST(req: NextRequest) {
                     );
                     taggedSerials = [...taggedSerials, ...(res?.data ?? [])];
                 }
+            }
 
-                // purchase_order_receiving_serial.purchase_order_product_id references
-                // purchase_order_receiving.purchase_order_product_id (primary key of receiving table)
-                const porIds = porRows.map(r => toNum(r.purchase_order_product_id)).filter(Boolean);
-                if (porIds.length) {
-                    for (const ids of chunk(porIds, 250)) {
-                        const res = await fetchJson<{ data: ReceivedSerialRow[] }>(
-                            `${base}/items/purchase_order_receiving_serial` +
-                            `?limit=-1` +
-                            `&filter[purchase_order_product_id][_in]=${encodeURIComponent(ids.join(","))}` +
-                            `&fields=receiving_item_id,purchase_order_product_id,product_id,serial_number,created_at,tare_weight`
-                        );
-                        receivedSerials = [...receivedSerials, ...(res?.data ?? [])];
-                    }
+            // Always fetch received serials from purchase_order_receiving_serial if there are received rows
+            const porIds = porRows.map(r => toNum(r.purchase_order_product_id)).filter(Boolean);
+            if (porIds.length) {
+                for (const ids of chunk(porIds, 250)) {
+                    const res = await fetchJson<{ data: ReceivedSerialRow[] }>(
+                        `${base}/items/purchase_order_receiving_serial` +
+                        `?limit=-1` +
+                        `&filter[purchase_order_product_id][_in]=${encodeURIComponent(ids.join(","))}` +
+                        `&fields=receiving_item_id,purchase_order_product_id,product_id,serial_number,created_at,tare_weight`
+                    );
+                    receivedSerials = [...receivedSerials, ...(res?.data ?? [])];
                 }
             }
 

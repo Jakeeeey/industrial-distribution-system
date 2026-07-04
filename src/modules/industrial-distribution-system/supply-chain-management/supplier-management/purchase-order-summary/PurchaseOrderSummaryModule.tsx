@@ -871,14 +871,20 @@ export default function PurchaseOrderSummaryModule({
                       <Skeleton className="h-6 w-56" />
                       <Skeleton className="h-28 w-full" />
                     </div>
-                  ) : serialAuditLog?.isRefillTagged && serialAuditLog.byProduct.length > 0 ? (
+                  ) : serialAuditLog && serialAuditLog.byProduct.length > 0 ? (
                     <div className="space-y-4">
                       <div className="flex items-center gap-2">
                         <ScanLine className="w-4 h-4 text-primary" />
                         <h3 className="text-sm font-black uppercase tracking-tight text-foreground">Serial Audit Log</h3>
-                        <Badge variant="outline" className="text-[9px] font-black border-primary/30 text-primary px-2 py-0.5">
-                          REFILL TAGGED
-                        </Badge>
+                        {serialAuditLog.isRefillTagged ? (
+                          <Badge variant="outline" className="text-[9px] font-black border-primary/30 text-primary px-2 py-0.5 animate-pulse bg-primary/5">
+                            REFILL TAGGED
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[9px] font-black border-blue-500/30 text-blue-600 px-2 py-0.5 bg-blue-500/5">
+                            RECEIVED SERIALS
+                          </Badge>
+                        )}
                       </div>
 
                       <div className="space-y-4">
