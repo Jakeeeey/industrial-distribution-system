@@ -51,8 +51,41 @@ export async function GET(request: Request) {
         const response = await fetcher(`/cylinder_assets?filter[serial_number][_eq]=${encodedSerial}&fields=id,serial_number,product_id`);
         const data = response.data || [];
 
-        if (data.length > 0) {
-            return NextResponse.json({ exists: true, asset: data[0] });
+        // Check if the serial is currently on hand in inventory using the Spring Boot API
+        const SPRING_API_BASE_URL = process.env.SPRING_API_BASE_URL;
+        let isOnHand = false;
+        if (SPRING_API_BASE_URL) {
+            try {
+                const targetUrl = `${SPRING_API_BASE_URL.replace(/\/$/, "")}/api/v-serial-onhand/filter?serialNumber=${encodedSerial}`;
+                const springRes = await fetch(targetUrl, { method: 'GET', cache: 'no-store' });
+                if (springRes.ok) {
+                    const text = await springRes.text();
+                    const parsed = text ? JSON.parse(text) : null;
+                    // Check if response contains active inventory details
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        isOnHand = true;
+                    } else if (parsed && typeof parsed === 'object') {
+                        if ('productId' in parsed || (Array.isArray(parsed.content) && parsed.content.length > 0) || (Array.isArray(parsed.data) && parsed.data.length > 0)) {
+                            isOnHand = true;
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('Spring v-serial-onhand validation error:', err);
+            }
+        }
+
+        // If it exists in cylinder_assets (already registered) or is currently on hand in the warehouse, block it
+        const existsInCylinderAssets = data.length > 0;
+        if (existsInCylinderAssets || isOnHand) {
+            return NextResponse.json({
+                exists: existsInCylinderAssets,
+                asset: data[0] || null,
+                isDuplicate: true,
+                reason: existsInCylinderAssets 
+                    ? 'Serial already exists in Cylinder Assets database' 
+                    : 'Serial is currently on hand in inventory'
+            });
         }
 
         return NextResponse.json({ exists: false });
@@ -61,6 +94,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Failed to verify Cylinder Asset' }, { status: 500 });
     }
 }
+
 
 export async function POST(request: Request) {
     try {
