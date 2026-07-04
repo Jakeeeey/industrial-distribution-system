@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
                     product_name: asset.product_id?.product_name || "Unknown Product",
                     cylinder_status: asset.cylinder_status
                 },
-                is_empty: asset.cylinder_status === "EMPTY"
+                is_empty: asset.cylinder_status === "EMPTY" || asset.cylinder_status === "AVAILABLE"
             });
         }
 

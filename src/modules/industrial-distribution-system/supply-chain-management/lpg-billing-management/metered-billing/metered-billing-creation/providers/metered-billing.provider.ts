@@ -547,7 +547,6 @@ async function createOrUpdateMeterReading(
     raw_consumption: rawConsumption,
     reading_status: payload.status || "DRAFT",
     reading_no: readingNo,
-   
     billing_period_from: payload.billing_period_from || null,
     billing_period_to: payload.billing_period_to || null,
     meter_unit: payload.meter_unit || "KG",

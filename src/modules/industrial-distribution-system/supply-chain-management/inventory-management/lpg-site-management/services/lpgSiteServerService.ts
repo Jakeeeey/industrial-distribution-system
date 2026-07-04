@@ -2,7 +2,7 @@ import { directusFetch, getDirectusBase } from "@/modules/industrial-distributio
 import { LpgSite, SiteCylinder } from "../types";
 
 export const lpgSiteServerService = {
-  async fetchSites(params?: { search?: string; customer_code?: string; page?: number; limit?: number; sort?: string }) {
+  async fetchSites(params?: { search?: string; customer_code?: string; page?: number; limit?: number; sort?: string; billing_mode?: string; is_active?: string }) {
     const DIRECTUS_URL = getDirectusBase();
     const page = params?.page || 1;
     const limit = params?.limit || 10;
@@ -36,9 +36,17 @@ export const lpgSiteServerService = {
       | { _in?: string[] }
       | Array<Record<string, { _icontains: string } | { _in: string[] }>>;
 
-    const filters: Record<string, FilterValue> = {
-      is_active: { _eq: 1 }
-    };
+    const filters: Record<string, FilterValue> = {};
+
+    if (params?.is_active !== undefined && params?.is_active !== "ALL") {
+      filters.is_active = { _eq: Number(params?.is_active) };
+    } else if (params?.is_active === undefined) {
+      filters.is_active = { _eq: 1 };
+    }
+
+    if (params?.billing_mode && params?.billing_mode !== "ALL") {
+      filters.billing_mode = { _eq: params.billing_mode };
+    }
 
     if (params?.customer_code) {
       filters.customer_code = { _eq: params.customer_code };
@@ -114,9 +122,18 @@ export const lpgSiteServerService = {
 
   async createSite(payload: Partial<LpgSite>) {
     const DIRECTUS_URL = getDirectusBase();
+    const d = new Date();
+    d.setHours(d.getHours() + 8);
+    const phTimestamp = d.toISOString().slice(0, 19).replace('T', ' ');
+    
+    const payloadWithTimestamps = {
+      ...payload,
+      created_date: phTimestamp
+    };
+
     const res = await directusFetch<{ data: LpgSite }>(`${DIRECTUS_URL}/items/lpg_customer_lpg_sites`, {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify(payloadWithTimestamps),
     });
     const site = res.data;
     if (site && site.customer_code) {
@@ -136,9 +153,18 @@ export const lpgSiteServerService = {
 
   async updateSite(id: number, payload: Partial<LpgSite>) {
     const DIRECTUS_URL = getDirectusBase();
+    const d = new Date();
+    d.setHours(d.getHours() + 8);
+    const phTimestamp = d.toISOString().slice(0, 19).replace('T', ' ');
+    
+    const payloadWithTimestamps = {
+      ...payload,
+      modified_date: phTimestamp
+    };
+
     const res = await directusFetch<{ data: LpgSite }>(`${DIRECTUS_URL}/items/lpg_customer_lpg_sites/${id}`, {
       method: "PATCH",
-      body: JSON.stringify(payload),
+      body: JSON.stringify(payloadWithTimestamps),
     });
     const site = res.data;
     if (site && site.customer_code) {

@@ -155,13 +155,11 @@ export function CustomerCylinderAgingProvider({
     setSearch("");
   }, []);
 
-  // Initial load — auto-fetch summaries on mount or view mode change.
+  // Initial load — auto-fetch summaries once on mount.
   React.useEffect(() => {
-    if (viewMode === "summary") {
-      applyFilters();
-    }
+    applyFilters();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode]);
+  }, []);
 
   const value: Ctx = {
     records,

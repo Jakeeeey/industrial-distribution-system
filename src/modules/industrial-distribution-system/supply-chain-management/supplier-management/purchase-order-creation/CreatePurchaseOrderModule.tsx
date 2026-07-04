@@ -60,7 +60,7 @@ const PurchaseOrderSummary =
 
 type RawSupplier = { id?: string | number; supplier_id?: string | number; supplier_name?: string; name?: string; payment_terms?: string; delivery_terms?: string; apBalance?: number; ap_balance?: number; supplier_type?: string; supplierType?: string };
 type RawBranch = { id?: string | number; branch_id?: string | number; branch_code?: string; branch_name?: string; branch_description?: string };
-type RawProduct = { product_id?: string | number; id?: string | number; product_name?: string; name?: string; product_code?: string; barcode?: string; sku?: string; category?: string; product_category_name?: string; product_category?: any; brand?: string; product_brand_name?: string; product_brand?: any; cost_price_unit?: number; priceA?: number; price_per_unit?: number; cost_per_unit?: number; price?: number; unit_of_measurement?: any; uom_id?: number | string; unit_id?: number | string; unit_of_measurement_count?: number; description?: string; short_description?: string; uom_name?: string; uom?: any; unit_name?: string };
+type RawProduct = { product_id?: string | number; id?: string | number; product_name?: string; name?: string; product_code?: string; barcode?: string; sku?: string; category?: string; product_category_name?: string; product_category?: any; brand?: string; product_brand_name?: string; product_brand?: any; cost_price_unit?: number; priceA?: number; price_per_unit?: number; cost_per_unit?: number; price?: number; unit_of_measurement?: any; uom_id?: number | string; unit_id?: number | string; unit_of_measurement_count?: number; description?: string; short_description?: string; uom_name?: string; uom?: any; unit_name?: string; parent_id?: number | string | null };
 type RawDiscountType = { id?: string | number; discount_type?: string; name?: string; total_percent?: string | number; percent?: string | number };
 
 const BOX_UOM_ID = 11;
@@ -175,6 +175,7 @@ function normalizeProduct(raw: RawProduct, fixedDiscountTypeId: string): Product
         sku,
         brand,
         category,
+        parent_id: raw?.parent_id ? Number(raw.parent_id) : null,
         price: pricePerUom,
         uom: String(
             raw?.unit_of_measurement?.unit_shortcut ??
@@ -687,8 +688,12 @@ export default function CreatePurchaseOrderModule({ encoderId, preparerName, isR
             
             // ✅ Filter only empty cylinder products for Cylinder Refill POs
             const isRefillOk = !isRefill || String(p.uom || "").toUpperCase() === "EMPTY";
+
+            // ✅ Filter for standard POs: only show parent products or products with uom = EMPTY
+            // Don't display swap, outright, deposit and refill just the empty or full tank.
+            const isStandardOk = isRefill || (!p.parent_id || String(p.uom || "").toUpperCase() === "EMPTY");
             
-            return catOk && qOk && isRefillOk;
+            return catOk && qOk && isRefillOk && isStandardOk;
         });
     }, [allProducts, selectedCategory, searchQuery, isRefill]);
 

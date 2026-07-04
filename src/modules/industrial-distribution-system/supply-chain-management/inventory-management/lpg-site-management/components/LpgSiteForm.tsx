@@ -11,7 +11,6 @@ import {
   CreditCard,
   // Cylinder,
   Loader2,
-  ChevronLeft,
   Gauge,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -291,14 +290,11 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 pb-32 animate-in fade-in slide-in-from-bottom-4 duration-700 px-4 sm:px-0">
+    <div className="flex flex-col h-full w-full animate-in fade-in slide-in-from-bottom-4 duration-700 bg-zinc-50 dark:bg-zinc-950">
       
-      {/* ── RESPONSIVE HEADER ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between sticky top-0 z-20 bg-zinc-50/80 dark:bg-zinc-950/80 backdrop-blur-md py-4 border-b border-zinc-200/50 dark:border-zinc-800/50 -mx-4 sm:mx-0 px-4 sm:px-0 mb-4 gap-4">
+      {/* Modal Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between sticky top-0 z-20 bg-zinc-50 dark:bg-zinc-950 px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 mb-6 gap-4">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={onCancel} className="rounded-xl h-10 w-10 shrink-0">
-            <ChevronLeft className="h-5 w-5" />
-          </Button>
           <h2 className="text-xl sm:text-2xl font-black tracking-tight truncate">
             {id ? "Edit LPG Site" : "Register New LPG Site"}
           </h2>
@@ -313,6 +309,8 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
           </Button>
         </div>
       </div>
+
+      <div className="px-6 pb-10 space-y-8">
 
       <div className="grid grid-cols-1 gap-6">
         {/* Basic & Billing Information */}
@@ -447,7 +445,6 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
                     <SelectContent className="rounded-xl border-zinc-200 dark:border-zinc-800">
                       <SelectItem value="BOTH">BOTH (KILO & METERED)</SelectItem>
                       <SelectItem value="KILO">KILO (By Weight)</SelectItem>
-                      <SelectItem value="METERED">METERED (By Volume)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -659,6 +656,7 @@ export function LpgSiteForm({ id, onSuccess, onCancel }: LpgSiteFormProps) {
             </Card>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

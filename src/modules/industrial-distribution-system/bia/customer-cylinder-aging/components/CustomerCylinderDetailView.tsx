@@ -27,9 +27,14 @@ import {
   ChevronsUpDown,
   Search,
   PhoneCall,
+  FileDown,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
+import type { CylinderCondition } from "../types/customer-cylinder-aging.types";
 import { useCustomerCylinderAging } from "../providers/CustomerCylinderAgingProvider";
 import {
   formatDaysWithCustomer,
@@ -123,6 +128,14 @@ export function CustomerCylinderDetailView() {
   const [cylinderSearch, setCylinderSearch] = React.useState("");
   const [txSearch, setTxSearch] = React.useState("");
 
+  // Filters for Connected Cylinders
+  const [cylConditionFilter, setCylConditionFilter] = React.useState<"ALL" | CylinderCondition>("ALL");
+  const [cylAgingStatusFilter, setCylAgingStatusFilter] = React.useState<"ALL" | "NORMAL" | "WARNING" | "CRITICAL">("ALL");
+
+  // Filters for Transactions
+  const [txMovementFilter, setTxMovementFilter] = React.useState<"ALL" | "IN" | "OUT">("ALL");
+  const [txSourceFilter, setTxSourceFilter] = React.useState<"ALL" | "POS" | "BULK">("ALL");
+
   // Sort states
   const [cylSortKey, setCylSortKey] = React.useState<"serialNumber" | "productCode" | "daysWithCustomer">("daysWithCustomer");
   const [cylSortDir, setCylSortDir] = React.useState<"asc" | "desc">("desc");
@@ -136,6 +149,9 @@ export function CustomerCylinderDetailView() {
 
   const [txPage, setTxPage] = React.useState(1);
   const [txPageSize, setTxPageSize] = React.useState(10);
+
+  const [exportingCyls, setExportingCyls] = React.useState(false);
+  const [exportingTxs, setExportingTxs] = React.useState(false);
 
   if (isLoading || !customerDetail) {
     return (
@@ -257,13 +273,27 @@ export function CustomerCylinderDetailView() {
 
   // ── Pipeline: Connected Cylinders ──────────────────────────────────────────
   const filteredCyls = connected.filter((c) => {
-    if (!cylinderSearch) return true;
-    const term = cylinderSearch.toLowerCase();
-    return (
-      c.serialNumber.toLowerCase().includes(term) ||
-      (c.productCode || "").toLowerCase().includes(term) ||
-      (c.productName || "").toLowerCase().includes(term)
-    );
+    // 1. Text Search
+    if (cylinderSearch) {
+      const term = cylinderSearch.toLowerCase();
+      const matchText =
+        c.serialNumber.toLowerCase().includes(term) ||
+        (c.productCode || "").toLowerCase().includes(term) ||
+        (c.productName || "").toLowerCase().includes(term);
+      if (!matchText) return false;
+    }
+    // 2. Condition Filter
+    if (cylConditionFilter !== "ALL" && c.cylinderCondition !== cylConditionFilter) {
+      return false;
+    }
+    // 3. Aging Status Filter
+    if (cylAgingStatusFilter !== "ALL") {
+      const days = c.daysWithCustomer;
+      if (cylAgingStatusFilter === "NORMAL" && (days === null || days >= 31)) return false;
+      if (cylAgingStatusFilter === "WARNING" && (days === null || days < 31 || days >= 91)) return false;
+      if (cylAgingStatusFilter === "CRITICAL" && (days === null || days < 91)) return false;
+    }
+    return true;
   });
 
   const sortedCyls = [...filteredCyls].sort((a, b) => {
@@ -283,14 +313,25 @@ export function CustomerCylinderDetailView() {
 
   // ── Pipeline: Transaction History ──────────────────────────────────────────
   const filteredTxs = customerDetail.transactions.filter((t) => {
-    if (!txSearch) return true;
-    const term = txSearch.toLowerCase();
-    return (
-      t.serialNumber.toLowerCase().includes(term) ||
-      (t.productCode || "").toLowerCase().includes(term) ||
-      (t.referenceNo || "").toLowerCase().includes(term) ||
-      t.movementType.toLowerCase().includes(term)
-    );
+    // 1. Text Search
+    if (txSearch) {
+      const term = txSearch.toLowerCase();
+      const matchText =
+        t.serialNumber.toLowerCase().includes(term) ||
+        (t.productCode || "").toLowerCase().includes(term) ||
+        (t.referenceNo || "").toLowerCase().includes(term) ||
+        t.movementType.toLowerCase().includes(term);
+      if (!matchText) return false;
+    }
+    // 2. Movement Type Filter
+    if (txMovementFilter !== "ALL" && t.movementType !== txMovementFilter) {
+      return false;
+    }
+    // 3. Source Module Filter
+    if (txSourceFilter !== "ALL" && t.sourceModule !== txSourceFilter) {
+      return false;
+    }
+    return true;
   });
 
   const sortedTxs = [...filteredTxs].sort((a, b) => {
@@ -328,6 +369,241 @@ export function CustomerCylinderDetailView() {
       setTxSortDir("asc");
     }
     setTxPage(1);
+  };
+
+
+
+  // ── PDF Export: Connected Cylinders ──────────────────────────────────────────
+  const handleExportCyls = async () => {
+    setExportingCyls(true);
+    let companyName = "VOS GAS";
+    let companyLogo = "";
+    let companyTin = "";
+    let companyContact = "";
+    let companyEmail = "";
+    let companyAddress = "";
+
+    try {
+      const res = await fetch("/api/pdf/company");
+      if (res.ok) {
+        const json = await res.json();
+        const companyData = json.data?.[0] || json.data;
+        if (companyData) {
+          companyName = companyData.company_name || companyName;
+          companyLogo = companyData.company_logo || "";
+          companyTin = companyData.company_tin || "";
+          companyContact = companyData.company_contact || "";
+          companyEmail = companyData.company_email || "";
+          companyAddress = [
+            companyData.company_address,
+            companyData.company_brgy,
+            companyData.company_city,
+            companyData.company_province,
+            companyData.company_zipCode,
+          ].filter(Boolean).join(", ");
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch company details for PDF:", err);
+    }
+
+    try {
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageW = doc.internal.pageSize.getWidth();
+      const margin = 14;
+      let y = 14;
+
+      if (companyLogo) {
+        try {
+          doc.addImage(companyLogo, "PNG", margin, y, 28, 16, undefined, "FAST");
+        } catch (e) {
+          console.error("Error adding logo to PDF:", e);
+        }
+      }
+      const headerTextX = companyLogo ? margin + 32 : margin;
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text(companyName.toUpperCase(), headerTextX, y + 5);
+
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100);
+      doc.text(`TIN: ${companyTin || "—"}  |  Contact: ${companyContact || "—"}  |  Email: ${companyEmail || "—"}`, headerTextX, y + 10);
+      if (companyAddress) doc.text(companyAddress, headerTextX, y + 14);
+
+      y += 20;
+      doc.setDrawColor(200);
+      doc.line(margin, y, pageW - margin, y);
+
+      y += 6;
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(0, 0, 0);
+      doc.text("CONNECTED CYLINDERS REPORT", margin, y);
+
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Generated: ${new Date().toLocaleString()}`, margin, y + 5);
+
+      y += 10;
+      // Customer Details block
+      doc.setFillColor(245, 245, 250);
+      doc.rect(margin, y, pageW - 2 * margin, 24, "F");
+      doc.setFont("helvetica", "bold");
+      doc.text(`Customer Name: ${customerDetail.customerName || "—"}`, margin + 4, y + 6);
+      doc.text(`Customer Code: ${customerDetail.customerCode || "—"}`, margin + 4, y + 11);
+      doc.text(`Store Name: ${customerDetail.storeName || "—"}`, margin + 4, y + 16);
+      doc.text(`Contact: ${customerDetail.contactNumber || "—"}`, margin + 4, y + 21);
+
+      doc.text(`Segment: ${segmentInfo.label || "—"}`, margin + 100, y + 6);
+      doc.text(`Limit: ${segmentInfo.limitDays} Days`, margin + 100, y + 11);
+      doc.text(`Avg Days Held: ${avgDays} Days`, margin + 100, y + 16);
+      doc.text(`Aged Cyls: ${warningCyls + criticalCyls} (${warningCyls} Warning, ${criticalCyls} Critical)`, margin + 100, y + 21);
+
+      y += 30;
+
+      autoTable(doc, {
+        startY: y,
+        styles: { fontSize: 8, cellPadding: 2.5 },
+        headStyles: { fillColor: [30, 30, 40], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [245, 245, 250] },
+        head: [["#", "Asset Name / Product", "Serial Number", "Condition", "Deployed Date", "Deployment Basis", "Days Held"]],
+        body: sortedCyls.map((c, idx) => [
+          idx + 1,
+          c.productName || c.productCode || "—",
+          c.serialNumber,
+          c.cylinderCondition,
+          formatDate(c.deployedDate) || "—",
+          formatAgingBasisSource(c.agingBasisSource) || "—",
+          formatDaysWithCustomer(c.daysWithCustomer),
+        ]),
+      });
+
+      doc.save(`${customerDetail.customerCode}-connected-cylinders-${new Date().toISOString().slice(0, 10)}.pdf`);
+      toast.success("Connected Cylinders PDF exported successfully.");
+    } catch (e) {
+      console.error(e);
+      toast.error("PDF export failed.");
+    } finally {
+      setExportingCyls(false);
+    }
+  };
+
+  // ── PDF Export: Transaction History ──────────────────────────────────────────
+  const handleExportTxs = async () => {
+    setExportingTxs(true);
+    let companyName = "VOS GAS";
+    let companyLogo = "";
+    let companyTin = "";
+    let companyContact = "";
+    let companyEmail = "";
+    let companyAddress = "";
+
+    try {
+      const res = await fetch("/api/pdf/company");
+      if (res.ok) {
+        const json = await res.json();
+        const companyData = json.data?.[0] || json.data;
+        if (companyData) {
+          companyName = companyData.company_name || companyName;
+          companyLogo = companyData.company_logo || "";
+          companyTin = companyData.company_tin || "";
+          companyContact = companyData.company_contact || "";
+          companyEmail = companyData.company_email || "";
+          companyAddress = [
+            companyData.company_address,
+            companyData.company_brgy,
+            companyData.company_city,
+            companyData.company_province,
+            companyData.company_zipCode,
+          ].filter(Boolean).join(", ");
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch company details for PDF:", err);
+    }
+
+    try {
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageW = doc.internal.pageSize.getWidth();
+      const margin = 14;
+      let y = 14;
+
+      if (companyLogo) {
+        try {
+          doc.addImage(companyLogo, "PNG", margin, y, 28, 16, undefined, "FAST");
+        } catch (e) {
+          console.error("Error adding logo to PDF:", e);
+        }
+      }
+      const headerTextX = companyLogo ? margin + 32 : margin;
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text(companyName.toUpperCase(), headerTextX, y + 5);
+
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100);
+      doc.text(`TIN: ${companyTin || "—"}  |  Contact: ${companyContact || "—"}  |  Email: ${companyEmail || "—"}`, headerTextX, y + 10);
+      if (companyAddress) doc.text(companyAddress, headerTextX, y + 14);
+
+      y += 20;
+      doc.setDrawColor(200);
+      doc.line(margin, y, pageW - margin, y);
+
+      y += 6;
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(0, 0, 0);
+      doc.text("CUSTOMER TRANSACTION HISTORY REPORT", margin, y);
+
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Generated: ${new Date().toLocaleString()}`, margin, y + 5);
+
+      y += 10;
+      // Customer Details block
+      doc.setFillColor(245, 245, 250);
+      doc.rect(margin, y, pageW - 2 * margin, 24, "F");
+      doc.setFont("helvetica", "bold");
+      doc.text(`Customer Name: ${customerDetail.customerName || "—"}`, margin + 4, y + 6);
+      doc.text(`Customer Code: ${customerDetail.customerCode || "—"}`, margin + 4, y + 11);
+      doc.text(`Store Name: ${customerDetail.storeName || "—"}`, margin + 4, y + 16);
+      doc.text(`Contact: ${customerDetail.contactNumber || "—"}`, margin + 4, y + 21);
+
+      doc.text(`Segment: ${segmentInfo.label || "—"}`, margin + 100, y + 6);
+      doc.text(`Email: ${customerDetail.customerEmail || "—"}`, margin + 100, y + 11);
+      doc.text(`Total Transactions: ${customerDetail.transactions.length}`, margin + 100, y + 16);
+      doc.text(`Filtered Count: ${sortedTxs.length}`, margin + 100, y + 21);
+
+      y += 30;
+
+      autoTable(doc, {
+        startY: y,
+        styles: { fontSize: 8, cellPadding: 2.5 },
+        headStyles: { fillColor: [30, 30, 40], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [245, 245, 250] },
+        head: [["#", "Transaction Date", "Serial Number", "Product Name", "Movement", "Source", "Ref No.", "Net Amount"]],
+        body: sortedTxs.map((t, idx) => [
+          idx + 1,
+          formatDate(t.transactionDate) || "—",
+          t.serialNumber,
+          t.productName || t.productCode || "—",
+          t.movementType,
+          t.sourceModule,
+          t.referenceNo || "—",
+          formatCurrency(t.netAmount),
+        ]),
+      });
+
+      doc.save(`${customerDetail.customerCode}-transaction-history-${new Date().toISOString().slice(0, 10)}.pdf`);
+      toast.success("Transaction History PDF exported successfully.");
+    } catch (e) {
+      console.error(e);
+      toast.error("PDF export failed.");
+    } finally {
+      setExportingTxs(false);
+    }
   };
 
   return (
@@ -662,23 +938,80 @@ export function CustomerCylinderDetailView() {
 
           {/* Tab 1: Connected Cylinders */}
           <TabsContent value="connected" className="mt-4 border border-border bg-card rounded-xl overflow-hidden shadow-sm">
-            <div className="flex items-center justify-between p-4 border-b border-border/50 bg-muted/10">
-              <div className="relative w-full max-w-xs">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                <Input
-                  id="cca-detail-cyl-search"
-                  placeholder="Search connected serial, product…"
-                  value={cylinderSearch}
-                  onChange={(e) => {
-                    setCylinderSearch(e.target.value);
+            <div className="flex flex-col gap-2 p-3 border-b border-border/50 sm:flex-row sm:items-center sm:justify-between bg-muted/10">
+              <div className="flex flex-col sm:flex-row gap-2 w-full sm:max-w-2xl">
+                <div className="relative w-full sm:max-w-[200px]">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                  <Input
+                    id="cca-detail-cyl-search"
+                    placeholder="Search connected serial, product…"
+                    value={cylinderSearch}
+                    onChange={(e) => {
+                      setCylinderSearch(e.target.value);
+                      setCylPage(1);
+                    }}
+                    className="pl-8 h-8 text-xs rounded-lg w-full"
+                  />
+                </div>
+
+                <Select
+                  value={cylConditionFilter}
+                  onValueChange={(v: "ALL" | CylinderCondition) => {
+                    setCylConditionFilter(v);
                     setCylPage(1);
                   }}
-                  className="pl-8 h-8 text-xs rounded-lg"
-                />
+                >
+                  <SelectTrigger className="h-8 text-xs rounded-lg w-full sm:w-[130px] font-medium bg-background whitespace-nowrap overflow-hidden text-ellipsis flex items-center justify-between">
+                    <SelectValue placeholder="All Conditions" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL" className="text-xs font-medium">All Conditions</SelectItem>
+                    <SelectItem value="GOOD" className="text-xs font-medium">Good</SelectItem>
+                    <SelectItem value="FOR_REPAIR" className="text-xs font-medium">For Repair</SelectItem>
+                    <SelectItem value="DAMAGED" className="text-xs font-medium">Damaged</SelectItem>
+                    <SelectItem value="SCRAP" className="text-xs font-medium">Scrap</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select
+                  value={cylAgingStatusFilter}
+                  onValueChange={(v: "ALL" | "NORMAL" | "WARNING" | "CRITICAL") => {
+                    setCylAgingStatusFilter(v);
+                    setCylPage(1);
+                  }}
+                >
+                  <SelectTrigger className="h-8 text-xs rounded-lg w-full sm:w-[130px] font-medium bg-background whitespace-nowrap overflow-hidden text-ellipsis flex items-center justify-between">
+                    <SelectValue placeholder="All Aging Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL" className="text-xs font-medium">All Aging Status</SelectItem>
+                    <SelectItem value="NORMAL" className="text-xs font-medium">Normal (&lt; 31 Days)</SelectItem>
+                    <SelectItem value="WARNING" className="text-xs font-medium">Warning (31-90 Days)</SelectItem>
+                    <SelectItem value="CRITICAL" className="text-xs font-medium">Critical (91+ Days)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <span className="text-[10px] font-semibold font-mono text-muted-foreground uppercase mr-1">
-                {filteredCyls.length} Matching
-              </span>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[10px] font-semibold font-mono text-muted-foreground uppercase mr-1 whitespace-nowrap">
+                  {filteredCyls.length} Matching
+                </span>
+                <Button
+                  id="cca-detail-cyl-export-pdf"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportCyls}
+                  disabled={exportingCyls || sortedCyls.length === 0}
+                  className="h-8 gap-1.5 transition-all hover:bg-muted font-semibold rounded-lg text-xs"
+                >
+                  {exportingCyls ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <FileDown className="h-3.5 w-3.5" />
+                  )}
+                  <span>Export Report PDF</span>
+                </Button>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -792,23 +1125,77 @@ export function CustomerCylinderDetailView() {
 
           {/* Tab 2: Transaction History */}
           <TabsContent value="transactions" className="mt-4 border border-border bg-card rounded-xl overflow-hidden shadow-sm">
-            <div className="flex items-center justify-between p-4 border-b border-border/50 bg-muted/10">
-              <div className="relative w-full max-w-xs">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                <Input
-                  id="cca-detail-tx-search"
-                  placeholder="Search transaction serial, product, ref…"
-                  value={txSearch}
-                  onChange={(e) => {
-                    setTxSearch(e.target.value);
+            <div className="flex flex-col gap-2 p-3 border-b border-border/50 sm:flex-row sm:items-center sm:justify-between bg-muted/10">
+              <div className="flex flex-col sm:flex-row gap-2 w-full sm:max-w-2xl">
+                <div className="relative w-full sm:max-w-[200px]">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                  <Input
+                    id="cca-detail-tx-search"
+                    placeholder="Search transaction serial, product, ref…"
+                    value={txSearch}
+                    onChange={(e) => {
+                      setTxSearch(e.target.value);
+                      setTxPage(1);
+                    }}
+                    className="pl-8 h-8 text-xs rounded-lg w-full"
+                  />
+                </div>
+
+                <Select
+                  value={txMovementFilter}
+                  onValueChange={(v: "ALL" | "IN" | "OUT") => {
+                    setTxMovementFilter(v);
                     setTxPage(1);
                   }}
-                  className="pl-8 h-8 text-xs rounded-lg"
-                />
+                >
+                  <SelectTrigger className="h-8 text-xs rounded-lg w-full sm:w-[130px] font-medium bg-background whitespace-nowrap overflow-hidden text-ellipsis flex items-center justify-between">
+                    <SelectValue placeholder="All Movements" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL" className="text-xs font-medium">All Movements</SelectItem>
+                    <SelectItem value="IN" className="text-xs font-medium">Inbound (IN)</SelectItem>
+                    <SelectItem value="OUT" className="text-xs font-medium">Outbound (OUT)</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select
+                  value={txSourceFilter}
+                  onValueChange={(v: "ALL" | "POS" | "BULK") => {
+                    setTxSourceFilter(v);
+                    setTxPage(1);
+                  }}
+                >
+                  <SelectTrigger className="h-8 text-xs rounded-lg w-full sm:w-[130px] font-medium bg-background whitespace-nowrap overflow-hidden text-ellipsis flex items-center justify-between">
+                    <SelectValue placeholder="All Sources" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL" className="text-xs font-medium">All Sources</SelectItem>
+                    <SelectItem value="POS" className="text-xs font-medium">POS Transaction</SelectItem>
+                    <SelectItem value="BULK" className="text-xs font-medium">Bulk Sales Order</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <span className="text-[10px] font-semibold font-mono text-muted-foreground uppercase mr-1">
-                {filteredTxs.length} Transactions
-              </span>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[10px] font-semibold font-mono text-muted-foreground uppercase mr-1 whitespace-nowrap">
+                  {filteredTxs.length} Transactions
+                </span>
+                <Button
+                  id="cca-detail-tx-export-pdf"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportTxs}
+                  disabled={exportingTxs || sortedTxs.length === 0}
+                  className="h-8 gap-1.5 transition-all hover:bg-muted font-semibold rounded-lg text-xs"
+                >
+                  {exportingTxs ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <FileDown className="h-3.5 w-3.5" />
+                  )}
+                  <span>Export Report PDF</span>
+                </Button>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
