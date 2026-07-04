@@ -57,11 +57,12 @@ export function useSerialTagging(): UseSerialTaggingReturn {
 
     // ── Zustand Store ─────────────────────────────────────────────────────────
     const store = useSerialTaggingStore();
+    const drafts = useSerialTaggingStore((state) => state.drafts);
 
     // Dynamically inject drafts into the selected PO
     const selectedPO = React.useMemo(() => {
         if (!rawSelectedPO) return null;
-        const poDrafts = store.drafts[rawSelectedPO.poId] || {};
+        const poDrafts = drafts[rawSelectedPO.poId] || {};
         return {
             ...rawSelectedPO,
             lines: rawSelectedPO.lines.map((l) => ({
@@ -69,7 +70,22 @@ export function useSerialTagging(): UseSerialTaggingReturn {
                 draftSerials: poDrafts[l.lineId] || [],
             })),
         };
-    }, [rawSelectedPO, store.drafts]);
+    }, [rawSelectedPO, drafts]);
+
+    // Dynamically inject drafts into the PO list items for real-time sidebar count updates
+    const poListWithDrafts = React.useMemo(() => {
+        return poList.map((po) => {
+            const poDrafts = drafts[po.poId] || {};
+            const draftCount = Object.values(poDrafts).reduce(
+                (sum, lineDrafts) => sum + (lineDrafts?.length || 0),
+                0
+            );
+            return {
+                ...po,
+                totalSerials: po.totalSerials + draftCount,
+            };
+        });
+    }, [poList, drafts]);
 
     // ── Load PO list on mount ─────────────────────────────────────────────────
     const refreshList = React.useCallback(async () => {
@@ -117,10 +133,20 @@ export function useSerialTagging(): UseSerialTaggingReturn {
         
         // Prevent duplicates in saved serials (draft duplicates are handled by store)
         const line = rawSelectedPO.lines.find(l => l.lineId === lineId);
-        if (line && line.savedSerials.some(s => s.serial_number.toUpperCase() === sn)) return;
+        if (!line) return;
+        if (line.savedSerials.some(s => s.serial_number.toUpperCase() === sn)) return;
+        
+        // Check capacity limit: do not exceed ordered quantity
+        const poDrafts = drafts[rawSelectedPO.poId] || {};
+        const lineDrafts = poDrafts[lineId] || [];
+        const currentCount = line.savedSerials.length + lineDrafts.length;
+        if (currentCount >= line.orderedQty) {
+            toast.error(`Cannot exceed ordered quantity of ${line.orderedQty} for this product.`);
+            return;
+        }
         
         store.addDraft(rawSelectedPO.poId, lineId, sn);
-    }, [rawSelectedPO, store]);
+    }, [rawSelectedPO, store, drafts]);
 
     // ── Remove a draft serial from a line (by index within draftSerials) ──────
     const removeDraftSerial = React.useCallback((lineId: number, index: number) => {
@@ -209,7 +235,7 @@ export function useSerialTagging(): UseSerialTaggingReturn {
     }, [selectedPO, canSubmit, rawSelectedPO, store]);
 
     return {
-        poList, isLoadingList, listError, refreshList,
+        poList: poListWithDrafts, isLoadingList, listError, refreshList,
         selectedPO, isLoadingDetail, isSubmitting,
         selectPO, backToList,
         addDraftSerial, removeDraftSerial, submitSerials,

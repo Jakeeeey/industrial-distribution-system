@@ -58,6 +58,23 @@ interface ReceiptGroup {
     items: ReceiptItem[];
 }
 
+// Serial audit log row shapes from Directus
+interface TaggedSerialRow {
+    id: number;
+    purchase_order_product_id: number;
+    product_id: number;
+    serial_number: string;
+}
+
+interface ReceivedSerialRow {
+    receiving_item_id: number;
+    purchase_order_product_id: number;
+    product_id: number;
+    serial_number: string;
+    created_at: string;
+    tare_weight: number | null;
+}
+
 function toNum(v: unknown) { 
     const n = parseFloat(String(v ?? "").replace(/,/g, "")); 
     return Number.isFinite(n) ? n : 0; 
@@ -384,7 +401,105 @@ export async function POST(req: NextRequest) {
             const receipts = Array.from(receiptMap.values())
                 .sort((a, b) => b.receiptNo.localeCompare(a.receiptNo));
 
-            return NextResponse.json({ data: { allocations, receipts } });
+            // ── Serial Audit Log ───────────────────────────────────────────────────────
+            // Fetch the PO's is_refill and is_tagged flags to determine if serials apply
+            let isRefillTagged = false;
+            let taggedSerials: TaggedSerialRow[] = [];
+            let receivedSerials: ReceivedSerialRow[] = [];
+
+            try {
+                const poFlagRes = await fetchJson<{ data: { is_refill: number; is_tagged: number }[] }>(
+                    `${base}/items/purchase_order?filter[purchase_order_id][_eq]=${poId}&fields=is_refill,is_tagged&limit=1`
+                );
+                const poFlags = poFlagRes?.data?.[0];
+                isRefillTagged = Number(poFlags?.is_refill) === 1 && Number(poFlags?.is_tagged) === 1;
+            } catch (e) {
+                console.warn("[PO Summary] Could not fetch is_refill/is_tagged:", e);
+            }
+
+            if (isRefillTagged && allPOPIds.length) {
+                // purchase_order_serial.purchase_order_product_id → purchase_order_products.purchase_order_product_id
+                for (const ids of chunk(allPOPIds, 250)) {
+                    const res = await fetchJson<{ data: TaggedSerialRow[] }>(
+                        `${base}/items/purchase_order_serial` +
+                        `?limit=-1` +
+                        `&filter[purchase_order_product_id][_in]=${encodeURIComponent(ids.join(","))}` +
+                        `&fields=id,purchase_order_product_id,product_id,serial_number`
+                    );
+                    taggedSerials = [...taggedSerials, ...(res?.data ?? [])];
+                }
+
+                // purchase_order_receiving_serial.purchase_order_product_id references
+                // purchase_order_receiving.purchase_order_product_id (primary key of receiving table)
+                const porIds = porRows.map(r => toNum(r.purchase_order_product_id)).filter(Boolean);
+                if (porIds.length) {
+                    for (const ids of chunk(porIds, 250)) {
+                        const res = await fetchJson<{ data: ReceivedSerialRow[] }>(
+                            `${base}/items/purchase_order_receiving_serial` +
+                            `?limit=-1` +
+                            `&filter[purchase_order_product_id][_in]=${encodeURIComponent(ids.join(","))}` +
+                            `&fields=receiving_item_id,purchase_order_product_id,product_id,serial_number,created_at,tare_weight`
+                        );
+                        receivedSerials = [...receivedSerials, ...(res?.data ?? [])];
+                    }
+                }
+            }
+
+            // Group expected + received serials by product for the audit log
+            // expected = purchase_order_serial (pre-tagged before receiving)
+            // received = purchase_order_receiving_serial (physically scanned at receiving)
+            const serialsByProduct = new Map<number, {
+                productId: number;
+                productName: string;
+                expected: { id: number; serialNumber: string }[];
+                received: { id: number; serialNumber: string; createdAt: string; tareWeight: number | null }[];
+            }>();
+
+            // Build expected serial groups from purchase_order_serial
+            for (const row of taggedSerials) {
+                const pid = toNum(row.product_id);
+                if (!serialsByProduct.has(pid)) {
+                    const product = productsMap.get(pid);
+                    serialsByProduct.set(pid, {
+                        productId: pid,
+                        productName: toStr(product?.product_name, `Product #${pid}`),
+                        expected: [],
+                        received: [],
+                    });
+                }
+                serialsByProduct.get(pid)!.expected.push({
+                    id: toNum(row.id),
+                    serialNumber: toStr(row.serial_number),
+                });
+            }
+
+            // Merge received serials from purchase_order_receiving_serial
+            for (const row of receivedSerials) {
+                const pid = toNum(row.product_id);
+                if (!serialsByProduct.has(pid)) {
+                    const product = productsMap.get(pid);
+                    serialsByProduct.set(pid, {
+                        productId: pid,
+                        productName: toStr(product?.product_name, `Product #${pid}`),
+                        expected: [],
+                        received: [],
+                    });
+                }
+                serialsByProduct.get(pid)!.received.push({
+                    id: toNum(row.receiving_item_id),
+                    serialNumber: toStr(row.serial_number),
+                    createdAt: toStr(row.created_at),
+                    tareWeight: row.tare_weight !== null && row.tare_weight !== undefined ? toNum(row.tare_weight) : null,
+                });
+            }
+
+            const serials = {
+                isRefillTagged,
+                byProduct: Array.from(serialsByProduct.values()),
+            };
+
+
+            return NextResponse.json({ data: { allocations, receipts, serials } });
         }
 
         return NextResponse.json({ error: "Unknown action" }, { status: 400 });
