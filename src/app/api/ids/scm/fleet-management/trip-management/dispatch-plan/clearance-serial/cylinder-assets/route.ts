@@ -84,17 +84,27 @@ export async function GET(request: Request) {
         
         const isCurrentAssetEmpty = existsInCylinderAssets && existingAssetUom === 'EMPTY';
 
-        // Only block/prevent duplicate if the existing serial's product in the database is EMPTY
+        // 1. If the serial is currently on hand in inventory, ALWAYS block it regardless of product status
+        if (isOnHand) {
+            return NextResponse.json({
+                exists: existsInCylinderAssets,
+                asset: data[0] || null,
+                isDuplicate: true,
+                reason: 'Serial is currently on hand in inventory'
+            });
+        }
+
+        // 2. If it is NOT on hand, but exists as an EMPTY Cylinder Asset, block it
         if (isCurrentAssetEmpty) {
             return NextResponse.json({
                 exists: existsInCylinderAssets,
                 asset: data[0] || null,
                 isDuplicate: true,
-                reason: 'Serial already exists as an EMPTY Cylinder Asset.'
+                reason: 'Serial already exists as an EMPTY Cylinder Asset'
             });
         }
 
-        // For NULL, SWAP, OUTRIGHT, DEPOSIT, REFILL (non-empty products), allow it to be processed/confirmed
+        // For non-empty products (NULL, SWAP, OUTRIGHT, DEPOSIT, REFILL) that are NOT on hand, allow them to be confirmed
         return NextResponse.json({ 
             exists: existsInCylinderAssets,
             asset: data[0] || null,
