@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FilterX, ListFilter, Printer, Calendar, Search, ChevronDown, X, Package, FileText, ChevronRight } from "lucide-react";
+import { FilterX, ListFilter, Printer, Calendar, Search, ChevronDown, X, Package, FileText, ChevronRight, ScanLine, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -27,7 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { PurchaseOrder, Supplier, StatusRef } from "./types";
+import { PurchaseOrder, Supplier, StatusRef, POSerialAuditLog } from "./types";
 import { generatePOSummaryPDF } from "./utils/generatePOSummaryPDF";
 import { DataTable } from "./utils/new-data-table";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -97,6 +97,8 @@ export default function PurchaseOrderSummaryModule({
   const [allocations, setAllocations] = useState<Allocation[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  // Serial audit log state — tagged vs received serials per product
+  const [serialAuditLog, setSerialAuditLog] = useState<POSerialAuditLog | null>(null);
   const [expandedReceipts, setExpandedReceipts] = useState<Set<string>>(new Set());
 
   const toggleReceipt = useCallback((receiptNo: string) => {
@@ -113,6 +115,7 @@ export default function PurchaseOrderSummaryModule({
     if (!selectedPO) {
       setAllocations([]);
       setReceipts([]);
+      setSerialAuditLog(null); // Reset serial audit log on PO deselect
       setExpandedReceipts(new Set());
       return;
     }
@@ -129,6 +132,8 @@ export default function PurchaseOrderSummaryModule({
         if (!cancelled) {
           setAllocations(json?.data?.allocations ?? []);
           setReceipts(json?.data?.receipts ?? []);
+          // Populate serial audit log if the API returned it (only for is_refill+is_tagged POs)
+          setSerialAuditLog(json?.data?.serials ?? null);
           // Auto-expand the first receipt
           const first = json?.data?.receipts?.[0]?.receiptNo;
           if (first) setExpandedReceipts(new Set([first]));
@@ -856,6 +861,163 @@ export default function PurchaseOrderSummaryModule({
                       </div>
                     </div>
                   )}
+
+                  <div className="border-t border-border/50 pt-2" />
+
+                  {/* ── Serial Audit Log ── */}
+                  {/* Only shown when is_refill=1 and is_tagged=1 for better audit trail */}
+                  {isLoadingDetails ? (
+                    <div className="space-y-3">
+                      <Skeleton className="h-6 w-56" />
+                      <Skeleton className="h-28 w-full" />
+                    </div>
+                  ) : serialAuditLog && serialAuditLog.byProduct.length > 0 ? (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2">
+                        <ScanLine className="w-4 h-4 text-primary" />
+                        <h3 className="text-sm font-black uppercase tracking-tight text-foreground">Serial Audit Log</h3>
+                        {serialAuditLog.isRefillTagged ? (
+                          <Badge variant="outline" className="text-[9px] font-black border-primary/30 text-primary px-2 py-0.5 animate-pulse bg-primary/5">
+                            REFILL TAGGED
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[9px] font-black border-blue-500/30 text-blue-600 px-2 py-0.5 bg-blue-500/5">
+                            RECEIVED SERIALS
+                          </Badge>
+                        )}
+                      </div>
+
+                      <div className="space-y-4">
+                        {serialAuditLog.byProduct.map((group) => {
+                          const expectedList = group.expected || [];
+                          const receivedList = group.received || [];
+
+                          // Build Sets for O(1) cross-reference lookups
+                          const receivedSet = new Set(receivedList.map(r => r.serialNumber?.toUpperCase() || ""));
+                          const expectedSet = new Set(expectedList.map(e => e.serialNumber?.toUpperCase() || ""));
+
+                          // Serials received but NOT in expected list (received without pre-tagging)
+                          const extraReceived = receivedList.filter(
+                            r => r.serialNumber && !expectedSet.has(r.serialNumber.toUpperCase())
+                          );
+
+                          return (
+                            <div key={group.productId} className="rounded-xl border border-border bg-card/50 shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
+                              {/* Product Header */}
+                              <div className="flex items-center justify-between px-4 py-3 bg-muted/40 border-b border-border">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <Package className="w-3.5 h-3.5 text-primary shrink-0" />
+                                  <span className="text-xs font-black text-foreground uppercase tracking-tight truncate">
+                                    {group.productName}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {/* Expected = purchase_order_serial (pre-tagged before receiving) */}
+                                  <Badge variant="outline" className="text-[9px] font-black bg-blue-500/10 text-blue-600 border-blue-500/20 px-2">
+                                    Expected: {expectedList.length}
+                                  </Badge>
+                                  {/* Received = purchase_order_receiving_serial (scanned at receiving) */}
+                                  <Badge variant="outline" className={`text-[9px] font-black px-2 ${
+                                    receivedList.length >= expectedList.length && expectedList.length > 0
+                                      ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                                      : receivedList.length > 0
+                                        ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                                        : "bg-muted text-muted-foreground border-border"
+                                  }`}>
+                                    Received: {receivedList.length}
+                                  </Badge>
+                                </div>
+                              </div>
+
+                              {/* Two-column serial comparison */}
+                              <div className="grid grid-cols-2 divide-x divide-border">
+                                {/* Expected Serials Column — from purchase_order_serial */}
+                                <div className="p-3 space-y-1.5">
+                                  <div className="text-[9px] font-bold uppercase text-muted-foreground tracking-widest mb-2">
+                                    Expected (Pre-Tagged)
+                                  </div>
+                                  {expectedList.length === 0 ? (
+                                    <div className="text-[10px] text-muted-foreground italic py-2">No expected serials</div>
+                                  ) : (
+                                    expectedList.map((e, idx) => {
+                                      const isReceived = e.serialNumber && receivedSet.has(e.serialNumber.toUpperCase());
+                                      const hasScans = receivedList.length > 0;
+                                      return (
+                                        <div
+                                          key={e.id}
+                                          className={`flex items-center gap-2 px-2 py-1 rounded-md text-[10px] font-mono transition-colors ${
+                                            isReceived
+                                              ? "bg-emerald-500/8 text-emerald-700 dark:text-emerald-400"
+                                              : hasScans
+                                                ? "bg-destructive/8 text-destructive"
+                                                : "bg-amber-500/8 text-amber-700 dark:text-amber-400"
+                                          }`}
+                                        >
+                                          <span className="text-[9px] text-muted-foreground/60 w-5 shrink-0 font-sans">
+                                            {String(idx + 1).padStart(2, "0")}
+                                          </span>
+                                          <span className="flex-1 tracking-tight font-bold">{e.serialNumber}</span>
+                                          {isReceived ? (
+                                            <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+                                          ) : hasScans ? (
+                                            <span className="text-[8px] font-black text-destructive shrink-0">UNRECEIVED</span>
+                                          ) : (
+                                            <span className="text-[8px] font-black text-amber-500 shrink-0">PENDING</span>
+                                          )}
+                                        </div>
+                                      );
+                                    })
+                                  )}
+                                </div>
+
+                                {/* Received Serials Column — from purchase_order_receiving_serial */}
+                                <div className="p-3 space-y-1.5">
+                                  <div className="text-[9px] font-bold uppercase text-muted-foreground tracking-widest mb-2">
+                                    Received / Scanned
+                                  </div>
+                                  {receivedList.length === 0 ? (
+                                    <div className="text-[10px] text-muted-foreground italic py-2">No received serials yet</div>
+                                  ) : (
+                                    receivedList.map((r, idx) => {
+                                      const isExpected = r.serialNumber && expectedSet.has(r.serialNumber.toUpperCase());
+                                      const isExtra = !isExpected;
+                                      return (
+                                        <div
+                                          key={r.id}
+                                          className={`flex items-center gap-2 px-2 py-1 rounded-md text-[10px] font-mono transition-colors ${
+                                            isExtra
+                                              ? "bg-blue-500/8 text-blue-700 dark:text-blue-400"
+                                              : "bg-emerald-500/8 text-emerald-700 dark:text-emerald-400"
+                                          }`}
+                                        >
+                                          <span className="text-[9px] text-muted-foreground/60 w-5 shrink-0 font-sans">
+                                            {String(idx + 1).padStart(2, "0")}
+                                          </span>
+                                          <span className="flex-1 tracking-tight font-bold">{r.serialNumber}</span>
+                                          {isExtra && (
+                                            <span className="text-[8px] font-black text-blue-500 shrink-0">NEW RECEIVED</span>
+                                          )}
+                                          {r.tareWeight !== null && (
+                                            <span className="text-[8px] text-muted-foreground shrink-0">{r.tareWeight}kg</span>
+                                          )}
+                                        </div>
+                                      );
+                                    }))}
+                                  {/* Flag received-without-pre-tagging anomalies */}
+                                  {extraReceived.length > 0 && (
+                                    <div className="mt-1 text-[9px] text-blue-500 font-bold">
+                                      {extraReceived.length} received but not pre-tagged
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+
 
                   <div className="border-t border-border/50 pt-2" />
 
