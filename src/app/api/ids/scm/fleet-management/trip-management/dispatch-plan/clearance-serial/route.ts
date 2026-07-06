@@ -432,12 +432,14 @@ export async function POST(request: Request) {
             }
     
             // 4. Update sales_order.order_status - SKIP if Pre-Save
+            // Declare salesOrders here with explicit types to avoid unexpected 'any' lint warning
+            let salesOrders: { order_id: number; order_no: string }[] = [];
             const orderNos = [...new Set(invoices.map((inv: { orderNo: string }) => inv.orderNo).filter((no: string) => no && no !== 'N/A'))];
             if (orderNos.length > 0) {
                 // Encode properly for API query
                 const encodedOrderNos = orderNos.map(no => encodeURIComponent(no)).join(',');
                 const soRes = await fetcher(`/sales_order?filter[order_no][_in]=${encodedOrderNos}&limit=-1&fields=order_id,order_no`);
-                const salesOrders = soRes.data || [];
+                salesOrders = soRes.data || [];
     
                 const soUpdates = invoices.map((inv: { orderNo: string; status: string }) => {
                     const so = salesOrders.find((s: { order_no: string; order_id: number }) => s.order_no === inv.orderNo);
@@ -467,6 +469,62 @@ export async function POST(request: Request) {
                          throw new Error('Failed to update sales_order');
                     }
                 }
+            }
+
+            // 4.5. Delete Consolidator Serial Mappings after Clearance Confirmation
+            // This is done regardless of the status chosen in the sales order table
+            try {
+                for (const so of salesOrders) {
+                    if (!so || !so.order_id) continue;
+
+                    // Step A: Fetch dispatch plan details associated with the Sales Order
+                    const dpdRes = await fetcher(`/dispatch_plan_details?filter[sales_order_id][_eq]=${so.order_id}&fields=dispatch_id`);
+                    const dpd = dpdRes.data?.[0];
+                    if (!dpd || !dpd.dispatch_id) continue;
+
+                    // Step B: Fetch dispatch plan to get the dispatch_no
+                    const dpRes = await fetcher(`/dispatch_plan/${dpd.dispatch_id}?fields=dispatch_no`);
+                    const dispatchNo = dpRes.data?.dispatch_no;
+                    if (!dispatchNo) continue;
+
+                    // Step C: Fetch consolidator linked to this dispatch
+                    const cdispRes = await fetcher(`/consolidator_dispatches?filter[dispatch_no][_eq]=${encodeURIComponent(dispatchNo)}&fields=consolidator_id`);
+                    const cdisp = cdispRes.data?.[0];
+                    if (!cdisp) continue;
+
+                    const consolidatorId = typeof cdisp.consolidator_id === "object" && cdisp.consolidator_id !== null
+                      ? cdisp.consolidator_id.id 
+                      : cdisp.consolidator_id;
+                    if (!consolidatorId) continue;
+
+                    // Step D: Fetch all consolidator details to get detail IDs
+                    const cdRes = await fetcher(`/consolidator_details?filter[consolidator_id][_eq]=${consolidatorId}&fields=id`);
+                    const detailIds = (cdRes.data || []).map((cd: { id: number }) => cd.id);
+                    if (detailIds.length === 0) continue;
+
+                    // Step E: Fetch consolidator serial mappings associated with these detail IDs
+                    const csmRes = await fetcher(`/consolidator_serial_mappings?filter[detail_id][_in]=${detailIds.join(",")}&fields=id&limit=-1`);
+                    const mappingIds = (csmRes.data || []).map((m: { id: number }) => m.id);
+
+                    // Step F: Delete the retrieved serial mappings if any exist
+                    if (mappingIds.length > 0) {
+                        console.log(`[Clearance POST] Deleting ${mappingIds.length} consolidator serial mappings for Sales Order ID ${so.order_id}`);
+                        const deleteRes = await fetch(`${BASE_URL}/consolidator_serial_mappings`, {
+                            method: 'DELETE',
+                            headers: {
+                                'Authorization': `Bearer ${TOKEN}`,
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(mappingIds),
+                        });
+                        if (!deleteRes.ok) {
+                            console.warn(`[Clearance POST] Failed to delete consolidator serial mappings for Sales Order ID ${so.order_id}`);
+                        }
+                    }
+                }
+            } catch (mappingErr) {
+                console.error('Error deleting consolidator serial mappings:', mappingErr);
+                // We log the error but don't fail the entire clearance process to keep the system robust
             }
         }
 

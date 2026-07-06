@@ -46,9 +46,9 @@ export async function GET(request: Request) {
     }
 
     try {
-        // Query Directus cylinder_assets collection for the serial number
+        // Query Directus cylinder_assets collection for the serial number, including the related product's uom_ids
         const encodedSerial = encodeURIComponent(serialNumber.trim());
-        const response = await fetcher(`/cylinder_assets?filter[serial_number][_eq]=${encodedSerial}&fields=id,serial_number,product_id`);
+        const response = await fetcher(`/cylinder_assets?filter[serial_number][_eq]=${encodedSerial}&fields=id,serial_number,product_id,product_id.uom_ids,cylinder_condition`);
         const data = response.data || [];
 
         // Check if the serial is currently on hand in inventory using the Spring Boot API
@@ -75,20 +75,31 @@ export async function GET(request: Request) {
             }
         }
 
-        // If it exists in cylinder_assets (already registered) or is currently on hand in the warehouse, block it
         const existsInCylinderAssets = data.length > 0;
-        if (existsInCylinderAssets || isOnHand) {
+        // Resolve the uom_ids of the serial's current product in the database
+        const existingAssetProduct = data[0]?.product_id;
+        const existingAssetUom = typeof existingAssetProduct === 'object' && existingAssetProduct !== null 
+            ? (existingAssetProduct as Record<string, unknown>).uom_ids 
+            : null;
+        
+        const isCurrentAssetEmpty = existsInCylinderAssets && existingAssetUom === 'EMPTY';
+
+        // Only block/prevent duplicate if the existing serial's product in the database is EMPTY
+        if (isCurrentAssetEmpty) {
             return NextResponse.json({
                 exists: existsInCylinderAssets,
                 asset: data[0] || null,
                 isDuplicate: true,
-                reason: existsInCylinderAssets 
-                    ? 'Serial already exists in Cylinder Assets database' 
-                    : 'Serial is currently on hand in inventory'
+                reason: 'Serial already exists as an EMPTY Cylinder Asset.'
             });
         }
 
-        return NextResponse.json({ exists: false });
+        // For NULL, SWAP, OUTRIGHT, DEPOSIT, REFILL (non-empty products), allow it to be processed/confirmed
+        return NextResponse.json({ 
+            exists: existsInCylinderAssets,
+            asset: data[0] || null,
+            isDuplicate: false
+        });
     } catch (err) {
         console.error('Cylinder Asset API Error:', err);
         return NextResponse.json({ error: 'Failed to verify Cylinder Asset' }, { status: 500 });
