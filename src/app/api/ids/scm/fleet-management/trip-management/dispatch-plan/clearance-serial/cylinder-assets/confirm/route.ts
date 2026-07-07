@@ -87,7 +87,7 @@ async function deleter(endpoint: string, data?: unknown) {
 export async function POST(request: Request) {
     try {
         const body = await request.json(); 
-        const { serials, selectedProductId, invoiceId } = body;
+        const { serials, selectedProductId, invoiceId, conditions } = body;
 
         const cookieStore = await cookies();
         const token = cookieStore.get("vos_access_token")?.value;
@@ -106,7 +106,7 @@ export async function POST(request: Request) {
 
         // 1. Query BOTH draft and existing first to avoid cross-contamination
         const draftResPromise = fetcher(`/cylinder_assets_draft?filter[serial_number][_in]=${serialsList}`);
-        const existingResPromise = fetcher(`/cylinder_assets?filter[serial_number][_in]=${serialsList}&fields=id`);
+        const existingResPromise = fetcher(`/cylinder_assets?filter[serial_number][_in]=${serialsList}&fields=id,serial_number`);
         
         const [draftRes, existingRes] = await Promise.all([draftResPromise, existingResPromise]);
         
@@ -122,6 +122,11 @@ export async function POST(request: Request) {
                 delete newAsset.date_created;
                 delete newAsset.user_updated;
                 delete newAsset.date_updated;
+                
+                const serial = String(asset.serial_number || '');
+                if (conditions && conditions[serial]) {
+                    newAsset.cylinder_condition = conditions[serial];
+                }
                 
                 if (userId) {
                     newAsset.created_by = userId;
@@ -140,13 +145,17 @@ export async function POST(request: Request) {
 
         // 3. Update existing assets in cylinder_assets
         if (existingAssets.length > 0) {
-            const bulkUpdates = existingAssets.map((a: { id: string | number }) => ({
-                id: a.id,
-                product_id: Number(selectedProductId),
-                cylinder_status: 'EMPTY',
-                ...(userId ? { modified_by: userId } : {}),
-                modified_date: now
-            }));
+            const bulkUpdates = existingAssets.map((a: { id: string | number; serial_number: string }) => {
+                const condition = conditions?.[a.serial_number] || 'GOOD';
+                return {
+                    id: a.id,
+                    product_id: Number(selectedProductId),
+                    cylinder_status: 'EMPTY',
+                    cylinder_condition: condition,
+                    ...(userId ? { modified_by: userId } : {}),
+                    modified_date: now
+                };
+            });
             await patcher('/cylinder_assets', bulkUpdates);
         }
 
@@ -169,3 +178,5 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: errorMessage }, { status: 500 });
     }
 }
+// Trigger recompilation comment
+
