@@ -21,8 +21,8 @@ async function fetcher(endpoint: string) {
 
 export async function GET() {
     try {
-        // Fetch products where is_serialized = 1 and uom_ids is 'EMPTY'
-        const query = `/products?filter[is_serialized][_eq]=1&filter[uom_ids][_eq]=EMPTY&fields=product_id,product_name,product_code&limit=-1`;
+        // Fetch serialized products where uom_ids is 'EMPTY'
+        const query = `/products?filter[is_serialized][_eq]=1&filter[uom_ids][_eq]=EMPTY&fields=product_id,product_name,product_code,uom_ids&limit=-1`;
         const res = await fetcher(query);
         const data = res.data || [];
 
