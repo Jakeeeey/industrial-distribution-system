@@ -115,6 +115,20 @@ export function TraceDrawer({ isOpen, onClose, cylinder }: TraceDrawerProps) {
                                     <span className="text-xs font-semibold text-foreground leading-tight block">{cylinder.movementCount} total movements</span>
                                 </div>
                             </div>
+
+                            {/* Custodian/Supplier Section */}
+                            {(cylinder.movements[0]?.customerName || cylinder.movements[0]?.supplierName) && (
+                                <div className="pt-2 border-t border-border/40">
+                                    <span className="block text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">
+                                        {cylinder.movements[0]?.customerName ? "Current Custodian (Customer)" : "Last Supplier / Refiller"}
+                                    </span>
+                                    <span className="text-xs font-bold text-primary leading-tight block">
+                                        {cylinder.movements[0]?.customerName 
+                                            ? `${cylinder.movements[0].customerName} (${cylinder.movements[0].customerCode})` 
+                                            : cylinder.movements[0]?.supplierName}
+                                    </span>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
 
@@ -160,6 +174,17 @@ export function TraceDrawer({ isOpen, onClose, cylinder }: TraceDrawerProps) {
                                                 <span>Doc: <span className="font-mono text-foreground font-semibold">{m.documentNo}</span></span>
                                                 {m.branchName && (
                                                     <span> · <span className="font-medium text-foreground">{m.branchName}</span></span>
+                                                )}
+                                                
+                                                {m.customerName && (
+                                                    <div className="mt-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 bg-blue-500/5 px-2 py-0.5 rounded border border-blue-500/10 inline-block">
+                                                        Sold/Delivered to: {m.customerName} ({m.customerCode})
+                                                    </div>
+                                                )}
+                                                {m.supplierName && (
+                                                    <div className="mt-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/5 px-2 py-0.5 rounded border border-amber-500/10 inline-block">
+                                                        Refilled at: {m.supplierName}
+                                                    </div>
                                                 )}
                                             </div>
                                         </div>
