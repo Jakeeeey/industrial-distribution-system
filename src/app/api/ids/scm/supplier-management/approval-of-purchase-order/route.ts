@@ -1099,7 +1099,18 @@ export async function POST(req: NextRequest) {
         console.log(`[APPROVAL DEBUG] PO #${poId} approved. Set status to 13 (For Receiving). MarkAsInvoice: ${Boolean(body?.markAsInvoice)}`);
 
         const patch: Record<string, unknown> = { 
-            date_approved: new Date().toISOString(),
+            date_approved: (() => {
+                const d = new Date();
+                const datePart = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(d);
+                const timePart = new Intl.DateTimeFormat("en-US", {
+                    timeZone: "Asia/Manila",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                    hour12: false
+                }).format(d);
+                return `${datePart} ${timePart}`;
+            })(),
             receiving_type: Boolean(body?.markAsInvoice) ? 2 : 3, // Persistent flag for "Mark as Invoice"
             inventory_status: 13, // ✅ For Receiving
             approver_id: body?.approver_id ?? body?.approverId ?? null, // ✅ Track who approved

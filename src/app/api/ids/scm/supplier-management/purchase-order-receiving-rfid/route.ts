@@ -90,7 +90,18 @@ function deriveDiscountPercentFromCode(codeRaw: string): number {
     const combined = (1 - factor) * 100;
     return Number(combined.toFixed(4));
 }
-function nowISO() { return new Date().toISOString(); }
+function nowISO() {
+    const d = new Date();
+    const datePart = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(d);
+    const timePart = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Manila",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+    }).format(d);
+    return `${datePart} ${timePart}`;
+}
 function keyLine(poId: number, productId: number, branchId: number) {
     return `${poId}::${productId}::${branchId}`;
 }
