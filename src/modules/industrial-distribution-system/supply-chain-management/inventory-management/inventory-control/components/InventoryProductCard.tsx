@@ -6,7 +6,7 @@ import type { ProductGroup } from "../type";
 
 interface InventoryProductCardProps {
     product: ProductGroup;
-    onClick: (product: ProductGroup, filter?: "full" | "empty") => void;
+    onClick: (product: ProductGroup, filter?: "available" | "empty") => void;
 }
 
 export function InventoryProductCard({ product, onClick }: InventoryProductCardProps) {
@@ -62,12 +62,12 @@ export function InventoryProductCard({ product, onClick }: InventoryProductCardP
                     tabIndex={0}
                     onClick={(e) => {
                         e.stopPropagation();
-                        onClick(product, "full");
+                        onClick(product, "available");
                     }}
                     onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                             e.stopPropagation();
-                            onClick(product, "full");
+                            onClick(product, "available");
                         }
                     }}
                     className="
