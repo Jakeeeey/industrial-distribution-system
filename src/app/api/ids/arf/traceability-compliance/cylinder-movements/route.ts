@@ -32,6 +32,12 @@ interface RawSerialMovement {
     in_qty?: unknown;
     outQty?: unknown;
     out_qty?: unknown;
+    customerCode?: unknown;
+    customer_code?: unknown;
+    customerName?: unknown;
+    customer_name?: unknown;
+    supplierName?: unknown;
+    supplier_name?: unknown;
 }
 
 /**
@@ -51,6 +57,21 @@ function normalizeRow(raw: unknown): SerialMovement {
         documentType: String(r.documentType ?? r.docType ?? r.doc_type ?? "").trim(),
         inQty: Number(r.inQty ?? r.in_qty ?? 0),
         outQty: Number(r.outQty ?? r.out_qty ?? 0),
+        customerCode: (r.customerCode !== undefined || r.customer_code !== undefined) 
+            ? (r.customerCode ?? r.customer_code) !== null 
+                ? String(r.customerCode ?? r.customer_code ?? "").trim() 
+                : null 
+            : null,
+        customerName: (r.customerName !== undefined || r.customer_name !== undefined) 
+            ? (r.customerName ?? r.customer_name) !== null 
+                ? String(r.customerName ?? r.customer_name ?? "").trim() 
+                : null 
+            : null,
+        supplierName: (r.supplierName !== undefined || r.supplier_name !== undefined) 
+            ? (r.supplierName ?? r.supplier_name) !== null 
+                ? String(r.supplierName ?? r.supplier_name ?? "").trim() 
+                : null 
+            : null,
     };
 }
 

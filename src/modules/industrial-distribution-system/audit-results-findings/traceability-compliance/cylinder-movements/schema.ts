@@ -35,6 +35,15 @@ export const rawSerialMovementSchema = z.object({
     
     out_qty: z.coerce.number().optional(),
     outQty: z.coerce.number().optional(),
+    
+    customer_code: z.string().nullable().optional(),
+    customerCode: z.string().nullable().optional(),
+    
+    customer_name: z.string().nullable().optional(),
+    customerName: z.string().nullable().optional(),
+    
+    supplier_name: z.string().nullable().optional(),
+    supplierName: z.string().nullable().optional(),
 });
 
 export const rawSerialMovementListSchema = z.array(rawSerialMovementSchema);

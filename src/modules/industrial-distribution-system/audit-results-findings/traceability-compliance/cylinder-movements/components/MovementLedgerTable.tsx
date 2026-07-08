@@ -55,6 +55,7 @@ export function MovementLedgerTable({ data, onViewTrace, productNameFilter }: Mo
     // ─── Filter Logic ────────────────────────────────────────────────────────
     const filteredData = React.useMemo(() => {
         return data.filter((r) => {
+
             const matchesSearch = 
                 r.serialNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 r.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -145,6 +146,9 @@ export function MovementLedgerTable({ data, onViewTrace, productNameFilter }: Mo
             "Movement Direction": r.inQty > 0 ? "IN" : (r.outQty > 0 ? "OUT" : "Review"),
             "In Qty": r.inQty,
             "Out Qty": r.outQty,
+            "Customer Code": r.customerCode || "—",
+            "Customer Name": r.customerName || "—",
+            "Supplier Name": r.supplierName || "—",
             "Handling Branch": r.branchName,
         }));
 
@@ -247,13 +251,14 @@ export function MovementLedgerTable({ data, onViewTrace, productNameFilter }: Mo
                                     </div>
                                 </TableHead>
                                 <TableHead className="font-bold text-xs tracking-wider uppercase text-center">Movement</TableHead>
+                                <TableHead className="font-bold text-xs tracking-wider uppercase">Custodian / Supplier</TableHead>
                                 <TableHead className="font-bold text-xs tracking-wider uppercase">Branch</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {paginatedData.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={7} className="text-center py-10 text-xs text-muted-foreground">
+                                    <TableCell colSpan={8} className="text-center py-10 text-xs text-muted-foreground">
                                         No ledger log entries match your current filters.
                                     </TableCell>
                                 </TableRow>
@@ -292,6 +297,18 @@ export function MovementLedgerTable({ data, onViewTrace, productNameFilter }: Mo
                                                     {isOUT && "OUTWARD"}
                                                     {!isIN && !isOUT && "REVIEW"}
                                                 </Badge>
+                                            </TableCell>
+                                            <TableCell className="max-w-[200px] truncate">
+                                                {r.customerName ? (
+                                                    <div className="flex flex-col">
+                                                        <span className="font-semibold text-foreground text-xs leading-tight">{r.customerName}</span>
+                                                        <span className="text-[10px] text-muted-foreground font-mono">{r.customerCode}</span>
+                                                    </div>
+                                                ) : r.supplierName ? (
+                                                    <span className="font-semibold text-amber-600 dark:text-amber-400 text-xs">{r.supplierName}</span>
+                                                ) : (
+                                                    <span className="text-muted-foreground text-xs">—</span>
+                                                )}
                                             </TableCell>
                                             <TableCell className="truncate max-w-[150px] font-medium text-muted-foreground">{r.branchName}</TableCell>
                                         </TableRow>
