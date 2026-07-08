@@ -632,11 +632,13 @@ export const stockAdjustmentService = {
           const results = Array.isArray(data)
             ? data
             : (data && typeof data === "object")
-              ? Array.isArray(data.content)
-                ? data.content
-                : Array.isArray(data.data)
-                  ? data.data
-                  : [data]
+              ? Array.isArray(data.v_serial_onhand)
+                ? data.v_serial_onhand
+                : Array.isArray(data.content)
+                  ? data.content
+                  : Array.isArray(data.data)
+                    ? data.data
+                    : [data]
               : [];
 
           const exactMatch = results.find((item: any) =>
@@ -646,7 +648,7 @@ export const stockAdjustmentService = {
           if (exactMatch) {
             onHand = true;
             onHandProdId = Number(exactMatch.productId || exactMatch.product_id);
-            onHandBranch = exactMatch.branch_name || "Inventory";
+            onHandBranch = exactMatch.branch_name || (exactMatch.branch_id ? `Branch #${exactMatch.branch_id}` : "Inventory");
             return true;
           }
         }
