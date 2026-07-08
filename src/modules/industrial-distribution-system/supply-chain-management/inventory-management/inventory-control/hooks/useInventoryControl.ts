@@ -37,8 +37,8 @@ interface UseInventoryControlReturn {
 
   // Modal
   selectedProduct: ProductGroup | null;
-  openModal: (product: ProductGroup, filter?: "full" | "empty") => void;
-  initialStockFilter: "full" | "empty" | null;
+  openModal: (product: ProductGroup, filter?: "available" | "empty") => void;
+  initialStockFilter: "available" | "empty" | null;
   closeModal: () => void;
 
   // View within modal
@@ -152,11 +152,11 @@ export function useInventoryControl(): UseInventoryControlReturn {
   );
 
   const [initialStockFilter, setInitialStockFilter] = useState<
-    "full" | "empty" | null
+    "available" | "empty" | null
   >(null);
 
   const openModal = useCallback(
-    (product: ProductGroup, filter?: "full" | "empty") => {
+    (product: ProductGroup, filter?: "available" | "empty") => {
       setSelectedProduct(product);
       setViewMode("serial");
       // Do not clear the search query when opening the modal — preserve current filter
@@ -180,10 +180,10 @@ export function useInventoryControl(): UseInventoryControlReturn {
   // Dev-rule: Modal searchbar filters by serials only as per instructions
   const filteredSerials: EnrichedSerial[] = selectedProduct
     ? selectedProduct.serials.filter((s) => {
-        const q = searchQuery.toLowerCase().trim();
-        if (!q) return true;
-        return s.serialNumber.toLowerCase().includes(q);
-      })
+      const q = searchQuery.toLowerCase().trim();
+      if (!q) return true;
+      return s.serialNumber.toLowerCase().includes(q);
+    })
     : [];
 
   return {
