@@ -74,7 +74,7 @@ export function InventoryDetailModal({
   // Initialize selected IDs based on initial stock filter to avoid checking hidden/unfiltered serials by default
   const [selectedSerialIds, setSelectedSerialIds] = useState<Set<number>>(() => {
     const initialPool =
-      initialStockFilter === "full"
+      initialStockFilter === "available"
         ? filteredSerials.filter((s) => s.isFull)
         : initialStockFilter === "empty"
           ? filteredSerials.filter((s) => !s.isFull)
