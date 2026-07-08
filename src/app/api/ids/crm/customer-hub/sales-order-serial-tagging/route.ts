@@ -53,7 +53,9 @@ function getUserIdFromToken(req: NextRequest): number | null {
   const idValue = payload.id ?? payload.sub ?? payload.userId ?? payload.user_id;
   if (idValue === undefined || idValue === null) return null;
   const num = Number(idValue);
-  return isNaN(num) ? null : num;
+  const userId = isNaN(num) ? null : num;
+  console.log("Current user loggedin ID:", userId);
+  return userId;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -74,6 +76,43 @@ async function fetchDirectus<T = any>(endpoint: string, options: RequestInit = {
   }
 
   return response.json();
+}
+
+/**
+ * Resolves the customer codes linked to the salesman of the logged-in user.
+ * Returns null if the user is not associated with any salesman (e.g., admin).
+ * Returns an array (which may be empty) of customer codes if the user is a salesman.
+ */
+async function getSalesmanCustomerCodes(userId: number | null): Promise<string[] | null> {
+  if (!userId) return null;
+
+  const salesmenRes = await fetchDirectus(
+    `/items/salesman?filter[_or][0][employee_id][_eq]=${userId}&filter[_or][1][encoder_id][_eq]=${userId}&filter[isActive][_eq]=1&fields=id`
+  );
+  const salesmen = salesmenRes.data || [];
+  if (salesmen.length === 0) return null;
+
+  const salesmanIds = salesmen.map((s: { id: number | string }) => s.id);
+  const customerSalesmenRes = await fetchDirectus(
+    `/items/customer_salesmen?filter[salesman_id][_in]=${salesmanIds.join(",")}&limit=-1&fields=customer_id`
+  );
+  const customerSalesmen = customerSalesmenRes.data || [];
+  const customerIds = customerSalesmen
+    .map((cs: { customer_id: number | string | { id?: number | string } }) => {
+      if (cs.customer_id && typeof cs.customer_id === "object") {
+        return cs.customer_id.id;
+      }
+      return cs.customer_id;
+    })
+    .filter(Boolean);
+
+  if (customerIds.length === 0) return [];
+
+  const customersRes = await fetchDirectus(
+    `/items/customer?filter[id][_in]=${customerIds.join(",")}&fields=customer_code&limit=-1`
+  );
+  const customers = customersRes.data || [];
+  return customers.map((c: { customer_code: string }) => c.customer_code).filter(Boolean);
 }
 
 export async function GET(req: NextRequest) {
@@ -98,7 +137,13 @@ export async function GET(req: NextRequest) {
 
         // Modified: Changed order status filter from "For Shipping" to "En Route"
         const ordersRes = await fetchDirectus(`/items/sales_order?filter[branch_id][_in]=196,197&filter[order_status][_eq]=En%20Route&fields=order_id,order_no,customer_code,branch_id,order_status,created_date&sort=-created_date&limit=-1`);
-        const rawOrders = (ordersRes.data || []) as RawSalesOrder[];
+        let rawOrders = (ordersRes.data || []) as RawSalesOrder[];
+
+        const userId = getUserIdFromToken(req);
+        const allowedCustomerCodes = await getSalesmanCustomerCodes(userId);
+        if (allowedCustomerCodes !== null) {
+          rawOrders = rawOrders.filter((o) => allowedCustomerCodes.includes(o.customer_code));
+        }
 
         const uniqueCustCodes = Array.from(new Set(rawOrders.map((o) => o.customer_code).filter(Boolean)));
 
@@ -144,8 +189,8 @@ export async function GET(req: NextRequest) {
             const rawDetails = (detailsRes.data || []) as RawDetail[];
             for (const d of rawDetails) {
               const oId = Number(d.order_id);
-              const target = Number(d.allocated_quantity || 0) > 0 
-                ? Number(d.allocated_quantity) 
+              const target = Number(d.allocated_quantity || 0) > 0
+                ? Number(d.allocated_quantity)
                 : Number(d.ordered_quantity || 0);
               targetQtyMap.set(oId, (targetQtyMap.get(oId) || 0) + target);
             }
@@ -169,7 +214,7 @@ export async function GET(req: NextRequest) {
           const targetQty = targetQtyMap.get(o.order_id) || 0;
           const taggedQty = taggedQtyMap.get(o.order_id) || 0;
           let taggingStatus: "tagged" | "partially tagged" | "not tagged" = "not tagged";
-          
+
           if (targetQty > 0) {
             if (taggedQty >= targetQty) {
               taggingStatus = "tagged";
@@ -208,6 +253,13 @@ export async function GET(req: NextRequest) {
           return NextResponse.json({ error: "Sales Order not found" }, { status: 404 });
         }
 
+        // Authorization check for salesman
+        const userId = getUserIdFromToken(req);
+        const allowedCustomerCodes = await getSalesmanCustomerCodes(userId);
+        if (allowedCustomerCodes !== null && (!order.customer_code || !allowedCustomerCodes.includes(order.customer_code))) {
+          return NextResponse.json({ error: "Unauthorized access to this Sales Order" }, { status: 403 });
+        }
+
         // Fetch Customer Details
         let customerName = "Unknown Customer";
         if (order.customer_code) {
@@ -231,7 +283,7 @@ export async function GET(req: NextRequest) {
 
         // Fetch Sales Order details line items
         const detailsRes = await fetchDirectus(`/items/sales_order_details?filter[order_id][_eq]=${orderId}&fields=detail_id,product_id,ordered_quantity,allocated_quantity,served_quantity&limit=-1`);
-        
+
         interface RawOrderDetailItem {
           detail_id: number;
           product_id: number | { product_id: number } | null;
@@ -290,7 +342,7 @@ export async function GET(req: NextRequest) {
         }
         const allTaggedRes = await fetchDirectus(`/items/sales_order_details_serial?filter[sales_order_id][_eq]=${orderId}&fields=sales_order_detail_id,serial_number&limit=-1`);
         const allTagged = (allTaggedRes.data || []) as RawDetailsSerial[];
-        
+
         const taggedMap = new Map<number, { serial_number: string; status: string }[]>();
         for (const t of allTagged) {
           const dId = Number(t.sales_order_detail_id);
@@ -355,6 +407,17 @@ export async function GET(req: NextRequest) {
           return NextResponse.json({ error: "orderId is required" }, { status: 400 });
         }
 
+        // Authorization check for salesman
+        const userId = getUserIdFromToken(req);
+        const allowedCustomerCodes = await getSalesmanCustomerCodes(userId);
+        if (allowedCustomerCodes !== null) {
+          const orderRes = await fetchDirectus(`/items/sales_order/${orderId}?fields=customer_code`);
+          const order = orderRes.data || {};
+          if (!order.customer_code || !allowedCustomerCodes.includes(order.customer_code)) {
+            return NextResponse.json({ error: "Unauthorized access to this Sales Order mappings" }, { status: 403 });
+          }
+        }
+
         // 1. Fetch dispatch plan details for this Sales Order
         const dpdRes = await fetchDirectus(`/items/dispatch_plan_details?filter[sales_order_id][_eq]=${orderId}&fields=dispatch_id`);
         const dpd = dpdRes.data?.[0];
@@ -377,7 +440,7 @@ export async function GET(req: NextRequest) {
         }
 
         const consolidatorId = typeof cdisp.consolidator_id === "object" && cdisp.consolidator_id !== null
-          ? cdisp.consolidator_id.id 
+          ? cdisp.consolidator_id.id
           : cdisp.consolidator_id;
 
         if (!consolidatorId) {
@@ -474,6 +537,13 @@ export async function GET(req: NextRequest) {
           return NextResponse.json({ error: "customerCode is required" }, { status: 400 });
         }
 
+        // Authorization check for salesman
+        const userId = getUserIdFromToken(req);
+        const allowedCustomerCodes = await getSalesmanCustomerCodes(userId);
+        if (allowedCustomerCodes !== null && !allowedCustomerCodes.includes(customerCode)) {
+          return NextResponse.json({ error: "Unauthorized access to this Customer's assets" }, { status: 403 });
+        }
+
         // Fetch cylinder assets currently with the customer
         const assetsRes = await fetchDirectus(
           `/items/cylinder_assets?filter[cylinder_status][_eq]=WITH_CUSTOMER&filter[current_customer_code][_eq]=${encodeURIComponent(customerCode)}&fields=id,serial_number,product_id.product_name,modified_date,created_date&limit=-1`
@@ -490,7 +560,7 @@ export async function GET(req: NextRequest) {
           const prodName = typeof asset.product_id === "object" ? asset.product_id?.product_name : `Product ID: ${asset.product_id}`;
           const basisDate = asset.modified_date || asset.created_date || new Date().toISOString();
           const daysAtSite = Math.max(0, Math.floor((Date.now() - new Date(basisDate).getTime()) / (1000 * 60 * 60 * 24)));
-          
+
           return {
             id: Number(asset.id),
             serial_number: asset.serial_number,
@@ -528,6 +598,12 @@ export async function POST(req: NextRequest) {
     const order = orderRes.data || {};
     const branchId = order.branch_id || null;
     const finalCustomerCode = order.customer_code || customerCode;
+
+    // Authorization check for salesman
+    const allowedCustomerCodes = await getSalesmanCustomerCodes(userId);
+    if (allowedCustomerCodes !== null && !allowedCustomerCodes.includes(finalCustomerCode)) {
+      return NextResponse.json({ error: "Unauthorized access to target Customer" }, { status: 403 });
+    }
 
     // Fetch Customer Name
     let customerName = "";
@@ -612,7 +688,7 @@ export async function POST(req: NextRequest) {
         const pid = typeof item.product_id === "object" && item.product_id !== null
           ? Number(item.product_id.product_id)
           : Number(item.product_id);
-        
+
         if (item.detail_id && pid) {
           const pName = productNamesMap.get(pid) || `Product ID: ${pid}`;
           detailToProductMap.set(Number(item.detail_id), { product_id: pid, product_name: pName });
