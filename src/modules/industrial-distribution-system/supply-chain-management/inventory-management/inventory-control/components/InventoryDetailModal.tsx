@@ -71,9 +71,16 @@ export function InventoryDetailModal({
     "available" | "empty" | null
   >(() => initialStockFilter ?? null);
 
-  const [selectedSerialIds, setSelectedSerialIds] = useState<Set<number>>(
-    () => new Set(filteredSerials.map((s) => s.id)),
-  );
+  // Initialize selected IDs based on initial stock filter to avoid checking hidden/unfiltered serials by default
+  const [selectedSerialIds, setSelectedSerialIds] = useState<Set<number>>(() => {
+    const initialPool =
+      initialStockFilter === "full"
+        ? filteredSerials.filter((s) => s.isFull)
+        : initialStockFilter === "empty"
+          ? filteredSerials.filter((s) => !s.isFull)
+          : filteredSerials;
+    return new Set(initialPool.map((s) => s.id));
+  });
   const printRef = useRef<HTMLDivElement>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(() => {
@@ -219,9 +226,10 @@ export function InventoryDetailModal({
     });
   };
 
+  // Only print serials that are currently displayed/visible and checked
   const selectedSerialsToPrint = useMemo(() => {
-    return filteredSerials.filter((s) => selectedSerialIds.has(s.id));
-  }, [filteredSerials, selectedSerialIds]);
+    return displayedSerials.filter((s) => selectedSerialIds.has(s.id));
+  }, [displayedSerials, selectedSerialIds]);
 
   const printViewOptions = useMemo(
     () => ({
@@ -749,10 +757,10 @@ export function InventoryDetailModal({
               </Button>
               <Button
                 onClick={() => setActiveMode("choice")}
-                disabled={selectedSerialIds.size === 0}
+                disabled={selectedSerialsToPrint.length === 0}
                 className="bg-blue-600 hover:bg-blue-700 text-white h-10 w-full sm:w-auto text-xs font-bold"
               >
-                Show Printables ({selectedSerialIds.size})
+                Show Printables ({selectedSerialsToPrint.length})
               </Button>
             </div>
           </div>
