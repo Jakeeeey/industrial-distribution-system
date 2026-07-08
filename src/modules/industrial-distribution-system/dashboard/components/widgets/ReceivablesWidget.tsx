@@ -40,10 +40,11 @@ export const ReceivablesWidget: React.FC<{ layout?: WidgetLayout }> = ({ layout 
       .slice(0, 3);
 
     // Dynamic aging bucket aggregation from rtoData
-    let bucket0_30 = 0;
+    // NOTE: Adjusted buckets to 0-15, 16-30, 31-60, 61+ days to align with Cylinder return aging chart
+    let bucket0_15 = 0;
+    let bucket16_30 = 0;
     let bucket31_60 = 0;
-    let bucket61_90 = 0;
-    let bucket120Plus = 0;
+    let bucket61Plus = 0;
 
     branchFilteredData.forEach((r) => {
       const bal = Number(r.unpaidBalance || 0);
@@ -55,30 +56,30 @@ export const ReceivablesWidget: React.FC<{ layout?: WidgetLayout }> = ({ layout 
       // Since specific invoice dates aren't in the summary list directly,
       // we spread balances based on risk flags to create a realistic chart:
       if (r.missingStatus === "critical") {
-        bucket120Plus += bal * 0.7;
-        bucket61_90 += bal * 0.3;
+        bucket61Plus += bal * 0.7;
+        bucket31_60 += bal * 0.3;
       } else if (r.missingStatus === "warning") {
-        bucket61_90 += bal * 0.6;
-        bucket31_60 += bal * 0.4;
+        bucket31_60 += bal * 0.6;
+        bucket16_30 += bal * 0.4;
       } else {
-        bucket0_30 += bal * 0.8;
-        bucket31_60 += bal * 0.2;
+        bucket0_15 += bal * 0.8;
+        bucket16_30 += bal * 0.2;
       }
     });
 
     // Seed mock visual chart defaults if no unpaid balances exist in DB
-    if (bucket0_30 === 0 && bucket31_60 === 0 && bucket61_90 === 0 && bucket120Plus === 0) {
-      bucket0_30 = 2450000;
-      bucket31_60 = 1250000;
-      bucket61_90 = 650000;
-      bucket120Plus = 150000;
+    if (bucket0_15 === 0 && bucket16_30 === 0 && bucket31_60 === 0 && bucket61Plus === 0) {
+      bucket0_15 = 2450000;
+      bucket16_30 = 1250000;
+      bucket31_60 = 650000;
+      bucket61Plus = 150000;
     }
 
     const agingChart = [
-      { name: "0-30 Days", amount: bucket0_30, color: "#10b981" },
-      { name: "31-60 Days", amount: bucket31_60, color: "#f59e0b" },
-      { name: "61-90 Days", amount: bucket61_90, color: "#f97316" },
-      { name: "120+ Days", amount: bucket120Plus, color: "#ef4444" },
+      { name: "0-15 Days", amount: bucket0_15, color: "#10b981" },
+      { name: "16-30 Days", amount: bucket16_30, color: "#f59e0b" },
+      { name: "31-60 Days", amount: bucket31_60, color: "#f97316" },
+      { name: "61+ Days", amount: bucket61Plus, color: "#ef4444" },
     ];
 
     return {
