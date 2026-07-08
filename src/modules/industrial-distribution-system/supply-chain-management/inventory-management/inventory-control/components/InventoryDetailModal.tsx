@@ -48,7 +48,7 @@ interface InventoryDetailModalProps {
   filteredSerials: EnrichedSerial[];
   printOptions: PrintOptions;
   setPrintOptions: (opts: Partial<PrintOptions>) => void;
-  initialStockFilter?: "full" | "empty" | null;
+  initialStockFilter?: "available" | "empty" | null;
 }
 
 export function InventoryDetailModal({
@@ -68,7 +68,7 @@ export function InventoryDetailModal({
   >(() => "list");
 
   const [activeStockFilter, setActiveStockFilter] = useState<
-    "full" | "empty" | null
+    "available" | "empty" | null
   >(() => initialStockFilter ?? null);
 
   const [selectedSerialIds, setSelectedSerialIds] = useState<Set<number>>(
@@ -129,7 +129,7 @@ export function InventoryDetailModal({
 
   // Apply the stock filter on top of filteredSerials
   const displayedSerials =
-    activeStockFilter === "full"
+    activeStockFilter === "available"
       ? fullSerials
       : activeStockFilter === "empty"
         ? emptySerials
@@ -259,7 +259,7 @@ export function InventoryDetailModal({
   if (!product) return null;
 
   const typeLabel =
-    activeStockFilter === "full"
+    activeStockFilter === "available"
       ? "Full Cylinders"
       : activeStockFilter === "empty"
         ? "Empty Cylinders"
@@ -268,7 +268,7 @@ export function InventoryDetailModal({
           : "Empty Cylinders";
 
   const headerBgClass =
-    activeStockFilter === "full"
+    activeStockFilter === "available"
       ? "bg-emerald-500/5"
       : activeStockFilter === "empty"
         ? "bg-rose-500/5"
@@ -277,7 +277,7 @@ export function InventoryDetailModal({
           : "bg-rose-500/5";
 
   const textThemeClass =
-    activeStockFilter === "full"
+    activeStockFilter === "available"
       ? "text-emerald-700 dark:text-emerald-400"
       : activeStockFilter === "empty"
         ? "text-rose-700 dark:text-rose-400"
@@ -319,9 +319,8 @@ export function InventoryDetailModal({
           activeMode === "choice"
             ? "w-[95vw] sm:max-w-md p-5 sm:p-6 bg-background rounded-xl"
             : activeMode === "list"
-              ? `w-[95vw] ${
-                  isSplit ? "sm:max-w-3xl" : "sm:max-w-xl"
-                } max-h-[90vh] flex flex-col p-4 sm:p-6 bg-background rounded-xl overflow-hidden`
+              ? `w-[95vw] ${isSplit ? "sm:max-w-3xl" : "sm:max-w-xl"
+              } max-h-[90vh] flex flex-col p-4 sm:p-6 bg-background rounded-xl overflow-hidden`
               : "w-[95vw] sm:max-w-5xl h-[90vh] flex flex-col p-0 overflow-hidden bg-zinc-100 dark:bg-zinc-950 rounded-xl"
         }
       >
@@ -342,20 +341,19 @@ export function InventoryDetailModal({
               <button
                 type="button"
                 onClick={() => {
-                  const next = activeStockFilter === "full" ? null : "full";
+                  const next = activeStockFilter === "available" ? null : "available";
                   setActiveStockFilter(next);
                   // Re-select visible serials on filter change
-                  const pool = next === "full" ? fullSerials : filteredSerials;
+                  const pool = next === "available" ? fullSerials : filteredSerials;
                   setSelectedSerialIds(new Set(pool.map((s) => s.id)));
                 }}
-                className={`flex items-center justify-between rounded-lg px-3.5 py-2.5 border transition-all duration-150 ${
-                  activeStockFilter === "full"
+                className={`flex items-center justify-between rounded-lg px-3.5 py-2.5 border transition-all duration-150 ${activeStockFilter === "available"
                     ? "bg-emerald-500/20 border-emerald-500/40 ring-2 ring-emerald-500/30"
                     : "bg-emerald-500/10 border-emerald-500/10 hover:bg-emerald-500/20 hover:border-emerald-500/30"
-                }`}
+                  }`}
               >
                 <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                  Full Cylinders{activeStockFilter === "full" ? " ✓" : ""}
+                  Full Cylinders{activeStockFilter === "available" ? " ✓" : ""}
                 </span>
                 <span className="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono">
                   {product.fullCount}
@@ -370,11 +368,10 @@ export function InventoryDetailModal({
                     next === "empty" ? emptySerials : filteredSerials;
                   setSelectedSerialIds(new Set(pool.map((s) => s.id)));
                 }}
-                className={`flex items-center justify-between rounded-lg px-3.5 py-2.5 border transition-all duration-150 ${
-                  activeStockFilter === "empty"
+                className={`flex items-center justify-between rounded-lg px-3.5 py-2.5 border transition-all duration-150 ${activeStockFilter === "empty"
                     ? "bg-rose-500/20 border-rose-500/40 ring-2 ring-rose-500/30"
                     : "bg-rose-500/10 border-rose-500/10 hover:bg-rose-500/20 hover:border-rose-500/30"
-                }`}
+                  }`}
               >
                 <span className="text-xs font-bold text-rose-700 dark:text-rose-400">
                   Empty Cylinders{activeStockFilter === "empty" ? " ✓" : ""}
@@ -388,14 +385,13 @@ export function InventoryDetailModal({
             {/* Active filter indicator */}
             {activeStockFilter && (
               <div
-                className={`flex items-center justify-between text-xs px-3 py-1.5 rounded-lg border shrink-0 ${
-                  activeStockFilter === "full"
+                className={`flex items-center justify-between text-xs px-3 py-1.5 rounded-lg border shrink-0 ${activeStockFilter === "available"
                     ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-400"
                     : "bg-rose-500/10 border-rose-500/20 text-rose-700 dark:text-rose-400"
-                }`}
+                  }`}
               >
                 <span className="font-semibold">
-                  Showing {activeStockFilter === "full" ? "Full" : "Empty"}{" "}
+                  Showing {activeStockFilter === "available" ? "available" : "Empty"}{" "}
                   cylinders only
                 </span>
                 <button
@@ -714,24 +710,22 @@ export function InventoryDetailModal({
                             </td>
                             <td className="py-2.5 px-4">
                               <span
-                                className={`inline-block text-[9px] font-extrabold px-2 py-0.5 rounded-full border ${
-                                  s.isFull
+                                className={`inline-block text-[9px] font-extrabold px-2 py-0.5 rounded-full border ${s.isFull
                                     ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20"
                                     : "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20"
-                                }`}
+                                  }`}
                               >
                                 {s.status}
                               </span>
                             </td>
                             <td className="py-2.5 px-4">
                               <span
-                                className={`inline-block text-[9px] font-extrabold px-2 py-0.5 rounded-full border ${
-                                  s.cylinderCondition?.toLowerCase() === "good"
+                                className={`inline-block text-[9px] font-extrabold px-2 py-0.5 rounded-full border ${s.cylinderCondition?.toLowerCase() === "good"
                                     ? "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20"
                                     : s.cylinderCondition?.toLowerCase() === "damaged"
                                       ? "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20"
                                       : "bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 border-zinc-500/20"
-                                }`}
+                                  }`}
                               >
                                 {s.cylinderCondition || "—"}
                               </span>
@@ -868,11 +862,10 @@ export function InventoryDetailModal({
                     variant="outline"
                     size="sm"
                     onClick={() => setShowSettings(!showSettings)}
-                    className={`h-8 gap-1.5 transition-all ${
-                      showSettings
+                    className={`h-8 gap-1.5 transition-all ${showSettings
                         ? "bg-accent text-accent-foreground border-zinc-400 dark:border-zinc-600"
                         : "text-muted-foreground"
-                    }`}
+                      }`}
                   >
                     <SlidersHorizontal className="h-3.5 w-3.5" />
                     <span className="text-xs font-bold">Options</span>

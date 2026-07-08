@@ -14,6 +14,9 @@ export type SerialMovement = {
     documentType: string;   // doc_type
     inQty: number;          // in_qty (0 or 1)
     outQty: number;         // out_qty (0 or 1)
+    customerCode?: string | null;
+    customerName?: string | null;
+    supplierName?: string | null;
 };
 
 /**
