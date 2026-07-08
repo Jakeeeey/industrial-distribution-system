@@ -134,9 +134,8 @@ export function RegisterCylinderAssetModal(props: Props) {
         try {
             setIsSaving(true);
             
-            // Derive status from UOM: EMPTY products are registered as EMPTY cylinders
             const resolvedStatus: CylinderAssetUpsertPayload["cylinder_status"] =
-                uomName?.toUpperCase() === "EMPTY" ? "EMPTY" : "AVAILABLE";
+                (uomName || "").toUpperCase().includes("EMPTY") ? "EMPTY" : "AVAILABLE";
 
             const payloads: CylinderAssetUpsertPayload[] = serials.map((serial) => {
                 const data = rows[serial];

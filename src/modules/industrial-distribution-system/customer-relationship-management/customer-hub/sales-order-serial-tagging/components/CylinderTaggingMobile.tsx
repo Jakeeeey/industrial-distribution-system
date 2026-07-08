@@ -169,9 +169,18 @@ function LineItemSerialsList({
                       ? "bg-blue-500/5 text-blue-500 border-blue-500/25" 
                       : "bg-amber-500/5 text-amber-500 border-amber-500/25"
                   }`}
-                  title={`${item.serial_number} (${isTagged ? "Tagged" : "Not Tagged"})`}
+                  // Dev-rule: If serial is not tagged, hide it like a password using * characters
+                  title={`${
+                    item.status === "not tagged"
+                      ? "*".repeat(item.serial_number.length)
+                      : item.serial_number
+                  } (${isTagged ? "Tagged" : "Not Tagged"})`}
                 >
-                  <span>{item.serial_number}</span>
+                  <span>
+                    {item.status === "not tagged"
+                      ? "*".repeat(item.serial_number.length)
+                      : item.serial_number}
+                  </span>
                   <span className="text-[8px] font-sans ml-1.5 shrink-0 select-none uppercase font-bold">
                     {isTagged ? "Tagged" : "Not Tagged"}
                   </span>
@@ -530,7 +539,7 @@ export default function CylinderTaggingMobile({
                 <div className="border rounded-xl bg-secondary/15 overflow-hidden">
                   <div className="p-3 bg-secondary/30 border-b flex justify-between items-center">
                     <span className="text-xs font-black uppercase text-muted-foreground flex items-center gap-1">
-                      <ListTodo className="w-4 h-4 text-primary" /> To Tag ({scannedList.length})
+                      <ListTodo className="w-4 h-4 text-primary" /> Scanned ({scannedList.length})
                     </span>
                     {scannedList.length > 0 && (
                       <button
