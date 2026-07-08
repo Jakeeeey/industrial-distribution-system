@@ -641,7 +641,17 @@ export const stockAdjustmentService = {
                     : [data]
               : [];
 
-          const exactMatch = results.find((item: any) =>
+          // Define typed interface for items in v_serial_onhand to resolve lint errors
+          interface SerialOnHandItem {
+            serialNumber?: string;
+            serial_number?: string;
+            productId?: string | number;
+            product_id?: string | number;
+            branch_name?: string;
+            branch_id?: string | number;
+          }
+
+          const exactMatch = (results as SerialOnHandItem[]).find((item) =>
             String(item.serialNumber || item.serial_number || "").toUpperCase() === cleanSerial
           );
 
@@ -663,7 +673,8 @@ export const stockAdjustmentService = {
       }
 
       // 2. Check if present in cylinder_assets (case-insensitive query using OR)
-      const assetRes = await directusFetch<{ data: Array<{ id: number; cylinder_status?: string; product_id?: any; serial_number?: string }> }>(
+      // Typed product_id specifically instead of 'any' to fix lint errors
+      const assetRes = await directusFetch<{ data: Array<{ id: number; cylinder_status?: string; product_id?: number | { id: number } | null; serial_number?: string }> }>(
         `${DIRECTUS_URL}/items/cylinder_assets?filter={"_or":[{"serial_number":{"_eq":"${serial.trim().toUpperCase()}"}},{"serial_number":{"_eq":"${serial.trim().toLowerCase()}"}}]}&fields=id,cylinder_status,product_id,serial_number`
       );
       
