@@ -725,10 +725,33 @@ export function StockAdjustmentForm({
 
     setIsGlobalScanValidating(true);
     try {
-      const res = await validateSerialAvailability(rawSerial, Number(watchedBranchId));
+      const res = await validateSerialAvailability(
+        rawSerial,
+        Number(watchedBranchId),
+        undefined,
+        watchedType
+      );
+
+      if (res.isBlocked) {
+        const errMsg = res.errorMsg || "Serial scan is blocked.";
+        toast.error("Scan Blocked", { description: errMsg });
+        playErrorBeep();
+        setScanLog((prev) => [
+          {
+            serial: rawSerial,
+            status: "error",
+            message: errMsg,
+            timestamp: new Date(),
+          },
+          ...prev.slice(0, 4),
+        ]);
+        return;
+      }
 
       if (!res.exists || !res.productId) {
-        const errMsg = res.location || "Serial number is not currently on-hand at the selected branch.";
+        const errMsg = watchedType === "OUT"
+          ? "Serial number is not currently on-hand at the selected branch."
+          : "Serial is not registered. Please select a product and add/register it via the serial modal.";
         toast.error("Scan Blocked", { description: errMsg });
         playErrorBeep();
         setScanLog((prev) => [
