@@ -169,9 +169,18 @@ function LineItemSerialsList({
                       ? "bg-blue-500/5 text-blue-500 border-blue-500/25" 
                       : "bg-amber-500/5 text-amber-500 border-amber-500/25"
                   }`}
-                  title={`${item.serial_number} (${isTagged ? "Tagged" : "Not Tagged"})`}
+                  // Dev-rule: If serial is not tagged, hide it like a password using * characters
+                  title={`${
+                    item.status === "not tagged"
+                      ? "*".repeat(item.serial_number.length)
+                      : item.serial_number
+                  } (${isTagged ? "Tagged" : "Not Tagged"})`}
                 >
-                  <span>{item.serial_number}</span>
+                  <span>
+                    {item.status === "not tagged"
+                      ? "*".repeat(item.serial_number.length)
+                      : item.serial_number}
+                  </span>
                   <span className="text-[8px] font-sans ml-1.5 shrink-0 select-none uppercase font-bold">
                     {isTagged ? "Tagged" : "Not Tagged"}
                   </span>
