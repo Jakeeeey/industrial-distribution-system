@@ -90,8 +90,8 @@ export function TransactionReviewCard({
           <div className="flex items-center gap-1 mt-0.5">
             <Calendar className="h-2.5 w-2.5 text-muted-foreground" />
             <span className="text-[10px] text-muted-foreground">
-              {transaction.billing_period_from ?? transaction.transaction_date}
-              {transaction.billing_period_to && ` → ${transaction.billing_period_to}`}
+              {/* AG-CHANGE: Always display transaction date instead of billing period */}
+              {transaction.transaction_date}
             </span>
           </div>
         </div>
