@@ -467,7 +467,8 @@ export function ConsolidationWorkspace({ hook, step, setStep }: ConsolidationWor
 
                         <div className="flex items-center justify-between w-full text-[10px] text-muted-foreground">
                           <span className="truncate">
-                            {tx.billing_period_from ?? tx.transaction_date}
+                            {/* AG-CHANGE: Always display transaction date instead of billing period */}
+                            {tx.transaction_date}
                           </span>
                           <Badge
                             className={cn(
