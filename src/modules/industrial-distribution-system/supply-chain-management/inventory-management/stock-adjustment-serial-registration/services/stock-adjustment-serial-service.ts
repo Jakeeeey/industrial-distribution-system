@@ -599,6 +599,146 @@ export const stockAdjustmentService = {
   },
 
   /**
+   * Validate serial number for Stock In and Stock Out adjustments
+   */
+  async validateSerialForAdjustment(params: {
+    serial: string;
+    token: string;
+    branchId?: number;
+    productId?: number;
+    type: "IN" | "OUT";
+  }): Promise<{ exists: boolean; location?: string; productId?: number; isBlocked?: boolean; errorMsg?: string }> {
+    const { serial, token, branchId, productId, type } = params;
+    const cleanSerial = serial.trim().toUpperCase();
+
+    try {
+      // 1. Check if present in v_serial_onhand using filter endpoint (case-insensitive checks)
+      let onHand = false;
+      let onHandProdId: number | undefined = undefined;
+      let onHandBranch: string | undefined = undefined;
+
+      const checkOnHand = async (searchSerial: string) => {
+        const filterUrl = new URL(`${SPRING_API_URL}/api/v-serial-onhand/filter`);
+        filterUrl.searchParams.set("serialNumber", searchSerial);
+        if (branchId) filterUrl.searchParams.set("branchId", String(branchId));
+        if (productId) filterUrl.searchParams.set("productId", String(productId));
+
+        const springRes = await fetch(filterUrl.toString(), {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+
+        if (springRes.ok) {
+          const data = await springRes.json();
+          const results = Array.isArray(data)
+            ? data
+            : (data && typeof data === "object")
+              ? Array.isArray(data.v_serial_onhand)
+                ? data.v_serial_onhand
+                : Array.isArray(data.content)
+                  ? data.content
+                  : Array.isArray(data.data)
+                    ? data.data
+                    : [data]
+              : [];
+
+          // Define typed interface for items in v_serial_onhand to resolve lint errors
+          interface SerialOnHandItem {
+            serialNumber?: string;
+            serial_number?: string;
+            productId?: string | number;
+            product_id?: string | number;
+            branch_name?: string;
+            branch_id?: string | number;
+          }
+
+          const exactMatch = (results as SerialOnHandItem[]).find((item) =>
+            String(item.serialNumber || item.serial_number || "").toUpperCase() === cleanSerial
+          );
+
+          if (exactMatch) {
+            onHand = true;
+            onHandProdId = Number(exactMatch.productId || exactMatch.product_id);
+            onHandBranch = exactMatch.branch_name || (exactMatch.branch_id ? `Branch #${exactMatch.branch_id}` : "Inventory");
+            return true;
+          }
+        }
+        return false;
+      };
+
+      // Try original (all-caps format)
+      await checkOnHand(cleanSerial);
+      // Fallback: try lowercase format
+      if (!onHand) {
+        await checkOnHand(serial.trim().toLowerCase());
+      }
+
+      // 2. Check if present in cylinder_assets (case-insensitive query using OR)
+      // Typed product_id specifically instead of 'any' to fix lint errors
+      const assetRes = await directusFetch<{ data: Array<{ id: number; cylinder_status?: string; product_id?: number | { id: number } | null; serial_number?: string }> }>(
+        `${DIRECTUS_URL}/items/cylinder_assets?filter={"_or":[{"serial_number":{"_eq":"${serial.trim().toUpperCase()}"}},{"serial_number":{"_eq":"${serial.trim().toLowerCase()}"}}]}&fields=id,cylinder_status,product_id,serial_number`
+      );
+      
+      const asset = assetRes.data?.find((a) =>
+        String(a.serial_number || "").toUpperCase() === cleanSerial
+      );
+
+      if (type === "IN") {
+        // STOCK IN validation:
+        // "if the serial is present on v_serial_onhand and present on cylinder_assets and/or its cylinder_assets.cylinder_status = 'WITH_CUSTOMER' dont accept it"
+        if (onHand) {
+          return {
+            exists: true,
+            isBlocked: true,
+            errorMsg: `Serial "${serial}" is already present on-hand in ${onHandBranch}.`,
+            productId: onHandProdId
+          };
+        }
+
+        if (asset && asset.cylinder_status === "WITH_CUSTOMER") {
+          const pId = typeof asset.product_id === "object" ? asset.product_id?.id : asset.product_id;
+          return {
+            exists: true,
+            isBlocked: true,
+            errorMsg: `Serial "${serial}" is currently WITH_CUSTOMER and cannot be adjusted in.`,
+            productId: pId ? Number(pId) : undefined
+          };
+        }
+
+        if (asset) {
+          const pId = typeof asset.product_id === "object" ? asset.product_id?.id : asset.product_id;
+          return {
+            exists: true,
+            productId: pId ? Number(pId) : undefined,
+            location: `Registered in Cylinder Assets (${asset.cylinder_status})`
+          };
+        }
+
+        // If it does not exist anywhere, it is unregistered
+        return { exists: false };
+      } else {
+        // STOCK OUT validation:
+        // "the serial should be present on the v_serial_onhand if not open register modal and register the serial"
+        if (onHand) {
+          return {
+            exists: true,
+            productId: onHandProdId,
+            location: onHandBranch
+          };
+        }
+
+        // Not present on hand
+        return {
+          exists: false,
+          location: `Serial "${serial}" is not on-hand in this branch.`
+        };
+      }
+    } catch (err) {
+      console.error("Failed validation check for serial:", err);
+      return { exists: false };
+    }
+  },
+
+  /**
    * Create a new Stock Adjustment (Header + Items)
    */
   async create(payload: { header: Record<string, unknown>; items: StockAdjustmentItem[]; userId?: number }) {
