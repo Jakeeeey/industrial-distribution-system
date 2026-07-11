@@ -38,7 +38,7 @@ export const cylinderAssetsService = {
       const today = format(new Date(), "yyyy-MM-dd");
       const next30Days = format(addDays(new Date(), 30), "yyyy-MM-dd");
       filters._and = [
-        ...(filters._and as any[] || []),
+        ...(filters._and as Record<string, unknown>[] || []),
         { expiration_date: { _gte: today } },
         { expiration_date: { _lte: next30Days } }
       ];
