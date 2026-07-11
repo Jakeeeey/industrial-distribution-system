@@ -37,8 +37,8 @@ interface UseInventoryControlReturn {
 
   // Modal
   selectedProduct: ProductGroup | null;
-  openModal: (product: ProductGroup, filter?: "available" | "empty") => void;
-  initialStockFilter: "available" | "empty" | null;
+  openModal: (product: ProductGroup, filter?: "full" | "empty") => void;
+  initialStockFilter: "full" | "empty" | null;
   closeModal: () => void;
 
   // View within modal
@@ -152,11 +152,11 @@ export function useInventoryControl(): UseInventoryControlReturn {
   );
 
   const [initialStockFilter, setInitialStockFilter] = useState<
-    "available" | "empty" | null
+    "full" | "empty" | null
   >(null);
 
   const openModal = useCallback(
-    (product: ProductGroup, filter?: "available" | "empty") => {
+    (product: ProductGroup, filter?: "full" | "empty") => {
       setSelectedProduct(product);
       setViewMode("serial");
       // Do not clear the search query when opening the modal — preserve current filter

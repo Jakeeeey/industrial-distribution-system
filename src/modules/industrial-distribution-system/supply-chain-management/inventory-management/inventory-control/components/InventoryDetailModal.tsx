@@ -48,7 +48,7 @@ interface InventoryDetailModalProps {
   filteredSerials: EnrichedSerial[];
   printOptions: PrintOptions;
   setPrintOptions: (opts: Partial<PrintOptions>) => void;
-  initialStockFilter?: "available" | "empty" | null;
+  initialStockFilter?: "full" | "empty" | null;
 }
 
 export function InventoryDetailModal({
@@ -68,13 +68,13 @@ export function InventoryDetailModal({
   >(() => "list");
 
   const [activeStockFilter, setActiveStockFilter] = useState<
-    "available" | "empty" | null
+    "full" | "empty" | null
   >(() => initialStockFilter ?? null);
 
   // Initialize selected IDs based on initial stock filter to avoid checking hidden/unfiltered serials by default
   const [selectedSerialIds, setSelectedSerialIds] = useState<Set<number>>(() => {
     const initialPool =
-      initialStockFilter === "available"
+      initialStockFilter === "full"
         ? filteredSerials.filter((s) => s.isFull)
         : initialStockFilter === "empty"
           ? filteredSerials.filter((s) => !s.isFull)
@@ -136,7 +136,7 @@ export function InventoryDetailModal({
 
   // Apply the stock filter on top of filteredSerials
   const displayedSerials =
-    activeStockFilter === "available"
+    activeStockFilter === "full"
       ? fullSerials
       : activeStockFilter === "empty"
         ? emptySerials
@@ -267,7 +267,7 @@ export function InventoryDetailModal({
   if (!product) return null;
 
   const typeLabel =
-    activeStockFilter === "available"
+    activeStockFilter === "full"
       ? "Full Cylinders"
       : activeStockFilter === "empty"
         ? "Empty Cylinders"
@@ -276,7 +276,7 @@ export function InventoryDetailModal({
           : "Empty Cylinders";
 
   const headerBgClass =
-    activeStockFilter === "available"
+    activeStockFilter === "full"
       ? "bg-emerald-500/5"
       : activeStockFilter === "empty"
         ? "bg-rose-500/5"
@@ -285,7 +285,7 @@ export function InventoryDetailModal({
           : "bg-rose-500/5";
 
   const textThemeClass =
-    activeStockFilter === "available"
+    activeStockFilter === "full"
       ? "text-emerald-700 dark:text-emerald-400"
       : activeStockFilter === "empty"
         ? "text-rose-700 dark:text-rose-400"
@@ -349,19 +349,19 @@ export function InventoryDetailModal({
               <button
                 type="button"
                 onClick={() => {
-                  const next = activeStockFilter === "available" ? null : "available";
+                  const next = activeStockFilter === "full" ? null : "full";
                   setActiveStockFilter(next);
                   // Re-select visible serials on filter change
-                  const pool = next === "available" ? fullSerials : filteredSerials;
+                  const pool = next === "full" ? fullSerials : filteredSerials;
                   setSelectedSerialIds(new Set(pool.map((s) => s.id)));
                 }}
-                className={`flex items-center justify-between rounded-lg px-3.5 py-2.5 border transition-all duration-150 ${activeStockFilter === "available"
+                className={`flex items-center justify-between rounded-lg px-3.5 py-2.5 border transition-all duration-150 ${activeStockFilter === "full"
                     ? "bg-emerald-500/20 border-emerald-500/40 ring-2 ring-emerald-500/30"
                     : "bg-emerald-500/10 border-emerald-500/10 hover:bg-emerald-500/20 hover:border-emerald-500/30"
                   }`}
               >
                 <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                  Full Cylinders{activeStockFilter === "available" ? " ✓" : ""}
+                  Full Cylinders{activeStockFilter === "full" ? " ✓" : ""}
                 </span>
                 <span className="text-base font-black text-emerald-600 dark:text-emerald-400 font-mono">
                   {product.fullCount}
@@ -393,13 +393,13 @@ export function InventoryDetailModal({
             {/* Active filter indicator */}
             {activeStockFilter && (
               <div
-                className={`flex items-center justify-between text-xs px-3 py-1.5 rounded-lg border shrink-0 ${activeStockFilter === "available"
+                className={`flex items-center justify-between text-xs px-3 py-1.5 rounded-lg border shrink-0 ${activeStockFilter === "full"
                     ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-400"
                     : "bg-rose-500/10 border-rose-500/20 text-rose-700 dark:text-rose-400"
                   }`}
               >
                 <span className="font-semibold">
-                  Showing {activeStockFilter === "available" ? "available" : "Empty"}{" "}
+                  Showing {activeStockFilter === "full" ? "Full" : "Empty"}{" "}
                   cylinders only
                 </span>
                 <button

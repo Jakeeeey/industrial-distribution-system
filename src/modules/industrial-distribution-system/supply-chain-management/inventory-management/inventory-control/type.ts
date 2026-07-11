@@ -1,6 +1,6 @@
 // src/modules/.../inventory-control/type.ts
 
-export type SerialStatus = "Available" | "Empty";
+export type SerialStatus = "Full" | "Empty";
 
 export interface SerialOnhandRecord {
   id: number;
