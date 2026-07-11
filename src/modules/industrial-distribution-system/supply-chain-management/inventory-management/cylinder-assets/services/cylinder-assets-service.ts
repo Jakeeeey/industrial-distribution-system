@@ -1,10 +1,12 @@
 import { directusFetch, getDirectusBase } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/cylinder-assets/utils/directus";
 import { CylinderAsset } from "../types";
 
+import { format, addDays } from "date-fns";
+
 const DIRECTUS_URL = getDirectusBase();
 
 export const cylinderAssetsService = {
-  async fetchAll(params?: { search?: string; status?: string; branchId?: number; productId?: number; condition?: string; page?: number; limit?: number; sort?: string; serials?: string }) {
+  async fetchAll(params?: { search?: string; status?: string; branchId?: number; productId?: number; condition?: string; expirationStatus?: string; page?: number; limit?: number; sort?: string; serials?: string }) {
     const page = params?.page || 1;
     const limit = params?.limit || 10;
     const offset = (page - 1) * limit;
@@ -28,6 +30,18 @@ export const cylinderAssetsService = {
     if (params?.serials) {
       const serialsList = params.serials.split(",");
       filters.serial_number = { _in: serialsList };
+    }
+    
+    if (params?.expirationStatus === "EXPIRED") {
+      filters.expiration_date = { _lt: format(new Date(), "yyyy-MM-dd") };
+    } else if (params?.expirationStatus === "NEAR_EXPIRATION") {
+      const today = format(new Date(), "yyyy-MM-dd");
+      const next30Days = format(addDays(new Date(), 30), "yyyy-MM-dd");
+      filters._and = [
+        ...(filters._and as any[] || []),
+        { expiration_date: { _gte: today } },
+        { expiration_date: { _lte: next30Days } }
+      ];
     }
 
     if (Object.keys(filters).length > 0) {
