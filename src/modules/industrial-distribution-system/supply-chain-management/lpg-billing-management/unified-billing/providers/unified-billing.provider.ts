@@ -99,7 +99,7 @@ export async function fetchActiveSiteCylinders(
     "cylinder_asset_id.cylinder_status,cylinder_asset_id.cylinder_condition";
   const res = await directusFetch<{ data: Record<string, unknown>[] }>(
     `${DIRECTUS_URL}/items/lpg_customer_site_cylinders?fields=${fields}` +
-      `&filter[lpg_site_id][_eq]=${siteId}&filter[site_cylinder_status][_in]=CONNECTED,STANDBY&limit=-1`
+    `&filter[lpg_site_id][_eq]=${siteId}&filter[site_cylinder_status][_in]=CONNECTED,STANDBY&limit=-1`
   );
   return ((res.data ?? []) as Record<string, unknown>[]).map((raw) => {
     const asset = raw["cylinder_asset_id"] as Record<string, unknown> | null;
@@ -108,12 +108,12 @@ export async function fetchActiveSiteCylinders(
       cylinder_asset_id: asset ? Number(asset["id"]) : raw["cylinder_asset_id"],
       cylinder_asset: asset
         ? {
-            id: Number(asset["id"]),
-            serial_number: String(asset["serial_number"] ?? ""),
-            tare_weight: Number(asset["tare_weight"] ?? 0),
-            cylinder_status: String(asset["cylinder_status"] ?? ""),
-            cylinder_condition: String(asset["cylinder_condition"] ?? ""),
-          }
+          id: Number(asset["id"]),
+          serial_number: String(asset["serial_number"] ?? ""),
+          tare_weight: Number(asset["tare_weight"] ?? 0),
+          cylinder_status: String(asset["cylinder_status"] ?? ""),
+          cylinder_condition: String(asset["cylinder_condition"] ?? ""),
+        }
         : undefined,
     } as unknown as CustomerSiteCylinder;
   });
@@ -124,8 +124,8 @@ export async function fetchAvailableCylinders(
 ): Promise<CylinderAsset[]> {
   const res = await directusFetch<{ data: Record<string, unknown>[] }>(
     `${DIRECTUS_URL}/items/lpg_cylinder_assets` +
-      `?fields=id,serial_number,tare_weight,cylinder_status,cylinder_condition` +
-      `&filter[cylinder_status][_in]=AVAILABLE,REFILLED&filter[customer_code][_eq]=${encodeURIComponent(customerCode)}&limit=-1`
+    `?fields=id,serial_number,tare_weight,cylinder_status,cylinder_condition` +
+    `&filter[cylinder_status][_in]=AVAILABLE,REFILLED&filter[customer_code][_eq]=${encodeURIComponent(customerCode)}&limit=-1`
   );
   return (res.data ?? []) as unknown as CylinderAsset[];
 }
