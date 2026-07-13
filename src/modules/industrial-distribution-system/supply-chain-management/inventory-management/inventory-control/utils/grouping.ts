@@ -12,7 +12,7 @@ import type {
 
 /** Treat anything not exactly "Full" (case-insensitive) as empty */
 export function isFullStatus(status: string): boolean {
-  return status?.trim().toLowerCase() === "available";
+  return status?.trim().toLowerCase() === "full";
 }
 
 /** Enrich flat serial records with product name, category name, barcode */

@@ -15,15 +15,17 @@ export function useCylinderAssets() {
   const [status, setStatus] = useState<string | undefined>();
   const [productId, setProductId] = useState<number | undefined>();
   const [condition, setCondition] = useState<string | undefined>();
+  const [expirationStatus, setExpirationStatus] = useState<string | undefined>();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
+  const [globalStats, setGlobalStats] = useState({ available: 0, withCustomer: 0, expired: 0, nearExpiration: 0, total: 0 });
   const [sortBy, setBy] = useState<string>("id");
   const [sortOrder, setOrder] = useState<"ASC" | "DESC">("DESC");
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, branchId, status, productId, condition, sortBy, sortOrder]);
+  }, [debouncedSearch, branchId, status, productId, condition, expirationStatus, sortBy, sortOrder]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -42,27 +44,36 @@ export function useCylinderAssets() {
       if (status && status !== "ALL") queryParams.set("status", status);
       if (productId) queryParams.set("productId", String(productId));
       if (condition && condition !== "ALL") queryParams.set("condition", condition);
+      if (expirationStatus && expirationStatus !== "ALL") queryParams.set("expirationStatus", expirationStatus);
 
       const sortValue = sortOrder === "DESC" ? `-${sortBy}` : sortBy;
       queryParams.set("sort", sortValue);
       queryParams.set("page", String(page));
       queryParams.set("limit", String(pageSize));
 
-      const response = await fetch(
-        `/api/ids/scm/inventory-management/cylinder-assets?${queryParams.toString()}`
-      );
-      const result = await response.json();
+      const [dataRes, statsRes] = await Promise.all([
+        fetch(`/api/ids/scm/inventory-management/cylinder-assets?${queryParams.toString()}`),
+        fetch(`/api/ids/scm/inventory-management/cylinder-assets/stats?${queryParams.toString()}`)
+      ]);
+      
+      const [result, statsResult] = await Promise.all([
+        dataRes.json(),
+        statsRes.json()
+      ]);
 
       if (result.error) throw new Error(result.error);
       setData(result.data || []);
       setTotal(result.total || 0);
+      if (statsResult.data) {
+        setGlobalStats(statsResult.data);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "An unknown error occurred");
       toast.error("Failed to load cylinder assets");
     } finally {
       setIsLoading(false);
     }
-  }, [debouncedSearch, branchId, status, productId, condition, page, pageSize, sortBy, sortOrder]);
+  }, [debouncedSearch, branchId, status, productId, condition, expirationStatus, page, pageSize, sortBy, sortOrder]);
 
   useEffect(() => {
     refresh();
@@ -150,6 +161,7 @@ export function useCylinderAssets() {
 
   return {
     data,
+    globalStats,
     isLoading,
     error,
     refresh,
@@ -163,6 +175,7 @@ export function useCylinderAssets() {
       status, setStatus,
       productId, setProductId,
       condition, setCondition,
+      expirationStatus, setExpirationStatus,
     },
     pagination: {
       page, setPage,

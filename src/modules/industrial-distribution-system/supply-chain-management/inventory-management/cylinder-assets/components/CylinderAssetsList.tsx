@@ -49,6 +49,8 @@ interface Props {
     setProductId: (val: number | undefined) => void;
     condition: string | undefined;
     setCondition: (val: string | undefined) => void;
+    expirationStatus: string | undefined;
+    setExpirationStatus: (val: string | undefined) => void;
   };
   pagination: {
     page: number;
@@ -62,11 +64,17 @@ interface Props {
     sortOrder: "ASC" | "DESC";
     toggleSort: (field: string) => void;
   };
+  globalStats: {
+    available: number;
+    withCustomer: number;
+    expired: number;
+    nearExpiration: number;
+    total: number;
+  };
 }
 
-export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, pagination, sorting }: Props) {
-  const [invalidSerials, setInvalidSerials] = useState<string[]>([]);
-  const [pendingSerials, setPendingSerials] = useState<Record<string, string>>({});
+export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, pagination, sorting, globalStats }: Props) {
+
   const [products, setProducts] = useState<{ id: number; name: string }[]>([]);
   const [branches, setBranches] = useState<{ id: number; name: string }[]>([]);
   const [qrModalOpen, setQrModalOpen] = useState(false);
@@ -87,9 +95,18 @@ export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, 
     ? globalAssets
     : data.filter(item => selectedIds.some(id => String(id) === String(item.id)));
 
-  // Calculate items per page based on layout
+  // Calculate items per page based on layout dynamically so it doesn't overflow
   const itemsPerPage = useMemo(() => {
-    const rows = orientation === "portrait" ? 5 : 3;
+    let rows = 3;
+    if (orientation === "portrait") {
+      rows = columns; // For aspect ratio 1/1.2, rows roughly equals columns
+    } else {
+      // Landscape: 11in x 8.5in. Usable height ~7.5in. Usable width ~10in.
+      if (columns === 2) rows = 1;
+      else if (columns === 3) rows = 1;
+      else if (columns === 4) rows = 2;
+      else if (columns === 5) rows = 3;
+    }
     return columns * rows;
   }, [columns, orientation]);
 
@@ -155,20 +172,8 @@ export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, 
 
 
 
-  // Statistics calculation
-  const stats = useMemo(() => {
-    return {
-      total: pagination.total,
-      available: data.filter(a => a.cylinder_status === 'AVAILABLE').length,
-      withCustomer: data.filter(a => a.cylinder_status === 'WITH_CUSTOMER').length,
-      expired: data.filter(a => a.expiration_date && isPast(new Date(a.expiration_date))).length,
-      nearExpiration: data.filter(a => {
-        if (!a.expiration_date) return false;
-        const expDate = new Date(a.expiration_date);
-        return !isPast(expDate) && isBefore(expDate, addDays(new Date(), 30));
-      }).length,
-    };
-  }, [data, pagination.total]);
+  // Statistics calculation (now uses globalStats passed from the API)
+  const stats = globalStats;
 
   useEffect(() => {
     fetch("/api/ids/scm/inventory-management/cylinder-assets/products")
@@ -192,35 +197,7 @@ export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, 
       });
   }, []);
 
-  useEffect(() => {
-    const checkOnhand = async () => {
-      if (!data || data.length === 0) return;
-      try {
-        const serials = data.map((item) => ({
-          serialNumber: item.serial_number,
-          branchId: item.current_branch_id || item.branch?.id
-        }));
-        const res = await fetch(`/api/ids/scm/inventory-management/cylinder-assets/validate-onhand`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ serials }),
-        });
-        const json = await res.json();
-        if (json.ok && json.invalidSerials) {
-          setInvalidSerials(json.invalidSerials);
-          if (json.pendingSerials) {
-            setPendingSerials(json.pendingSerials);
-          }
-        } else {
-          setInvalidSerials([]);
-          setPendingSerials({});
-        }
-      } catch (err) {
-        console.error("Failed to validate serials", err);
-      }
-    };
-    checkOnhand();
-  }, [data]);
+
 
   const renderSortIcon = (field: string) => {
     if (sorting.sortBy !== field) return <ArrowUpDown className="ml-2 h-3 w-3 opacity-50" />;
@@ -235,154 +212,210 @@ export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, 
 
   return (
     <div className="flex flex-col gap-4 p-4 min-h-full">
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center justify-between">
+      {/* ── Page Header & KPIs ────────────────────────────────── */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 p-6 md:p-8 mb-6 shadow-xl border border-slate-800">
+        {/* Subtle background glow */}
+        <div className="absolute top-0 right-0 -translate-y-12 translate-x-1/4 opacity-30 pointer-events-none">
+           <div className="w-[30rem] h-[30rem] rounded-full bg-blue-500 blur-[100px] mix-blend-screen" />
+        </div>
+        
+        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Cylinder Assets</h1>
-            <p className="text-sm text-muted-foreground">Manage and track your serialized products</p>
+            <h1 className="text-3xl font-extrabold tracking-tight text-white mb-1.5">Cylinder Assets</h1>
+            <p className="text-slate-400 text-sm font-medium">Manage and track your serialized products</p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button onClick={onCreate} className="h-9 gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
-              <Plus className="h-4 w-4" />
-              Add Asset
-            </Button>
-          </div>
+          <Button onClick={onCreate} className="h-10 px-5 bg-white text-slate-900 hover:bg-slate-100 shadow-lg shadow-black/20 font-semibold rounded-full border-0 transition-all hover:scale-105 active:scale-95">
+            <Plus className="h-5 w-5 mr-2" />
+            Add New Asset
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 relative z-10">
+          {[
+            { 
+              label: "Total Assets", val: stats.total, icon: Cylinder, color: "text-white", bg: "bg-white/10",
+              isActive: !filters.status && !filters.expirationStatus && !filters.condition,
+              onClick: () => {
+                filters.setStatus(undefined);
+                filters.setExpirationStatus(undefined);
+                filters.setCondition(undefined);
+              }
+            },
+            { 
+              label: "Available", val: stats.available, icon: CheckCircle2, color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20",
+              isActive: filters.status === "AVAILABLE",
+              onClick: () => {
+                filters.setStatus("AVAILABLE");
+                filters.setExpirationStatus(undefined);
+                filters.setCondition(undefined);
+              }
+            },
+            { 
+              label: "With Customers", val: stats.withCustomer, icon: Building2, color: "text-indigo-400", bg: "bg-indigo-500/10 border-indigo-500/20",
+              isActive: filters.status === "WITH_CUSTOMER",
+              onClick: () => {
+                filters.setStatus("WITH_CUSTOMER");
+                filters.setExpirationStatus(undefined);
+                filters.setCondition(undefined);
+              }
+            },
+            { 
+              label: "Near Exp.", val: stats.nearExpiration, icon: AlertTriangle, color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20",
+              isActive: filters.expirationStatus === "NEAR_EXPIRATION",
+              onClick: () => {
+                filters.setExpirationStatus("NEAR_EXPIRATION");
+                filters.setStatus(undefined);
+                filters.setCondition(undefined);
+              }
+            },
+            { 
+              label: "Expired", val: stats.expired, icon: ShieldAlert, color: "text-rose-400", bg: "bg-rose-500/10 border-rose-500/20",
+              isActive: filters.expirationStatus === "EXPIRED",
+              onClick: () => {
+                filters.setExpirationStatus("EXPIRED");
+                filters.setStatus(undefined);
+                filters.setCondition(undefined);
+              }
+            },
+          ].map((item, i) => (
+            <motion.div
+              key={item.label}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.1 }}
+              className="h-full"
+            >
+              <div 
+                onClick={item.onClick}
+                className={`flex flex-col p-4 sm:p-5 rounded-xl border border-white/5 bg-white/5 backdrop-blur-md hover:bg-white/10 transition-all cursor-pointer h-full justify-between gap-3 shadow-inner ${item.bg ? item.bg.split(' ')[1] : ''} ${item.isActive ? 'ring-2 ring-white/50 bg-white/10 scale-[1.02]' : ''}`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] sm:text-xs font-bold text-slate-300 uppercase tracking-wider">{item.label}</span>
+                  <div className={`p-1.5 sm:p-2 rounded-lg ${item.bg?.split(' ')[0]}`}>
+                    <item.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${item.color}`} />
+                  </div>
+                </div>
+                <h3 className="text-2xl sm:text-3xl font-black text-white tabular-nums tracking-tight">
+                  {item.val}
+                </h3>
+              </div>
+            </motion.div>
+          ))}
         </div>
       </div>
 
+      {/* ── Search & Filters Toolbar ────────────────────────────────── */}
+      <div className="bg-card border border-border/60 rounded-xl shadow-sm mb-6 p-2 sm:p-3">
+        <div className="flex flex-col lg:flex-row gap-3 items-end">
+          
+          {/* Global Search */}
+          <div className="w-full lg:w-72 xl:w-96 flex-shrink-0">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search serials or remarks..."
+                value={filters.search}
+                onChange={(e) => filters.setSearch(e.target.value)}
+                className="pl-9 h-10 w-full bg-muted/30 border-border/50 focus-visible:ring-1 transition-all rounded-lg"
+              />
+            </div>
+          </div>
 
-      {/* ── KPI Dashboard ────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
-        {[
-          { label: "Total Assets", val: stats.total, icon: Cylinder, color: "blue" },
-          { label: "Available", val: stats.available, icon: CheckCircle2, color: "emerald" },
-          { label: "With Customers", val: stats.withCustomer, icon: Building2, color: "indigo" },
-          { label: "Near Exp.", val: stats.nearExpiration, icon: AlertTriangle, color: "orange" },
-          { label: "Expired", val: stats.expired, icon: ShieldAlert, color: "red" },
-        ].map((item, i) => (
-          <motion.div
-            key={item.label}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.1 }}
+          <div className="hidden lg:block w-[1px] h-8 bg-border/60 mx-1 mb-1" />
+
+          {/* Filters Row */}
+          <div className="flex-1 w-full grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
+            <div>
+              <Select value={filters.status || "ALL"} onValueChange={(val) => filters.setStatus(val === "ALL" ? undefined : val)}>
+                <SelectTrigger className="h-10 bg-transparent border-border/50 hover:bg-muted/30 rounded-lg">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All Status</SelectItem>
+                  <SelectItem value="AVAILABLE">Available</SelectItem>
+                  <SelectItem value="WITH_CUSTOMER">With Customer</SelectItem>
+                  <SelectItem value="EMPTY">Empty</SelectItem>
+                  <SelectItem value="LOADED">Loaded</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Select value={filters.condition || "ALL"} onValueChange={(val) => filters.setCondition(val === "ALL" ? undefined : val)}>
+                <SelectTrigger className="h-10 bg-transparent border-border/50 hover:bg-muted/30 rounded-lg">
+                  <SelectValue placeholder="Condition" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All Conditions</SelectItem>
+                  <SelectItem value="GOOD">Good</SelectItem>
+                  <SelectItem value="FOR_REPAIR">For Repair</SelectItem>
+                  <SelectItem value="DAMAGED">Damaged</SelectItem>
+                  <SelectItem value="SCRAP">Scrap</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <SearchableSelect
+                options={[
+                  { value: "ALL", label: "All Branches" },
+                  ...branches.map(b => ({ value: String(b.id), label: b.name }))
+                ]}
+                value={filters.branchId ? String(filters.branchId) : "ALL"}
+                onValueChange={(val) => filters.setBranchId(val === "ALL" ? undefined : Number(val))}
+                placeholder="Branch"
+                className="h-10 w-full bg-transparent border-border/50 hover:bg-muted/30 rounded-lg"
+              />
+            </div>
+
+            <div>
+              <SearchableSelect
+                options={[
+                  { value: "ALL", label: "All Products" },
+                  ...products.map(p => ({ value: String(p.id), label: p.name }))
+                ]}
+                value={filters.productId ? String(filters.productId) : "ALL"}
+                onValueChange={(val) => filters.setProductId(val === "ALL" ? undefined : Number(val))}
+                placeholder="Product"
+                className="h-10 w-full bg-transparent border-border/50 hover:bg-muted/30 rounded-lg"
+              />
+            </div>
+          </div>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              filters.setStatus(undefined);
+              filters.setCondition(undefined);
+              filters.setExpirationStatus(undefined);
+              filters.setBranchId(undefined);
+              filters.setProductId(undefined);
+              filters.setSearch("");
+            }}
+            className="h-10 w-10 shrink-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg hidden sm:flex"
+            title="Clear Filters"
           >
-            <Card className="relative overflow-hidden border-none shadow-md bg-white/50 dark:bg-zinc-900/50 backdrop-blur-md hover:shadow-lg transition-shadow duration-300">
-              <div className={`absolute top-0 left-0 w-1 h-full bg-${item.color}-500`} />
-              <CardContent className="p-5 flex items-center gap-4">
-                <div className={`p-3 bg-${item.color}-50 dark:bg-${item.color}-900/20 rounded-xl text-${item.color}-600 dark:text-${item.color}-400 shadow-inner`}>
-                  <item.icon className="h-6 w-6" />
-                </div>
-                <div>
-                  <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-0.5">{item.label}</p>
-                  <h3 className={`text-2xl font-black tabular-nums text-${item.color}-600 dark:text-${item.color}-400`}>
-                    {item.val}
-                  </h3>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        ))}
-      </div>
-
-      <div className="flex flex-col gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="text"
-            placeholder="Search by serial or remarks..."
-            value={filters.search}
-            onChange={(e) => filters.setSearch(e.target.value)}
-            className="pl-9 h-10 shadow-sm"
-          />
+            <X className="h-4 w-4" />
+          </Button>
+          
+          <Button
+            variant="ghost"
+            onClick={() => {
+              filters.setStatus(undefined);
+              filters.setCondition(undefined);
+              filters.setExpirationStatus(undefined);
+              filters.setBranchId(undefined);
+              filters.setProductId(undefined);
+              filters.setSearch("");
+            }}
+            className="h-10 w-full text-muted-foreground hover:text-red-600 hover:bg-red-50 sm:hidden mt-1"
+          >
+            <X className="h-4 w-4 mr-2" />
+            Clear Filters
+          </Button>
         </div>
-
-        <div className="overflow-visible mt-2">
-          <Card className="bg-muted/30 border-none shadow-inner mb-2">
-              <CardContent className="p-4 flex flex-wrap items-end gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest ml-0.5 opacity-70">Status</Label>
-                  <Select
-                    value={filters.status || "ALL"}
-                    onValueChange={(val) => filters.setStatus(val === "ALL" ? undefined : val)}
-                  >
-                    <SelectTrigger className="h-10 w-[140px] bg-background border-none shadow-sm ring-1 ring-border/50">
-                      <SelectValue placeholder="All Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ALL">All Status</SelectItem>
-                      <SelectItem value="AVAILABLE">Available</SelectItem>
-                      <SelectItem value="WITH_CUSTOMER">With Customer</SelectItem>
-                      <SelectItem value="EMPTY">Empty</SelectItem>
-                      <SelectItem value="LOADED">Loaded</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest ml-0.5 opacity-70">Condition</Label>
-                  <Select
-                    value={filters.condition || "ALL"}
-                    onValueChange={(val) => filters.setCondition(val === "ALL" ? undefined : val)}
-                  >
-                    <SelectTrigger className="h-10 w-[140px] bg-background border-none shadow-sm ring-1 ring-border/50">
-                      <SelectValue placeholder="All Conditions" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ALL">All Conditions</SelectItem>
-                      <SelectItem value="GOOD">Good</SelectItem>
-                      <SelectItem value="FOR_REPAIR">For Repair</SelectItem>
-                      <SelectItem value="DAMAGED">Damaged</SelectItem>
-                      <SelectItem value="SCRAP">Scrap</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex flex-col gap-1.5 w-[180px]">
-                  <Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest ml-0.5 opacity-70">Branch</Label>
-                  <SearchableSelect
-                    options={[
-                      { value: "ALL", label: "All Branches" },
-                      ...branches.map(b => ({ value: String(b.id), label: b.name }))
-                    ]}
-                    value={filters.branchId ? String(filters.branchId) : "ALL"}
-                    onValueChange={(val) => filters.setBranchId(val === "ALL" ? undefined : Number(val))}
-                    placeholder="All Branches"
-                    className="h-10 bg-background border-none shadow-sm ring-1 ring-border/50"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1.5 w-[220px]">
-                  <Label className="text-[10px] uppercase font-black text-muted-foreground tracking-widest ml-0.5 opacity-70">Product</Label>
-                  <SearchableSelect
-                    options={[
-                      { value: "ALL", label: "All Products" },
-                      ...products.map(p => ({ value: String(p.id), label: p.name }))
-                    ]}
-                    value={filters.productId ? String(filters.productId) : "ALL"}
-                    onValueChange={(val) => filters.setProductId(val === "ALL" ? undefined : Number(val))}
-                    placeholder="All Products"
-                    className="h-10 bg-background border-none shadow-sm ring-1 ring-border/50"
-                  />
-                </div>
-
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    filters.setStatus(undefined);
-                    filters.setCondition(undefined);
-                    filters.setBranchId(undefined);
-                    filters.setProductId(undefined);
-                    filters.setSearch("");
-                  }}
-                  className="h-10 gap-2 text-muted-foreground hover:text-red-600 transition-colors"
-                >
-                  <X className="h-4 w-4" />
-                  Clear
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
       </div>
 
       {/* ── Bulk Actions & Selection Banner ──────────────── */}
@@ -456,10 +489,9 @@ export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, 
       )}
 
       <Card className="flex-1 min-h-[500px] overflow-hidden flex flex-col shadow-md border-border/60 bg-white/50 dark:bg-zinc-900/50 backdrop-blur-sm">
-        {/* ── Fixed Header Area ─────────────────────────── */}
-        <div className="bg-zinc-50/80 dark:bg-zinc-900/80 backdrop-blur-md border-b z-40">
-          <Table className="table-fixed border-separate border-spacing-0">
-            <TableHeader>
+        <CardContent className="p-0 flex-1 overflow-auto relative custom-scrollbar">
+          <Table className="hidden md:table w-full min-w-[1200px] table-fixed border-separate border-spacing-0">
+            <TableHeader className="sticky top-0 bg-zinc-50/95 dark:bg-zinc-900/95 backdrop-blur-md z-40 shadow-[0_1px_0_rgba(0,0,0,0.1)]">
               <TableRow className="hover:bg-transparent border-b-0">
                 <TableHead className="w-[50px] px-4 h-12">
                   <div className="flex items-center h-full">
@@ -500,24 +532,15 @@ export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, 
                 <TableHead className="w-[12%] font-bold text-foreground cursor-pointer h-12 py-0" onClick={() => sorting.toggleSort("current_customer_code")}>
                   <div className="flex items-center text-[11px] uppercase tracking-wider h-full">Customer {renderSortIcon("current_customer_code")}</div>
                 </TableHead>
-                <TableHead className="w-[10%] font-bold text-foreground cursor-pointer h-12 py-0" onClick={() => sorting.toggleSort("created_by")}>
-                  <div className="flex items-center text-[11px] uppercase tracking-wider h-full">Created By {renderSortIcon("created_by")}</div>
-                </TableHead>
                 <TableHead className="w-[80px] text-right font-bold text-foreground pr-6 h-12 py-0 text-[11px] uppercase tracking-wider">
                   <div className="flex items-center justify-end h-full">Actions</div>
                 </TableHead>
               </TableRow>
             </TableHeader>
-          </Table>
-        </div>
-
-        {/* ── Scrollable Body Area ────────────────────────── */}
-        <CardContent className="p-0 flex-1 overflow-auto relative custom-scrollbar">
-          <Table className="table-fixed border-separate border-spacing-0">
             <TableBody>
               {data.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="h-[400px] text-center">
+                  <TableCell colSpan={9} className="h-[400px] text-center">
                     <div className="flex flex-col items-center justify-center p-8 text-muted-foreground opacity-60">
                       <Cylinder className="h-12 w-12 mb-4 stroke-1" />
                       <p className="text-lg font-medium">No assets found</p>
@@ -544,13 +567,6 @@ export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, 
                       </TableCell>
                       <TableCell className="w-[12%] font-bold text-foreground">
                         <div className="truncate">{item.serial_number}</div>
-                        {invalidSerials.includes(item.serial_number) && (
-                          <div className="text-[10px] text-red-600 font-semibold mt-0.5">
-                            {pendingSerials[item.serial_number] 
-                              ? pendingSerials[item.serial_number]
-                              : 'Not Transacted'}
-                          </div>
-                        )}
                       </TableCell>
                       <TableCell className="w-[18%] font-medium">
                         <div className="truncate">
@@ -606,11 +622,6 @@ export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, 
                       </TableCell>
                       <TableCell className="w-[12%] text-muted-foreground truncate">{item.branch?.branch_name || "N/A"}</TableCell>
                       <TableCell className="w-[12%] text-muted-foreground truncate">{item.customer?.customer_name || item.current_customer_code || "N/A"}</TableCell>
-                      <TableCell className="w-[10%] text-muted-foreground text-xs truncate">
-                        {item.created_by && typeof item.created_by === 'object'
-                          ? `${item.created_by.user_fname} ${item.created_by.user_lname}`
-                          : "—"}
-                      </TableCell>
                       <TableCell className="w-[80px] text-right space-x-1 pr-6">
                         <Button
                           variant="ghost"
@@ -636,6 +647,88 @@ export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, 
               )}
             </TableBody>
           </Table>
+
+          {/* Mobile Card List View */}
+          <div className="md:hidden flex flex-col p-4 gap-3">
+            {data.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-8 text-muted-foreground opacity-60 bg-muted/20 rounded-xl border border-dashed">
+                <Cylinder className="h-10 w-10 mb-3 stroke-1" />
+                <p className="font-medium text-sm">No assets found</p>
+              </div>
+            ) : (
+              data.map((item) => {
+                const isExpired = item.expiration_date && isPast(new Date(item.expiration_date));
+                const isNearExp = item.expiration_date && !isExpired && isBefore(new Date(item.expiration_date), addDays(new Date(), 30));
+                
+                return (
+                  <div key={item.id} className={`flex flex-col p-4 rounded-xl border shadow-sm transition-all ${selectedIds.some(id => String(id) === String(item.id)) ? 'border-blue-400 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-900/20' : 'border-border/60 bg-white dark:bg-zinc-900/50'}`}>
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div className="flex items-start gap-3">
+                        <div className="pt-1">
+                          <Checkbox
+                            checked={selectedIds.some(id => String(id) === String(item.id))}
+                            onCheckedChange={() => toggleSelect(item.id)}
+                            aria-label={`Select ${item.serial_number}`}
+                          />
+                        </div>
+                        <div>
+                          <div className="font-bold text-base leading-none mb-1">{item.serial_number}</div>
+                          <div className="text-xs text-muted-foreground line-clamp-1">
+                            {item.product?.product_name || "N/A"}
+                            {item.product?.unit_of_measurement === 23 ? " (FULL)" : item.product?.unit_of_measurement === 18 ? " (EMPTY)" : ""}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center -mt-1 -mr-1">
+                        <Button variant="ghost" size="icon" onClick={() => { setSelectedAsset(item); setQrModalOpen(true); }} className="h-8 w-8 text-muted-foreground hover:text-indigo-600">
+                          <QrCode className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => onEdit(item.id)} className="h-8 w-8 text-muted-foreground hover:text-blue-600">
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-y-3 gap-x-4 bg-muted/30 p-3 rounded-lg border border-border/40">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[9px] font-black uppercase text-muted-foreground tracking-widest">Status</span>
+                        <Badge variant="secondary" className={`text-[10px] w-fit font-black px-2 py-0 border-none shadow-sm ${item.cylinder_status === 'AVAILABLE' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : item.cylinder_status === 'WITH_CUSTOMER' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400' : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-400'}`}>
+                          {item.cylinder_status.replace(/_/g, ' ')}
+                        </Badge>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[9px] font-black uppercase text-muted-foreground tracking-widest">Condition</span>
+                        <Badge variant="outline" className={`text-[10px] w-fit font-black px-2 py-0 ${item.cylinder_condition === 'GOOD' ? 'border-emerald-200 text-emerald-700 bg-emerald-50/50 dark:border-emerald-800 dark:text-emerald-400 dark:bg-emerald-900/20' : 'border-red-200 text-red-700 bg-red-50/50 dark:border-red-800 dark:text-red-400 dark:bg-red-900/20'}`}>
+                          {item.cylinder_condition.replace(/_/g, ' ')}
+                        </Badge>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[9px] font-black uppercase text-muted-foreground tracking-widest">Branch</span>
+                        <span className="text-xs font-medium truncate">{item.branch?.branch_name || "N/A"}</span>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[9px] font-black uppercase text-muted-foreground tracking-widest">Customer</span>
+                        <span className="text-xs font-medium truncate">{item.customer?.customer_name || item.current_customer_code || "N/A"}</span>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[9px] font-black uppercase text-muted-foreground tracking-widest">Expiration</span>
+                        <span className={`text-xs font-medium flex items-center gap-1 ${isExpired ? 'text-red-600' : isNearExp ? 'text-orange-600' : 'text-muted-foreground'}`}>
+                          {isExpired ? <ShieldAlert className="h-3 w-3" /> : isNearExp ? <AlertTriangle className="h-3 w-3" /> : null}
+                          {item.expiration_date || "—"}
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[9px] font-black uppercase text-muted-foreground tracking-widest">Tare (KG)</span>
+                        <span className="text-xs font-medium font-mono tabular-nums">
+                          {item.tare_weight !== null && !isNaN(Number(item.tare_weight)) ? `${Number(item.tare_weight).toFixed(2)}` : "—"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </CardContent>
         {data.length > 0 && (
           <div className="border-t p-4 bg-muted/10">
@@ -708,11 +801,7 @@ export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, 
                             className="p-2 border-4 border-black rounded-xl bg-white"
                           >
                             <QRCodeSVG
-                              value={JSON.stringify({
-                                id: selectedAsset.id,
-                                sn: selectedAsset.serial_number,
-                                type: "CYLINDER_ASSET"
-                              })}
+                              value={selectedAsset?.serial_number || ''}
                               size={140}
                               level="H"
                             />
@@ -726,7 +815,7 @@ export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, 
                             className="p-3 border-4 border-black rounded-xl bg-white flex items-center justify-center overflow-hidden"
                           >
                             <Barcode
-                              value={selectedAsset.serial_number}
+                              value={selectedAsset?.serial_number || ''}
                               width={1.8}
                               height={80}
                               fontSize={12}
@@ -740,9 +829,9 @@ export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, 
                       </AnimatePresence>
                     </div>
                     <div className="text-center space-y-1 w-full">
-                      <p className="font-mono font-black text-2xl text-black tracking-tight leading-none">{selectedAsset.serial_number}</p>
+                      <p className="font-mono font-black text-2xl text-black tracking-tight leading-none">{selectedAsset?.serial_number}</p>
                       <div className="h-[1.5px] bg-black w-full opacity-10 my-1" />
-                      <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest truncate max-w-full">{selectedAsset.product?.product_name}</p>
+                      <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest truncate max-w-full">{selectedAsset?.product?.product_name}</p>
                       <div className="flex items-center justify-between text-[7px] text-zinc-400 font-bold pt-1 uppercase">
                         <span>Seagas Industrial</span>
                         <span>{format(new Date(), 'yyyy-MM-dd')}</span>
@@ -973,11 +1062,7 @@ export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, 
                             {printMode === 'QR' ? (
                               <div className="p-1 border-2 border-black rounded bg-white">
                                 <QRCodeSVG
-                                  value={JSON.stringify({
-                                    id: asset.id,
-                                    sn: asset.serial_number,
-                                    type: "CYLINDER_ASSET"
-                                  })}
+                                  value={asset.serial_number}
                                   size={100 / (columns / 3)}
                                   level="M"
                                 />
@@ -1075,11 +1160,7 @@ export function CylinderAssetsList({ data, onCreate, onEdit, onDelete, filters, 
                       {printMode === 'QR' ? (
                         <div className="p-1 border-2 border-black rounded bg-white">
                           <QRCodeSVG
-                            value={JSON.stringify({
-                              id: asset.id,
-                              sn: asset.serial_number,
-                              type: "CYLINDER_ASSET"
-                            })}
+                            value={asset.serial_number}
                             size={100 / (columns / 3)}
                             level="M"
                           />
