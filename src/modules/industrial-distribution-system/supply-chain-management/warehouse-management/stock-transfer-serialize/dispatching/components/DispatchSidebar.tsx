@@ -116,7 +116,7 @@ export function DispatchSidebar({
                           minimumFractionDigits: 2,
                         })}
                       </p>
-                      <p className="text-[10px] font-medium text-muted-foreground truncate max-w-[100px]">
+                      <p className="text-[10px] font-medium text-muted-foreground">
                          {typeof group.targetBranch === 'object' && group.targetBranch 
                               ? (group.targetBranch as BranchRow).branch_name 
                               : getBranchName(group.targetBranch as number | null)}

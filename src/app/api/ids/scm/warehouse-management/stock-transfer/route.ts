@@ -117,8 +117,13 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as CreateTransferPayload;
-    // Note: In a real app, we'd get the actual user ID from the session
-    const result = await createTransfer(body);
+    // Extract userId from token
+    const token = request.cookies.get("vos_access_token")?.value;
+    const decoded = token ? decodeJwtPayload(token) : null;
+    const userId = decoded?.sub ? Number(decoded.sub)
+      : (process.env.NEXT_PUBLIC_AUTH_DISABLED === "true" ? 1 : undefined);
+
+    const result = await createTransfer(body, userId);
     return NextResponse.json(result, { status: 201 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";

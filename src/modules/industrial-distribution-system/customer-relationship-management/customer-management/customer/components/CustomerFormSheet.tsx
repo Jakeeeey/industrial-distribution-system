@@ -1398,7 +1398,7 @@ export function CustomerFormSheet({
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel className="font-bold uppercase text-xs text-muted-foreground">
-                            Customer Name
+                            Customer Name *
                           </FormLabel>
                           <FormControl>
                             <Input
@@ -1418,7 +1418,7 @@ export function CustomerFormSheet({
                       render={({ field }) => (
                         <FormItem className="flex flex-col h-20 pt-1.5">
                           <FormLabel className="font-bold uppercase text-xs text-muted-foreground">
-                            Store Type
+                            Store Type *
                           </FormLabel>
                           <FieldCombobox
                             items={storeTypes}
@@ -1483,7 +1483,7 @@ export function CustomerFormSheet({
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel className="font-bold uppercase text-xs text-muted-foreground">
-                                Store Name
+                                Store Name *
                               </FormLabel>
                               <FormControl>
                                 <Input
@@ -1502,7 +1502,7 @@ export function CustomerFormSheet({
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel className="font-bold uppercase text-xs text-muted-foreground">
-                                Store Signage
+                                Store Signage *
                               </FormLabel>
                               <FormControl>
                                 <Input
@@ -1604,7 +1604,7 @@ export function CustomerFormSheet({
                       render={({ field }) => (
                         <FormItem className="flex flex-col md:col-span-2">
                           <FormLabel className="font-bold uppercase text-xs text-muted-foreground">
-                            Province
+                            Province<span> *</span>
                           </FormLabel>
                           <SearchableCombobox
                             items={provincesList}
@@ -1633,7 +1633,7 @@ export function CustomerFormSheet({
                       render={({ field }) => (
                         <FormItem className="flex flex-col">
                           <FormLabel className="font-bold uppercase text-xs text-muted-foreground">
-                            City / Municipality
+                            City / Municipality *
                           </FormLabel>
                           <SearchableCombobox
                             items={citiesList}
@@ -1663,7 +1663,7 @@ export function CustomerFormSheet({
                       render={({ field }) => (
                         <FormItem className="flex flex-col">
                           <FormLabel className="font-bold uppercase text-xs text-muted-foreground">
-                            Barangay
+                            Barangay *
                           </FormLabel>
                           <SearchableCombobox
                             items={barangaysList}
@@ -1728,7 +1728,7 @@ export function CustomerFormSheet({
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel className="font-bold uppercase text-xs text-muted-foreground">
-                            Mobile Number
+                            Mobile Number *
                           </FormLabel>
                           <FormControl>
                             <Input
@@ -1869,7 +1869,7 @@ export function CustomerFormSheet({
                       render={({ field }) => (
                         <FormItem className="md:col-span-2">
                           <FormLabel className="font-bold uppercase text-xs text-muted-foreground">
-                            Business Registration No. (TIN)
+                            Business Registration No. (TIN) *
                           </FormLabel>
 
                           <FormControl>

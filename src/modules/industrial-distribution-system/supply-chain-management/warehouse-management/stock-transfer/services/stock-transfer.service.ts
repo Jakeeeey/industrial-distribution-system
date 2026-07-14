@@ -95,7 +95,7 @@ export async function getEnrichedProducts(
 /**
  * Handles the creation of a new stock transfer request.
  */
-export async function createTransfer(payload: CreateTransferPayload): Promise<{ success: boolean; orderNo: string }> {
+export async function createTransfer(payload: CreateTransferPayload, userId?: number): Promise<{ success: boolean; orderNo: string }> {
   // 1. Validate payload
   const validated = CreateStockTransferSchema.parse(payload);
   
@@ -118,6 +118,7 @@ export async function createTransfer(payload: CreateTransferPayload): Promise<{ 
       remarks: item.rfid, // RFID stored in remarks for the request stage
       date_requested: now,
       date_encoded: now,
+      encoder_id: userId || null,
     }));
 
   if (insertPayloads.length === 0) {
@@ -149,31 +150,50 @@ export async function updateTransferStatus(payload: UpdateTransferPayload): Prom
   // 1. Validate payload
   const validated = UpdateStockTransferSchema.parse(payload);
   
-  // 2. Normalize updates (handle both 'items' and 'ids' formats)
+  // 2. Fetch existing items to resolve quantities and prevent reset
+  const ids = validated.ids || (validated.items || []).map(item => item.id);
+  const existingItems = ids.length > 0 ? await repo.fetchStockTransfersByIds(ids) : [];
+  const itemsMap = new Map(existingItems.map(item => [item.id, item]));
+
+  // 3. Normalize updates (handle both 'items' and 'ids' formats)
   const phNow = nowPH();
   const updates = (validated.items || (validated.ids || []).map(id => ({
     id,
     status: validated.status || "Unknown"
-  }))).map(u => ({
-    ...u,
-    ...(u.status === "Received" ? { date_received: phNow, receiver_id: validated.userId || null } : {}),
-    ...(u.status === "For Picking" ? { 
-      approved_by: validated.userId || null
-    } : {}),
-    ...(u.status === "For Loading" ? { 
-      dispatched_at: phNow, 
-      dispatched_by: validated.userId || null 
-    } : {})
-  }));
+  }))).map(u => {
+    const existing = itemsMap.get(u.id);
+    // Cast to access optional quantity fields — items may come from modern or legacy format
+    const uExtended = u as typeof u & { received_quantity?: number; picked_quantity?: number };
+    return {
+      ...u,
+      ...(u.status === "Received" ? { 
+        date_received: phNow, 
+        receiver_id: validated.userId || null,
+        received_quantity: uExtended.received_quantity ?? existing?.allocated_quantity ?? existing?.ordered_quantity ?? 0
+      } : {}),
+      ...(u.status === "For Picking" ? { 
+        approved_by: validated.userId || null
+      } : {}),
+      ...(u.status === "For Loading" ? { 
+        dispatched_at: phNow, 
+        dispatched_by: validated.userId || null,
+        picked_quantity: uExtended.picked_quantity ?? existing?.allocated_quantity ?? existing?.ordered_quantity ?? 0
+      } : {}),
+      ...(u.status === "Rejected" ? {
+        rejected_at: phNow,
+        rejected_by: validated.userId || null
+      } : {})
+    };
+  });
 
   console.log("[Stock Transfer Service] Mapped updates payload:", JSON.stringify(updates));
 
   if (updates.length === 0) return { success: true };
 
-  // 3. Update main table statuses
+  // 4. Update main table statuses
   await repo.updateTransfersStatus(updates);
 
-  // 4. Record RFID tracking if provided
+  // 5. Record RFID tracking if provided
   if (validated.rfids && validated.rfids.length > 0 && validated.scanType) {
     const trackingEntries = validated.rfids.map(r => ({
       stock_transfer_id: r.stock_transfer_id,

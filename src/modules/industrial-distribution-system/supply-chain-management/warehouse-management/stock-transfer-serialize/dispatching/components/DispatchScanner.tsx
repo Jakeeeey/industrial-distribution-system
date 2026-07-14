@@ -154,8 +154,13 @@ export function DispatchScanner({
                     key={item.id}
                     className={cn('transition-colors', isComplete && 'bg-emerald-500/5')}
                   >
-                    <TableCell className="text-sm font-medium text-foreground">
-                      {product?.product_name || 'Unknown'}
+                    <TableCell className="text-sm font-medium text-foreground py-3">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-semibold text-sm line-clamp-1">{product?.description || product?.product_name || 'Unknown'}</span>
+                        {product?.description && product?.description !== product?.product_name && (
+                          <span className="text-[10px] text-muted-foreground font-medium">{product?.product_name}</span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-sm font-semibold">
                       {product?.is_serialized === 0 ? (
@@ -233,11 +238,11 @@ export function DispatchScanner({
 
           <Button
             onClick={() => dispatchOrder(selectedGroup.orderNo)}
-            disabled={processing || !isAllScanned}
+            disabled={processing || metrics.scannedUnits === 0}
             size="sm"
             className={cn(
               'gap-2 transition-all active:scale-95',
-              isAllScanned
+              metrics.scannedUnits > 0
                 ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                 : 'bg-muted text-muted-foreground',
             )}

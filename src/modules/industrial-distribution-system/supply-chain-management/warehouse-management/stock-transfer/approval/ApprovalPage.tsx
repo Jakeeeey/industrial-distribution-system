@@ -96,11 +96,13 @@ export default function StockTransferApprovalView() {
     return selectedGroup.items.filter((item: OrderGroupItem) => {
       const product = typeof item.product_id === 'object' && item.product_id !== null ? (item.product_id as ProductRow) : null;
       const productName = product?.product_name || `PRD-${item.product_id}`;
+      const description = product?.description || '';
       const barcode = product?.barcode || '';
+      const term = productSearch.toLowerCase();
       return (
-        productName.toLowerCase().includes(productSearch.toLowerCase()) ||
-        barcode.toLowerCase().includes(productSearch.toLowerCase()) ||
-        String(item.product_id).includes(productSearch)
+        productName.toLowerCase().includes(term) ||
+        description.toLowerCase().includes(term) ||
+        barcode.toLowerCase().includes(term)
       );
     });
   }, [selectedGroup, productSearch]);
@@ -236,7 +238,7 @@ export default function StockTransferApprovalView() {
                   <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 flex-1 min-w-0">
                     <div className="min-w-0">
                       <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider block mb-0.5">Source</span>
-                      <span className="font-semibold text-sm text-foreground block truncate max-w-[180px] bg-background border border-border rounded-md px-2.5 py-1">
+                      <span className="font-semibold text-sm text-foreground block bg-background border border-border rounded-md px-2.5 py-1">
                         {getBranchName(selectedGroup.sourceBranch)}
                       </span>
                     </div>
@@ -248,7 +250,7 @@ export default function StockTransferApprovalView() {
                     
                     <div className="min-w-0">
                       <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider block mb-0.5">Target</span>
-                      <span className="font-semibold text-sm text-foreground block truncate max-w-[180px] bg-background border border-border rounded-md px-2.5 py-1">
+                      <span className="font-semibold text-sm text-foreground block bg-background border border-border rounded-md px-2.5 py-1">
                         {getBranchName(selectedGroup.targetBranch)}
                       </span>
                     </div>
@@ -286,8 +288,7 @@ export default function StockTransferApprovalView() {
                 <Table>
                   <TableHeader>
                     <TableRow className="border-b border-border bg-muted/20">
-                      <TableHead className="text-[10px] uppercase font-bold">Product</TableHead>
-                      <TableHead className="text-[10px] uppercase font-bold">Details</TableHead>
+                      <TableHead className="text-[10px] uppercase font-bold">Description</TableHead>
                       <TableHead className="text-[10px] uppercase font-bold">Brand</TableHead>
                       <TableHead className="text-[10px] uppercase font-bold">Unit</TableHead>
                       <TableHead className="text-[10px] uppercase font-bold text-center">Ordered</TableHead>
@@ -299,20 +300,21 @@ export default function StockTransferApprovalView() {
                   <TableBody>
                     {paginatedItems.map((item: OrderGroupItem) => {
                       const product = typeof item.product_id === 'object' && item.product_id !== null ? (item.product_id as ProductRow) : null;
+                      const productDescription = product?.description || product?.product_name || `PRD-${item.product_id}`;
                       const productName = product?.product_name || `PRD-${item.product_id}`;
-                      const description = product?.description || product?.barcode || 'N/A';
                       const brandName = typeof product?.product_brand === 'object' ? product?.product_brand?.brand_name : 'N/A';
                       const unitName = typeof product?.unit_of_measurement === 'object' ? product?.unit_of_measurement?.unit_name : 'unit';
-                      // const originalId = product ? (product.product_id) : item.product_id;
 
                       return (
                         <TableRow key={item.id} className="hover:bg-muted/5 border-b border-border/50">
                           <TableCell className="py-3">
-                            <div className="flex flex-col">
-                              <span className="font-semibold text-sm">{productName}</span>
+                            <div className="flex flex-col gap-0.5">
+                              <span className="font-semibold text-sm line-clamp-1">{productDescription}</span>
+                              {productDescription !== productName && (
+                                <span className="text-[10px] text-muted-foreground font-medium">{productName}</span>
+                              )}
                             </div>
                           </TableCell>
-                          <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{description}</TableCell>
                           <TableCell className="text-[10px] font-bold text-primary uppercase">{brandName}</TableCell>
                           <TableCell className="text-[10px] font-medium uppercase text-muted-foreground">{unitName}</TableCell>
                           <TableCell className="text-sm text-center font-medium">{item.ordered_quantity}</TableCell>
@@ -347,7 +349,7 @@ export default function StockTransferApprovalView() {
                   </TableBody>
                   <TableFooter className="bg-muted/10">
                     <TableRow>
-                      <TableCell colSpan={7} className="text-right font-bold text-[10px] uppercase tracking-widest text-muted-foreground py-4">Total Value</TableCell>
+                      <TableCell colSpan={6} className="text-right font-bold text-[10px] uppercase tracking-widest text-muted-foreground py-4">Total Value</TableCell>
                       <TableCell className="text-right text-base font-bold text-emerald-600 py-4">
                         ₱{currentTotalAmount.toLocaleString('en-PH', {minimumFractionDigits: 2})}
                       </TableCell>

@@ -118,7 +118,7 @@ export async function fetchPriceHistory(
  */
 export async function fetchProductOptions(
   q: string,
-  limit = 30,
+  limit = 300,
   isSerialized?: number | null,
 ): Promise<ProductOption[]> {
   const sp = new URLSearchParams();

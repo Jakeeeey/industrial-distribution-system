@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import * as service from "@/modules/industrial-distribution-system/supply-chain-management/warehouse-management/stock-transfer-serialize/services/serialize.service";
-import { jwtDecode } from "jwt-decode";
+import { decodeJwtPayload } from "@/lib/auth-utils";
 
 /**
  * API Route for Serialized Stock Transfer operations.
@@ -70,11 +70,15 @@ export async function PATCH(req: NextRequest) {
 
     if (token) {
       try {
-        const decoded = jwtDecode<{ id: number }>(token);
-        userId = decoded.id;
+        const decoded = decodeJwtPayload(token);
+        userId = decoded?.sub ? Number(decoded.sub) : (decoded?.id ? Number(decoded.id) : undefined);
       } catch (e) {
         console.warn("[Stock Transfer Serialize API] Failed to decode token:", e);
       }
+    }
+
+    if (!userId && process.env.NEXT_PUBLIC_AUTH_DISABLED === "true") {
+      userId = 1;
     }
 
     const result = await service.updateTransferWithSerials(body, userId);
