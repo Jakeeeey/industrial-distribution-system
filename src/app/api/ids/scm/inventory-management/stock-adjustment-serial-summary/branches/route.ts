@@ -4,7 +4,7 @@ import { handleApiError } from "@/modules/industrial-distribution-system/supply-
 
 export async function GET() {
   try {
-    const data = await stockAdjustmentService.fetchBranches();
+    const data = await stockAdjustmentService.fetchBranches({ divisionId: 1 });
     return NextResponse.json({ data });
   } catch (error) {
     return handleApiError(error);
