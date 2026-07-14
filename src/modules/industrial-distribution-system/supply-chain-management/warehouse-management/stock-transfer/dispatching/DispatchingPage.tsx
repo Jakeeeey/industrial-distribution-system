@@ -139,6 +139,8 @@ export default function StockTransferDispatchView({ currentUser }: { currentUser
     return (i.scannedQty || 0) >= targetQty;
   });
 
+  const hasScannedAny = selectedGroup?.items.some((i: OrderGroupItem) => (i.scannedQty || 0) > 0);
+
   return (
     <div className="flex flex-col lg:flex-row gap-6 p-4 md:p-8 pt-6 min-h-screen bg-background">
       <style dangerouslySetInnerHTML={{
@@ -287,13 +289,13 @@ export default function StockTransferDispatchView({ currentUser }: { currentUser
                         const targetQty = Math.max(0, item.allocated_quantity ?? 0);
                         const complete = (item.scannedQty || 0) >= targetQty;
                         const product = typeof item.product_id === 'object' && item.product_id !== null ? (item.product_id as ProductRow) : null;
-                        const productName = product?.product_name || `PRD-${item.product_id}`;
+                        const productDescription = product?.description || product?.product_name || `PRD-${item.product_id}`;
 
                         return (
                           <TableRow key={item.id} className="border-b border-border/50">
                             <TableCell className="py-3">
                               <div className="flex flex-col">
-                                <span className="font-semibold text-sm line-clamp-1">{productName}</span>
+                                <span className="font-semibold text-sm line-clamp-1">{productDescription}</span>
                                 {item.isLoosePack && (
                                   <span className="text-[9px] bg-amber-500/10 text-amber-600 px-1.5 py-0.5 rounded w-fit mt-1 font-bold flex items-center gap-1">
                                     <Edit2 className="w-2 h-2" /> MANUAL ENTRY
@@ -439,11 +441,11 @@ export default function StockTransferDispatchView({ currentUser }: { currentUser
                         size="sm"
                         className={cn(
                           "w-full sm:w-auto font-bold text-xs shadow-none px-6 transition-all",
-                          (isAllScanned || selectedGroup.status === 'Picked') 
+                          hasScannedAny
                             ? "bg-emerald-600 hover:bg-emerald-700 text-white" 
                             : "bg-muted text-muted-foreground"
                         )}
-                        disabled={processing || (!isAllScanned && selectedGroup.status !== 'Picked')}
+                        disabled={processing || !hasScannedAny}
                         onClick={() => dispatchOrder(selectedGroup.orderNo)}
                       >
                         {processing && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}

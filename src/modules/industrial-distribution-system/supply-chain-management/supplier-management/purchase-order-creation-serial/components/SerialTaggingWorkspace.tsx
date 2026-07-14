@@ -96,6 +96,7 @@ export function SerialTaggingWorkspace({ po, loading, hook }: SerialTaggingWorks
     if (!po) return null; // Fallback, shouldn't reach here
 
     const isTagged = po.isTagged;
+    const isReadOnly = isTagged || po.inventoryStatus !== 13;
 
     return (
         <div className="min-w-0 border border-border rounded-xl bg-background shadow-sm overflow-hidden flex flex-col h-full">
@@ -109,6 +110,11 @@ export function SerialTaggingWorkspace({ po, loading, hook }: SerialTaggingWorks
                         {isTagged && (
                             <Badge className="text-[10px] font-black bg-emerald-500/15 text-emerald-700 border border-emerald-500/20 px-1.5 h-4">
                                 FULLY TAGGED
+                            </Badge>
+                        )}
+                        {(po.inventoryStatus === 8 || po.inventoryStatus === 4) && (
+                            <Badge variant="destructive" className="text-[10px] font-black px-1.5 h-4">
+                                REJECTED
                             </Badge>
                         )}
                     </div>
@@ -137,6 +143,22 @@ export function SerialTaggingWorkspace({ po, loading, hook }: SerialTaggingWorks
                     <div className="rounded-xl border border-emerald-500/30 bg-emerald-50 dark:bg-emerald-950/20 p-4 text-sm text-emerald-700 dark:text-emerald-300 font-medium flex items-center gap-2">
                         <Info className="h-4 w-4 shrink-0" />
                         This PO has been fully tagged. All serial numbers have been saved.
+                    </div>
+                )}
+                {/* ── Rejected notice ── */}
+                {(po.inventoryStatus === 8 || po.inventoryStatus === 4) && (
+                    <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive font-medium flex flex-col gap-1">
+                        <div className="flex items-center gap-2 font-black uppercase tracking-wider">
+                            <Info className="h-4 w-4 shrink-0" />
+                            This PO was Rejected ({po.inventoryStatusLabel || "Rejected"})
+                        </div>
+                        {po.remark && <div className="text-foreground/90 font-medium">Reason: {po.remark}</div>}
+                    </div>
+                )}
+                {po.inventoryStatus !== 13 && po.inventoryStatus !== 8 && po.inventoryStatus !== 4 && !isTagged && (
+                    <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-300 font-medium flex items-center gap-2">
+                        <Info className="h-4 w-4 shrink-0" />
+                        This PO is not ready for tagging (Status: {po.inventoryStatusLabel || "Pending"}). Serial entry is disabled until approved.
                     </div>
                 )}
 
@@ -188,19 +210,22 @@ export function SerialTaggingWorkspace({ po, loading, hook }: SerialTaggingWorks
                     </div>
 
                     {/* Rapid Scan button */}
-                    <div className="shrink-0">
-                        <Button
-                            id="rapid-scan-open-btn"
-                            type="button"
-                            variant="outline"
-                            className="h-9 gap-2 font-bold shadow-sm"
-                            onClick={() => setRapidScanOpen(true)}
-                            disabled={isTagged}
-                        >
-                            <ScanLine className="h-4 w-4 text-primary" />
-                            Rapid Scan
-                        </Button>
-                    </div>
+                    {!isReadOnly && (
+                        <div className="shrink-0">
+                            <Button
+                                id="rapid-scan-open-btn"
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setRapidScanOpen(true)}
+                                disabled={isReadOnly}
+                                className="h-8 text-xs font-bold gap-1.5 rounded-lg border-primary/30 hover:bg-primary/5 text-primary"
+                            >
+                                <ScanLine className="h-3.5 w-3.5" />
+                                Rapid Scan
+                            </Button>
+                        </div>
+                    )}
                 </div>
 
                 {/* ── Product Lines ── */}
@@ -214,9 +239,9 @@ export function SerialTaggingWorkspace({ po, loading, hook }: SerialTaggingWorks
                             <SerialEntryPanel
                                 key={line.lineId}
                                 line={line}
-                                isReadOnly={isTagged}
-                                onAddSerial={isTagged ? () => {} : hook.addDraftSerial}
-                                onRemoveDraft={isTagged ? () => {} : hook.removeDraftSerial}
+                                isReadOnly={isReadOnly}
+                                onAddSerial={isReadOnly ? () => {} : hook.addDraftSerial}
+                                onRemoveDraft={isReadOnly ? () => {} : hook.removeDraftSerial}
                             />
                         ))
                     )}
@@ -232,47 +257,49 @@ export function SerialTaggingWorkspace({ po, loading, hook }: SerialTaggingWorks
             </div>
 
             {/* ── Fixed Action Bar ── */}
-            <div className="p-4 bg-background/95 backdrop-blur-xl border-t border-border flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between shrink-0 z-10">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    {!hook.canSubmit && hook.totalDraftCount === 0 && (
-                        <>
-                            <Info className="h-4 w-4 shrink-0" />
-                            <span>Add serials to enable saving.</span>
-                        </>
-                    )}
-                    {!hook.canSubmit && hook.totalDraftCount > 0 && (
-                        <span className="text-orange-500 font-medium flex items-center gap-1.5">
-                            <Info className="h-4 w-4 shrink-0" />
-                            All lines must match ordered quantity to save.
-                        </span>
-                    )}
-                </div>
+            {!isReadOnly && (
+                <div className="p-4 bg-background/95 backdrop-blur-xl border-t border-border flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between shrink-0 z-10">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        {!hook.canSubmit && hook.totalDraftCount === 0 && (
+                            <>
+                                <Info className="h-4 w-4 shrink-0" />
+                                <span>Add serials to enable saving.</span>
+                            </>
+                        )}
+                        {!hook.canSubmit && hook.totalDraftCount > 0 && (
+                            <span className="text-orange-500 font-medium flex items-center gap-1.5">
+                                <Info className="h-4 w-4 shrink-0" />
+                                All lines must match ordered quantity to save.
+                            </span>
+                        )}
+                    </div>
 
-                <div className="flex items-center gap-3">
-                    <Button
-                        id="serial-tagging-submit-btn"
-                        type="button"
-                        className={cn(
-                            "h-10 rounded-xl font-black uppercase tracking-wider px-6",
-                            (hook.totalSavedCount + hook.totalDraftCount) === hook.totalOrderedCount && hook.totalOrderedCount > 0 && !hook.isSubmitting && "bg-emerald-600 hover:bg-emerald-700 text-white"
-                        )}
-                        disabled={!hook.canSubmit || hook.isSubmitting}
-                        onClick={hook.submitSerials}
-                    >
-                        {hook.isSubmitting ? (
-                            <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Saving...
-                            </>
-                        ) : (
-                            <>
-                                <Save className="mr-2 h-4 w-4" />
-                                {(hook.totalSavedCount + hook.totalDraftCount) === hook.totalOrderedCount && hook.totalOrderedCount > 0 ? "Confirm & Save All" : `Save ${hook.totalDraftCount} Drafts`}
-                            </>
-                        )}
-                    </Button>
+                    <div className="flex items-center gap-3">
+                        <Button
+                            id="serial-tagging-submit-btn"
+                            type="button"
+                            className={cn(
+                                "h-10 rounded-xl font-black uppercase tracking-wider px-6",
+                                (hook.totalSavedCount + hook.totalDraftCount) === hook.totalOrderedCount && hook.totalOrderedCount > 0 && !hook.isSubmitting && "bg-emerald-600 hover:bg-emerald-700 text-white"
+                            )}
+                            disabled={!hook.canSubmit || hook.isSubmitting}
+                            onClick={hook.submitSerials}
+                        >
+                            {hook.isSubmitting ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Saving...
+                                </>
+                            ) : (
+                                <>
+                                    <Save className="mr-2 h-4 w-4" />
+                                    {(hook.totalSavedCount + hook.totalDraftCount) === hook.totalOrderedCount && hook.totalOrderedCount > 0 ? "Confirm & Save All" : `Save ${hook.totalDraftCount} Drafts`}
+                                </>
+                            )}
+                        </Button>
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* ── Rapid Scan Modal ── */}
             <RapidScanModal

@@ -25,6 +25,8 @@ export type UseSerialTaggingReturn = {
     isLoadingList: boolean;
     listError: string;
     refreshList: () => Promise<void>;
+    statusTab: "all" | "ready" | "for_approval" | "tagged" | "rejected";
+    onTabChange: (tab: "all" | "ready" | "for_approval" | "tagged" | "rejected") => void;
     // ── Phase 2: Tagging Workspace ──
     selectedPO: SerialTaggingPODetail | null;
     isLoadingDetail: boolean;
@@ -49,6 +51,7 @@ export function useSerialTagging(): UseSerialTaggingReturn {
     const [poList, setPoList] = React.useState<SerialTaggingPOListItem[]>([]);
     const [isLoadingList, setIsLoadingList] = React.useState(true);
     const [listError, setListError] = React.useState("");
+    const [statusTab, setStatusTab] = React.useState<"all" | "ready" | "for_approval" | "tagged" | "rejected">("ready");
 
     // ── Phase 2 state ─────────────────────────────────────────────────────────
     const [rawSelectedPO, setRawSelectedPO] = React.useState<SerialTaggingPODetail | null>(null);
@@ -87,12 +90,12 @@ export function useSerialTagging(): UseSerialTaggingReturn {
         });
     }, [poList, drafts]);
 
-    // ── Load PO list on mount ─────────────────────────────────────────────────
+    // ── Load PO list on mount / status tab change ─────────────────────────────
     const refreshList = React.useCallback(async () => {
         try {
             setIsLoadingList(true);
             setListError("");
-            const data = await provider.fetchRefillPOs();
+            const data = await provider.fetchRefillPOs(statusTab);
             setPoList(data ?? []);
         } catch (e: unknown) {
             const msg = String((e as Error).message ?? e);
@@ -101,11 +104,15 @@ export function useSerialTagging(): UseSerialTaggingReturn {
         } finally {
             setIsLoadingList(false);
         }
-    }, []);
+    }, [statusTab]);
 
     React.useEffect(() => {
         refreshList();
     }, [refreshList]);
+
+    const onTabChange = React.useCallback((tab: "all" | "ready" | "for_approval" | "tagged" | "rejected") => {
+        setStatusTab(tab);
+    }, []);
 
     // ── Select a PO → load its detail ────────────────────────────────────────
     const selectPO = React.useCallback(async (poId: number) => {
@@ -236,6 +243,7 @@ export function useSerialTagging(): UseSerialTaggingReturn {
 
     return {
         poList: poListWithDrafts, isLoadingList, listError, refreshList,
+        statusTab, onTabChange,
         selectedPO, isLoadingDetail, isSubmitting,
         selectPO, backToList,
         addDraftSerial, removeDraftSerial, submitSerials,

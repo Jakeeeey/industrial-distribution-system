@@ -154,14 +154,17 @@ export default function StockTransferReceiveManualView({ currentUser }: { curren
                       const targetQty = Math.max(0, item.scanned_quantity ?? item.picked_quantity ?? item.allocated_quantity ?? 0);
                       const currentQty = receivedQtys[item.id] ?? 0;
                       const product = typeof item.product_id === 'object' && item.product_id !== null ? item.product_id : null;
+                      const productDescription = product?.description || product?.product_name || `PRD-${item.product_id}`;
                       const productName = product?.product_name || `PRD-${item.product_id}`;
 
                       return (
                         <TableRow key={item.id} className="border-b border-border/50">
                           <TableCell className="py-3">
-                            <div className="flex flex-col">
-                              <span className="font-semibold text-sm">{productName}</span>
-                              <span className="text-[10px] text-muted-foreground font-mono uppercase tracking-tight">ID: {String(product?.product_id || 'N/A')}</span>
+                            <div className="flex flex-col gap-0.5">
+                              <span className="font-semibold text-sm line-clamp-1">{productDescription}</span>
+                              {productDescription !== productName && (
+                                <span className="text-[10px] text-muted-foreground font-medium">{productName}</span>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell className="text-sm font-bold text-center">

@@ -82,45 +82,42 @@ export function useStockTransferDispatch() {
       setFetchingAvailable(true);
       try {
         const newAvailable: Record<number, number> = { ...scannedInventory };
-        let hasChanges = false;
         const sourceBranch = selectedGroup.sourceBranch!;
         const sourceBranchName = base.getBranchName(sourceBranch);
 
-        for (const item of selectedGroup.items) {
-          const product = item.product_id as ProductRow;
-          const pid = product?.product_id || item.product_id;
+        const params = new URLSearchParams({
+          branchName: sourceBranchName,
+          branchId: String(sourceBranch),
+          current: '0'
+        });
 
-          if (!pid || scannedInventory[pid as number] !== undefined) continue;
+        const proxyUrl = `/api/ids/scm/warehouse-management/inventory-proxy?${params.toString()}`;
+        const res = await fetch(proxyUrl);
+        if (res.ok) {
+          const data = await res.json();
+          const list = Array.isArray(data) ? data : (data.data || []);
 
-          const params = new URLSearchParams({
-            branchName: sourceBranchName,
-            branchId: String(sourceBranch),
-            productId: String(pid),
-            current: '0'
+          // Build a lookup map of product ID to running inventory
+          const invMap = new Map<string, number>();
+          list.forEach((inv: Record<string, string | number | unknown>) => {
+            const pId = String(inv.productId ?? inv.product_id ?? "");
+            const qty = Number(inv.runningInventory ?? inv.running_inventory ?? 0);
+            if (pId) {
+              invMap.set(pId, (invMap.get(pId) || 0) + qty);
+            }
           });
 
-          const proxyUrl = `/api/ids/scm/warehouse-management/inventory-proxy?${params.toString()}`;
-          const res = await fetch(proxyUrl);
-          if (res.ok) {
-            const data = await res.json();
-            const list = Array.isArray(data) ? data : (data.data || []);
-            const inventoryList = list.filter((inv: { productId: string | number; branchId: string | number; runningInventory: number }) =>
-              String(inv.productId) === String(pid) &&
-              String(inv.branchId) === String(sourceBranch)
-            );
-            const availableCount = inventoryList.reduce((acc: number, inv: { runningInventory: number }) => acc + Number(inv.runningInventory || 0), 0);
+          // Update scannedInventory state for all items in the selected group
+          selectedGroup.items.forEach((item) => {
+            const product = item.product_id as ProductRow;
+            const pid = (product?.product_id || item.product_id) as number;
+            const availableCount = invMap.get(String(pid)) || 0;
             const unitCount = Number(product?.unit_of_measurement_count || 1) || 1;
-            const finalAvailable = Math.max(0, Math.floor(availableCount / unitCount));
+            newAvailable[pid] = Math.max(0, Math.floor(availableCount / unitCount));
+          });
 
-            newAvailable[pid as number] = finalAvailable;
-            hasChanges = true;
-          } else {
-            newAvailable[pid as number] = 0;
-            hasChanges = true;
-          }
+          setScannedInventory(newAvailable);
         }
-
-        if (hasChanges) setScannedInventory(newAvailable);
       } catch (err) {
         console.error('Failed to fetch initial available quantities:', err);
       } finally {
@@ -167,7 +164,9 @@ export function useStockTransferDispatch() {
 
       const itemsPayload = group.items.map(i => ({
         id: i.id,
-        status: 'For Loading'
+        status: 'For Loading',
+        // Record the actual scanned quantity for partial dispatch audit trail
+        picked_quantity: i.scannedQty ?? 0,
       }));
 
       await stockTransferLifecycleService.submitStatusUpdate({

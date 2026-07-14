@@ -31,6 +31,8 @@ interface RefillPOListProps {
     selectedId?: number;
     onSelectPO: (poId: number) => void;
     onRefresh: () => void;
+    statusTab?: "all" | "ready" | "for_approval" | "tagged" | "rejected";
+    onTabChange?: (tab: "all" | "ready" | "for_approval" | "tagged" | "rejected") => void;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -38,11 +40,12 @@ interface RefillPOListProps {
 const APPROVED_STATUS = 13;
 const DEFAULT_PAGE_SIZE = 10;
 
-type FilterStatus = "all" | "ready" | "for_approval" | "tagged";
+type FilterStatus = "all" | "ready" | "for_approval" | "tagged" | "rejected";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function getCardType(item: SerialTaggingPOListItem): "ready" | "tagged" | "pending" {
+function getCardType(item: SerialTaggingPOListItem): "ready" | "tagged" | "pending" | "rejected" {
+    if (item.inventoryStatus === 8 || item.inventoryStatus === 4) return "rejected";
     if (item.inventoryStatus === APPROVED_STATUS && !item.isTagged) return "ready";
     if (item.isTagged) return "tagged";
     return "pending";
@@ -73,11 +76,18 @@ function getPaginationModel(totalPages: number, currentPage: number) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function RefillPOList({ items, loading, selectedId, onSelectPO, onRefresh }: RefillPOListProps) {
+export function RefillPOList({ items, loading, selectedId, onSelectPO, onRefresh, statusTab, onTabChange }: RefillPOListProps) {
     const [searchQuery, setSearchQuery] = React.useState("");
-    const [filterStatus, setFilterStatus] = React.useState<FilterStatus>("all");
+    const [filterStatus, setFilterStatus] = React.useState<FilterStatus>("ready");
     const [page, setPage] = React.useState(1);
     const pageSize = DEFAULT_PAGE_SIZE;
+
+    const activeStatus = statusTab ?? filterStatus;
+    const handleTabClick = (tab: FilterStatus) => {
+        if (onTabChange) onTabChange(tab);
+        else setFilterStatus(tab);
+        setPage(1);
+    };
 
     // ── Filter ────────────────────────────────────────────────────────────────
     const filteredItems = React.useMemo(() => {
@@ -88,16 +98,19 @@ export function RefillPOList({ items, loading, selectedId, onSelectPO, onRefresh
                 po.poNumber.toLowerCase().includes(q) ||
                 po.supplierName.toLowerCase().includes(q);
 
+            if (onTabChange) return textOk; // Server already filtered by statusTab
+
             const type = getCardType(po);
             const statusOk =
-                filterStatus === "all" ||
-                (filterStatus === "ready" && type === "ready") ||
-                (filterStatus === "tagged" && type === "tagged") ||
-                (filterStatus === "for_approval" && type === "pending");
+                activeStatus === "all" ||
+                (activeStatus === "ready" && type === "ready") ||
+                (activeStatus === "tagged" && type === "tagged") ||
+                (activeStatus === "for_approval" && type === "pending") ||
+                (activeStatus === "rejected" && type === "rejected");
 
             return textOk && statusOk;
         });
-    }, [items, searchQuery, filterStatus]);
+    }, [items, searchQuery, activeStatus, onTabChange]);
 
     const totalPages = React.useMemo(
         () => Math.max(1, Math.ceil(filteredItems.length / pageSize)),
@@ -118,12 +131,6 @@ export function RefillPOList({ items, loading, selectedId, onSelectPO, onRefresh
         [totalPages, page]
     );
 
-    const counts = React.useMemo(() => ({
-        all: items.length,
-        ready: items.filter((i) => getCardType(i) === "ready").length,
-        tagged: items.filter((i) => getCardType(i) === "tagged").length,
-        for_approval: items.filter((i) => getCardType(i) === "pending").length,
-    }), [items]);
 
     const isDisabled = loading;
 
@@ -144,7 +151,45 @@ export function RefillPOList({ items, loading, selectedId, onSelectPO, onRefresh
                 </Badge>
             </div>
 
-            <div className="p-3 pb-0 space-y-3">
+            <div className="flex items-center gap-1 p-2 bg-muted/40 border-b border-border overflow-x-auto no-scrollbar">
+                <button
+                    type="button"
+                    onClick={() => handleTabClick("ready")}
+                    className={cn("flex-1 py-1.5 px-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors whitespace-nowrap", activeStatus === "ready" ? "bg-background text-primary shadow-sm" : "text-muted-foreground hover:bg-muted")}
+                >
+                    Ready
+                </button>
+                <button
+                    type="button"
+                    onClick={() => handleTabClick("for_approval")}
+                    className={cn("flex-1 py-1.5 px-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors whitespace-nowrap", activeStatus === "for_approval" ? "bg-background text-amber-600 shadow-sm" : "text-muted-foreground hover:bg-muted")}
+                >
+                    Pending
+                </button>
+                <button
+                    type="button"
+                    onClick={() => handleTabClick("tagged")}
+                    className={cn("flex-1 py-1.5 px-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors whitespace-nowrap", activeStatus === "tagged" ? "bg-background text-emerald-600 shadow-sm" : "text-muted-foreground hover:bg-muted")}
+                >
+                    Tagged
+                </button>
+                <button
+                    type="button"
+                    onClick={() => handleTabClick("rejected")}
+                    className={cn("flex-1 py-1.5 px-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors whitespace-nowrap", activeStatus === "rejected" ? "bg-background text-destructive shadow-sm" : "text-muted-foreground hover:bg-muted")}
+                >
+                    Rejected
+                </button>
+                <button
+                    type="button"
+                    onClick={() => handleTabClick("all")}
+                    className={cn("flex-1 py-1.5 px-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors whitespace-nowrap", activeStatus === "all" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:bg-muted")}
+                >
+                    All
+                </button>
+            </div>
+
+            <div className="p-3 pb-2 space-y-3">
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -153,33 +198,6 @@ export function RefillPOList({ items, loading, selectedId, onSelectPO, onRefresh
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="pl-9 h-10 rounded-xl shadow-sm border-border bg-background"
                     />
-                </div>
-                
-                {/* Status Chips */}
-                <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-                    {(["all", "ready", "for_approval", "tagged"] as FilterStatus[]).map((f) => {
-                        const labels: Record<FilterStatus, string> = {
-                            all: "All",
-                            ready: "Ready",
-                            for_approval: "Pending",
-                            tagged: "Tagged",
-                        };
-                        return (
-                            <button
-                                key={f}
-                                type="button"
-                                onClick={() => setFilterStatus(f)}
-                                className={cn(
-                                    "text-[9px] whitespace-nowrap font-black px-2.5 py-1 rounded-full border transition-colors",
-                                    filterStatus === f
-                                        ? "bg-primary text-primary-foreground border-primary"
-                                        : "bg-muted text-muted-foreground border-border hover:border-primary/50"
-                                )}
-                            >
-                                {labels[f]} ({counts[f]})
-                            </button>
-                        );
-                    })}
                 </div>
             </div>
 
@@ -197,23 +215,14 @@ export function RefillPOList({ items, loading, selectedId, onSelectPO, onRefresh
                         // totalSerials already includes draft counts (injected by hook via poListWithDrafts)
                         const displaySerials = po.isTagged ? Math.max(po.totalSerials, po.totalOrderedQty) : po.totalSerials;
                         const progress = po.totalOrderedQty > 0 ? Math.round((displaySerials / po.totalOrderedQty) * 100) : 0;
-                        const isCardDisabled = cardType !== "ready" && cardType !== "tagged";
 
                         return (
                             <button
                                 key={po.poId}
                                 type="button"
-                                // Disable button if status is "pending" (for approval) to prevent selecting it
-                                disabled={isCardDisabled}
-                                onClick={() => {
-                                    if (!isCardDisabled) {
-                                        onSelectPO(po.poId);
-                                    }
-                                }}
+                                onClick={() => onSelectPO(po.poId)}
                                 className={cn(
-                                    "w-full text-left rounded-lg border border-border bg-background p-3 transition focus:outline-none",
-                                    !isCardDisabled && "hover:bg-muted/40 cursor-pointer",
-                                    isCardDisabled && "opacity-70 cursor-not-allowed",
+                                    "w-full text-left rounded-lg border border-border bg-background p-3 transition focus:outline-none hover:bg-muted/40 cursor-pointer",
                                     selected ? "ring-2 ring-primary/40 border-primary/50" : ""
                                 )}
                             >
@@ -245,11 +254,18 @@ export function RefillPOList({ items, loading, selectedId, onSelectPO, onRefresh
                                         </div>
                                     </div>
 
-                                    {cardType === "pending" && (
-                                        <Badge variant="secondary" className="text-[9px] font-black bg-amber-500/15 text-amber-700 shrink-0">
-                                            FOR APPROVAL
-                                        </Badge>
-                                    )}
+                                    <div className="flex flex-col items-end gap-1 shrink-0">
+                                        {cardType === "pending" && (
+                                            <Badge variant="secondary" className="text-[9px] font-black bg-amber-500/15 text-amber-700">
+                                                FOR APPROVAL
+                                            </Badge>
+                                        )}
+                                        {cardType === "rejected" && (
+                                            <Badge variant="destructive" className="text-[9px] font-black">
+                                                REJECTED
+                                            </Badge>
+                                        )}
+                                    </div>
                                 </div>
                             </button>
                         );

@@ -43,9 +43,9 @@ async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 // ─── Fetch Refill PO List ─────────────────────────────────────────────────────
-/** Fetch all is_refill=1 POs (all statuses) for the PO selection list. */
-export async function fetchRefillPOs(): Promise<SerialTaggingPOListItem[]> {
-    return apiFetch<SerialTaggingPOListItem[]>(BASE);
+/** Fetch is_refill=1 POs filtered by status (`ready`, `for_approval`, `tagged`, `rejected`, `all`) */
+export async function fetchRefillPOs(status: string = "ready"): Promise<SerialTaggingPOListItem[]> {
+    return apiFetch<SerialTaggingPOListItem[]>(`${BASE}?status=${encodeURIComponent(status)}`);
 }
 
 // ─── Fetch PO Detail ──────────────────────────────────────────────────────────

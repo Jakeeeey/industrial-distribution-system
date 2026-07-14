@@ -196,7 +196,7 @@ export default function StockTransferReceiveView({ currentUser }: { currentUser:
                       const progress = targetQty > 0 ? (item.receivedQty || 0) / targetQty : 0;
                     const complete = progress >= 1;
                     const product = typeof item.product_id === 'object' ? (item.product_id as ProductRow) : null;
-                    const productName = product?.product_name || `PRD-${item.product_id}`;
+                    const productDescription = product?.description || product?.product_name || `PRD-${item.product_id}`;
 
                     return (
                       <TableRow key={item.id} className="border-b border-border/50 group hover:bg-muted/20 transition-colors">
@@ -209,7 +209,7 @@ export default function StockTransferReceiveView({ currentUser }: { currentUser:
                               <Radar className={cn("w-4 h-4", complete ? "text-blue-500" : "text-muted-foreground")} />
                             </div>
                             <div className="flex flex-col">
-                              <span className="font-bold text-sm group-hover:text-primary transition-colors">{productName}</span>
+                              <span className="font-bold text-sm group-hover:text-primary transition-colors">{productDescription}</span>
                               <span className="text-[10px] text-muted-foreground font-mono">CODE: {product?.product_code || '---'}</span>
                               {item.isLoosePack && (
                                 <span className="text-[9px] bg-sky-500/10 text-sky-600 px-1.5 py-0.5 rounded w-fit mt-1 font-bold flex items-center gap-1">

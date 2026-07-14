@@ -154,8 +154,13 @@ export function ReceiveScanner({
                     key={item.id}
                     className={cn('transition-colors', isComplete && 'bg-emerald-500/5')}
                   >
-                    <TableCell className="text-sm font-medium text-foreground">
-                      {product?.product_name || 'Unknown'}
+                    <TableCell className="text-sm font-medium text-foreground py-3">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-semibold text-sm line-clamp-1">{product?.description || product?.product_name || 'Unknown'}</span>
+                        {product?.description && product?.description !== product?.product_name && (
+                          <span className="text-[10px] text-muted-foreground font-medium">{product?.product_name}</span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-sm font-semibold">
                       {product?.is_serialized === 0 ? (
