@@ -266,6 +266,7 @@ export interface StockTransferInsertPayload {
   remarks: string;
   date_requested: string;
   date_encoded: string;
+  encoder_id?: number | null;
 }
 
 // ─── Valid Statuses ─────────────────────────────────────────

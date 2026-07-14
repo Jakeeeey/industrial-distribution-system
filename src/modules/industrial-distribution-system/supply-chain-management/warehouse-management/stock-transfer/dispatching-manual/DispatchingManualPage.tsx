@@ -62,6 +62,7 @@ export default function StockTransferDispatchManualView({ currentUser }: { curre
     currentPage * itemsPerPage
   ) || [];
 
+  // Partial dispatch: allow dispatch as long as at least one item has a scanned quantity > 0
   const hasScannedAny = selectedGroup?.items.some((i: OrderGroupItem) => {
     return (scannedQtys[i.id] ?? 0) > 0;
   }) ?? false;
@@ -174,13 +175,17 @@ export default function StockTransferDispatchManualView({ currentUser }: { curre
                       const maxAllowedQty = Math.min(targetQty, availableQty);
                       const currentQty = scannedQtys[item.id] ?? 0;
                       const product = typeof item.product_id === 'object' && item.product_id !== null ? item.product_id : null;
+                      const productDescription = product?.description || product?.product_name || `PRD-${item.product_id}`;
                       const productName = product?.product_name || `PRD-${item.product_id}`;
 
                       return (
                         <TableRow key={item.id} className="border-b border-border/50">
                           <TableCell className="py-3">
-                            <div className="flex flex-col">
-                              <span className="font-semibold text-sm">{productName}</span>
+                            <div className="flex flex-col gap-0.5">
+                              <span className="font-semibold text-sm line-clamp-1">{productDescription}</span>
+                              {productDescription !== productName && (
+                                <span className="text-[10px] text-muted-foreground font-medium">{productName}</span>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell className="text-sm font-bold text-center">{targetQty}</TableCell>

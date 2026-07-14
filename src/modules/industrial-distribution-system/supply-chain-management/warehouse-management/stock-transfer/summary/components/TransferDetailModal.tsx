@@ -156,16 +156,18 @@ export function TransferDetailModal({
               <TableBody>
                 {group.items.map((item: OrderGroupItem) => {
                   const product = typeof item.product_id === 'object' ? (item.product_id as ProductRow) : null;
+                  const productDescription = product?.description || product?.product_name || `PRD-${item.product_id}`;
                   const productName = product?.product_name || `PRD-${item.product_id}`;
-                  const barcode = product?.barcode || '—';
                   const unitPrice = item.ordered_quantity > 0 ? (Number(item.amount || 0) / item.ordered_quantity) : 0;
 
                   return (
                     <TableRow key={item.id} className="border-b border-border/50 hover:bg-muted/5">
                       <TableCell>
-                        <div className="flex flex-col max-w-[300px]">
-                          <span className="font-bold text-sm truncate" title={productName}>{productName}</span>
-                          <span className="text-[10px] text-muted-foreground font-mono">Barcode: {barcode}</span>
+                        <div className="flex flex-col max-w-[300px] gap-0.5">
+                          <span className="font-bold text-sm line-clamp-1" title={productDescription}>{productDescription}</span>
+                          {productDescription !== productName && (
+                            <span className="text-[10px] text-muted-foreground font-medium">{productName}</span>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell className="text-center font-medium text-xs">

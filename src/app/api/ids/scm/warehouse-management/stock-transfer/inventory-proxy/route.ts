@@ -2,19 +2,48 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
+// ─── In-Memory TTL Cache (30s) ──────────────────────────────────────────────
+// Prevents repeated round-trips to the Spring Boot running-inventory view
+// for the same branch within a short window. Keyed by branchId+branchName.
+const inventoryCache = new Map<string, { data: unknown; expiry: number }>();
+const CACHE_TTL_MS = 30_000; // 30 seconds
+
+function getCached(key: string): unknown | null {
+  const entry = inventoryCache.get(key);
+  if (entry && Date.now() < entry.expiry) return entry.data;
+  inventoryCache.delete(key);
+  return null;
+}
+
+function setCached(key: string, data: unknown): void {
+  inventoryCache.set(key, { data, expiry: Date.now() + CACHE_TTL_MS });
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  
+
   const springBase = process.env.SPRING_API_BASE_URL?.replace(/\/$/, '');
-  
+
   if (!springBase) {
     console.error('[Proxy] SPRING_API_BASE_URL is not configured');
     return NextResponse.json({ error: 'SPRING_API_BASE_URL is not configured' }, { status: 500 });
   }
 
+  // Build cache key from branch identifiers (excludes auth/token params)
+  const branchId = searchParams.get('branchId') || searchParams.get('branch_id') || '';
+  const branchName = searchParams.get('branchName') || '';
+  const cacheKey = `inv:${branchId}:${branchName}`;
+
+  // Return cached response if still fresh (avoids expensive DB view hit)
+  const cached = getCached(cacheKey);
+  if (cached) {
+    console.log(`[Proxy] Cache HIT for branch ${branchId} (${branchName})`);
+    return NextResponse.json(cached);
+  }
+
   // Construct the target external URL dynamically
   const targetUrl = new URL(`${springBase}/api/view-running-inventory/filter`);
-  
+
   // Forward all query parameters
   searchParams.forEach((value, key) => {
     targetUrl.searchParams.set(key, value);
@@ -22,9 +51,9 @@ export async function GET(request: NextRequest) {
 
   // Extract auth token from cookies
   const token = request.cookies.get('vos_access_token')?.value;
-  console.log(`[Proxy] Target: ${targetUrl.toString()}`);
+  console.log(`[Proxy] Cache MISS — fetching: ${targetUrl.toString()}`);
   console.log(`[Proxy] Token present: ${!!token}, Length: ${token?.length}`);
-  
+
   if (token) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -46,7 +75,7 @@ export async function GET(request: NextRequest) {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
-        ...(token ? { 
+        ...(token ? {
           'Authorization': `Bearer ${token}`,
           'Cookie': `vos_access_token=${token}`
         } : {}),
@@ -56,6 +85,8 @@ export async function GET(request: NextRequest) {
 
     if (response.ok) {
       const data = await response.json();
+      // Cache successful response for 30s to prevent N+1 DB view queries
+      setCached(cacheKey, data);
       return NextResponse.json(data);
     } else {
       const errText = await response.text();

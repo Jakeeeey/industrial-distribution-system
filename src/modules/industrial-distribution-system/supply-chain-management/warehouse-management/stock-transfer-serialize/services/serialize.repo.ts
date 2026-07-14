@@ -97,9 +97,15 @@ interface TransferUpdatePayload {
   id: number;
   status?: string;
   received_quantity?: number;
+  picked_quantity?: number;
   date_encoded?: string;
   date_received?: string;
-  receiver_id?: number;
+  receiver_id?: number | null;
+  dispatched_by?: number | null;
+  dispatched_at?: string;
+  approved_by?: number | null;
+  rejected_by?: number | null;
+  rejected_at?: string;
 }
 
 /**
