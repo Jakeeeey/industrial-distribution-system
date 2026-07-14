@@ -103,18 +103,23 @@ export function useSerializeReceive() {
   };
 
   const handleSerialInput = async (serial: string) => {
-// ... existing handleSerialInput ...
+    console.log("[Serialize Receive Hook] handleSerialInput called with:", serial);
     if (!base.selectedOrderNo || !selectedGroup) {
+      console.warn("[Serialize Receive Hook] No selected order or group.");
       toast.error("Please select an order first.");
       return;
     }
 
     const serialTrimmed = serial.trim();
-    if (serialTrimmed.length < 3) return;
+    if (serialTrimmed.length < 1) {
+      console.warn("[Serialize Receive Hook] Serial is empty.");
+      return;
+    }
 
     try {
       const currentScans = receivedSerialsState[base.selectedOrderNo!] || [];
       if (currentScans.some(s => s.status === 'SUCCESS' && s.serialNumber === serialTrimmed)) {
+        console.warn("[Serialize Receive Hook] Serial already scanned:", serialTrimmed);
         toast.warning("Serial already scanned.");
         return;
       }
@@ -122,9 +127,12 @@ export function useSerializeReceive() {
       // In the Receive phase, we match against the Dispatched serials.
       // We'll perform a lookup to see if this serial was dispatched for this order.
       const transferIds = selectedGroup.items.map(i => i.id).filter(id => id !== undefined);
+      console.log("[Serialize Receive Hook] Verifying receive serial against transfer IDs:", transferIds);
       const match = await serializeLifecycleService.lookupReceiveSerial(serialTrimmed, transferIds);
+      console.log("[Serialize Receive Hook] Lookup match found:", match);
       
       const itemInOrder = selectedGroup.items.find(i => i.id === match.stockTransferId);
+      console.log("[Serialize Receive Hook] Item in order:", itemInOrder);
 
       if (!itemInOrder) {
         throw new Error(`Serial ${serialTrimmed} does not belong to this order.`);
@@ -133,13 +141,18 @@ export function useSerializeReceive() {
       const product = itemInOrder.product_id as ProductRow;
       const pid = typeof product === 'object' ? product.product_id : product as number;
       const productName = typeof product === 'object' ? product.product_name : `Product ${pid}`;
+      const isSerializedVal = typeof product === 'object' && product !== null ? product.is_serialized : undefined;
+      console.log("[Serialize Receive Hook] Product is_serialized:", isSerializedVal);
 
-      if (product?.is_serialized === 0) {
+      if (isSerializedVal === 0) {
         throw new Error(`Product ${productName} is not serialized. Use manual input.`);
       }
 
       const targetQty = itemInOrder.allocated_quantity || 0;
-      if ((itemInOrder as SerialOrderGroupItem).receivedSerialQty! >= targetQty) {
+      const currentReceivedQty = (itemInOrder as SerialOrderGroupItem).receivedSerialQty || 0;
+      console.log("[Serialize Receive Hook] Quantities -> Received:", currentReceivedQty, "Target:", targetQty);
+
+      if (currentReceivedQty >= targetQty) {
         throw new Error(`Quantity limit reached for ${productName}.`);
       }
 
@@ -151,6 +164,7 @@ export function useSerializeReceive() {
         status: 'SUCCESS'
       };
 
+      console.log("[Serialize Receive Hook] Adding scan log to state:", newScan);
       setReceivedSerialsState(prev => ({
         ...prev,
         [base.selectedOrderNo!]: [newScan, ...(prev[base.selectedOrderNo!] || [])]
@@ -158,6 +172,7 @@ export function useSerializeReceive() {
 
       toast.success(`Serial ${serialTrimmed} verified.`);
     } catch (err) {
+      console.error("[Serialize Receive Hook] Error in handleSerialInput:", err);
       toast.error(err instanceof Error ? err.message : String(err));
     }
   };

@@ -163,49 +163,39 @@ export function useStockTransferDispatch() {
         const sourceBranch = selectedGroup.sourceBranch!;
         const sourceBranchName = base.getBranchName(sourceBranch);
 
-        // Fetch all uncached product inventories in parallel
-        const itemsToFetch = selectedGroup.items.filter(item => {
-          const product = item.product_id as ProductRow;
-          const pid = product?.product_id || item.product_id;
-          return pid && scannedInventory[pid as number] === undefined;
+        const params = new URLSearchParams({
+          branchName: sourceBranchName,
+          branchId: String(sourceBranch),
+          current: '0'
         });
 
-        const results = await Promise.allSettled(itemsToFetch.map(async (item) => {
-          const product = item.product_id as ProductRow;
-          const pid = product?.product_id || item.product_id;
+        const proxyUrl = `/api/ids/scm/warehouse-management/stock-transfer/inventory-proxy?${params.toString()}`;
+        const res = await fetch(proxyUrl);
+        if (res.ok) {
+          const data = await res.json();
+          const list = Array.isArray(data) ? data : (data.data || []);
 
-          const params = new URLSearchParams({
-            branchName: sourceBranchName,
-            branchId: String(sourceBranch),
-            productId: String(pid),
-            current: '0'
+          // Build a lookup map of product ID to running inventory
+          const invMap = new Map<string, number>();
+          list.forEach((inv: Record<string, string | number | unknown>) => {
+            const pId = String(inv.productId ?? inv.product_id ?? "");
+            const qty = Number(inv.runningInventory ?? inv.running_inventory ?? 0);
+            if (pId) {
+              invMap.set(pId, (invMap.get(pId) || 0) + qty);
+            }
           });
 
-          const proxyUrl = `/api/ids/scm/warehouse-management/stock-transfer/inventory-proxy?${params.toString()}`;
-          const res = await fetch(proxyUrl);
-          if (res.ok) {
-            const data = await res.json();
-            const list = Array.isArray(data) ? data : (data.data || []);
-            // Handle both camelCase (productId) and snake_case (product_id) from Spring API
-            const inventoryList = list.filter((inv: Record<string, string | number>) =>
-              String(inv.productId ?? inv.product_id) === String(pid) &&
-              String(inv.branchId ?? inv.branch_id) === String(sourceBranch)
-            );
-
-            const availableCount = inventoryList.reduce((acc: number, inv: Record<string, string | number>) => acc + Number(inv.runningInventory ?? inv.running_inventory ?? 0), 0);
+          // Update scannedInventory state for all items in the selected group
+          selectedGroup.items.forEach((item) => {
+            const product = item.product_id as ProductRow;
+            const pid = (product?.product_id || item.product_id) as number;
+            const availableCount = invMap.get(String(pid)) || 0;
             const unitCount = Number(product?.unit_of_measurement_count || 1) || 1;
-            return { pid: pid as number, available: Math.max(0, Math.floor(availableCount / unitCount)) };
-          }
-          return { pid: pid as number, available: 0 };
-        }));
+            newAvailable[pid] = Math.max(0, Math.floor(availableCount / unitCount));
+          });
 
-        for (const result of results) {
-          if (result.status === 'fulfilled') {
-            newAvailable[result.value.pid] = result.value.available;
-          }
+          setScannedInventory(newAvailable);
         }
-
-        if (results.some(r => r.status === 'fulfilled')) setScannedInventory(newAvailable);
       } catch (err) {
         console.error('Failed to fetch initial available quantities:', err);
       } finally {

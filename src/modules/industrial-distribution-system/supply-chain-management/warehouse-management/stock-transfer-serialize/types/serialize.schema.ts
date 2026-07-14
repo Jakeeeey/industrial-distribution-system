@@ -15,6 +15,7 @@ export const UpdateSerializeTransferSchema = z.object({
     id: z.number().min(1, "Item ID is required"),
     status: z.string().min(1, "Status is required"),
     received_quantity: z.number().min(0).optional(),
+    picked_quantity: z.number().min(0).optional(),
   })).min(1, "At least one item is required"),
   
   /** Status to set for the entire batch. */
