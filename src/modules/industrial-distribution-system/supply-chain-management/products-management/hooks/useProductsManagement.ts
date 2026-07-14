@@ -49,20 +49,35 @@ export function useProductsManagement() {
       setLoading(true);
       try {
         const prodRes = await productsService.getProducts({ 
-          page, 
-          limit,
+          page: 1, 
+          limit: -1,
           q: searchQuery,
           category: selectedCategory === "all" ? undefined : selectedCategory,
           brand: selectedBrand === "all" ? undefined : selectedBrand,
           status: selectedStatus === "all" ? undefined : selectedStatus,
           sort: sortOrder
         });
-        setProducts(prodRes.data || []);
-        setTotalItems(
-          prodRes.meta?.filter_count !== undefined 
-            ? prodRes.meta.filter_count 
-            : (prodRes.meta?.total_count ?? 0)
-        );
+        
+        const allProducts: Product[] = prodRes.data || [];
+        
+        // Group by product_name to correctly paginate by parent product
+        const grouped = allProducts.reduce((acc, product) => {
+          const name = product.product_name || "Unknown";
+          if (!acc[name]) acc[name] = [];
+          acc[name].push(product);
+          return acc;
+        }, {} as Record<string, Product[]>);
+        
+        const groupedArray = Object.values(grouped);
+        
+        // Set total based on number of unique product groups
+        setTotalItems(groupedArray.length);
+        
+        // Paginate on the frontend
+        const start = (page - 1) * limit;
+        const paginatedGroups = groupedArray.slice(start, start + limit);
+        
+        setProducts(paginatedGroups.flat());
       } catch (error) {
         toast.error("Failed to fetch products: " + (error instanceof Error ? error.message : String(error)));
       } finally {

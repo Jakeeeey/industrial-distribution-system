@@ -96,6 +96,7 @@ export function ProductTable({
             <TableHead>Variants / Codes</TableHead>
             <TableHead>Category</TableHead>
             <TableHead>Brand</TableHead>
+            <TableHead>Serialized</TableHead>
             <TableHead>Status</TableHead>
           </TableRow>
         </TableHeader>
@@ -184,6 +185,13 @@ export function ProductTable({
                   </TableCell>
                   <TableCell>{getCategoryName(firstItem.product_category)}</TableCell>
                   <TableCell>{getBrandName(firstItem.product_brand)}</TableCell>
+                  <TableCell>
+                    {firstItem.is_serialized ? (
+                      <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800">YES</Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-slate-500">NO</Badge>
+                    )}
+                  </TableCell>
                   <TableCell>
                     {/* If all items have the same status, show it, otherwise 'Mixed' */}
                     {groupItems.every(p => p.isActive === firstItem.isActive) ? (
