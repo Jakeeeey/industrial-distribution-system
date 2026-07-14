@@ -48,7 +48,7 @@ export function DispatchScanner({
     return { totalItems, totalUnits, scannedUnits, progress };
   }, [selectedGroup]);
 
-  const isAllScanned = metrics.scannedUnits >= metrics.totalUnits && metrics.totalUnits > 0;
+  // const isAllScanned = metrics.scannedUnits >= metrics.totalUnits && metrics.totalUnits > 0;
 
   /* ── Empty state ── */
   if (!selectedGroup) {
