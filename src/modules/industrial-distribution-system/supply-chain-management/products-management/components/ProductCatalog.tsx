@@ -1,8 +1,7 @@
 import React from "react";
 import { Product, Category, Brand } from "../types";
-import { Card, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Edit, Trash, Package, Tag, Settings2, Eye } from "lucide-react";
 import Image from "next/image";
@@ -34,14 +33,6 @@ export function ProductCatalog({
   selectedIds,
   onSelectionChange
 }: ProductCatalogProps) {
-  const toggleOne = (id: number) => {
-    if (selectedIds.includes(id)) {
-      onSelectionChange(selectedIds.filter(i => i !== id));
-    } else {
-      onSelectionChange([...selectedIds, id]);
-    }
-  };
-
   const getCategoryName = (idOrObj: unknown) => {
     if (typeof idOrObj === 'object' && idOrObj !== null && 'category_name' in idOrObj) return (idOrObj as Record<string, string>).category_name;
     const cat = categories.find(c => c.category_id === Number(idOrObj));
@@ -82,8 +73,8 @@ export function ProductCatalog({
         const categoryName = getCategoryName(firstItem.product_category);
         const brandName = getBrandName(firstItem.product_brand);
 
-        const toggleGroupSelection = (e: React.MouseEvent) => {
-          e.stopPropagation();
+        const toggleGroupSelection = (e?: React.MouseEvent) => {
+          if (e) e.stopPropagation();
           if (allSelected) {
             onSelectionChange(selectedIds.filter(id => !groupIds.includes(id)));
           } else {
@@ -101,7 +92,7 @@ export function ProductCatalog({
             <div className="absolute top-3 left-3 z-10" onClick={(e) => e.stopPropagation()}>
               <Checkbox 
                 checked={allSelected ? true : someSelected ? "indeterminate" : false}
-                onCheckedChange={() => toggleGroupSelection(new MouseEvent('click') as any)}
+                onCheckedChange={() => toggleGroupSelection()}
                 className={allSelected || someSelected ? "" : "opacity-0 group-hover:opacity-100 transition-opacity bg-white/50 backdrop-blur-sm data-[state=checked]:opacity-100"}
               />
             </div>
