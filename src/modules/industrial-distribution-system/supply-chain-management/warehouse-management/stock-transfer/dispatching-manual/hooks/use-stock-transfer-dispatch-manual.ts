@@ -122,14 +122,27 @@ export function useStockTransferDispatchManual() {
     const group = orderGroups.find((g: OrderGroup) => g.orderNo === orderNo);
     if (!group) return;
 
+    // Build item payload — include all items but only send picked_quantity > 0
+    // This supports partial dispatch: items with 0 qty still get status updated
+    const itemsPayload = group.items.map((i: OrderGroupItem) => ({
+      id: i.id,
+      status: 'For Loading',
+      picked_quantity: scannedQtys[i.id] ?? 0,
+    }));
+
+    if (!itemsPayload.some(i => i.picked_quantity > 0)) {
+      toast.error('No quantities entered — please enter at least one quantity before dispatching.');
+      return;
+    }
+
     base.setProcessing(true);
     try {
-      await stockTransferLifecycleService.submitManualDispatch(
-        group.items.map((i: OrderGroupItem) => i.id),
-        'For Loading'
-      );
+      await stockTransferLifecycleService.submitStatusUpdate({
+        items: itemsPayload,
+        status: 'For Loading',
+      });
 
-      toast.success(`Order ${orderNo} successfully dispatched manually.`);
+      toast.success(`Order ${orderNo} successfully dispatched.`);
       base.setSelectedOrderNo(null);
       await base.refresh();
     } catch (err: unknown) {
