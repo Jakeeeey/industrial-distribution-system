@@ -119,11 +119,25 @@ async function fetchBranchesMap(base: string, ids: number[]) {
 // Returns all purchase_order rows where is_refill=1, sorted by date desc.
 // Includes: supplier name, inventory status label, serial counts.
 
-async function getPOList(base: string) {
-    // Step 1: Fetch all refill POs
+async function getPOList(base: string, statusFilter: string = "ready") {
+    // Step 1: Fetch refill POs filtered by tab status to optimize load time
+    let statusQuery = "&filter[inventory_status][_nin]=7";
+    if (statusFilter === "ready") {
+        statusQuery = "&filter[inventory_status][_eq]=13&filter[is_tagged][_neq]=1";
+    } else if (statusFilter === "for_approval" || statusFilter === "pending") {
+        statusQuery = "&filter[inventory_status][_nin]=13,8,4,7&filter[is_tagged][_neq]=1";
+    } else if (statusFilter === "tagged") {
+        statusQuery = "&filter[inventory_status][_nin]=7&filter[is_tagged][_eq]=1";
+    } else if (statusFilter === "rejected") {
+        statusQuery = "&filter[inventory_status][_in]=8,4";
+    } else {
+        // all
+        statusQuery = "&filter[inventory_status][_nin]=7";
+    }
+
     const url =
         `${base}/items/purchase_order` +
-        `?filter[is_refill][_eq]=1` +
+        `?filter[is_refill][_in]=1,true${statusQuery}` +
         `&sort[]=-date&sort[]=-purchase_order_id` +
         `&limit=-1` +
         `&fields=purchase_order_id,purchase_order_no,supplier_name,` +
@@ -299,6 +313,7 @@ async function getPODetail(base: string, poId: number) {
         date: String(headerJson?.date ?? ""),
         remark: headerJson?.remark ? String(headerJson.remark) : undefined,
         inventoryStatus: Number(statusRel?.id ?? 0),
+        inventoryStatusLabel: String(statusRel?.status ?? ""),
         isTagged: Number(headerJson?.is_tagged ?? 0) === 1,
         lines,
     };
@@ -412,8 +427,9 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ data: detail });
         }
 
-        // Return full PO list
-        const list = await getPOList(base);
+        // Return PO list filtered by status
+        const statusParam = searchParams.get("status") || "ready";
+        const list = await getPOList(base, statusParam);
         return NextResponse.json({ data: list });
 
     } catch (e: unknown) {

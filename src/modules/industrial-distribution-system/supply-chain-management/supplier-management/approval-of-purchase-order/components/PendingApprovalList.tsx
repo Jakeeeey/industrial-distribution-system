@@ -24,6 +24,8 @@ type Props = {
     selectedId: string | null;
     onSelect: (id: string) => void;
     disabled?: boolean;
+    statusTab?: "pending" | "approved" | "rejected" | "all";
+    onTabChange?: (tab: "pending" | "approved" | "rejected" | "all") => void;
 };
 
 // ✅ default to 10 per page
@@ -124,6 +126,8 @@ export default function PendingApprovalList({
     selectedId,
     onSelect,
     disabled,
+    statusTab = "pending",
+    onTabChange,
 }: Props) {
     const [searchQuery, setSearchQuery] = React.useState("");
     const [page, setPage] = React.useState(1);
@@ -188,7 +192,7 @@ export default function PendingApprovalList({
             <div className="px-4 py-3 border-b border-border bg-muted/30 flex items-center justify-between gap-3">
                 <div className="min-w-0">
                     <div className="text-sm font-black text-foreground uppercase tracking-tight">
-                        Pending for Approval
+                        {statusTab === "rejected" ? "Rejected POs" : statusTab === "approved" ? "Approved POs" : statusTab === "all" ? "All Purchase Orders" : "Pending for Approval"}
                     </div>
                     <div className="text-[11px] text-muted-foreground">
                         {filteredItems.length} filtered / {items?.length ?? 0} total
@@ -199,6 +203,39 @@ export default function PendingApprovalList({
                     Page {page} of {totalPages}
                 </Badge>
             </div>
+
+            {onTabChange && (
+                <div className="flex items-center gap-1 p-2 bg-muted/40 border-b border-border overflow-x-auto no-scrollbar">
+                    <button
+                        type="button"
+                        onClick={() => onTabChange("pending")}
+                        className={cn("flex-1 py-1.5 px-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors whitespace-nowrap", statusTab === "pending" ? "bg-background text-primary shadow-sm" : "text-muted-foreground hover:bg-muted")}
+                    >
+                        Pending
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => onTabChange("approved")}
+                        className={cn("flex-1 py-1.5 px-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors whitespace-nowrap", statusTab === "approved" ? "bg-background text-emerald-600 shadow-sm" : "text-muted-foreground hover:bg-muted")}
+                    >
+                        Approved
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => onTabChange("rejected")}
+                        className={cn("flex-1 py-1.5 px-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors whitespace-nowrap", statusTab === "rejected" ? "bg-background text-destructive shadow-sm" : "text-muted-foreground hover:bg-muted")}
+                    >
+                        Rejected
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => onTabChange("all")}
+                        className={cn("flex-1 py-1.5 px-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors whitespace-nowrap", statusTab === "all" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:bg-muted")}
+                    >
+                        All
+                    </button>
+                </div>
+            )}
 
             <div className="p-3 pb-0">
                 <div className="relative">
@@ -254,9 +291,16 @@ export default function PendingApprovalList({
                                         <div className="text-[10px] text-muted-foreground truncate">{date}</div>
                                     </div>
 
-                                    <Badge variant="secondary" className="text-[10px] font-black">
-                                        {total.toLocaleString()}
-                                    </Badge>
+                                    <div className="flex flex-col items-end gap-1">
+                                        <Badge variant="secondary" className="text-[10px] font-black">
+                                            {total.toLocaleString()}
+                                        </Badge>
+                                        {statusTab !== "pending" && (
+                                            <Badge variant={Number(row.inventory_status) === 8 || Number(row.inventory_status) === 4 ? "destructive" : "outline"} className="text-[9px] font-bold uppercase">
+                                                {Number(row.inventory_status) === 8 || Number(row.inventory_status) === 4 ? "Rejected" : Number(row.inventory_status) === 3 || Number(row.inventory_status) === 13 ? "Approved" : "Pending"}
+                                            </Badge>
+                                        )}
+                                    </div>
                                 </div>
                             </button>
                         );

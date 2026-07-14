@@ -440,9 +440,12 @@ type PoHeaderRow = {
     receiving_type?: number | null;
     user_created?: string | number | { first_name?: string; last_name?: string } | null;
     encoder_id?: string | number | { first_name?: string; last_name?: string } | null;
+    remark?: string | null;
+    remarks?: string | null;
+    date_approved?: string | null;
 };
 
-async function fetchPendingPOs(base: string): Promise<PoHeaderRow[]> {
+async function fetchPendingPOs(base: string, statusFilter: string = "pending"): Promise<PoHeaderRow[]> {
     const fields = [
         "purchase_order_id",
         "purchase_order_no",
@@ -454,6 +457,7 @@ async function fetchPendingPOs(base: string): Promise<PoHeaderRow[]> {
         "approver_id",
         "date_approved",
         "receiving_type",
+        "remark",
         "user_created.first_name",
         "user_created.last_name",
         "encoder_id.user_id",
@@ -463,7 +467,19 @@ async function fetchPendingPOs(base: string): Promise<PoHeaderRow[]> {
         "encoder_id.last_name",
     ].join(",");
 
-    const url = `${base}/items/${PO_COLLECTION}?limit=-1&sort=-date_encoded&fields=${fields}&filter[date_approved][_null]=true&filter[approver_id][_null]=true`;
+    let filterQuery = "";
+    if (statusFilter === "rejected") {
+        filterQuery = "&filter[inventory_status][_in]=8,4";
+    } else if (statusFilter === "approved") {
+        filterQuery = "&filter[inventory_status][_in]=3,13";
+    } else if (statusFilter === "all") {
+        filterQuery = "";
+    } else {
+        // pending
+        filterQuery = "&filter[date_approved][_null]=true&filter[approver_id][_null]=true&filter[inventory_status][_nin]=3,7,8,13";
+    }
+
+    const url = `${base}/items/${PO_COLLECTION}?limit=-1&sort=-date_encoded&fields=${fields}${filterQuery}`;
     const j = await fetchJson(url) as { data: PoHeaderRow[] };
     return Array.isArray(j?.data) ? j.data : [];
 }
@@ -843,6 +859,10 @@ async function buildPurchaseOrderDetail(base: string, poId: number) {
         poNumber,
         date,
         currency,
+        inventory_status: (header as Record<string, unknown>)?.inventory_status,
+        remark: (header as Record<string, unknown>)?.remark ? String((header as Record<string, unknown>).remark) : ((header as Record<string, unknown>)?.remarks ? String((header as Record<string, unknown>).remarks) : undefined),
+        remarks: (header as Record<string, unknown>)?.remark ? String((header as Record<string, unknown>).remark) : ((header as Record<string, unknown>)?.remarks ? String((header as Record<string, unknown>).remarks) : undefined),
+        date_approved: (header as Record<string, unknown>)?.date_approved ? String((header as Record<string, unknown>).date_approved) : undefined,
 
         supplierId,
         supplierName,
@@ -950,7 +970,8 @@ export async function GET(req: NextRequest) {
             return ok(detail);
         }
 
-        const headers = await fetchPendingPOs(base);
+        const statusFilter = req.nextUrl.searchParams.get("status") || "pending";
+        const headers = await fetchPendingPOs(base, statusFilter);
         const poIds = uniqNums(headers.map((h) => h.purchase_order_id));
         const lines = await fetchPOProductsByPOIds(base, poIds);
 
@@ -1075,6 +1096,10 @@ export async function GET(req: NextRequest) {
                 is_invoice: (Number(h.receiving_type) === 2) || (String(h.is_invoice ?? h.isInvoice).toLowerCase() === "true") || !!(h.is_invoice ?? h.isInvoice),
 
                 preparer_name: getPreparer(),
+                inventory_status: h.inventory_status,
+                remark: h.remark ? String(h.remark) : (h.remarks ? String(h.remarks) : undefined),
+                remarks: h.remark ? String(h.remark) : (h.remarks ? String(h.remarks) : undefined),
+                date_approved: h.date_approved ? String(h.date_approved) : undefined,
             };
         }).filter(Boolean); // remove nulls
 
@@ -1095,6 +1120,36 @@ export async function POST(req: NextRequest) {
 
         const poId = toNum(id);
         if (!poId) return bad("Invalid id.", 400);
+
+        const isReject = body?.action === "reject" || Boolean(body?.reject) || body?.status === "REJECTED";
+        if (isReject) {
+            console.log(`[APPROVAL DEBUG] PO #${poId} rejected. Set inventory_status to 8 (Rejected).`);
+            const nowStr = (() => {
+                const d = new Date();
+                const datePart = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(d);
+                const timePart = new Intl.DateTimeFormat("en-US", {
+                    timeZone: "Asia/Manila",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                    hour12: false
+                }).format(d);
+                return `${datePart} ${timePart}`;
+            })();
+            const rejectPatch: Record<string, unknown> = {
+                date_approved: nowStr,
+                approver_id: body?.approver_id ?? body?.approverId ?? null,
+                inventory_status: 8, // 8 = Rejected
+            };
+            if (body?.remarks !== undefined && body?.remarks !== null) {
+                rejectPatch.remark = String(body.remarks);
+            } else if (body?.remark !== undefined && body?.remark !== null) {
+                rejectPatch.remark = String(body.remark);
+            }
+            const url = `${base}/items/${PO_COLLECTION}/${encodeURIComponent(String(poId))}`;
+            await fetchJson(url, { method: "PATCH", body: JSON.stringify(rejectPatch) });
+            return ok({ ok: true, rejected: true });
+        }
 
         console.log(`[APPROVAL DEBUG] PO #${poId} approved. Set status to 13 (For Receiving). MarkAsInvoice: ${Boolean(body?.markAsInvoice)}`);
 
