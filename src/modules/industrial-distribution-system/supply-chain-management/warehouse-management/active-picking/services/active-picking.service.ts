@@ -93,11 +93,8 @@ export const ActivePickingService = {
 
         // ---------------------------
 
-        // PH Manila Time (+08:00)
-        const now = new Date();
-        const manilaOffset = 8 * 60; // minutes
-        const manilaTime = new Date(now.getTime() + (manilaOffset + now.getTimezoneOffset()) * 60000);
-        const timestamp = manilaTime.toISOString().replace('Z', '+08:00');
+        // PH Manila Time
+        const timestamp = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Manila" }).replace(' ', 'T');
 
         // Calculate quantity directly to avoid internal GET in updatePickedQuantity
         const targetNewQty = detail.picked_quantity + 1;
@@ -128,11 +125,8 @@ export const ActivePickingService = {
         // 1. Delete mapping
         await ActivePickingRepo.deleteSerialMapping(mappingId);
 
-        // PH Manila Time (+08:00)
-        const now = new Date();
-        const manilaOffset = 8 * 60; // minutes
-        const manilaTime = new Date(now.getTime() + (manilaOffset + now.getTimezoneOffset()) * 60000);
-        const timestamp = manilaTime.toISOString().replace('Z', '+08:00');
+        // PH Manila Time
+        const timestamp = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Manila" }).replace(' ', 'T');
 
         // 2. Decrement picked quantity
         const newQty = await ActivePickingRepo.updatePickedQuantity(detailId, -1, userId, timestamp);

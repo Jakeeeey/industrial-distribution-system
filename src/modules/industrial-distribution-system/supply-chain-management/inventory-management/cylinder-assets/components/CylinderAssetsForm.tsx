@@ -54,7 +54,7 @@ const defaultRow = (): SerialRow => ({
 });
 
 const STATUS_OPTIONS: { value: CylinderStatus; label: string }[] = [
-  { value: "AVAILABLE", label: "Available" },
+  { value: "AVAILABLE", label: "Full" },
   { value: "WITH_CUSTOMER", label: "With Customer" },
   { value: "EMPTY", label: "Empty" },
 ];
@@ -76,7 +76,7 @@ export function CylinderAssetsForm({
   updateAsset,
 }: Props) {
   const [loading, setLoading] = useState(false);
-  const [products, setProducts] = useState<{ value: string; label: string }[]>([]);
+  const [products, setProducts] = useState<{ value: string; label: string; uom: number | null }[]>([]);
   const [branches, setBranches] = useState<{ value: string; label: string }[]>([]);
   const [customers, setCustomers] = useState<{ value: string; label: string }[]>([]);
   const [customerSearch, setCustomerSearch] = useState("");
@@ -108,6 +108,7 @@ export function CylinderAssetsForm({
               return {
                 value: String(p.product_id),
                 label: `${p.product_code} — ${p.product_name}${uomLabel}`,
+                uom: p.unit_of_measurement,
               };
             })
           );
@@ -125,6 +126,24 @@ export function CylinderAssetsForm({
       })
       .catch(console.error);
   }, [open]);
+
+  // Enforce status based on product UOM
+  useEffect(() => {
+    if (productId && products.length > 0) {
+      const selected = products.find(p => p.value === productId);
+      if (selected) {
+        if (selected.uom === 23) {
+          // FULL UOM => force status FULL (AVAILABLE)
+          setRows(prev => prev.map(r => ({ ...r, cylinder_status: "AVAILABLE", customer_code: "" })));
+          setEditData(prev => ({ ...prev, cylinder_status: "AVAILABLE", current_customer_code: null }));
+        } else if (selected.uom === 18) {
+          // EMPTY UOM => force status EMPTY
+          setRows(prev => prev.map(r => ({ ...r, cylinder_status: "EMPTY", customer_code: "" })));
+          setEditData(prev => ({ ...prev, cylinder_status: "EMPTY", current_customer_code: null }));
+        }
+      }
+    }
+  }, [productId, products]);
 
   // Fetch customers with debounce
   useEffect(() => {
@@ -282,16 +301,18 @@ export function CylinderAssetsForm({
 
   const validRows = rows.filter((r) => r.serial_number.trim() !== "").length;
   const isCreateMode = !id;
+  const selectedProduct = products.find(p => p.value === productId);
+  const isStatusLocked = selectedProduct?.uom === 23 || selectedProduct?.uom === 18;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent 
-        className="sm:max-w-[920px] max-h-[90vh] overflow-y-auto"
+        className="sm:max-w-[920px] max-h-[95vh] w-[95vw] sm:w-full flex flex-col p-0 overflow-hidden gap-0"
         onWheel={(e) => e.stopPropagation()}
       >
-        <form onSubmit={handleSubmit}>
-          <DialogHeader className="pb-2">
-            <DialogTitle className="text-xl">
+        <form onSubmit={handleSubmit} className="flex flex-col h-full max-h-[95vh] overflow-hidden">
+          <DialogHeader className="px-5 sm:px-6 py-4 border-b shrink-0 bg-background z-10 relative">
+            <DialogTitle className="text-xl pr-6 leading-tight">
               {isCreateMode ? "Register Cylinder Assets" : "Edit Cylinder Asset"}
             </DialogTitle>
             <DialogDescription>
@@ -301,9 +322,12 @@ export function CylinderAssetsForm({
             </DialogDescription>
           </DialogHeader>
 
+          {/* Scrollable Form Content */}
+          <div className="p-5 sm:px-6 sm:py-5 overflow-y-auto flex-1 custom-scrollbar">
+
           {/* ── Header: Product + Branch ─────────────────────── */}
-          <div className="flex flex-col gap-3 pt-4 pb-2">
-            <div className="space-y-2">
+          <div className="flex flex-col sm:flex-row gap-4 pb-2">
+            <div className="space-y-2 flex-1">
               <Label className="flex items-center gap-1.5 text-sm font-medium">
                 <Package className="h-3.5 w-3.5 text-blue-500" />
                 Product <span className="text-red-500">*</span>
@@ -316,7 +340,7 @@ export function CylinderAssetsForm({
                 className="w-full"
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 flex-1">
               <Label className="flex items-center gap-1.5 text-sm font-medium">
                 <Building2 className="h-3.5 w-3.5 text-blue-500" />
                 Branch
@@ -345,22 +369,115 @@ export function CylinderAssetsForm({
                 </div>
               </div>
 
-              {/* Table header */}
-              <div className="rounded-lg border border-border/60 overflow-hidden">
-                <div className="grid grid-cols-[1.5fr_1fr_1fr_1.8fr_0.8fr_auto] gap-0 bg-muted/40 border-b border-border/60 px-3 py-2">
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              {/* Mobile Cards (hidden on desktop) */}
+              <div className="block lg:hidden space-y-4">
+                {rows.map((row, index) => {
+                  const isDuplicated = (row.serial_number.trim() !== "" &&
+                    rows.filter(r => r.serial_number.trim().toLowerCase() === row.serial_number.trim().toLowerCase()).length > 1) ||
+                    (apiDuplicateSerials.includes(row.serial_number.trim()));
+                  
+                  return (
+                    <div key={row.id} className="rounded-xl border border-border/60 bg-card shadow-sm overflow-hidden flex flex-col relative animate-in fade-in slide-in-from-bottom-2 duration-300">
+                      <div className="bg-muted/30 px-3 py-2 flex items-center justify-between border-b border-border/60">
+                        <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">Asset {index + 1}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                          onClick={() => removeRow(row.id)}
+                          disabled={rows.length === 1}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      
+                      <div className="p-3.5 space-y-4">
+                        <div className="space-y-1.5">
+                          <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest ml-0.5 opacity-70">Serial Number</Label>
+                          <Input
+                            placeholder={`e.g. CYL-${String(index + 1).padStart(4, "0")}`}
+                            value={row.serial_number}
+                            onChange={(e) => updateRow(row.id, "serial_number", e.target.value)}
+                            className={`h-11 text-base font-mono font-medium shadow-sm transition-all focus-visible:ring-blue-500 ${isDuplicated ? 'border-red-500 bg-red-50/50 text-red-900 focus-visible:ring-red-500 dark:border-red-500/50 dark:bg-red-500/10 dark:text-red-200' : ''}`}
+                            disabled={!productId}
+                          />
+                        </div>
+                        
+                        <div className="grid grid-cols-1 gap-3">
+                          <div className="space-y-1.5">
+                            <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest ml-0.5 opacity-70">Condition</Label>
+                            <Select
+                              value={row.cylinder_condition}
+                              onValueChange={(val: CylinderCondition) =>
+                                updateRow(row.id, "cylinder_condition", val)
+                              }
+                              disabled={!productId}
+                            >
+                              <SelectTrigger className="h-11 shadow-sm border-border/60">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {CONDITION_OPTIONS.map((opt) => (
+                                  <SelectItem key={opt.value} value={opt.value} className="text-sm py-2">
+                                    {opt.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest ml-0.5 opacity-70">Expiration</Label>
+                            <Input
+                              type="date"
+                              value={row.expiration_date}
+                              onChange={(e) => updateRow(row.id, "expiration_date", e.target.value)}
+                              className={`h-11 text-sm shadow-sm border-border/60 ${showValidation && !row.expiration_date ? 'border-red-500 bg-red-50/50 text-red-900 focus-visible:ring-red-500 dark:border-red-500/50 dark:bg-red-500/10 dark:text-red-200' : ''}`}
+                              disabled={!productId}
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest ml-0.5 opacity-70">Tare Weight (kg)</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              placeholder="0.00"
+                              value={row.tare_weight}
+                              onChange={(e) => updateRow(row.id, "tare_weight", e.target.value)}
+                              onBlur={(e) => {
+                                const val = parseFloat(e.target.value);
+                                if (!isNaN(val)) {
+                                  updateRow(row.id, "tare_weight", val.toFixed(2));
+                                }
+                              }}
+                              className={`h-11 text-sm shadow-sm border-border/60 ${showValidation && (!row.tare_weight || isNaN(Number(row.tare_weight))) ? 'border-red-500 bg-red-50/50 text-red-900 focus-visible:ring-red-500 dark:border-red-500/50 dark:bg-red-500/10 dark:text-red-200' : ''}`}
+                              disabled={!productId}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop Table Header (hidden on mobile) */}
+              <div className="hidden lg:block rounded-lg border border-border/60 overflow-x-auto custom-scrollbar shadow-sm bg-card">
+                <div className="min-w-[800px]">
+                  <div className="grid grid-cols-[1.5fr_1.2fr_1.5fr_1fr_auto] gap-0 bg-muted/40 border-b border-border/60 px-3 py-2.5">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">
                     Serial Number
                   </span>
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Status
-                  </span>
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">
                     Condition
                   </span>
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1 flex items-center gap-2">
                     Expiration
                   </span>
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">
                     Tare (kg)
                   </span>
                   <span className="w-8" />
@@ -372,37 +489,16 @@ export function CylinderAssetsForm({
                       rows.filter(r => r.serial_number.trim().toLowerCase() === row.serial_number.trim().toLowerCase()).length > 1) ||
                       (apiDuplicateSerials.includes(row.serial_number.trim()));
                     return (
-                      <div key={row.id} className="px-3 py-2 hover:bg-muted/10 transition-colors space-y-2">
+                      <div key={row.id} className="px-3 py-2 hover:bg-muted/10 transition-colors space-y-2 group">
                         {/* Main row: serial / status / condition / delete / expiration */}
-                        <div className="grid grid-cols-[1.5fr_1fr_1fr_1.8fr_0.8fr_auto] gap-2 items-center">
+                        <div className="grid grid-cols-[1.5fr_1.2fr_1.5fr_1fr_auto] gap-2 items-center">
                           <Input
                             placeholder={`e.g. CYL-${String(index + 1).padStart(4, "0")}`}
                             value={row.serial_number}
                             onChange={(e) => updateRow(row.id, "serial_number", e.target.value)}
-                            className={`h-8 text-sm font-mono ${isDuplicated ? 'border-red-500 bg-red-50/50 text-red-900 focus-visible:ring-red-500 dark:border-red-500/50 dark:bg-red-500/10 dark:text-red-200' : ''}`}
+                            className={`h-9 text-sm font-mono shadow-sm border-border/60 transition-all focus-visible:ring-blue-500 ${isDuplicated ? 'border-red-500 bg-red-50/50 text-red-900 focus-visible:ring-red-500 dark:border-red-500/50 dark:bg-red-500/10 dark:text-red-200' : ''}`}
                             disabled={!productId}
                           />
-                          <Select
-                            value={row.cylinder_status}
-                            onValueChange={(val: CylinderStatus) => {
-                              updateRow(row.id, "cylinder_status", val);
-                              if (val !== "WITH_CUSTOMER") {
-                                updateRow(row.id, "customer_code", "");
-                              }
-                            }}
-                            disabled={!productId}
-                          >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {STATUS_OPTIONS.map((opt) => (
-                                <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                                  {opt.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
                           <Select
                             value={row.cylinder_condition}
                             onValueChange={(val: CylinderCondition) =>
@@ -410,7 +506,7 @@ export function CylinderAssetsForm({
                             }
                             disabled={!productId}
                           >
-                            <SelectTrigger className="h-8 text-xs">
+                            <SelectTrigger className="h-9 text-xs shadow-sm border-border/60">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -421,12 +517,12 @@ export function CylinderAssetsForm({
                               ))}
                             </SelectContent>
                           </Select>
-                          <div className="flex items-center gap-1 group">
+                          <div className="flex items-center gap-1">
                             <Input
                               type="date"
                               value={row.expiration_date}
                               onChange={(e) => updateRow(row.id, "expiration_date", e.target.value)}
-                              className={`h-8 text-[11px] px-2 flex-1 min-w-0 ${showValidation && !row.expiration_date ? 'border-red-500 bg-red-50/50 text-red-900 focus-visible:ring-red-500 dark:border-red-500/50 dark:bg-red-500/10 dark:text-red-200' : ''}`}
+                              className={`h-9 text-[11px] px-2 flex-1 min-w-0 shadow-sm border-border/60 ${showValidation && !row.expiration_date ? 'border-red-500 bg-red-50/50 text-red-900 focus-visible:ring-red-500 dark:border-red-500/50 dark:bg-red-500/10 dark:text-red-200' : ''}`}
                               disabled={!productId}
                             />
                           </div>
@@ -443,7 +539,7 @@ export function CylinderAssetsForm({
                                   updateRow(row.id, "tare_weight", val.toFixed(2));
                                 }
                               }}
-                              className={`h-8 text-xs flex-1 ${showValidation && (!row.tare_weight || isNaN(Number(row.tare_weight))) ? 'border-red-500 bg-red-50/50 text-red-900 focus-visible:ring-red-500 dark:border-red-500/50 dark:bg-red-500/10 dark:text-red-200' : ''}`}
+                              className={`h-9 text-xs flex-1 shadow-sm border-border/60 ${showValidation && (!row.tare_weight || isNaN(Number(row.tare_weight))) ? 'border-red-500 bg-red-50/50 text-red-900 focus-visible:ring-red-500 dark:border-red-500/50 dark:bg-red-500/10 dark:text-red-200' : ''}`}
                               disabled={!productId}
                             />
                           </div>
@@ -451,34 +547,21 @@ export function CylinderAssetsForm({
                             type="button"
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-red-500"
+                            className="h-8 w-8 text-muted-foreground hover:text-red-500 hover:bg-red-50 opacity-50 group-hover:opacity-100 transition-opacity"
                             onClick={() => removeRow(row.id)}
                             disabled={rows.length === 1}
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
-
-                        {/* Customer lookup — only when WITH_CUSTOMER */}
-                        {row.cylinder_status === "WITH_CUSTOMER" && (
-                          <div className="pl-0.5 pb-1">
-                            <SearchableSelect
-                              options={customers}
-                              value={row.customer_code}
-                              onValueChange={(val) => updateRow(row.id, "customer_code", val)}
-                              onSearchChange={setCustomerSearch}
-                              placeholder={isCustomerLoading ? "Searching..." : "Select customer..."}
-                              className="h-8 text-xs"
-                            />
-                          </div>
-                        )}
                       </div>
                     );
                   })}
+                  </div>
                 </div>
               </div>
 
-              <div className="flex justify-start">
+              <div className="flex justify-end pt-2">
                 <Button
                   type="button"
                   variant="outline"
@@ -576,6 +659,7 @@ export function CylinderAssetsForm({
                         current_customer_code: val !== "WITH_CUSTOMER" ? null : p.current_customer_code,
                       }));
                     }}
+                    disabled={isStatusLocked}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -637,15 +721,16 @@ export function CylinderAssetsForm({
               placeholder="Optional notes..."
             />
           </div>
+          </div> {/* End Scrollable Form Content */}
 
-          <DialogFooter className="pt-4">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <DialogFooter className="px-5 sm:px-6 py-4 border-t shrink-0 bg-gray-50/50 dark:bg-zinc-900/50 flex-row justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
               Cancel
             </Button>
             <Button
               type="submit"
               disabled={loading || (isCreateMode && (!productId || validRows === 0))}
-              className="bg-blue-600 hover:bg-blue-700 text-white min-w-[120px]"
+              className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto sm:min-w-[120px]"
             >
               {loading
                 ? "Saving..."

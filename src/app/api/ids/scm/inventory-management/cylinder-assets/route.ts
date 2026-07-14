@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
       status: searchParams.get("status") || undefined,
       productId: (productId !== undefined && !isNaN(productId)) ? productId : undefined,
       condition: searchParams.get("condition") || undefined,
+      expirationStatus: searchParams.get("expirationStatus") || undefined,
       page: searchParams.get("page") ? Number(searchParams.get("page")) : 1,
       limit: searchParams.get("limit") ? Number(searchParams.get("limit")) : 10,
       sort: searchParams.get("sort") || undefined,

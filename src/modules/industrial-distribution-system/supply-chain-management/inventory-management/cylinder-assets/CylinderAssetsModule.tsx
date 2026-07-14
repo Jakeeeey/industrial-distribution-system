@@ -17,6 +17,7 @@ export default function CylinderAssetsModule() {
     filters,
     pagination,
     sorting,
+    globalStats,
     createBulkAssets,
     updateAsset,
     deleteAsset,
@@ -69,6 +70,7 @@ export default function CylinderAssetsModule() {
         filters={filters}
         pagination={pagination}
         sorting={sorting}
+        globalStats={globalStats}
       />
 
       <CylinderAssetsForm
