@@ -247,7 +247,8 @@ export async function GET(req: NextRequest) {
     const suppliersMap = new Map<number, SupplierDetail>();
     if (supplierIdsToFetch.length > 0) {
       const sUrl = new URL(`${DIRECTUS_BASE}/items/suppliers`);
-      sUrl.searchParams.set("filter[id][_in]", supplierIdsToFetch.join(","));
+      sUrl.searchParams.set("filter[_and][0][id][_in]", supplierIdsToFetch.join(","));
+      sUrl.searchParams.set("filter[_and][1][division_id][_eq]", "1");
       sUrl.searchParams.set(
         "fields",
         "id,supplier_name,supplier_shortcut,supplier_type",
@@ -342,8 +343,9 @@ export async function GET(req: NextRequest) {
     // 2. FETCH PRICE CHANGE REQUESTS (APPROVED)
     // =========================================================================
     const pcrUrl = new URL(`${DIRECTUS_BASE}/items/price_change_requests`);
-    pcrUrl.searchParams.set("filter[product_id][_eq]", String(productId));
-    pcrUrl.searchParams.set("filter[status][_eq]", "APPROVED");
+    pcrUrl.searchParams.set("filter[_and][0][product_id][_eq]", String(productId));
+    pcrUrl.searchParams.set("filter[_and][1][status][_eq]", "APPROVED");
+    pcrUrl.searchParams.set("filter[_and][2][product_id][product_brand][is_industrial][_eq]", "1");
     pcrUrl.searchParams.set(
       "fields",
       "request_id,product_id,product_id.product_id,product_id.product_code,product_id.product_name,price_type_id,price_type_id.price_type_id,price_type_id.price_type_name,price_type_id.sort,proposed_price,status,requested_by,requested_at,approved_by,approved_at,rejected_by,rejected_at,reject_reason",

@@ -244,6 +244,8 @@ export async function GET(req: NextRequest) {
             andIdx += 1;
         };
 
+        addAnd("[product_id][product_brand][is_industrial][_eq]", "1");
+
         if (status) addAnd("[status][_eq]", status);
         if (product_id) addAnd("[product_id][_eq]", product_id);
         if (requested_by) addAnd("[requested_by][_eq]", requested_by);
