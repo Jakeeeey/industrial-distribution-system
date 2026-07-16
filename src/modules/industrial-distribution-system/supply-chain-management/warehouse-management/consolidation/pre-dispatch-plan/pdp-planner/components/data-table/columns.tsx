@@ -4,10 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DispatchPlan } from "@/modules/industrial-distribution-system/supply-chain-management/warehouse-management/consolidation/pre-dispatch-plan/types/dispatch-plan.schema";
 import { ColumnDef } from "@tanstack/react-table";
-import {
-  formatNumber,
-  formatPeso,
-} from "@/modules/industrial-distribution-system/supply-chain-management/warehouse-management/consolidation/pre-dispatch-plan/utils/format";
+import { formatNumber, formatPeso } from "@/modules/industrial-distribution-system/supply-chain-management/warehouse-management/consolidation/pre-dispatch-plan/utils/format";
 
 /**
  * Returns the appropriate badge variant based on dispatch plan status.
@@ -25,6 +22,8 @@ function getStatusVariant(
     case "Picking":
     case "Picked":
       return "secondary";
+    case "Rejected":
+      return "destructive";
     default:
       return "outline";
   }
@@ -37,9 +36,11 @@ function getStatusVariant(
 export function getPDPPlannerColumns({
   onView,
   onApprove,
+  onReject,
 }: {
   onView: (plan: DispatchPlan) => void;
   onApprove: (plan: DispatchPlan) => void;
+  onReject: (plan: DispatchPlan) => void;
 }): ColumnDef<DispatchPlan>[] {
   return [
     {
@@ -68,14 +69,16 @@ export function getPDPPlannerColumns({
       id: "cluster",
       header: "Cluster",
       cell: ({ row }) => (
-        <span className="font-medium">{row.original.cluster_name || "—"}</span>
+        <span className="font-medium line-clamp-1 max-w-[120px]">
+          {row.original.cluster_name || "—"}
+        </span>
       ),
     },
     {
       id: "branch",
       header: "Branch",
       cell: ({ row }) => (
-        <span className="font-medium text-xs text-muted-foreground">
+        <span className="font-medium text-xs text-muted-foreground line-clamp-1 max-w-[120px]">
           {row.original.branch_name || "—"}
         </span>
       ),
@@ -84,7 +87,9 @@ export function getPDPPlannerColumns({
       id: "driver",
       header: "Driver",
       cell: ({ row }) => (
-        <span className="font-medium">{row.original.driver_name || "—"}</span>
+        <span className="font-medium line-clamp-1 max-w-[150px]">
+          {row.original.driver_name || "—"}
+        </span>
       ),
     },
     {
@@ -100,7 +105,9 @@ export function getPDPPlannerColumns({
         const capacity = row.original.capacity_percentage || 0;
         return (
           <div className="flex flex-col">
-            <span className="font-semibold">{formatNumber(weight)} kg</span>
+            <span className="font-semibold">
+              {formatNumber(weight)} kg
+            </span>
             <span
               className={`text-[10px] font-medium ${
                 capacity > 100
@@ -149,6 +156,15 @@ export function getPDPPlannerColumns({
                 onClick={() => onApprove(row.original)}
               >
                 Approve
+              </Button>
+            )}
+            {isPending && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => onReject(row.original)}
+              >
+                Reject
               </Button>
             )}
             <Button

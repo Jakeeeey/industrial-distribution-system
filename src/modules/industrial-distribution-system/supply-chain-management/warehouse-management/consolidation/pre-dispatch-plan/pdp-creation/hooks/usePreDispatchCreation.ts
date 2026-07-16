@@ -62,7 +62,7 @@ export function usePreDispatchCreation() {
     setError(null);
     try {
       const params = new URLSearchParams({
-        status: "Pending",
+        status: "Pending,Rejected",
         limit: "-1",
       });
 
@@ -85,9 +85,9 @@ export function usePreDispatchCreation() {
       setPendingData(plansRes.data || []);
       setPendingTotal(
         plansRes.meta?.filter_count ||
-          plansRes.meta?.total_count ||
-          plansRes.data?.length ||
-          0,
+        plansRes.meta?.total_count ||
+        plansRes.data?.length ||
+        0,
       );
     } catch (e: unknown) {
       const err = e as Error;
@@ -108,16 +108,18 @@ export function usePreDispatchCreation() {
   // ─── Fetch Available Orders by Cluster ────────────
   const fetchAvailableOrders = useCallback(
     async (
-      targetClusterId?: number,
+      targetClusterId?: number | null,
       orderSearch?: string,
-      targetBranchId?: number,
+      targetBranchId?: number | null,
     ) => {
       setIsLoadingOrders(true);
       try {
         const params = new URLSearchParams({ type: "available_orders" });
         // Use the passed ids or the global filter ids
-        const activeClusterId = targetClusterId || clusterId;
-        const activeBranchId = targetBranchId || branchId;
+        const activeClusterId =
+          targetClusterId !== undefined ? targetClusterId : clusterId;
+        const activeBranchId =
+          targetBranchId !== undefined ? targetBranchId : branchId;
 
         if (activeClusterId) params.set("cluster_id", String(activeClusterId));
         if (activeBranchId) params.set("branch_id", String(activeBranchId));
