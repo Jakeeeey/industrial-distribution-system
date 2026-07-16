@@ -1,4 +1,4 @@
-﻿import {
+import {
     Breadcrumb,
     BreadcrumbItem,
     BreadcrumbLink,
@@ -11,17 +11,9 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { NavUser } from "@/components/shared/app-sidebar/nav-user";
 
 import { cookies } from "next/headers";
-<<<<<<< HEAD
 
 import StockAdjustmentSerialSummaryModule from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment-serial-summary/StockAdjustmentSerialSummaryModule";
-=======
-<<<<<<<< HEAD:src/app/(industrial-distribution-system)/industrial-distribution-system/scm/inventory-control/page.tsx
-import InventoryControlModule from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/inventory-control/InventoryControlModule";
-========
 
-import StockAdjustmentSerialSummaryModule from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment-serial-summary/StockAdjustmentSerialSummaryModule";
->>>>>>>> master:src/app/(industrial-distribution-system)/industrial-distribution-system/scm/stock-adjustment/stock-adjustment-summary/page.tsx
->>>>>>> master
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -115,7 +107,7 @@ export default async function Page(props: {
                                     <BreadcrumbLink href="#">SCM</BreadcrumbLink>
                                 </BreadcrumbItem>
                                 <BreadcrumbSeparator className="hidden md:block shrink-0" />
-<<<<<<< HEAD
+
                                 <BreadcrumbItem className="hidden md:block shrink-0">
                                     <BreadcrumbLink href="#">Stock Adjustment</BreadcrumbLink>
                                 </BreadcrumbItem>
@@ -123,15 +115,7 @@ export default async function Page(props: {
                                 <BreadcrumbItem className="min-w-0 overflow-hidden">
                                     <BreadcrumbPage className="truncate max-w-[56vw] sm:max-w-[60vw] md:max-w-none">
                                         Stock Adjustment Summary
-=======
-                                <BreadcrumbItem className="min-w-0 overflow-hidden">
-                                    <BreadcrumbPage className="truncate max-w-[56vw] sm:max-w-[60vw] md:max-w-none">
-<<<<<<<< HEAD:src/app/(industrial-distribution-system)/industrial-distribution-system/scm/inventory-control/page.tsx
-                                        Inventory Control
-========
-                                        Stock Adjustment Serial Summary
->>>>>>>> master:src/app/(industrial-distribution-system)/industrial-distribution-system/scm/stock-adjustment/stock-adjustment-summary/page.tsx
->>>>>>> master
+
                                     </BreadcrumbPage>
                                 </BreadcrumbItem>
                             </BreadcrumbList>
@@ -144,18 +128,11 @@ export default async function Page(props: {
                 </div>
             </header>
 
-<<<<<<< HEAD
+
+
             <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4 bg-muted/20">
                 <StockAdjustmentSerialSummaryModule />
-=======
-<<<<<<<< HEAD:src/app/(industrial-distribution-system)/industrial-distribution-system/scm/inventory-control/page.tsx
-            <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4">
-                <InventoryControlModule />
-========
-            <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4 bg-muted/20">
-                <StockAdjustmentSerialSummaryModule />
->>>>>>>> master:src/app/(industrial-distribution-system)/industrial-distribution-system/scm/stock-adjustment/stock-adjustment-summary/page.tsx
->>>>>>> master
+
             </main>
         </div>
     );
