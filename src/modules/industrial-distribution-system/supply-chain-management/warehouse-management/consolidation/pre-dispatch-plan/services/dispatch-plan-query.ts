@@ -40,7 +40,8 @@ export const dispatchPlanQueryService = {
     };
 
     if (status) {
-      params["filter[status][_eq]"] = status;
+      const op = status.includes(",") ? "_in" : "_eq";
+      params[`filter[status][${op}]`] = status;
     }
 
     if (search) {
@@ -461,6 +462,7 @@ export const dispatchPlanQueryService = {
             customer?.customer_name || customer?.store_name || "\u2014",
           city: customer?.city ?? undefined,
           province: customer?.province ?? undefined,
+          brgy: customer?.brgy ?? undefined,
           amount:
             order?.allocated_amount ??
             order?.net_amount ??
@@ -491,13 +493,13 @@ export const dispatchPlanQueryService = {
     branchId?: number,
   ): Promise<SalesOrderOption[]> {
     // Step 1: Get allowed areas for the cluster
-    let allowedAreas: { province: string; city: string }[] = [];
+    let allowedAreas: { province: string; city: string; baranggay: string | null }[] = [];
     if (clusterId) {
-      const areasRes = await fetchItems<{ province: string; city: string }>(
+      const areasRes = await fetchItems<{ province: string; city: string; baranggay: string | null }>(
         "/items/area_per_cluster",
         {
           "filter[cluster_id][_eq]": clusterId,
-          fields: "province,city",
+          fields: "province,city,baranggay",
           limit: -1,
         },
       );
@@ -611,8 +613,42 @@ export const dispatchPlanQueryService = {
           limit: -1,
         },
       );
-      customerMap = new Map(customers.map((c) => [c.customer_code, c]));
+      customerMap = new Map(customers.map((c) => [c.customer_code?.trim().toUpperCase(), c]));
     }
+
+    // Step 5.2: Resolve cluster names for each customer
+    const [clustersRes, allAreasRes] = await Promise.all([
+      fetchItems<{ id: number; cluster_name: string }>("/items/cluster", { fields: "id,cluster_name", limit: -1 }),
+      fetchItems<{ cluster_id: number; province: string; city: string; baranggay: string | null }>("/items/area_per_cluster", { fields: "cluster_id,province,city,baranggay", limit: -1 }),
+    ]);
+
+    const clusterNameMap = new Map<number, string>();
+    (clustersRes.data || []).forEach(c => clusterNameMap.set(c.id, c.cluster_name));
+    const allAreas = allAreasRes.data || [];
+
+    const getCustomerClusterName = (customer: CustomerInfo | undefined) => {
+      if (!customer) return undefined;
+      const match = allAreas.find((area) => {
+        const cProv = customer.province?.trim().toUpperCase() || "";
+        const aProv = area.province?.trim().toUpperCase() || "";
+        if (cProv !== aProv) return false;
+
+        const aCity = area.city?.trim().toUpperCase() || "";
+        if (aCity !== "") {
+          const cCity = customer.city?.trim().toUpperCase() || "";
+          if (aCity !== cCity) return false;
+        }
+
+        const aBrgy = area.baranggay?.trim().toUpperCase() || "";
+        if (aBrgy !== "") {
+          const cBrgy = customer.brgy?.trim().toUpperCase() || "";
+          if (aBrgy !== cBrgy) return false;
+        }
+
+        return true;
+      });
+      return match ? clusterNameMap.get(match.cluster_id) : undefined;
+    };
 
     // Step 5.5: Filter "Not Fulfilled" by Clearance Status
     const notFulfilledOrderNos = orderList
@@ -667,8 +703,7 @@ export const dispatchPlanQueryService = {
       const { data: assignedDetails } = await fetchItemsInChunks<{
         sales_order_id: number;
       }>("/items/dispatch_plan_details", "sales_order_id", allOrderIds, {
-        "filter[dispatch_id][status][_nin]": "Dispatched,Cancelled,Delivered",
-        "filter[sales_order_id][order_status][_neq]": "Not Fulfilled",
+        "filter[dispatch_id][status][_nin]": "Dispatched,Cancelled,Rejected",
         fields: "sales_order_id",
         limit: -1,
       });
@@ -687,16 +722,34 @@ export const dispatchPlanQueryService = {
       })
       .filter((o) => {
         if (!clusterId || !allowedAreas.length) return true;
-        const customer = customerMap.get(o.customer_code);
+        const customer = customerMap.get(o.customer_code?.trim().toUpperCase());
         if (!customer) return false;
-        return allowedAreas.some(
-          (area) =>
-            area.province?.toUpperCase() === customer.province?.toUpperCase() &&
-            area.city?.toUpperCase() === customer.city?.toUpperCase(),
-        );
+
+        return allowedAreas.some((area) => {
+          // Province must match exactly (ignoring trailing spaces, which MySQL does automatically)
+          const cProv = customer.province?.trim().toUpperCase() || "";
+          const aProv = area.province?.trim().toUpperCase() || "";
+          if (cProv !== aProv) return false;
+
+          // City condition: apc.city = c.city OR apc.city is null OR apc.city = ''
+          const aCity = area.city?.trim().toUpperCase() || "";
+          if (aCity !== "") {
+            const cCity = customer.city?.trim().toUpperCase() || "";
+            if (aCity !== cCity) return false;
+          }
+
+          // Barangay condition: apc.baranggay = c.brgy OR apc.baranggay is null OR apc.baranggay = ''
+          const aBrgy = area.baranggay?.trim().toUpperCase() || "";
+          if (aBrgy !== "") {
+            const cBrgy = customer.brgy?.trim().toUpperCase() || "";
+            if (aBrgy !== cBrgy) return false;
+          }
+
+          return true;
+        });
       })
       .map((o) => {
-        const customer = customerMap.get(o.customer_code);
+        const customer = customerMap.get(o.customer_code?.trim().toUpperCase());
         return {
           order_id: o.order_id,
           order_no: o.order_no,
@@ -705,12 +758,14 @@ export const dispatchPlanQueryService = {
           store_name: customer?.store_name || undefined,
           city: customer?.city || undefined,
           province: customer?.province || undefined,
+          brgy: customer?.brgy || undefined,
           total_amount: o.total_amount,
           net_amount: o.net_amount,
           allocated_amount: o.allocated_amount,
           po_no: o.po_no,
           order_status: o.order_status,
           total_weight: o.total_weight,
+          cluster_name: getCustomerClusterName(customer),
         };
       });
   },

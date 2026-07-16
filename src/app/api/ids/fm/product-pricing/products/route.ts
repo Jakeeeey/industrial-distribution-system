@@ -276,6 +276,7 @@ function applyCommonFilters(args: {
         andIdx += 1;
     };
 
+    addAnd("[product_brand][is_industrial][_eq]", "1");
     if (activeOnly) addAnd("[isActive][_eq]", "1");
 
     if (isSerialized !== undefined && isSerialized !== null) {

@@ -1,3 +1,4 @@
+
 // src/app/api/ids/fm/printables/lookups/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
@@ -88,6 +89,8 @@ async function collectSetsFromProducts(args: {
         sp.set("fields", fields);
         if (categoryId > 0) sp.set("filter[product_category][category_id][_eq]", String(categoryId));
         if (brandId > 0) sp.set("filter[product_brand][brand_id][_eq]", String(brandId));
+        sp.set("filter[product_brand][is_industrial][_eq]", "1");
+        sp.set("filter[isActive][_eq]", "1");
     };
 
     if (Array.isArray(productIds) && productIds.length > 0) {
@@ -131,10 +134,10 @@ export async function GET(req: NextRequest) {
 
         // Fetch Base Lookups
         const [catJson, brandJson, unitJson, supplierJson] = await Promise.all([
-            fetchDirectus<{ data: Record<string, unknown>[] }>(`${DIRECTUS_URL}/items/${CATEGORIES}?limit=-1&fields=category_id,category_name&sort=category_name`),
-            fetchDirectus<{ data: Record<string, unknown>[] }>(`${DIRECTUS_URL}/items/${BRAND}?limit=-1&fields=brand_id,brand_name&sort=brand_name`),
+            fetchDirectus<{ data: Record<string, unknown>[] }>(`${DIRECTUS_URL}/items/${CATEGORIES}?limit=-1&fields=category_id,category_name&sort=category_name&filter[is_industrial][_eq]=1`),
+            fetchDirectus<{ data: Record<string, unknown>[] }>(`${DIRECTUS_URL}/items/${BRAND}?limit=-1&fields=brand_id,brand_name&sort=brand_name&filter[is_industrial][_eq]=1`),
             fetchDirectus<{ data: Record<string, unknown>[] }>(`${DIRECTUS_URL}/items/${UNITS}?limit=-1&fields=unit_id,unit_name,unit_shortcut,order&sort=order,unit_name`),
-            fetchDirectus<{ data: Record<string, unknown>[] }>(`${DIRECTUS_URL}/items/${SUPPLIERS}?limit=-1&fields=id,supplier_name,supplier_shortcut,isActive,address,tin_number,contact_person,phone_number,email_address,city,state_province,supplier_type&sort=supplier_name&filter[isActive][_eq]=1&filter[supplier_type][_eq]=TRADE`),
+            fetchDirectus<{ data: Record<string, unknown>[] }>(`${DIRECTUS_URL}/items/${SUPPLIERS}?limit=-1&fields=id,supplier_name,supplier_shortcut,isActive,address,tin_number,contact_person,phone_number,email_address,city,state_province,supplier_type&sort=supplier_name&filter[isActive][_eq]=1&filter[supplier_type][_eq]=TRADE&filter[division_id][_eq]=1`),
         ]);
 
         let categories = catJson.data ?? [];

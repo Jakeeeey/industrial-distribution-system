@@ -164,6 +164,8 @@ async function collectSetsFromProducts(args: {
         if (brandId > 0) {
             sp.set("filter[product_brand][brand_id][_eq]", String(brandId));
         }
+        sp.set("filter[product_brand][is_industrial][_eq]", "1");
+        sp.set("filter[isActive][_eq]", "1");
     };
 
     if (Array.isArray(productIds) && productIds.length > 0) {
@@ -234,11 +236,13 @@ export async function GET(req: NextRequest) {
         catParams.set("limit", "-1");
         catParams.set("fields", "category_id,category_name");
         catParams.set("sort", "category_name");
+        catParams.set("filter[is_industrial][_eq]", "1");
 
         const brandParams = new URLSearchParams();
         brandParams.set("limit", "-1");
         brandParams.set("fields", "brand_id,brand_name");
         brandParams.set("sort", "brand_name");
+        brandParams.set("filter[is_industrial][_eq]", "1");
 
         const unitParams = new URLSearchParams();
         unitParams.set("limit", "-1");
@@ -251,6 +255,7 @@ export async function GET(req: NextRequest) {
         supplierParams.set("sort", "supplier_name");
         supplierParams.set("filter[isActive][_eq]", "1");
         supplierParams.set("filter[supplier_type][_eq]", "TRADE");
+        supplierParams.set("filter[division_id][_eq]", "1");
 
         const [catJson, brandJson, unitJson, supplierJson] = await Promise.all([
             fetchDirectus<{ data: DirectusCategory[] }>(`${DIRECTUS_URL}/items/${CATEGORIES}?${catParams.toString()}`),

@@ -14,7 +14,7 @@ export const dispatchPlanLifecycleService = {
   /**
    * Creates a new dispatch plan and its detail records.
    */
-  async createPlan(values: DispatchPlanFormValues): Promise<DispatchPlan> {
+  async createPlan(values: DispatchPlanFormValues, userId?: number): Promise<DispatchPlan> {
     const baseUrl = API_BASE_URL?.replace(/\/$/, "");
 
     // Generate dispatch number
@@ -55,6 +55,8 @@ export const dispatchPlanLifecycleService = {
           status: "Pending",
           total_amount: totalAmount,
           remarks: values.remarks || "",
+          created_by: userId,
+          user_created: userId,
         }),
       },
     );
@@ -160,6 +162,20 @@ export const dispatchPlanLifecycleService = {
     await request(`${baseUrl}/items/dispatch_plan/${id}`, {
       method: "PATCH",
       body: JSON.stringify({ status: "Approved" }),
+    });
+  },
+
+  /**
+   * Rejects a dispatch plan by updating its status to 'Rejected' and adding remarks.
+   */
+  async rejectPlan(id: number | string, remarks: string): Promise<void> {
+    const baseUrl = API_BASE_URL?.replace(/\/$/, "");
+    await request(`${baseUrl}/items/dispatch_plan/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        status: "Rejected",
+        reject_remarks: remarks || "",
+      }),
     });
   },
 };

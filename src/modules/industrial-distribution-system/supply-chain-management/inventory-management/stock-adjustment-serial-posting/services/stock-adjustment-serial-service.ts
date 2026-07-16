@@ -1011,7 +1011,17 @@ export const stockAdjustmentService = {
     const res = await directusFetch<{ data: unknown[] }>(`${DIRECTUS_URL}/items/products?${query}`);
     const products = res.data || [];
 
-    return products.map((item: unknown) => {
+    const excludedUnits = ['REFILL', 'OUTRIGHT', 'DEPOSIT', 'SWAP'];
+
+    return products
+      .filter((item: unknown) => {
+        const p = item as Record<string, unknown>;
+        const uom = p['unit_of_measurement'] as Record<string, unknown> | undefined;
+        const unitName = typeof uom?.['unit_name'] === 'string' ? uom['unit_name'].toUpperCase() : '';
+        const fallbackName = typeof p['unit_name'] === 'string' ? p['unit_name'].toUpperCase() : '';
+        return !excludedUnits.includes(unitName) && !excludedUnits.includes(fallbackName);
+      })
+      .map((item: unknown) => {
       const p = item as Record<string, unknown>;
       const uom = p['unit_of_measurement'] as Record<string, unknown> | undefined;
       const brand = p['product_brand'] as Record<string, unknown> | undefined;
@@ -1029,10 +1039,12 @@ export const stockAdjustmentService = {
   /**
    * Fetch active suppliers (nonBuy = 0) for the supplier dropdown.
    */
-  async fetchSuppliers() {
-    const res = await directusFetch<{ data: Array<{ id: number; supplier_name: string; supplier_shortcut: string }> }>(
-      `${DIRECTUS_URL}/items/suppliers?fields=id,supplier_name,supplier_shortcut,nonBuy&filter[nonBuy][_eq]=0&sort=supplier_name&limit=-1`
-    );
+  async fetchSuppliers(divisionId?: number) {
+    let url = `${DIRECTUS_URL}/items/suppliers?fields=id,supplier_name,supplier_shortcut,nonBuy,division_id&filter[nonBuy][_eq]=0&sort=supplier_name&limit=-1`;
+    if (divisionId !== undefined) {
+      url += `&filter[division_id][_eq]=${divisionId}`;
+    }
+    const res = await directusFetch<{ data: Array<{ id: number; supplier_name: string; supplier_shortcut: string }> }>(url);
     return res.data.map((s) => ({
       id: s.id,
       supplier_name: s.supplier_name,
@@ -1089,7 +1101,17 @@ export const stockAdjustmentService = {
     const res = await directusFetch<{ data: unknown[] }>(`${DIRECTUS_URL}/items/products?${query}`);
     const products = res.data || [];
 
-    return products.map((item: unknown) => {
+    const excludedUnits = ['REFILL', 'OUTRIGHT', 'DEPOSIT', 'SWAP'];
+
+    return products
+      .filter((item: unknown) => {
+        const p = item as Record<string, unknown>;
+        const uom = p['unit_of_measurement'] as Record<string, unknown> | undefined;
+        const unitName = typeof uom?.['unit_name'] === 'string' ? uom['unit_name'].toUpperCase() : '';
+        const fallbackName = typeof p['unit_name'] === 'string' ? p['unit_name'].toUpperCase() : '';
+        return !excludedUnits.includes(unitName) && !excludedUnits.includes(fallbackName);
+      })
+      .map((item: unknown) => {
       const p = item as Record<string, unknown>;
       const uom = p['unit_of_measurement'] as Record<string, unknown> | undefined;
       const brand = p['product_brand'] as Record<string, unknown> | undefined;

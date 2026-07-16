@@ -59,8 +59,8 @@ export async function GET(req: NextRequest) {
       filterIdx++;
     }
 
-    // Filter only serialized and active products
-    params.set(`filter[_and][${filterIdx}][is_serialized][_eq]`, "1");
+    // Filter only industrial brand products and active products
+    params.set(`filter[_and][${filterIdx}][product_brand][is_industrial][_eq]`, "1");
     filterIdx++;
     params.set(`filter[_and][${filterIdx}][isActive][_eq]`, "1");
     filterIdx++;
@@ -109,7 +109,9 @@ export async function POST(req: NextRequest) {
       if (u.unit_shortcut) unitShortcutMap.set(u.unit_shortcut.trim().toUpperCase(), u.unit_id);
     }
 
-    const resolvedParentUomId = unitShortcutMap.get("FULL") ?? 16;
+    const isSerialized = body.is_serialized === 1 || body.is_serialized === "1" || body.is_serialized === true;
+
+    const resolvedParentUomId = isSerialized ? (unitShortcutMap.get("FULL") ?? 16) : (body.unit_of_measurement || 16);
 
     const parentPayload = {
       ...body,
@@ -134,7 +136,7 @@ export async function POST(req: NextRequest) {
     const parentProduct = parentData.data;
 
     // If it is a parent product, automatically generate the standard children variations
-    if (isParent && parentProduct && parentProduct.product_id) {
+    if (isParent && parentProduct && parentProduct.product_id && isSerialized) {
       const variants = ["EMPTY", "SWAP", "OUTRIGHT", "DEPOSIT", "REFILL"];
       const parentId = parentProduct.product_id;
 
