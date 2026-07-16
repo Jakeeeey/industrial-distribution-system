@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { RefreshCw, Package, ChevronRight, ChevronLeft } from "lucide-react";
+import { RefreshCw, Package, ChevronRight, ChevronLeft, Loader2 } from "lucide-react";
 import { useReceivingProductsManual } from "../providers/ReceivingProductsManualProvider";
+import { isReceivingPOOpening } from "../utils/receivingManualView";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -19,6 +20,8 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+
+type ReceivingListTab = "normal" | "refill" | "received";
 
 function statusBadge(status: string) {
     const s = String(status || "").toUpperCase();
@@ -38,6 +41,7 @@ export function AvailableForReceivingManual() {
         poList,
         listLoading,
         listError,
+        openingPOId,
         refreshList,
         selectAndVerifyPO,
         selectedPO,
@@ -45,18 +49,22 @@ export function AvailableForReceivingManual() {
         serialsByPorId,
     } = useReceivingProductsManual();
 
-    const [activeTab, setActiveTab] = React.useState<"normal" | "refill">("normal");
+    const [activeTab, setActiveTab] = React.useState<ReceivingListTab>("normal");
     const [q, setQ] = React.useState("");
     const [pendingPO, setPendingPO] = React.useState<{ id: string; poNumber: string } | null>(null);
     const [isSwitchModalOpen, setIsSwitchModalOpen] = React.useState(false);
 
     // Calculate PO counts for badges
     const normalCount = React.useMemo(() => {
-        return (poList ?? []).filter((x) => !x.isRefill).length;
+        return (poList ?? []).filter((x) => receivingTabFor(x) === "normal").length;
     }, [poList]);
 
     const refillCount = React.useMemo(() => {
-        return (poList ?? []).filter((x) => !!x.isRefill).length;
+        return (poList ?? []).filter((x) => receivingTabFor(x) === "refill").length;
+    }, [poList]);
+
+    const receivedCount = React.useMemo(() => {
+        return (poList ?? []).filter((x) => receivingTabFor(x) === "received").length;
     }, [poList]);
 
     const hasUnsavedProgress = React.useMemo(() => {
@@ -88,10 +96,8 @@ export function AvailableForReceivingManual() {
 
     const filtered = React.useMemo(() => {
         const s = q.trim().toLowerCase();
-        // Filter by active tab (normal vs refill PO)
         const tabFiltered = (poList ?? []).filter((x) => {
-            if (activeTab === "refill") return !!x.isRefill;
-            return !x.isRefill;
+            return receivingTabFor(x) === activeTab;
         });
 
         if (!s) return tabFiltered;
@@ -143,7 +149,7 @@ export function AvailableForReceivingManual() {
                 </Button>
             </div>
 
-            {/* Tabs for Normal vs Refill POs */}
+            {/* Tabs for active and received POs */}
             <div className="mt-4 flex border-b border-border shrink-0">
                 <button
                     type="button"
@@ -168,6 +174,18 @@ export function AvailableForReceivingManual() {
                     )}
                 >
                     Refill POs ({refillCount})
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setActiveTab("received")}
+                    className={cn(
+                        "flex-1 pb-2 text-xs font-bold border-b-2 transition-all duration-200",
+                        activeTab === "received"
+                            ? "border-primary text-primary"
+                            : "border-transparent text-muted-foreground hover:text-foreground"
+                    )}
+                >
+                    Received ({receivedCount})
                 </button>
             </div>
 
@@ -227,27 +245,31 @@ export function AvailableForReceivingManual() {
                     </>
                 ) : totalItems === 0 ? (
                     <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                        No purchase orders available.
+                        {activeTab === "received" ? "No received purchase orders found." : "No purchase orders available."}
                     </div>
                 ) : (
                     pageItems.map((po) => {
                         const active = selectedPO?.id === po.id;
                         // Block only if it is the refill tab and PO is not tagged
                         const isNotTagged = activeTab === "refill" && po.isTagged === false;
+                        const isOpening = isReceivingPOOpening(openingPOId, po.id);
+                        const isSwitching = Boolean(openingPOId);
 
                         return (
                             <button
                                 key={po.id}
                                 type="button"
-                                onClick={() => !isNotTagged && initiatePOSwitch(po.id, po.poNumber)}
-                                disabled={isNotTagged}
+                                onClick={() => !isNotTagged && !isSwitching && initiatePOSwitch(po.id, po.poNumber)}
+                                disabled={isNotTagged || isSwitching}
                                 className={cn(
                                     "w-full text-left rounded-xl border border-border p-3 transition relative overflow-hidden",
-                                    !isNotTagged && "hover:bg-muted/40",
+                                    !isNotTagged && !isSwitching && "hover:bg-muted/40",
                                     active && !isNotTagged
                                         ? "ring-2 ring-primary/25 bg-muted/30"
                                         : "bg-background",
-                                    isNotTagged && "opacity-60 cursor-not-allowed bg-slate-50 grayscale"
+                                    isNotTagged && "opacity-60 cursor-not-allowed bg-slate-50 grayscale",
+                                    isSwitching && !isOpening && "opacity-60 cursor-wait",
+                                    isOpening && "ring-2 ring-primary/25 bg-primary/5 cursor-wait"
                                 )}
                             >
                                 <div className="flex items-start justify-between gap-3">
@@ -296,7 +318,11 @@ export function AvailableForReceivingManual() {
                                         </div>
                                     </div>
 
-                                    <ChevronRight className="h-4 w-4 text-muted-foreground mt-1 shrink-0" />
+                                    {isOpening ? (
+                                        <Loader2 className="h-4 w-4 text-primary mt-1 shrink-0 animate-spin" />
+                                    ) : (
+                                        <ChevronRight className="h-4 w-4 text-muted-foreground mt-1 shrink-0" />
+                                    )}
                                 </div>
                             </button>
                         );
@@ -363,4 +389,12 @@ export function AvailableForReceivingManual() {
             </AlertDialog>
         </Card>
     );
+}
+
+function receivingTabFor(po: { status?: string; inventoryStatus?: number; isRefill?: boolean }): ReceivingListTab {
+    const status = String(po.status || "").toUpperCase();
+    if (status === "CLOSED" || status === "RECEIVED" || Number(po.inventoryStatus) === 6) {
+        return "received";
+    }
+    return po.isRefill ? "refill" : "normal";
 }
