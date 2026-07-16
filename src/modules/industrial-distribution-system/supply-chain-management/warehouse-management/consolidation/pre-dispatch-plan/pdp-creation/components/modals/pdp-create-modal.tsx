@@ -63,7 +63,7 @@ interface PDPCreateModalProps {
   masterData: DispatchPlanMasterData | null;
   availableOrders: SalesOrderOption[];
   isLoadingOrders: boolean;
-  onFilterChange: (clusterId?: number, branchId?: number) => void;
+  onFilterChange: (clusterId?: number | null, branchId?: number | null) => void;
   initialClusterId?: number | null;
   initialBranchId?: number | null;
   editPlan?: DispatchPlan | null;
@@ -113,13 +113,20 @@ function AvailableOrderCard({
       onClick={onClick}
     >
       {/* Row 1: SO number + amount */}
-      <div className="flex items-start justify-between gap-2 mb-1.5">
-        <span className="text-sm font-semibold text-primary leading-tight">
+      <div className="flex items-start justify-between gap-2 mb-1.5 w-full">
+        <span className="text-sm font-semibold text-primary leading-tight truncate flex-1 min-w-0" title={order.order_no}>
           {order.order_no}
         </span>
-        <span className="text-sm font-semibold text-foreground tabular-nums shrink-0">
-          {formatPeso(amount)}
-        </span>
+        <div className="flex items-center gap-1.5 shrink-0 justify-end max-w-[60%]">
+          {order.cluster_name && (
+            <Badge variant="outline" title={order.cluster_name} className="text-[9px] h-4 px-1.5 bg-muted/50 max-w-[80px]">
+              <span className="truncate">{order.cluster_name}</span>
+            </Badge>
+          )}
+          <span className="text-sm font-semibold text-foreground tabular-nums shrink-0">
+            {formatPeso(amount)}
+          </span>
+        </div>
       </div>
 
       {/* Row 2: Customer name */}
@@ -127,11 +134,11 @@ function AvailableOrderCard({
         {order.customer_name || order.store_name || "—"}
       </p>
 
-      {/* Row 3: Meta row — PO, status, location, weight */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 min-w-0">
+      {/* Row 3: Meta row — PO, status, weight */}
+      <div className="flex items-center justify-between gap-2 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
           {order.po_no && (
-            <span className="text-[10px] text-muted-foreground font-medium shrink-0">
+            <span className="text-[10px] text-muted-foreground font-medium shrink-0 truncate max-w-[100px]">
               PO: {order.po_no}
             </span>
           )}
@@ -140,7 +147,9 @@ function AvailableOrderCard({
               ·
             </span>
           )}
-          <OrderStatusBadge status={order.order_status} />
+          <div className="shrink-0">
+            <OrderStatusBadge status={order.order_status} />
+          </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <span className="text-[10px] text-muted-foreground tabular-nums">
@@ -150,10 +159,12 @@ function AvailableOrderCard({
       </div>
 
       {/* Row 4: Location */}
-      <div className="flex items-center gap-1 mt-1.5 text-[11px] text-muted-foreground">
+      <div className="flex items-center gap-1 mt-1.5 text-[11px] text-muted-foreground min-w-0 w-full">
         <MapPin className="h-3 w-3 shrink-0" />
-        <span className="truncate">
-          {[order.city, order.province].filter(Boolean).join(", ") || "—"}
+        <span className="truncate flex-1 min-w-0" title={[order.brgy, order.city, order.province].filter(Boolean).join(", ")}>
+          {[order.brgy, order.city, order.province]
+            .filter(Boolean)
+            .join(", ") || "—"}
         </span>
       </div>
     </div>
@@ -212,7 +223,7 @@ export function PDPCreateModal({
           return Number(val) || null;
         };
 
-        const cId = toId(editPlan.cluster_id);
+        const cId = editPlan.cluster_id === null ? -1 : toId(editPlan.cluster_id);
         const bId = toId(editPlan.branch_id);
 
         setDriverId(toId(editPlan.driver_id));
@@ -236,6 +247,7 @@ export function PDPCreateModal({
               customer_name: d.customer_name,
               city: d.city,
               province: d.province,
+              brgy: d.brgy,
               total_amount: d.amount ?? null,
               net_amount: d.amount ?? null,
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -332,6 +344,7 @@ export function PDPCreateModal({
       customer_name: d.customer_name,
       city: d.city,
       province: d.province,
+      brgy: d.brgy,
       total_amount: d.amount ?? null,
       net_amount: d.amount ?? null,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -387,7 +400,7 @@ export function PDPCreateModal({
   }, [effectiveAvailableOrders, manifestOrderIds]);
 
   const handleClusterChange = (value: string) => {
-    const id = Number(value);
+    const id = value === "all" ? -1 : value ? Number(value) : null;
     if (id === clusterId) return;
     if (
       manifestOrders.length > 0 &&
@@ -398,11 +411,13 @@ export function PDPCreateModal({
       return;
     setClusterId(id);
     setManifestOrders([]);
-    onFilterChange(id, branchId || undefined);
+    if (id !== null && branchId !== null) {
+      onFilterChange(id === -1 ? null : id, branchId);
+    }
   };
 
   const handleBranchChange = (value: string) => {
-    const id = Number(value);
+    const id = value ? Number(value) : null;
     if (id === branchId) return;
     if (
       manifestOrders.length > 0 &&
@@ -413,7 +428,9 @@ export function PDPCreateModal({
       return;
     setBranchId(id);
     setManifestOrders([]);
-    onFilterChange(clusterId || undefined, id);
+    if (clusterId !== null && id !== null) {
+      onFilterChange(clusterId === -1 ? null : clusterId, id);
+    }
   };
 
   const handleAddOrder = (order: SalesOrderOption) => {
@@ -426,7 +443,7 @@ export function PDPCreateModal({
 
   const handleSave = async () => {
     if (!driverId) return toast.error("Please select a driver.");
-    if (!clusterId) return toast.error("Please select a target cluster.");
+    if (clusterId === null) return toast.error("Please select a target cluster.");
     if (!branchId) return toast.error("Please select a source branch.");
     if (!vehicleId) return toast.error("Please select a vehicle.");
     if (!dispatchDate) return toast.error("Please set a dispatch date.");
@@ -439,7 +456,7 @@ export function PDPCreateModal({
     try {
       await onSubmit({
         driver_id: driverId,
-        cluster_id: clusterId,
+        cluster_id: clusterId === -1 ? null : clusterId,
         branch_id: branchId,
         vehicle_id: vehicleId,
         dispatch_date: dispatchDate,
@@ -496,6 +513,7 @@ export function PDPCreateModal({
                 value={driverId ? String(driverId) : ""}
                 onValueChange={(v: string) => setDriverId(v ? Number(v) : null)}
                 placeholder="Select driver"
+                disabled={isLoadingOrders || isSaving}
               />
             </div>
 
@@ -515,6 +533,7 @@ export function PDPCreateModal({
                   setVehicleId(v ? Number(v) : null)
                 }
                 placeholder="Select vehicle"
+                disabled={isLoadingOrders || isSaving}
               />
               {selectedVehicle && (
                 <p className="text-[10px] text-muted-foreground">
@@ -528,15 +547,17 @@ export function PDPCreateModal({
                 Target Cluster <span className="text-destructive">*</span>
               </Label>
               <Combobox
-                options={
-                  masterData?.clusters?.map((c) => ({
+                options={[
+                  { value: "all", label: "All" },
+                  ...(masterData?.clusters?.map((c) => ({
                     value: String(c.id),
                     label: c.cluster_name,
-                  })) || []
-                }
-                value={clusterId ? String(clusterId) : ""}
+                  })) || [])
+                ]}
+                value={clusterId === -1 ? "all" : clusterId ? String(clusterId) : ""}
                 onValueChange={handleClusterChange}
                 placeholder="Select cluster"
+                disabled={isLoadingOrders || isSaving}
               />
             </div>
 
@@ -544,17 +565,31 @@ export function PDPCreateModal({
               <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
                 Source Branch <span className="text-destructive">*</span>
               </Label>
-              <Combobox
-                options={
-                  masterData?.branches?.map((b) => ({
-                    value: String(b.id),
-                    label: b.branch_name,
-                  })) || []
-                }
-                value={branchId ? String(branchId) : ""}
-                onValueChange={handleBranchChange}
-                placeholder="Select branch"
-              />
+              <div className="flex gap-2 items-center">
+                <div className="flex-1 min-w-0">
+                  <Combobox
+                    options={
+                      masterData?.branches?.map((b) => ({
+                        value: String(b.id),
+                        label: b.branch_name,
+                      })) || []
+                    }
+                    value={branchId ? String(branchId) : ""}
+                    onValueChange={handleBranchChange}
+                    placeholder="Select branch"
+                    disabled={isLoadingOrders || isSaving}
+                  />
+                </div>
+                <Button 
+                  type="button" 
+                  variant="default"
+                  className="h-10 px-3 shrink-0" 
+                  disabled={isLoadingOrders || isSaving || !branchId || clusterId === null}
+                  onClick={() => onFilterChange(clusterId === -1 ? null : clusterId ?? undefined, branchId ?? undefined)}
+                >
+                  Load
+                </Button>
+              </div>
             </div>
 
             <div className="space-y-1.5">
@@ -565,6 +600,7 @@ export function PDPCreateModal({
                 type="date"
                 value={dispatchDate}
                 onChange={(e) => setDispatchDate(e.target.value)}
+                disabled={isLoadingOrders || isSaving}
               />
             </div>
 
@@ -576,6 +612,7 @@ export function PDPCreateModal({
                 placeholder="e.g., Priority delivery"
                 value={remarks}
                 onChange={(e) => setRemarks(e.target.value)}
+                disabled={isLoadingOrders || isSaving}
               />
             </div>
           </div>
@@ -592,13 +629,14 @@ export function PDPCreateModal({
                   Available Deliveries
                 </h3>
               </div>
-              {(clusterId || branchId) && (
+              {(clusterId !== null || branchId !== null) && (
                 <p className="text-xs text-muted-foreground mb-2">
                   {[
-                    clusterId
-                      ? masterData?.clusters?.find((c) => c.id === clusterId)
-                          ?.cluster_name
-                      : null,
+                    clusterId === -1
+                      ? "All Clusters"
+                      : clusterId
+                        ? masterData?.clusters?.find((c) => c.id === clusterId)?.cluster_name
+                        : null,
                     branchId
                       ? masterData?.branches?.find((b) => b.id === branchId)
                           ?.branch_name
@@ -673,7 +711,7 @@ export function PDPCreateModal({
 
             <ScrollArea className="flex-1 min-h-0">
               <div className="p-3 space-y-2">
-                {!clusterId ? (
+                {clusterId === null ? (
                   <div className="text-center py-10">
                     <Package className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
                     <p className="text-xs text-muted-foreground">
@@ -768,7 +806,7 @@ export function PDPCreateModal({
                           {order.customer_name || order.store_name || "—"}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {[order.city, order.province]
+                          {[order.brgy, order.city, order.province]
                             .filter(Boolean)
                             .join(", ") || "—"}
                         </TableCell>
