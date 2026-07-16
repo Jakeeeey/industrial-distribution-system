@@ -1,3 +1,5 @@
+// src/app/(industrial-distribution-system)/ids/arf/traceability-compliance/cylinder-movements/page.tsx
+
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -9,19 +11,17 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { NavUser } from "@/components/shared/app-sidebar/nav-user";
-
 import { cookies } from "next/headers";
-
-// ✅ Wire the module you asked for
-import DashboardModule from "@/modules/industrial-distribution-system/dashboard";
-
+import { CylinderMovementsModule } from "@/modules/industrial-distribution-system/audit-results-findings/traceability-compliance/cylinder-movements/CylinderMovementsModule";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const COOKIE_NAME = "vos_access_token";
 
-
+/**
+ * Base64URL decodes JWT payload to extract user metadata server-side
+ */
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
     try {
         const parts = token.split(".");
@@ -32,13 +32,13 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
         const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
 
         const json = Buffer.from(padded, "base64").toString("utf8");
-        return JSON.parse(json);
+        return JSON.parse(json) as Record<string, unknown>;
     } catch {
         return null;
     }
 }
 
-function pickString(obj: Record<string, unknown> | null | undefined, keys: string[]): string {
+function pickString(obj: Record<string, unknown> | null, keys: string[]): string {
     for (const k of keys) {
         const v = obj?.[k];
         if (typeof v === "string" && v.trim()) return v.trim();
@@ -75,35 +75,32 @@ function buildHeaderUserFromToken(token: string | null | undefined) {
 }
 
 export default async function Page() {
-    // ✅ Next.js 16: cookies() is async
+    // Next.js 16 cookies are async
     const cookieStore = await cookies();
     const token = cookieStore.get(COOKIE_NAME)?.value ?? null;
 
     const headerUser = buildHeaderUserFromToken(token);
 
     return (
-        // ✅ This fills the RIGHT column provided by SidebarInset (which is now fixed-height).
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            {/* ✅ Topbar is fixed in place because ONLY <main> scrolls */}
+            {/* Topbar sticky header */}
             <header className="relative z-10 flex h-14 shrink-0 items-center justify-between border-b shadow-sm bg-background sm:h-16 overflow-hidden">
                 <div className="flex h-full min-w-0 items-center gap-2 px-3 sm:px-4 overflow-hidden">
                     <SidebarTrigger className="-ml-1 shrink-0" />
-
                     <Separator
                         orientation="vertical"
                         className="hidden sm:block mr-2 data-[orientation=vertical]:h-4 shrink-0"
                     />
-
                     <div className="min-w-0 overflow-hidden">
                         <Breadcrumb>
                             <BreadcrumbList className="min-w-0 overflow-hidden">
                                 <BreadcrumbItem className="hidden md:block shrink-0">
-                                    <BreadcrumbLink href="#">IDS</BreadcrumbLink>
+                                    <BreadcrumbLink href="#">Traceability Compliance</BreadcrumbLink>
                                 </BreadcrumbItem>
                                 <BreadcrumbSeparator className="hidden md:block shrink-0" />
                                 <BreadcrumbItem className="min-w-0 overflow-hidden">
                                     <BreadcrumbPage className="truncate max-w-[56vw] sm:max-w-[60vw] md:max-w-none">
-                                        Dashboard
+                                        Cylinder Movement
                                     </BreadcrumbPage>
                                 </BreadcrumbItem>
                             </BreadcrumbList>
@@ -116,9 +113,9 @@ export default async function Page() {
                 </div>
             </header>
 
-            {/* ✅ Only content scrolls inside RIGHT column */}
-            <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-0 m-0">
-                <DashboardModule />
+            {/* Scrollable contents panel */}
+            <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-5">
+                <CylinderMovementsModule />
             </main>
         </div>
     );
