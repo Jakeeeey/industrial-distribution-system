@@ -1,4 +1,8 @@
+<<<<<<< HEAD
+﻿import {
+=======
 import {
+>>>>>>> master
     Breadcrumb,
     BreadcrumbItem,
     BreadcrumbLink,
@@ -11,7 +15,16 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { NavUser } from "@/components/shared/app-sidebar/nav-user";
 
 import { cookies } from "next/headers";
+<<<<<<< HEAD
+<<<<<<<< HEAD:src/app/(industrial-distribution-system)/industrial-distribution-system/scm/inventory-control/page.tsx
 import InventoryControlModule from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/inventory-control/InventoryControlModule";
+========
+
+import StockAdjustmentSerialSummaryModule from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment-serial-summary/StockAdjustmentSerialSummaryModule";
+>>>>>>>> master:src/app/(industrial-distribution-system)/industrial-distribution-system/scm/stock-adjustment/stock-adjustment-summary/page.tsx
+=======
+import InventoryControlModule from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/inventory-control/InventoryControlModule";
+>>>>>>> master
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,6 +87,10 @@ export default async function Page(props: {
     params: Promise<Record<string, string | string[] | undefined>>;
     searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+<<<<<<< HEAD
+    // Await params and searchParams to satisfy Next.js 15+ routing rules
+=======
+>>>>>>> master
     await props.params;
     await props.searchParams;
 
@@ -97,16 +114,28 @@ export default async function Page(props: {
                         <Breadcrumb>
                             <BreadcrumbList className="min-w-0 overflow-hidden">
                                 <BreadcrumbItem className="hidden md:block shrink-0">
+<<<<<<< HEAD
                                     <BreadcrumbLink href="#">INDUSTRIAL-DISTRIBUTION-SYSTEM</BreadcrumbLink>
                                 </BreadcrumbItem>
                                 <BreadcrumbSeparator className="hidden md:block shrink-0" />
                                 <BreadcrumbItem className="hidden md:block shrink-0">
                                     <BreadcrumbLink href="#">SCM</BreadcrumbLink>
+=======
+                                    <BreadcrumbLink href="#">Inventory Management</BreadcrumbLink>
+>>>>>>> master
                                 </BreadcrumbItem>
                                 <BreadcrumbSeparator className="hidden md:block shrink-0" />
                                 <BreadcrumbItem className="min-w-0 overflow-hidden">
                                     <BreadcrumbPage className="truncate max-w-[56vw] sm:max-w-[60vw] md:max-w-none">
+<<<<<<< HEAD
+<<<<<<<< HEAD:src/app/(industrial-distribution-system)/industrial-distribution-system/scm/inventory-control/page.tsx
                                         Inventory Control
+========
+                                        Stock Adjustment Serial Summary
+>>>>>>>> master:src/app/(industrial-distribution-system)/industrial-distribution-system/scm/stock-adjustment/stock-adjustment-summary/page.tsx
+=======
+                                        Inventory Control
+>>>>>>> master
                                     </BreadcrumbPage>
                                 </BreadcrumbItem>
                             </BreadcrumbList>
@@ -119,8 +148,18 @@ export default async function Page(props: {
                 </div>
             </header>
 
+<<<<<<< HEAD
+<<<<<<<< HEAD:src/app/(industrial-distribution-system)/industrial-distribution-system/scm/inventory-control/page.tsx
             <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4">
                 <InventoryControlModule />
+========
+            <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4 bg-muted/20">
+                <StockAdjustmentSerialSummaryModule />
+>>>>>>>> master:src/app/(industrial-distribution-system)/industrial-distribution-system/scm/stock-adjustment/stock-adjustment-summary/page.tsx
+=======
+            <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4">
+                <InventoryControlModule />
+>>>>>>> master
             </main>
         </div>
     );

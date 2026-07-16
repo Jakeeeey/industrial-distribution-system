@@ -14,6 +14,8 @@ import { cookies } from "next/headers";
 
 import StockAdjustmentSerialPostingModule from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment-serial-posting/StockAdjustmentSerialPostingModule"
 
+import StockAdjustmentSerialRegistrationModule from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-adjustment-serial-registration/StockAdjustmentSerialRegistrationModule"
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -80,6 +82,8 @@ export default async function Page(props: {
     const searchParamsObj = await props.searchParams;
     const initialId = searchParamsObj?.id ? Number(searchParamsObj.id) : undefined;
 
+
+
     // âœ… Next.js 16: cookies() is async
     const cookieStore = await cookies();
     const token = cookieStore.get(COOKIE_NAME)?.value ?? null;
@@ -103,20 +107,15 @@ export default async function Page(props: {
                         <Breadcrumb>
                             <BreadcrumbList className="min-w-0 overflow-hidden">
                                 <BreadcrumbItem className="hidden md:block shrink-0">
-                                    <BreadcrumbLink href="#">INDUSTRIAL-DISTRIBUTION-SYSTEM</BreadcrumbLink>
-                                </BreadcrumbItem>
-                                <BreadcrumbSeparator className="hidden md:block shrink-0" />
-                                <BreadcrumbItem className="hidden md:block shrink-0">
-                                    <BreadcrumbLink href="#">SCM</BreadcrumbLink>
-                                </BreadcrumbItem>
-                                <BreadcrumbSeparator className="hidden md:block shrink-0" />
-                                <BreadcrumbItem className="hidden md:block shrink-0">
-                                    <BreadcrumbLink href="#">Stock Adjustment</BreadcrumbLink>
+
+
+                                    <BreadcrumbLink href="#">Inventory Management</BreadcrumbLink>
+
                                 </BreadcrumbItem>
                                 <BreadcrumbSeparator className="hidden md:block shrink-0" />
                                 <BreadcrumbItem className="min-w-0 overflow-hidden">
                                     <BreadcrumbPage className="truncate max-w-[56vw] sm:max-w-[60vw] md:max-w-none">
-                                        Stock Adjustment Posting
+                                        Stock Adjustment Serial Registration
                                     </BreadcrumbPage>
                                 </BreadcrumbItem>
                             </BreadcrumbList>
@@ -132,6 +131,9 @@ export default async function Page(props: {
             {/* âœ… Only content scrolls inside RIGHT column */}
             <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4">
                 <StockAdjustmentSerialPostingModule mode="posting" initialId={initialId} />
+
+                <StockAdjustmentSerialRegistrationModule />
+
             </main>
         </div>
     );

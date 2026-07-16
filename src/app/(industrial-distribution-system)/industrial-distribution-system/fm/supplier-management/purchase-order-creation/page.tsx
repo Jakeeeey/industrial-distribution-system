@@ -103,24 +103,24 @@ export default async function Page() {
                     />
                     <Breadcrumb>
                         <BreadcrumbList className="min-w-0 overflow-hidden">
-                                <BreadcrumbItem className="hidden md:block shrink-0">
-                                    <BreadcrumbLink href="#">INDUSTRIAL-DISTRIBUTION-SYSTEM</BreadcrumbLink>
-                                </BreadcrumbItem>
-                                <BreadcrumbSeparator className="hidden md:block shrink-0" />
-                                <BreadcrumbItem className="hidden md:block shrink-0">
-                                    <BreadcrumbLink href="#">FM</BreadcrumbLink>
-                                </BreadcrumbItem>
-                                <BreadcrumbSeparator className="hidden md:block shrink-0" />
-                                <BreadcrumbItem className="hidden md:block shrink-0">
-                                    <BreadcrumbLink href="#">Supplier Management</BreadcrumbLink>
-                                </BreadcrumbItem>
-                                <BreadcrumbSeparator className="hidden md:block shrink-0" />
-                                <BreadcrumbItem className="min-w-0 overflow-hidden">
-                                    <BreadcrumbPage className="truncate max-w-[56vw] sm:max-w-[60vw] md:max-w-none">
-                                        Purchase Order Creation
-                                    </BreadcrumbPage>
-                                </BreadcrumbItem>
-                            </BreadcrumbList>
+                            <BreadcrumbItem className="hidden md:block shrink-0">
+                                <BreadcrumbLink href="#">INDUSTRIAL-DISTRIBUTION-SYSTEM</BreadcrumbLink>
+                            </BreadcrumbItem>
+                            <BreadcrumbSeparator className="hidden md:block shrink-0" />
+                            <BreadcrumbItem className="hidden md:block shrink-0">
+                                <BreadcrumbLink href="#">FM</BreadcrumbLink>
+                            </BreadcrumbItem>
+                            <BreadcrumbSeparator className="hidden md:block shrink-0" />
+                            <BreadcrumbItem className="hidden md:block shrink-0">
+                                <BreadcrumbLink href="#">Supplier Management</BreadcrumbLink>
+                            </BreadcrumbItem>
+                            <BreadcrumbSeparator className="hidden md:block shrink-0" />
+                            <BreadcrumbItem className="min-w-0 overflow-hidden">
+                                <BreadcrumbPage className="truncate max-w-[56vw] sm:max-w-[60vw] md:max-w-none">
+                                    Purchase Order Creation
+                                </BreadcrumbPage>
+                            </BreadcrumbItem>
+                        </BreadcrumbList>
                     </Breadcrumb>
                 </div>
 
@@ -134,22 +134,22 @@ export default async function Page() {
                 {/* Clean floating tabs list with top and horizontal margin/padding */}
                 <div className="px-6 pt-6 flex items-center justify-between shrink-0">
                     <TabsList className="h-10 bg-muted/60 p-1 rounded-xl gap-1 border border-border/45 shadow-inner">
-                        <TabsTrigger 
-                            value="standard-po" 
+                        <TabsTrigger
+                            value="standard-po"
                             className="rounded-lg h-8 px-4 text-xs font-bold gap-2 transition-all duration-200 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm hover:text-foreground/80"
                         >
                             <ClipboardList className="h-3.5 w-3.5 transition-transform group-data-[state=active]:scale-110" />
                             Standard Purchase Order
                         </TabsTrigger>
-                        <TabsTrigger 
-                            value="refill-po" 
+                        <TabsTrigger
+                            value="refill-po"
                             className="rounded-lg h-8 px-4 text-xs font-bold gap-2 transition-all duration-200 data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm hover:text-foreground/80"
                         >
                             <RefreshCw className="h-3.5 w-3.5 transition-transform group-data-[state=active]:rotate-45" />
                             Cylinder Refill PO
                         </TabsTrigger>
                     </TabsList>
-                    
+
                     <div className="hidden sm:flex items-center gap-1.5 text-[10px] font-black uppercase text-muted-foreground tracking-widest bg-muted/30 px-3 py-1 rounded-full border border-border/20">
                         <span>Status</span>
                         <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
