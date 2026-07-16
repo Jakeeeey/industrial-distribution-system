@@ -99,12 +99,16 @@ export default async function Page(props: {
                         <Breadcrumb>
                             <BreadcrumbList className="min-w-0 overflow-hidden">
                                 <BreadcrumbItem className="hidden md:block shrink-0">
-                                    <BreadcrumbLink href="#">Inventory Management</BreadcrumbLink>
+                                    <BreadcrumbLink href="#">INDUSTRIAL-DISTRIBUTION-SYSTEM</BreadcrumbLink>
+                                </BreadcrumbItem>
+                                <BreadcrumbSeparator className="hidden md:block shrink-0" />
+                                <BreadcrumbItem className="hidden md:block shrink-0">
+                                    <BreadcrumbLink href="#">SCM</BreadcrumbLink>
                                 </BreadcrumbItem>
                                 <BreadcrumbSeparator className="hidden md:block shrink-0" />
                                 <BreadcrumbItem className="min-w-0 overflow-hidden">
                                     <BreadcrumbPage className="truncate max-w-[56vw] sm:max-w-[60vw] md:max-w-none">
-                                        Inventory Control
+                                        Active Picking
                                     </BreadcrumbPage>
                                 </BreadcrumbItem>
                             </BreadcrumbList>

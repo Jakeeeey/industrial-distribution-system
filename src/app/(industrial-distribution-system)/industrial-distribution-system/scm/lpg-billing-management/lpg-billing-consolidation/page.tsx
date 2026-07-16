@@ -96,21 +96,25 @@ export default async function LpgBillingConsolidationPage() {
             className="mr-2 data-[orientation=vertical]:h-4 shrink-0"
           />
           <Breadcrumb className="min-w-0">
-            <BreadcrumbList className="min-w-0">
-              <BreadcrumbItem className="hidden md:block shrink-0">
-                <BreadcrumbLink href="#">SCM</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator className="hidden md:block shrink-0" />
-              <BreadcrumbItem className="hidden md:block shrink-0">
-                <BreadcrumbLink href="#">LPG Billing Management</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator className="hidden md:block shrink-0" />
-              <BreadcrumbItem className="min-w-0">
-                <BreadcrumbPage className="truncate">
-                  Billing Consolidation
-                </BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
+            <BreadcrumbList className="min-w-0 overflow-hidden">
+                                <BreadcrumbItem className="hidden md:block shrink-0">
+                                    <BreadcrumbLink href="#">INDUSTRIAL-DISTRIBUTION-SYSTEM</BreadcrumbLink>
+                                </BreadcrumbItem>
+                                <BreadcrumbSeparator className="hidden md:block shrink-0" />
+                                <BreadcrumbItem className="hidden md:block shrink-0">
+                                    <BreadcrumbLink href="#">SCM</BreadcrumbLink>
+                                </BreadcrumbItem>
+                                <BreadcrumbSeparator className="hidden md:block shrink-0" />
+                                <BreadcrumbItem className="hidden md:block shrink-0">
+                                    <BreadcrumbLink href="#">Lpg Billing Management</BreadcrumbLink>
+                                </BreadcrumbItem>
+                                <BreadcrumbSeparator className="hidden md:block shrink-0" />
+                                <BreadcrumbItem className="min-w-0 overflow-hidden">
+                                    <BreadcrumbPage className="truncate max-w-[56vw] sm:max-w-[60vw] md:max-w-none">
+                                        Lpg Billing Consolidation
+                                    </BreadcrumbPage>
+                                </BreadcrumbItem>
+                            </BreadcrumbList>
           </Breadcrumb>
         </div>
 
