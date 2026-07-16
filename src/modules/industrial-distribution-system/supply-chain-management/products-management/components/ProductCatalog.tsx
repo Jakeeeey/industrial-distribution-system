@@ -1,11 +1,16 @@
 import React from "react";
 import { Product, Category, Brand } from "../types";
-import { Card, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Edit, Trash, Package, Tag } from "lucide-react";
+import { Edit, Trash, Package, Tag, Settings2, Eye } from "lucide-react";
 import Image from "next/image";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface ProductCatalogProps {
   products: Product[];
@@ -28,14 +33,6 @@ export function ProductCatalog({
   selectedIds,
   onSelectionChange
 }: ProductCatalogProps) {
-  const toggleOne = (id: number) => {
-    if (selectedIds.includes(id)) {
-      onSelectionChange(selectedIds.filter(i => i !== id));
-    } else {
-      onSelectionChange([...selectedIds, id]);
-    }
-  };
-
   const getCategoryName = (idOrObj: unknown) => {
     if (typeof idOrObj === 'object' && idOrObj !== null && 'category_name' in idOrObj) return (idOrObj as Record<string, string>).category_name;
     const cat = categories.find(c => c.category_id === Number(idOrObj));
@@ -56,32 +53,55 @@ export function ProductCatalog({
     );
   }
 
+  // Group products by product_name
+  const groupedProducts = products.reduce((acc, product) => {
+    const name = product.product_name || "Unknown";
+    if (!acc[name]) {
+      acc[name] = [];
+    }
+    acc[name].push(product);
+    return acc;
+  }, {} as Record<string, Product[]>);
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-2">
-      {products.map((product) => {
-        const isSelected = selectedIds.includes(product.product_id);
-        const categoryName = getCategoryName(product.product_category);
-        const brandName = getBrandName(product.product_brand);
+      {Object.entries(groupedProducts).map(([groupName, groupItems]) => {
+        const firstItem = groupItems[0];
+        const groupIds = groupItems.map(p => p.product_id);
+        const allSelected = groupIds.every(id => selectedIds.includes(id));
+        const someSelected = groupIds.some(id => selectedIds.includes(id)) && !allSelected;
+        const categoryName = getCategoryName(firstItem.product_category);
+        const brandName = getBrandName(firstItem.product_brand);
+
+        const toggleGroupSelection = (e?: React.MouseEvent) => {
+          if (e) e.stopPropagation();
+          if (allSelected) {
+            onSelectionChange(selectedIds.filter(id => !groupIds.includes(id)));
+          } else {
+            const newIds = new Set([...selectedIds, ...groupIds]);
+            onSelectionChange(Array.from(newIds));
+          }
+        };
 
         return (
           <Card 
-            key={product.product_id} 
-            className={`cursor-pointer overflow-hidden transition-all duration-200 border group relative flex flex-col ${isSelected ? 'ring-2 ring-primary border-transparent shadow-md' : 'border-border/50 hover:shadow-lg hover:border-border'}`}
-            onClick={() => onView(product)}
+            key={groupName} 
+            className={`cursor-pointer overflow-hidden transition-all duration-200 border group relative flex flex-col ${allSelected ? 'ring-2 ring-primary border-transparent shadow-md' : 'border-border/50 hover:shadow-lg hover:border-border'}`}
+            onClick={() => onView(firstItem)}
           >
             <div className="absolute top-3 left-3 z-10" onClick={(e) => e.stopPropagation()}>
               <Checkbox 
-                checked={isSelected}
-                onCheckedChange={() => toggleOne(product.product_id)}
-                className={isSelected ? "" : "opacity-0 group-hover:opacity-100 transition-opacity bg-white/50 backdrop-blur-sm data-[state=checked]:opacity-100"}
+                checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                onCheckedChange={() => toggleGroupSelection()}
+                className={allSelected || someSelected ? "" : "opacity-0 group-hover:opacity-100 transition-opacity bg-white/50 backdrop-blur-sm data-[state=checked]:opacity-100"}
               />
             </div>
             
             <div className="h-32 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800/50 dark:to-slate-900/50 flex items-center justify-center border-b border-border/50 relative overflow-hidden group/image">
-              {product.product_image ? (
+              {firstItem.product_image ? (
                 <Image
-                  src={`${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8055"}/assets/${product.product_image}`}
-                  alt={product.product_name}
+                  src={`${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8055"}/assets/${firstItem.product_image}`}
+                  alt={firstItem.product_name}
                   fill
                   className="object-cover group-hover/image:scale-105 transition-transform duration-500"
                   unoptimized
@@ -90,8 +110,8 @@ export function ProductCatalog({
                 <Package className="w-12 h-12 text-slate-400/50 dark:text-slate-500/50" />
               )}
               <div className="absolute top-3 right-3 flex flex-col gap-1.5 items-end">
-                <Badge variant={product.isActive ? "default" : "secondary"} className="shadow-sm">
-                  {product.isActive ? "Active" : "Inactive"}
+                <Badge variant={firstItem.isActive ? "default" : "secondary"} className="shadow-sm">
+                  {firstItem.isActive ? "Active" : "Inactive"}
                 </Badge>
               </div>
             </div>
@@ -110,23 +130,59 @@ export function ProductCatalog({
                   </Badge>
                 )}
               </div>
-              <CardTitle className="text-[15px] font-bold leading-tight line-clamp-2" title={product.product_name}>
-                {product.product_name}
+              <CardTitle className="text-[15px] font-bold leading-tight line-clamp-2" title={firstItem.product_name}>
+                {groupName}
               </CardTitle>
-              <div className="text-xs text-muted-foreground mt-1.5 font-mono bg-muted/50 w-max px-2 py-0.5 rounded border border-border/50">
-                Code: {product.product_code}
+              
+              <div className="mt-3">
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block">Variants</span>
+                <div className="flex flex-wrap gap-1.5 max-h-[80px] overflow-y-auto pr-1">
+                  {groupItems.map(variant => {
+                    let variantLabel = variant.product_code;
+                    const baseParts = groupName.split(' ')[0];
+                    if (variantLabel.startsWith(baseParts)) {
+                        const codeWords = variant.product_code.split(' ');
+                        if (codeWords.length > 1) {
+                            variantLabel = codeWords[codeWords.length - 1]; 
+                        }
+                    }
+                    if (!variantLabel || variantLabel.trim() === '') {
+                       variantLabel = variant.product_code;
+                    }
+
+                    return (
+                      <DropdownMenu key={variant.product_id}>
+                        <DropdownMenuTrigger asChild>
+                          <Badge 
+                            variant={variant.isActive ? "secondary" : "outline"} 
+                            className={`cursor-pointer transition-all hover:ring-2 hover:ring-primary/20 data-[state=open]:ring-2 data-[state=open]:ring-primary/50 flex items-center gap-1.5 text-[10px] px-1.5 py-0.5 ${!variant.isActive && 'opacity-60 grayscale'}`}
+                            title={variant.product_code}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {variantLabel}
+                            <Settings2 className="w-3 h-3 opacity-50" />
+                          </Badge>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-40" onClick={(e) => e.stopPropagation()}>
+                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-b mb-1">
+                            Code: {variant.product_code}
+                          </div>
+                          <DropdownMenuItem onClick={() => onView(variant)}>
+                            <Eye className="h-4 w-4 mr-2" /> View Variant
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => onEdit(variant)}>
+                            <Edit className="h-4 w-4 mr-2" /> Edit Variant
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className="text-destructive focus:text-destructive focus:bg-destructive/10" onClick={() => onDelete(variant.product_id)}>
+                            <Trash className="h-4 w-4 mr-2" /> Delete Variant
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    );
+                  })}
+                </div>
               </div>
             </CardHeader>
-            
-
-            <CardFooter className="p-2 flex justify-end gap-1 bg-muted/30" onClick={(e) => e.stopPropagation()}>
-              <Button variant="ghost" size="icon" onClick={() => onEdit(product)} title="Edit" className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/30">
-                <Edit className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="icon" onClick={() => onDelete(product.product_id)} title="Delete" className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/30">
-                <Trash className="h-4 w-4" />
-              </Button>
-            </CardFooter>
           </Card>
         );
       })}

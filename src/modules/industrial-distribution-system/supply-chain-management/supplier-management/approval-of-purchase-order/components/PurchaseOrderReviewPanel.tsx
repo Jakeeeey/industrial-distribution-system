@@ -7,7 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { generatePurchaseOrderPdf } from "../utils/generatePoPdf";
-import { Printer } from "lucide-react";
+import { Printer, Trash2 } from "lucide-react";
 
 import {
     Select,
@@ -191,6 +191,9 @@ export default function PurchaseOrderReviewPanel(props: {
         branch_id?: number | null;
         receiver_id?: number | null;
     }) => void | Promise<void>;
+    onReject?: (opts: {
+        remarks?: string;
+    }) => void | Promise<void>;
     approverName?: string;
 }) {
     const fmt = React.useMemo(() => money(), []);
@@ -201,11 +204,14 @@ export default function PurchaseOrderReviewPanel(props: {
     const [termsDays, setTermsDays] = React.useState<number>(30);
 
     const [confirmOpen, setConfirmOpen] = React.useState(false);
+    const [rejectConfirmOpen, setRejectConfirmOpen] = React.useState(false);
+    const [rejectRemarks, setRejectRemarks] = React.useState("");
     const [submitting, setSubmitting] = React.useState(false);
 
     const [currentPage, setCurrentPage] = React.useState(1);
     const [pageSize, setPageSize] = React.useState(10);
     const [companyData, setCompanyData] = React.useState<CompanyData | null>(null);
+    const [removedKeys, setRemovedKeys] = React.useState<Set<string>>(new Set());
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const poAny: any = React.useMemo(() => unwrap(props.po), [props.po]);
@@ -245,8 +251,11 @@ export default function PurchaseOrderReviewPanel(props: {
         setTermsDays(30);
 
         setConfirmOpen(false);
+        setRejectConfirmOpen(false);
+        setRejectRemarks("");
         setSubmitting(false);
         setCurrentPage(1);
+        setRemovedKeys(new Set());
     }, [
         poAny?.purchase_order_id, 
         poAny?.id, 
@@ -293,7 +302,9 @@ export default function PurchaseOrderReviewPanel(props: {
         );
     }, [poAny]);
 
-    const lines = React.useMemo(() => normalizeLines(poAny?.items ?? []), [poAny]);
+    const lines = React.useMemo(() => {
+        return normalizeLines(poAny?.items ?? []).filter(l => !removedKeys.has(l.key));
+    }, [poAny, removedKeys]);
 
     const totalPages = Math.ceil(lines.length / pageSize);
     const currentLines = React.useMemo(() => {
@@ -316,18 +327,20 @@ export default function PurchaseOrderReviewPanel(props: {
     }, [lines]);
 
     const discountAmount = React.useMemo(() => {
-        if (summaryDiscountLines > 0) return summaryDiscountLines;
+        if (removedKeys.size > 0 || summaryDiscountLines > 0) return summaryDiscountLines;
         return discountAmountHeader;
-    }, [summaryDiscountLines, discountAmountHeader]);
+    }, [removedKeys.size, summaryDiscountLines, discountAmountHeader]);
 
     const grossAmount = React.useMemo(() => {
+        if (removedKeys.size > 0) return summaryGross;
         return grossAmountDirect || summaryGross;
-    }, [grossAmountDirect, summaryGross]);
+    }, [removedKeys.size, grossAmountDirect, summaryGross]);
 
     const netAmount = React.useMemo(() => {
+        if (removedKeys.size > 0) return Math.max(0, grossAmount - discountAmount);
         if (totalAmountDirect > 0) return totalAmountDirect;
         return Math.max(0, grossAmount - discountAmount);
-    }, [totalAmountDirect, grossAmount, discountAmount]);
+    }, [removedKeys.size, totalAmountDirect, grossAmount, discountAmount]);
 
     const vatExclusive = React.useMemo(() => {
         return netAmount / 1.12;
@@ -352,8 +365,10 @@ export default function PurchaseOrderReviewPanel(props: {
         return term.payment_description || term.payment_name;
     }, [selectedPaymentTermId, props.paymentTerms]);
 
+    const isProcessed = Number(poAny?.inventory_status) === 3 || Number(poAny?.inventory_status) === 13 || Number(poAny?.inventory_status) === 8 || Number(poAny?.inventory_status) === 4;
+
     const approveDisabled =
-        props.disabled || props.loading || submitting || !poAny?.purchase_order_id;
+        props.disabled || props.loading || submitting || !poAny?.purchase_order_id || isProcessed;
 
     async function runApprove() {
         if (!selectedPaymentTermId) {
@@ -384,6 +399,21 @@ export default function PurchaseOrderReviewPanel(props: {
                               toNum(poAny?.allocations?.[0]?.branch?.id ?? poAny?.allocations?.[0]?.branch) || 
                               null,
                     receiver_id: toNum(poAny?.receiver_id?.id ?? poAny?.receiver_id) || null,
+                    ...(removedKeys.size > 0 ? {
+                        items: lines.map(l => ({
+                            po_item_id: l.key,
+                            item_name: l.name,
+                            brand: l.brand,
+                            category: l.category,
+                            uom: l.uom,
+                            ordered_quantity: l.qty,
+                            unit_price: l.price,
+                            gross: l.gross,
+                            discount_type: l.discountType,
+                            discount_amount: l.discountAmount,
+                            total_amount: l.net,
+                        }))
+                    } : {}),
                 })
             );
 
@@ -397,6 +427,33 @@ export default function PurchaseOrderReviewPanel(props: {
                 description: String(e instanceof Error ? e.message : e || "Unknown error"),
             });
             setConfirmOpen(false);
+            throw e;
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
+    const rejectDisabled =
+        props.disabled || props.loading || submitting || !poAny?.purchase_order_id || isProcessed;
+
+    async function runReject() {
+        if (rejectDisabled) return;
+        try {
+            setSubmitting(true);
+            await Promise.resolve(
+                props.onReject?.({
+                    remarks: rejectRemarks.trim() || "Rejected by approver",
+                })
+            );
+            toast.success("Purchase Order rejected", {
+                description: "The PO has been rejected and removed from pending approvals.",
+            });
+            setRejectConfirmOpen(false);
+        } catch (e: unknown) {
+            toast.error("Failed to reject Purchase Order", {
+                description: String(e instanceof Error ? e.message : e || "Unknown error"),
+            });
+            setRejectConfirmOpen(false);
             throw e;
         } finally {
             setSubmitting(false);
@@ -439,6 +496,27 @@ export default function PurchaseOrderReviewPanel(props: {
                         </div>
                     ) : (
                         <>
+                            {(Number(poAny?.inventory_status) === 8 || Number(poAny?.inventory_status) === 4) && (
+                                <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 space-y-1">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs font-black uppercase tracking-wider text-destructive">Purchase Order Rejected</span>
+                                    </div>
+                                    {(poAny?.remarks || poAny?.remark) && (
+                                        <div className="text-sm text-foreground/90 font-medium mt-1">
+                                            <span className="font-bold text-destructive/90">Reason: </span>
+                                            {String(poAny.remarks || poAny.remark)}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                            {(Number(poAny?.inventory_status) === 3 || Number(poAny?.inventory_status) === 13) && (
+                                <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4 space-y-1">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs font-black uppercase tracking-wider text-emerald-700">Purchase Order Approved</span>
+                                        {poAny?.date_approved && <span className="text-xs font-medium text-emerald-700">Date: {String(poAny.date_approved)}</span>}
+                                    </div>
+                                </div>
+                            )}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <div className="rounded-lg border border-border bg-background p-4">
                                     <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
@@ -503,15 +581,15 @@ export default function PurchaseOrderReviewPanel(props: {
                                                 <thead className="sticky top-0 z-10 bg-muted/90 backdrop-blur-sm shadow-sm">
                                                 <tr>
                                                     <th className="px-3 py-2 font-black uppercase tracking-tight text-muted-foreground border-b border-border">Brand</th>
-                                                    <th className="px-3 py-2 font-black uppercase tracking-tight text-muted-foreground border-b border-border">Category</th>
+                                                    <th className="px-3 py-2 font-black uppercase tracking-tight text-muted-foreground border-b border-border">category</th>
                                                     <th className="px-3 py-2 font-black uppercase tracking-tight text-muted-foreground border-b border-border">Product Name</th>
-                                                    <th className="px-3 py-2 font-black uppercase tracking-tight text-muted-foreground text-right border-b border-border">Price</th>
                                                     <th className="px-3 py-2 font-black uppercase tracking-tight text-muted-foreground border-b border-border">UOM</th>
+                                                    <th className="px-3 py-2 font-black uppercase tracking-tight text-muted-foreground text-right border-b border-border">Price</th>
                                                     <th className="px-3 py-2 font-black uppercase tracking-tight text-muted-foreground text-right border-b border-border">Qty</th>
-                                                    <th className="px-3 py-2 font-black uppercase tracking-tight text-muted-foreground text-right border-b border-border">Gross</th>
-                                                    <th className="px-3 py-2 font-black uppercase tracking-tight text-muted-foreground border-b border-border">Discount Type</th>
-                                                    <th className="px-3 py-2 font-black uppercase tracking-tight text-muted-foreground text-right border-b border-border">Discount</th>
-                                                    <th className="px-3 py-2 font-black uppercase tracking-tight text-muted-foreground text-right border-b border-border">Net</th>
+                                                    <th className="px-3 py-2 font-black uppercase tracking-tight text-muted-foreground border-b border-border">Disc. Type</th>
+                                                    <th className="px-3 py-2 font-black uppercase tracking-tight text-muted-foreground text-right border-b border-border">Disc. Amount</th>
+                                                    <th className="px-3 py-2 font-black uppercase tracking-tight text-muted-foreground text-right border-b border-border">Net Amount</th>
+                                                    <th className="px-3 py-2 font-black uppercase tracking-tight text-muted-foreground text-right border-b border-border">Action</th>
                                                 </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-border/50">
@@ -520,15 +598,33 @@ export default function PurchaseOrderReviewPanel(props: {
                                                         <td className="px-3 py-2 text-muted-foreground border-b border-border/10">{l.brand}</td>
                                                         <td className="px-3 py-2 text-muted-foreground border-b border-border/10">{l.category}</td>
                                                         <td className="px-3 py-2 font-bold text-foreground border-b border-border/10">{l.name}</td>
+                                                        <td className="px-3 py-2 text-muted-foreground border-b border-border/10">
+                                                            <span className="px-1.5 py-0.5 bg-secondary text-secondary-foreground text-[10px] font-black rounded uppercase">
+                                                                {l.uom}
+                                                            </span>
+                                                        </td>
                                                         <td className="px-3 py-2 text-right tabular-nums border-b border-border/10">{fmt.format(l.price)}</td>
-                                                        <td className="px-3 py-2 text-muted-foreground border-b border-border/10">{l.uom}</td>
                                                         <td className="px-3 py-2 text-right tabular-nums font-medium border-b border-border/10">{l.qty}</td>
-                                                        <td className="px-3 py-2 text-right tabular-nums font-medium border-b border-border/10">{fmt.format(l.gross)}</td>
                                                         <td className="px-3 py-2 text-muted-foreground uppercase border-b border-border/10">{l.discountType}</td>
                                                         <td className="px-3 py-2 text-right tabular-nums font-medium text-emerald-600 dark:text-emerald-400 border-b border-border/10">
                                                             {fmt.format(l.discountAmount)}
                                                         </td>
                                                         <td className="px-3 py-2 text-right tabular-nums font-black text-foreground border-b border-border/10">{fmt.format(l.net)}</td>
+                                                        <td className="px-3 py-2 text-right border-b border-border/10">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setRemovedKeys(prev => {
+                                                                    const next = new Set(prev);
+                                                                    next.add(l.key);
+                                                                    return next;
+                                                                })}
+                                                                disabled={props.disabled || submitting}
+                                                                className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                                                title="Remove item"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                        </td>
                                                     </tr>
                                                 ))}
                                                 </tbody>
@@ -749,41 +845,96 @@ export default function PurchaseOrderReviewPanel(props: {
                                             Print PO
                                         </Button>
 
-                                        <AlertDialog open={confirmOpen} onOpenChange={(o) => !submitting && setConfirmOpen(o)}>
-                                            <AlertDialogTrigger asChild>
-                                                <Button
-                                                    type="button"
-                                                    className="h-10 rounded-xl font-black uppercase tracking-wider"
-                                                    disabled={approveDisabled}
-                                                    onClick={() => setConfirmOpen(true)}
-                                                >
-                                                    {submitting ? "Approving..." : "Approve PO"}
-                                                </Button>
-                                            </AlertDialogTrigger>
-
-                                            <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                    <AlertDialogTitle>Are you sure this is the final approval?</AlertDialogTitle>
-                                                    <AlertDialogDescription>
-                                                        This will approve and post the Purchase Order. Please confirm before proceeding.
-                                                    </AlertDialogDescription>
-                                                </AlertDialogHeader>
-
-                                                <AlertDialogFooter>
-                                                    <AlertDialogCancel asChild>
-                                                        <Button type="button" variant="outline" disabled={submitting}>
-                                                            Cancel
+                                        {!isProcessed && (
+                                            <>
+                                                <AlertDialog open={rejectConfirmOpen} onOpenChange={(o) => !submitting && setRejectConfirmOpen(o)}>
+                                                    <AlertDialogTrigger asChild>
+                                                        <Button
+                                                            type="button"
+                                                            variant="destructive"
+                                                            className="h-10 rounded-xl font-black uppercase tracking-wider"
+                                                            disabled={rejectDisabled}
+                                                            onClick={() => setRejectConfirmOpen(true)}
+                                                        >
+                                                            {submitting ? "Processing..." : "Reject PO"}
                                                         </Button>
-                                                    </AlertDialogCancel>
+                                                    </AlertDialogTrigger>
 
-                                                    <AlertDialogAction asChild>
-                                                        <Button type="button" onClick={runApprove} disabled={approveDisabled}>
-                                                            Confirm &amp; Approve
+                                                    <AlertDialogContent>
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle className="text-destructive font-black">Reject Purchase Order?</AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                This action will deny the purchase order request and remove it from pending approvals. Please specify the reason for rejection below.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+
+                                                        <div className="my-3 space-y-2">
+                                                            <Label htmlFor="rejectRemarks" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                                                                Remarks / Reason for Rejection
+                                                            </Label>
+                                                            <textarea
+                                                                id="rejectRemarks"
+                                                                value={rejectRemarks}
+                                                                onChange={(e) => setRejectRemarks(e.target.value)}
+                                                                placeholder="Enter reason for rejection..."
+                                                                disabled={submitting}
+                                                                className="w-full min-h-[80px] p-2.5 text-sm rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-destructive/20"
+                                                            />
+                                                        </div>
+
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogCancel asChild>
+                                                                <Button type="button" variant="outline" disabled={submitting}>
+                                                                    Cancel
+                                                                </Button>
+                                                            </AlertDialogCancel>
+
+                                                            <AlertDialogAction asChild>
+                                                                <Button type="button" variant="destructive" onClick={runReject} disabled={rejectDisabled}>
+                                                                    Confirm Rejection
+                                                                </Button>
+                                                            </AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+
+                                                <AlertDialog open={confirmOpen} onOpenChange={(o) => !submitting && setConfirmOpen(o)}>
+                                                    <AlertDialogTrigger asChild>
+                                                        <Button
+                                                            type="button"
+                                                            className="h-10 rounded-xl font-black uppercase tracking-wider"
+                                                            disabled={approveDisabled}
+                                                            onClick={() => setConfirmOpen(true)}
+                                                        >
+                                                            {submitting ? "Approving..." : "Approve PO"}
                                                         </Button>
-                                                    </AlertDialogAction>
-                                                </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                        </AlertDialog>
+                                                    </AlertDialogTrigger>
+
+                                                    <AlertDialogContent>
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle>Are you sure this is the final approval?</AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                This will approve and post the Purchase Order. Please confirm before proceeding.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogCancel asChild>
+                                                                <Button type="button" variant="outline" disabled={submitting}>
+                                                                    Cancel
+                                                                </Button>
+                                                            </AlertDialogCancel>
+
+                                                            <AlertDialogAction asChild>
+                                                                <Button type="button" onClick={runApprove} disabled={approveDisabled}>
+                                                                    Confirm &amp; Approve
+                                                                </Button>
+                                                            </AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
                             </div>

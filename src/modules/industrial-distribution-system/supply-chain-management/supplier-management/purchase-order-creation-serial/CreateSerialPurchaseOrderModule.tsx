@@ -52,6 +52,8 @@ export default function CreateSerialPurchaseOrderModule({
                     selectedId={hook.selectedPO?.poId}
                     onSelectPO={hook.selectPO}
                     onRefresh={hook.refreshList}
+                    statusTab={hook.statusTab}
+                    onTabChange={hook.onTabChange}
                 />
 
                 {/* ── Right: Tagging Workspace (Detail) ── */}

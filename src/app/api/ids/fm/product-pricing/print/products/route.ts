@@ -257,6 +257,7 @@ function applyCommonFilters(args: {
         andIdx += 1;
     };
 
+    addAnd("[product_brand][is_industrial][_eq]", "1");
     if (activeOnly) addAnd("[isActive][_eq]", "1");
     if (categoryIds.length > 0) addAnd("[product_category][_in]", categoryIds.join(","));
     if (brandIds.length > 0) addAnd("[product_brand][_in]", brandIds.join(","));

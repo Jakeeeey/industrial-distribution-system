@@ -1,9 +1,9 @@
 import * as React from "react";
-// 🎯 Import the local industrial sidebar
-import { AppSidebar } from "./_components/app-sidebar"; 
+// 🎯 Import the local IDS sidebar
+import { AppSidebar } from "./_components/app-sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
-export default function IndustrialLayout({ children }: { children: React.ReactNode }) {
+export default function IdsLayout({ children }: { children: React.ReactNode }) {
     return (
         <SidebarProvider>
             <AppSidebar />

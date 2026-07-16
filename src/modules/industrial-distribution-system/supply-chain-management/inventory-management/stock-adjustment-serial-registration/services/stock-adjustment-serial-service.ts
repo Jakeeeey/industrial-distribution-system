@@ -1135,8 +1135,12 @@ export const stockAdjustmentService = {
   /**
    * Fetch all branches for the dropdown
    */
-  async fetchBranches() {
-    const res = await directusFetch<{ data: { id: number; branch_name: string; branch_code: string }[] }>(`${DIRECTUS_URL}/items/branches?fields=id,branch_name,branch_code&sort=branch_name&limit=-1`);
+  async fetchBranches(params?: { divisionId?: number }) {
+    let url = `${DIRECTUS_URL}/items/branches?fields=id,branch_name,branch_code&sort=branch_name&limit=-1`;
+    if (params?.divisionId) {
+      url += `&filter[division_id][_eq]=${params.divisionId}`;
+    }
+    const res = await directusFetch<{ data: { id: number; branch_name: string; branch_code: string }[] }>(url);
     return res.data;
   },
 
@@ -1163,7 +1167,17 @@ export const stockAdjustmentService = {
     const res = await directusFetch<{ data: unknown[] }>(`${DIRECTUS_URL}/items/products?${query}`);
     const products = res.data || [];
 
-    return products.map((item: unknown) => {
+    const excludedUnits = ['REFILL', 'OUTRIGHT', 'DEPOSIT', 'SWAP'];
+
+    return products
+      .filter((item: unknown) => {
+        const p = item as Record<string, unknown>;
+        const uom = p['unit_of_measurement'] as Record<string, unknown> | undefined;
+        const unitName = typeof uom?.['unit_name'] === 'string' ? uom['unit_name'].toUpperCase() : '';
+        const fallbackName = typeof p['unit_name'] === 'string' ? p['unit_name'].toUpperCase() : '';
+        return !excludedUnits.includes(unitName) && !excludedUnits.includes(fallbackName);
+      })
+      .map((item: unknown) => {
       const p = item as Record<string, unknown>;
       const uom = p['unit_of_measurement'] as Record<string, unknown> | undefined;
       const brand = p['product_brand'] as Record<string, unknown> | undefined;
@@ -1243,7 +1257,17 @@ export const stockAdjustmentService = {
     const res = await directusFetch<{ data: unknown[] }>(`${DIRECTUS_URL}/items/products?${query}`);
     const products = res.data || [];
 
-    return products.map((item: unknown) => {
+    const excludedUnits = ['REFILL', 'OUTRIGHT', 'DEPOSIT', 'SWAP'];
+
+    return products
+      .filter((item: unknown) => {
+        const p = item as Record<string, unknown>;
+        const uom = p['unit_of_measurement'] as Record<string, unknown> | undefined;
+        const unitName = typeof uom?.['unit_name'] === 'string' ? uom['unit_name'].toUpperCase() : '';
+        const fallbackName = typeof p['unit_name'] === 'string' ? p['unit_name'].toUpperCase() : '';
+        return !excludedUnits.includes(unitName) && !excludedUnits.includes(fallbackName);
+      })
+      .map((item: unknown) => {
       const p = item as Record<string, unknown>;
       const uom = p['unit_of_measurement'] as Record<string, unknown> | undefined;
       const brand = p['product_brand'] as Record<string, unknown> | undefined;
