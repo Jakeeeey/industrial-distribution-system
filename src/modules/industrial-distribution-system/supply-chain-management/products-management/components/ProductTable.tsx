@@ -9,8 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Edit, Trash, Settings2, Eye } from "lucide-react";
+import { Edit, Settings2, Eye } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,10 +22,7 @@ interface ProductTableProps {
   categories: Category[];
   brands: Brand[];
   onEdit: (product: Product) => void;
-  onDelete: (id: number) => void;
   onView: (product: Product) => void;
-  selectedIds: number[];
-  onSelectionChange: (ids: number[]) => void;
 }
 
 export function ProductTable({ 
@@ -34,19 +30,8 @@ export function ProductTable({
   categories, 
   brands, 
   onEdit, 
-  onDelete, 
   onView,
-  selectedIds,
-  onSelectionChange
 }: ProductTableProps) {
-  const toggleAll = () => {
-    if (selectedIds.length === products.length) {
-      onSelectionChange([]);
-    } else {
-      onSelectionChange(products.map(p => p.product_id));
-    }
-  };
-
   const getCategoryName = (idOrObj: unknown) => {
     if (typeof idOrObj === 'object' && idOrObj !== null && 'category_name' in idOrObj) return (idOrObj as Record<string, string>).category_name;
     const cat = categories.find(c => c.category_id === Number(idOrObj));
@@ -69,29 +54,11 @@ export function ProductTable({
     return acc;
   }, {} as Record<string, Product[]>);
 
-  const toggleGroupSelection = (groupProducts: Product[]) => {
-    const groupIds = groupProducts.map(p => p.product_id);
-    const allSelected = groupIds.every(id => selectedIds.includes(id));
-    
-    if (allSelected) {
-      onSelectionChange(selectedIds.filter(id => !groupIds.includes(id)));
-    } else {
-      const newIds = new Set([...selectedIds, ...groupIds]);
-      onSelectionChange(Array.from(newIds));
-    }
-  };
-
   return (
     <div className="rounded-md border bg-card">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-12">
-              <Checkbox 
-                checked={products.length > 0 && selectedIds.length === products.length}
-                onCheckedChange={toggleAll}
-              />
-            </TableHead>
             <TableHead>Name</TableHead>
             <TableHead>Variants / Codes</TableHead>
             <TableHead>Category</TableHead>
@@ -109,10 +76,6 @@ export function ProductTable({
             </TableRow>
           ) : (
             Object.entries(groupedProducts).map(([groupName, groupItems]) => {
-              const groupIds = groupItems.map(p => p.product_id);
-              const allSelected = groupIds.every(id => selectedIds.includes(id));
-              const someSelected = groupIds.some(id => selectedIds.includes(id)) && !allSelected;
-
               // Use the first item to get shared properties
               const firstItem = groupItems[0];
 
@@ -121,12 +84,6 @@ export function ProductTable({
                   key={groupName}
                   className="bg-background hover:bg-muted/30 transition-colors group"
                 >
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <Checkbox 
-                      checked={allSelected ? true : someSelected ? "indeterminate" : false}
-                      onCheckedChange={() => toggleGroupSelection(groupItems)}
-                    />
-                  </TableCell>
                   <TableCell className="font-medium">
                     {groupName}
                   </TableCell>
@@ -173,9 +130,6 @@ export function ProductTable({
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(variant); }}>
                                 <Edit className="h-4 w-4 mr-2" /> Edit Variant
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="text-destructive focus:text-destructive focus:bg-destructive/10" onClick={(e) => { e.stopPropagation(); onDelete(variant.product_id); }}>
-                                <Trash className="h-4 w-4 mr-2" /> Delete Variant
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
