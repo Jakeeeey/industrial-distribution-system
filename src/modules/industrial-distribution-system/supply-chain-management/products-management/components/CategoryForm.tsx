@@ -52,7 +52,7 @@ export function CategoryForm({
           name="category_name"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Category Name</FormLabel>
+              <FormLabel>Category Name <span className="text-red-500">*</span></FormLabel>
               <FormControl>
                 <Input placeholder="Enter category name" {...field} value={field.value ?? ""} />
               </FormControl>
@@ -65,7 +65,7 @@ export function CategoryForm({
           name="sku_code"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>SKU Code Prefix</FormLabel>
+              <FormLabel>SKU Code Prefix <span className="text-red-500">*</span></FormLabel>
               <FormControl>
                 <Input placeholder="CAT" {...field} value={field.value ?? ""} />
               </FormControl>
