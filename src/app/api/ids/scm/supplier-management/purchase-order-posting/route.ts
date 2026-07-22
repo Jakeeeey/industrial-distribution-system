@@ -885,13 +885,29 @@ async function registerCylinders(
             if (!sn) continue;
 
             const pid = toNum(item.product_id);
-            const p = productsMap.get(pid);
+            let p = productsMap.get(pid);
+            if (!p) {
+                try {
+                    const pj = await fetchJson<{ data: Product }>(`${base}/items/${PRODUCTS_COLLECTION}/${pid}?fields=product_id,product_name,barcode,product_code,cost_per_unit,is_serialized,parent_id`);
+                    if (pj?.data) {
+                        p = {
+                            ...pj.data,
+                            product_id: toNum(pj.data.product_id),
+                            is_serialized: !!(pj.data.is_serialized),
+                            parent_id: pj.data.parent_id ? toNum(pj.data.parent_id) : null
+                        } as Product;
+                        productsMap.set(pid, p);
+                    }
+                } catch (err) {
+                    console.error(`[registerCylinders] Failed to fetch product info for pid ${pid}:`, err);
+                }
+            }
 
-            // Only register if the product is serialized
-            if (!p || !p.is_serialized) continue;
+            // Only register if product is serialized or was explicitly tracked in receiving
+            if (p && !p.is_serialized) continue;
 
             // Resolve target product_id (use parent_id if available)
-            const resolvedProductId = p.parent_id ? p.parent_id : pid;
+            const resolvedProductId = (p && p.parent_id) ? p.parent_id : pid;
 
             const porId = toNum(item.purchase_order_product_id);
             const por = porRows.find(r => toNum(r.purchase_order_product_id) === porId);
@@ -912,7 +928,7 @@ async function registerCylinders(
                         current_branch_id: por ? toNum(por.branch_id) : null,
                         expiration_date: item.expiry_date ? new Date(item.expiry_date).toISOString().split("T")[0] : null,
                         tare_weight: formatTareWeightForCommit(item.tare_weight),
-                        cost: por ? toNum(por.unit_price) : toNum(p.cost_per_unit),
+                        cost: por ? toNum(por.unit_price) : toNum(p?.cost_per_unit),
                         modified_by: userId || null
                     };
 
@@ -932,7 +948,7 @@ async function registerCylinders(
                         acquisition_date: nowISO().split("T")[0],
                         expiration_date: item.expiry_date ? new Date(item.expiry_date).toISOString().split("T")[0] : null,
                         tare_weight: formatTareWeightForCommit(item.tare_weight),
-                        cost: por ? toNum(por.unit_price) : toNum(p.cost_per_unit),
+                        cost: por ? toNum(por.unit_price) : toNum(p?.cost_per_unit),
                         created_by: userId || null
                     };
 
@@ -1604,7 +1620,10 @@ export async function POST(req: NextRequest) {
             // Fetch receiving items and products map for the rows being posted
             const targetPorIds = toPost.map(r => r.porId).filter(Boolean);
             const targetReceivingItems = targetPorIds.length ? await fetchReceivingItems(base, targetPorIds) : [];
-            const allProductIds = Array.from(new Set(porRows.map(r => toNum(r?.product_id)).filter(Boolean)));
+            const allProductIds = Array.from(new Set([
+                ...porRows.map(r => toNum(r?.product_id)),
+                ...targetReceivingItems.map(item => toNum(item.product_id))
+            ].filter(Boolean)));
             const productsMap = await fetchProductsMap(base, allProductIds);
             
             // Execute cylinder registration
@@ -1726,7 +1745,10 @@ export async function POST(req: NextRequest) {
             // Fetch receiving items and products map for the rows being posted
             const targetPorIdsAll = toPost.map(r => toNum(r?.purchase_order_product_id)).filter(Boolean);
             const targetReceivingItemsAll = targetPorIdsAll.length ? await fetchReceivingItems(base, targetPorIdsAll) : [];
-            const allProductIdsAll = Array.from(new Set(porRows.map(r => toNum(r?.product_id)).filter(Boolean)));
+            const allProductIdsAll = Array.from(new Set([
+                ...porRows.map(r => toNum(r?.product_id)),
+                ...targetReceivingItemsAll.map(item => toNum(item.product_id))
+            ].filter(Boolean)));
             const productsMapAll = await fetchProductsMap(base, allProductIdsAll);
             
             // Execute cylinder registration
