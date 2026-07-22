@@ -52,7 +52,7 @@ export function BrandForm({
           name="brand_name"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Brand Name</FormLabel>
+              <FormLabel>Brand Name <span className="text-red-500">*</span></FormLabel>
               <FormControl>
                 <Input placeholder="Enter brand name" {...field} value={field.value ?? ""} />
               </FormControl>
@@ -65,7 +65,7 @@ export function BrandForm({
           name="sku_code"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>SKU Code Prefix</FormLabel>
+              <FormLabel>SKU Code Prefix <span className="text-red-500">*</span></FormLabel>
               <FormControl>
                 <Input placeholder="BRND" {...field} value={field.value ?? ""} />
               </FormControl>

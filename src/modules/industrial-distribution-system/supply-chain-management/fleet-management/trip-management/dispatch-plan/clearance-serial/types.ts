@@ -100,6 +100,7 @@ export interface ReconciliationRow {
   missingQtys?: Record<string | number, number>;
   scannedQtys?: Record<string | number, number>;
   scannedSerials?: Record<string | number, string[]>;
+  is_visit?: number;
 }
 
 export interface InvoiceLine {

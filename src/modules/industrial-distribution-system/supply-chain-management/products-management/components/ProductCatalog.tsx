@@ -2,8 +2,7 @@ import React from "react";
 import { Product, Category, Brand } from "../types";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Edit, Trash, Package, Tag, Settings2, Eye } from "lucide-react";
+import { Edit, Package, Tag, Settings2, Eye } from "lucide-react";
 import Image from "next/image";
 import {
   DropdownMenu,
@@ -17,10 +16,7 @@ interface ProductCatalogProps {
   categories: Category[];
   brands: Brand[];
   onEdit: (product: Product) => void;
-  onDelete: (id: number) => void;
   onView: (product: Product) => void;
-  selectedIds: number[];
-  onSelectionChange: (ids: number[]) => void;
 }
 
 export function ProductCatalog({ 
@@ -28,10 +24,7 @@ export function ProductCatalog({
   categories, 
   brands, 
   onEdit, 
-  onDelete, 
   onView,
-  selectedIds,
-  onSelectionChange
 }: ProductCatalogProps) {
   const getCategoryName = (idOrObj: unknown) => {
     if (typeof idOrObj === 'object' && idOrObj !== null && 'category_name' in idOrObj) return (idOrObj as Record<string, string>).category_name;
@@ -67,36 +60,15 @@ export function ProductCatalog({
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-2">
       {Object.entries(groupedProducts).map(([groupName, groupItems]) => {
         const firstItem = groupItems[0];
-        const groupIds = groupItems.map(p => p.product_id);
-        const allSelected = groupIds.every(id => selectedIds.includes(id));
-        const someSelected = groupIds.some(id => selectedIds.includes(id)) && !allSelected;
         const categoryName = getCategoryName(firstItem.product_category);
         const brandName = getBrandName(firstItem.product_brand);
-
-        const toggleGroupSelection = (e?: React.MouseEvent) => {
-          if (e) e.stopPropagation();
-          if (allSelected) {
-            onSelectionChange(selectedIds.filter(id => !groupIds.includes(id)));
-          } else {
-            const newIds = new Set([...selectedIds, ...groupIds]);
-            onSelectionChange(Array.from(newIds));
-          }
-        };
 
         return (
           <Card 
             key={groupName} 
-            className={`cursor-pointer overflow-hidden transition-all duration-200 border group relative flex flex-col ${allSelected ? 'ring-2 ring-primary border-transparent shadow-md' : 'border-border/50 hover:shadow-lg hover:border-border'}`}
+            className="cursor-pointer overflow-hidden transition-all duration-200 border group relative flex flex-col border-border/50 hover:shadow-lg hover:border-border"
             onClick={() => onView(firstItem)}
           >
-            <div className="absolute top-3 left-3 z-10" onClick={(e) => e.stopPropagation()}>
-              <Checkbox 
-                checked={allSelected ? true : someSelected ? "indeterminate" : false}
-                onCheckedChange={() => toggleGroupSelection()}
-                className={allSelected || someSelected ? "" : "opacity-0 group-hover:opacity-100 transition-opacity bg-white/50 backdrop-blur-sm data-[state=checked]:opacity-100"}
-              />
-            </div>
-            
             <div className="h-32 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800/50 dark:to-slate-900/50 flex items-center justify-center border-b border-border/50 relative overflow-hidden group/image">
               {firstItem.product_image ? (
                 <Image
@@ -172,9 +144,6 @@ export function ProductCatalog({
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => onEdit(variant)}>
                             <Edit className="h-4 w-4 mr-2" /> Edit Variant
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="text-destructive focus:text-destructive focus:bg-destructive/10" onClick={() => onDelete(variant.product_id)}>
-                            <Trash className="h-4 w-4 mr-2" /> Delete Variant
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
