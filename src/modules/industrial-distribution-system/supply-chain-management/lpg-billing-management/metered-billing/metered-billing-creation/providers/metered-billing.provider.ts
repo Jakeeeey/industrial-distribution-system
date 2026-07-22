@@ -845,8 +845,8 @@ export async function updateMeteredTransaction(
   const invoiceId = payload.sales_invoice_id || existing?.sales_invoice_id || null;
   if (headerId && invoiceId) {
     try {
-      const headerInvoiceStatus =
-        (payload.status || existing?.status) === "POSTED" ? "POSTED" : "DRAFT";
+      const isPosted = (payload.status || existing?.status) === "POSTED";
+      const headerInvoiceStatus = isPosted ? "POSTED" : "DRAFT";
 
       const checkRes = await directusFetch<{ data: { id: number }[] }>(
         `${DIRECTUS_URL}/items/lpg_transaction_header_invoices?filter[header_id][_eq]=${headerId}&filter[sales_invoice_id][_eq]=${invoiceId}&limit=1`
@@ -877,8 +877,19 @@ export async function updateMeteredTransaction(
           }),
         });
       }
+
+      // DEV-RULE: Mark sales_invoice.is_visit = 1 upon completing regular metered billing (strictly excluded for onboarding)
+      const txType = payload.transaction_type || existing?.transaction_type;
+      if (isPosted && txType !== "ONBOARDING_BASELINE") {
+        await directusFetch(`${DIRECTUS_URL}/items/sales_invoice/${invoiceId}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            is_visit: 1,
+          }),
+        });
+      }
     } catch (linkErr) {
-      console.warn("[updateMeteredTransaction] Failed to link/update invoice status to header:", linkErr);
+      console.warn("[updateMeteredTransaction] Failed to link/update invoice status to header or update is_visit:", linkErr);
     }
   }
 

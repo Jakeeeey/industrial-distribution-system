@@ -1487,7 +1487,7 @@ export async function processRegularSwap(payload: {
     );
     parentTxData = parentRes.data;
 
-    // Link / Update invoice status to POSTED on the header linking table
+    // Link / Update invoice status to POSTED on the header linking table and update is_visit to 1 on sales_invoice
     if (invoiceId) {
       try {
         const checkRes = await directusFetch<{ data: { id: number }[] }>(
@@ -1517,8 +1517,16 @@ export async function processRegularSwap(payload: {
             }),
           });
         }
+
+        // DEV-RULE: Mark sales_invoice.is_visit = 1 upon completing regular billing (strictly excluded for onboarding)
+        await directusFetch(`${DIRECTUS_URL}/items/sales_invoice/${invoiceId}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            is_visit: 1,
+          }),
+        });
       } catch (e) {
-        console.warn("Failed to update lpg_transaction_header_invoices status to POSTED", e);
+        console.warn("Failed to update lpg_transaction_header_invoices status or sales_invoice.is_visit to 1", e);
       }
     }
   }
