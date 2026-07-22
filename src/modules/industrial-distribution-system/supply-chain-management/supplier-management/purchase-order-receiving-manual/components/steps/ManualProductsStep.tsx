@@ -36,8 +36,10 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
     const [receivingPage, setReceivingPage] = React.useState(1);
     const ITEMS_PER_PAGE = 10;
 
-    // ✅ Verification Modal state
+    // ✅ Over-receiving modal (non-serialized path & serialized over-limit path) - AG 2026-07-14
     const [isOverReceivingModalOpen, setIsOverReceivingModalOpen] = React.useState(false);
+    // Pending count the user tried to enter (non-serialized over-limit confirm flow)
+    const [pendingOverCount, setPendingOverCount] = React.useState<{ id: string; val: number } | null>(null);
 
     // ✅ Serial Modal state
     const [serialModalOpen, setSerialModalOpen] = React.useState(false);
@@ -48,6 +50,15 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
     const [newTare, setNewTare] = React.useState("");
     const [newExpiry, setNewExpiry] = React.useState("");
     const inputRef = React.useRef<HTMLInputElement>(null);
+
+    // ✅ Fix 3: Serial Verification state - AG 2026-07-14
+    const [verifyingSerial, setVerifyingSerial] = React.useState(false);
+    // Holds the serial that was BLOCKED because it is already in cylinder_assets master - AG 2026-07-14
+    const [blockedAssetSerial, setBlockedAssetSerial] = React.useState<{ sn: string; assetId: unknown; status: unknown; condition: unknown } | null>(null);
+    const [isBlockedSerialOpen, setIsBlockedSerialOpen] = React.useState(false);
+    // When serial count exceeds ordered qty for serialized items, prompt warning
+    const [isSerialOverLimitOpen, setIsSerialOverLimitOpen] = React.useState(false);
+    const [pendingSerialEntry, setPendingSerialEntry] = React.useState<{ sn: string; tare: string; expiry: string } | null>(null);
 
     // ✅ Auto-focus input when modal opens
     React.useEffect(() => {
@@ -79,6 +90,20 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
         const parsed = parseInt(val, 10);
         let validVal = isNaN(parsed) ? 0 : parsed;
         if (validVal < 0) validVal = 0;
+
+        // ✅ Fix 2: Check if new count would exceed ordered qty for non-serialized items - AG 2026-07-14
+        const item = filteredItems.find(it => String(it.id) === id);
+        if (item && !item.isSerialized && validVal > 0) {
+            const expectedQty = Number(item.expectedQty || 0);
+            const receivedAtStart = Number(item.receivedQty || 0);
+            const remainingBalance = expectedQty - receivedAtStart;
+            if (validVal > remainingBalance && validVal > 0) {
+                // Hold the value and prompt a confirmation dialog
+                setPendingOverCount({ id, val: validVal });
+                setIsOverReceivingModalOpen(true);
+                return; // Don't apply yet — wait for user confirmation
+            }
+        }
 
         setManualCounts(prev => ({ ...prev, [id]: validVal }));
     };
@@ -135,13 +160,17 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
     };
 
     const activeItem = filteredItems.find(x => String(x.id) === activePorId);
+    // orderedLimit is the remaining balance — used for display, NOT for hard blocking (warning shown instead) - AG 2026-07-14
     const orderedLimit = activeItem ? Math.max(0, Number(activeItem.expectedQty || 0) - Number(activeItem.receivedQty || 0)) : Infinity;
 
     // ✅ Validation Helper
     const isPendingValid = newSerial.trim() !== "" && newTare.trim() !== "" && newExpiry.trim() !== "";
     const isPartialEntry = newSerial.trim() !== "" || newTare.trim() !== ""; // If user started typing anything
 
-    const addSerial = () => {
+    // ✅ Fix 3: Serial Verification — NEW LOGIC (AG 2026-07-14)
+    // - Serial NOT in cylinder_assets (requiresRegistration=true) → AUTO-ACCEPT (new asset, free to receive)
+    // - Serial IS in cylinder_assets (source="asset") → BLOCK with popup (already registered, cannot duplicate)
+    const addSerial = async () => {
         if (!isPendingValid) {
             toast.error("Incomplete Registration", {
                 description: "Please fulfill all fields: Serial, Tare, and Expiry.",
@@ -149,21 +178,15 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
             return;
         }
 
-        const val = newSerial.trim();
+        const val = newSerial.trim().toUpperCase();
 
-        if (tempSerials.length >= orderedLimit) {
-            toast.error("Registration Limit Reached", {
-                description: `Ordered quantity balance is ${orderedLimit}.`,
-            });
-            return;
-        }
-
+        // 1. In-session duplicate check
         if (tempSerials.some(x => x.sn === val)) {
             toast.warning("Duplicate Serial", { description: "Already in current list." });
             return;
         }
 
-        // Cross-product duplicate check
+        // 2. Cross-product duplicate check (within this receiving session)
         let existingProduct = "";
         for (const [pid, sns] of Object.entries(serialsByPorId)) {
             if (pid === activePorId) continue;
@@ -173,19 +196,73 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                 break;
             }
         }
-
         if (existingProduct) {
             toast.error("Duplicate Serial", { description: `Already registered for ${existingProduct}` });
             return;
         }
 
-        setTempSerials([...tempSerials, { sn: val, tareWeight: newTare, expiryDate: newExpiry }]);
+        // 3. Check if over the ordered balance — warn instead of hard block - AG 2026-07-14
+        if (tempSerials.length >= orderedLimit) {
+            setPendingSerialEntry({ sn: val, tare: newTare, expiry: newExpiry });
+            setIsSerialOverLimitOpen(true);
+            return;
+        }
+
+        // 4. Verify against Cylinder Asset master DB - AG 2026-07-14
+        setVerifyingSerial(true);
+        try {
+            const res = await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "validate_scan_serial",
+                    serialNumber: val,
+                    poId: selectedPO?.id,
+                }),
+            });
+            const j = await res.json();
+            const result = j?.data;
+
+            if (result?.source === "asset") {
+                // ❌ BLOCKED: Serial is already registered in cylinder_assets master — cannot receive a duplicate - AG 2026-07-14
+                setBlockedAssetSerial({
+                    sn: val,
+                    assetId: result.asset?.id,
+                    status: result.asset?.cylinder_status,
+                    condition: result.asset?.cylinder_condition,
+                });
+                setIsBlockedSerialOpen(true);
+                return; // Do NOT add to tempSerials
+            }
+
+            // ✅ AUTO-ACCEPT: Serial not in cylinder_assets (requiresRegistration=true) or matched via PO serial tag
+            // New cylinders / PO-tagged serials can always be received without registration friction.
+            setTempSerials(prev => [...prev, { sn: val, tareWeight: newTare, expiryDate: newExpiry }]);
+            setNewSerial("");
+            setNewTare("");
+            setNewExpiry("");
+            setTimeout(() => inputRef.current?.focus(), 10);
+        } catch {
+            toast.error("Verification Failed", { description: "Could not verify serial. Please check your connection." });
+        } finally {
+            setVerifyingSerial(false);
+        }
+    };
+
+    // ✅ Confirm adding an over-limit serial (user acknowledged warning) - AG 2026-07-14
+    const confirmAddOverLimitSerial = () => {
+        if (!pendingSerialEntry) return;
+        setTempSerials(prev => [...prev, { sn: pendingSerialEntry.sn, tareWeight: pendingSerialEntry.tare, expiryDate: pendingSerialEntry.expiry }]);
+        setPendingSerialEntry(null);
+        setIsSerialOverLimitOpen(false);
         setNewSerial("");
         setNewTare("");
         setNewExpiry("");
-        toast.success("Serial Added", { description: val, duration: 800 });
         setTimeout(() => inputRef.current?.focus(), 10);
     };
+
+    // ✅ Removed: confirmRegisterCylinder and rejectUnregisteredSerial — no longer needed.
+    // Unregistered serials are now auto-accepted. Registered serials are blocked. - AG 2026-07-14
 
     const removeSerial = (index: number) => {
         setTempSerials(tempSerials.filter((_, i) => i !== index));
@@ -367,19 +444,106 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                 </Button>
             </div>
 
-            <AlertDialog open={isOverReceivingModalOpen} onOpenChange={setIsOverReceivingModalOpen}>
+            {/* ✅ Fix 2: Over-receiving warning for non-serialized items - AG 2026-07-14 */}
+            <AlertDialog open={isOverReceivingModalOpen} onOpenChange={(open) => {
+                if (!open) setPendingOverCount(null);
+                setIsOverReceivingModalOpen(open);
+            }}>
                 <AlertDialogContent className="rounded-2xl border-2">
                     <AlertDialogHeader>
                         <AlertDialogTitle className="flex items-center gap-2 text-red-600 font-black uppercase tracking-tight">
-                            <AlertTriangle className="w-5 h-5" /> Over-Receiving Detected
+                            <AlertTriangle className="w-5 h-5" /> Over-Receiving Warning
                         </AlertDialogTitle>
                         <AlertDialogDescription className="text-sm font-bold text-slate-600 uppercase tracking-wider leading-relaxed">
-                            Some products exceed the ordered quantity. This will create a discrepancy.
+                            The quantity you entered ({pendingOverCount?.val}) exceeds the remaining ordered balance.
+                            This will create an over-receiving discrepancy.
+                            Are you sure you want to proceed?
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel className="rounded-xl font-black uppercase tracking-widest text-[10px] border-2">Adjust</AlertDialogCancel>
-                        <AlertDialogAction onClick={onContinue} className="bg-red-600 hover:bg-red-700 rounded-xl font-black uppercase tracking-widest text-[10px]">Proceed</AlertDialogAction>
+                        <AlertDialogCancel className="rounded-xl font-black uppercase tracking-widest text-[10px] border-2" onClick={() => setPendingOverCount(null)}>Adjust Quantity</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => {
+                            // ✅ Apply the pending over-count on explicit user confirmation - AG 2026-07-14
+                            if (pendingOverCount) {
+                                setManualCounts(prev => ({ ...prev, [pendingOverCount.id]: pendingOverCount.val }));
+                                setPendingOverCount(null);
+                            }
+                            setIsOverReceivingModalOpen(false);
+                        }} className="bg-red-600 hover:bg-red-700 rounded-xl font-black uppercase tracking-widest text-[10px]">Proceed Anyway</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* ✅ Fix 2: Serial over-limit warning for serialized items - AG 2026-07-14 */}
+            <AlertDialog open={isSerialOverLimitOpen} onOpenChange={(open) => {
+                if (!open) setPendingSerialEntry(null);
+                setIsSerialOverLimitOpen(open);
+            }}>
+                <AlertDialogContent className="rounded-2xl border-2">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2 text-amber-600 font-black uppercase tracking-tight">
+                            <AlertTriangle className="w-5 h-5" /> Quantity Limit Exceeded
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-sm font-bold text-slate-600 uppercase tracking-wider leading-relaxed">
+                            You have already registered {tempSerials.length} serial(s) but the ordered balance is only {orderedLimit}.
+                            Adding serial <span className="font-mono text-slate-800">{pendingSerialEntry?.sn}</span> will exceed the ordered quantity.
+                            Confirm only if you are intentionally receiving more than ordered.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel className="rounded-xl font-black uppercase tracking-widest text-[10px] border-2" onClick={() => setPendingSerialEntry(null)}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={confirmAddOverLimitSerial} className="bg-amber-600 hover:bg-amber-700 rounded-xl font-black uppercase tracking-widest text-[10px]">Add Anyway</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* ✅ Fix 3 (UPDATED): Blocked Serial dialog — fires when serial is ALREADY in cylinder_assets master - AG 2026-07-14 */}
+            <AlertDialog open={isBlockedSerialOpen} onOpenChange={(open) => {
+                if (!open) setBlockedAssetSerial(null);
+                setIsBlockedSerialOpen(open);
+            }}>
+                <AlertDialogContent className="rounded-2xl border-2 border-red-200">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2 text-red-600 font-black uppercase tracking-tight">
+                            <AlertTriangle className="w-5 h-5" /> Serial Already Registered
+                        </AlertDialogTitle>
+                        <AlertDialogDescription asChild>
+                            <div className="space-y-3">
+                                <p className="text-sm font-bold text-slate-600 uppercase tracking-wider leading-relaxed">
+                                    Serial <span className="font-mono text-red-700 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">{blockedAssetSerial?.sn}</span> already exists in the Cylinder Asset master database and cannot be received again.
+                                </p>
+                                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5">
+                                    <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest">
+                                        <span className="text-slate-400">Asset ID</span>
+                                        <span className="font-mono text-slate-700">{String(blockedAssetSerial?.assetId || "—")}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest">
+                                        <span className="text-slate-400">Status</span>
+                                        <span className="text-slate-700">{String(blockedAssetSerial?.status || "—")}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest">
+                                        <span className="text-slate-400">Condition</span>
+                                        <span className="text-slate-700">{String(blockedAssetSerial?.condition || "—")}</span>
+                                    </div>
+                                </div>
+                                <p className="text-[10px] font-bold text-red-500 uppercase tracking-widest">
+                                    Please verify the physical serial number and try a different one.
+                                </p>
+                            </div>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogAction
+                            onClick={() => {
+                                setBlockedAssetSerial(null);
+                                setIsBlockedSerialOpen(false);
+                                setNewSerial("");
+                                setTimeout(() => inputRef.current?.focus(), 10);
+                            }}
+                            className="bg-red-600 hover:bg-red-700 rounded-xl font-black uppercase tracking-widest text-[10px]"
+                        >
+                            OK, Clear Entry
+                        </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
@@ -506,14 +670,14 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
 
                                 <Button 
                                     onClick={addSerial} 
-                                    disabled={tempSerials.length >= orderedLimit || !isPendingValid}
+                                    disabled={verifyingSerial || !isPendingValid}
                                     className={cn(
                                         "w-full h-11 rounded-xl font-black uppercase tracking-widest text-[10px] gap-2 shadow-md transition-all active:scale-[0.98]",
                                         !isPendingValid ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-slate-900 hover:bg-slate-800 text-white"
                                     )}
                                 >
                                     <Plus className="h-3.5 w-3.5" />
-                                    Add Registered Piece
+                                    {verifyingSerial ? "Verifying..." : "Add Registered Piece"}
                                 </Button>
                             </div>
                         </div>

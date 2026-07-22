@@ -8,6 +8,7 @@ export const DispatchPlanStatusSchema = z.enum([
   "Picking",
   "Picked",
   "Dispatched",
+  "Rejected",
 ]);
 export type DispatchPlanStatus = z.infer<typeof DispatchPlanStatusSchema>;
 
@@ -74,12 +75,14 @@ export const salesOrderOptionSchema = z.object({
   store_name: z.string().optional(),
   city: z.string().optional(),
   province: z.string().optional(),
+  brgy: z.string().optional(),
   total_amount: z.number().nullable(),
   net_amount: z.number().nullable(),
   allocated_amount: z.number().nullable().optional(),
   po_no: z.string().nullable().optional(),
   total_weight: z.number().optional(), // Computed from products.weight via sales_order_details
   order_status: z.string().optional(),
+  cluster_name: z.string().optional(),
 });
 export type SalesOrderOption = z.infer<typeof salesOrderOptionSchema>;
 
@@ -98,6 +101,7 @@ export const dispatchPlanSchema = z.object({
   cluster_id: z.number().nullable(),
   vehicle_id: z.number().nullable(),
   remarks: z.string().nullable().optional(),
+  reject_remarks: z.string().nullable().optional(),
   // Enriched fields (populated on fetch)
   driver_name: z.string().optional(),
   cluster_name: z.string().optional(),
@@ -122,6 +126,7 @@ export const dispatchPlanDetailSchema = z.object({
   customer_name: z.string().optional(),
   city: z.string().optional(),
   province: z.string().optional(),
+  brgy: z.string().optional(),
   weight: z.number().optional(),
   ordered_quantity: z.number().optional(),
   amount: z.number().optional(),
@@ -133,7 +138,7 @@ export type DispatchPlanDetail = z.infer<typeof dispatchPlanDetailSchema>;
 // Schema for creating a new Pre Dispatch Plan
 export const dispatchPlanFormSchema = z.object({
   driver_id: z.number().min(1, "Driver is required"),
-  cluster_id: z.number().min(1, "Cluster is required"),
+  cluster_id: z.number().nullable().optional(),
   branch_id: z.number().min(1, "Branch is required"),
   vehicle_id: z.number().min(1, "Vehicle is required"),
   dispatch_date: z.string().min(1, "Dispatch date is required"),

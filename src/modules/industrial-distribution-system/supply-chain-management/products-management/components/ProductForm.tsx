@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Info, Package, Upload, X } from "lucide-react";
@@ -109,11 +109,24 @@ export function ProductForm({
       cost_per_unit: initialValues?.cost_per_unit || 0,
       price_per_unit: initialValues?.price_per_unit || 0,
       isActive: initialValues?.isActive ?? 1,
-      is_serialized: 1,
+      is_serialized: initialValues?.is_serialized ?? 1,
       status: initialValues?.status || "Active",
       product_image: initialValues?.product_image || null,
     },
   });
+
+  const watchedCategory = form.watch("product_category");
+  
+  React.useEffect(() => {
+    if (watchedCategory && !initialValues) {
+      const category = categories.find(c => c.category_id === watchedCategory);
+      if (category && category.is_industrial === 1) {
+        form.setValue("is_serialized", 0);
+      } else {
+        form.setValue("is_serialized", 1);
+      }
+    }
+  }, [watchedCategory, categories, form, initialValues]);
 
   const handleFormSubmit = async (values: ProductFormValues) => {
     try {
@@ -159,7 +172,7 @@ export function ProductForm({
 
       const uomId = Number(values.unit_of_measurement) || (units && units.length > 0 ? Number(units[0].unit_id) : 1);
 
-      onSubmit({ ...values, product_image: imageId, unit_of_measurement: uomId, is_serialized: 1 });
+      onSubmit({ ...values, product_image: imageId, unit_of_measurement: uomId, is_serialized: values.is_serialized });
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to save product",
@@ -188,7 +201,7 @@ export function ProductForm({
               name="product_code"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Product Code</FormLabel>
+                  <FormLabel>Product Code <span className="text-red-500">*</span></FormLabel>
                   <FormControl>
                     <Input
                       placeholder="PROD-001"
@@ -207,7 +220,7 @@ export function ProductForm({
               name="product_name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Product Name</FormLabel>
+                  <FormLabel>Product Name <span className="text-red-500">*</span></FormLabel>
                   <FormControl>
                     <Input
                       placeholder="Enter product name"
@@ -228,7 +241,7 @@ export function ProductForm({
               name="product_category"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Category</FormLabel>
+                  <FormLabel>Category <span className="text-red-500">*</span></FormLabel>
                   <FormControl>
                     <SearchableSelect
                       options={categories.map((cat) => ({
@@ -251,7 +264,7 @@ export function ProductForm({
               name="product_brand"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Brand</FormLabel>
+                  <FormLabel>Brand <span className="text-red-500">*</span></FormLabel>
                   <FormControl>
                     <SearchableSelect
                       options={brands.map((brand) => ({
@@ -276,7 +289,7 @@ export function ProductForm({
               name="isActive"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Status</FormLabel>
+                  <FormLabel>Status <span className="text-red-500">*</span></FormLabel>
                   <FormControl>
                     <SearchableSelect
                       options={[
@@ -300,23 +313,57 @@ export function ProductForm({
             <FormField
               control={form.control}
               name="is_serialized"
-              render={() => (
+              render={({ field }) => (
                 <FormItem className="flex items-center space-x-3 space-y-0 p-4 rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-slate-50/30 dark:bg-slate-900/30 shadow-sm">
                   <FormControl>
-                    <Checkbox
-                      checked={true}
-                      disabled={true}
+                    <Switch
+                      checked={field.value === 1}
+                      onCheckedChange={(checked) => field.onChange(checked ? 1 : 0)}
+                      disabled={readOnly}
                     />
                   </FormControl>
-                  <div className="space-y-1 leading-none">
-                    <FormLabel className="text-sm font-semibold cursor-not-allowed select-none text-muted-foreground">
-                      Is Serialized Product (Default for Serial Management)
+                  <div className="space-y-1 leading-none flex-1">
+                    <FormLabel className="text-sm font-semibold select-none cursor-pointer">
+                      Is Serialized Product
                     </FormLabel>
+                    <p className="text-[11px] text-muted-foreground mt-1.5 font-medium leading-snug">
+                      {field.value === 1 
+                        ? "Creates EMPTY, SWAP, OUTRIGHT, DEPOSIT, and REFILL variants automatically and tracks serial numbers." 
+                        : "Creates a single product only based on the selected UOM. Serial tracking is disabled."}
+                    </p>
                   </div>
                 </FormItem>
               )}
             />
           </div>
+
+          {form.watch("is_serialized") === 0 && (
+            <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+              <FormField
+                control={form.control}
+                name="unit_of_measurement"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Unit of Measurement <span className="text-red-500">*</span></FormLabel>
+                    <FormControl>
+                      <SearchableSelect
+                        options={units.map((u) => ({
+                          value: u.unit_id.toString(),
+                          label: `${u.unit_name} (${u.unit_shortcut})`,
+                        }))}
+                        value={field.value?.toString()}
+                        onValueChange={(v) => field.onChange(parseInt(v))}
+                        placeholder="Select UOM"
+                        className="bg-slate-50/50 dark:bg-slate-900/50"
+                        disabled={readOnly}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          )}
         </div>
 
         {/* Section: Descriptions */}

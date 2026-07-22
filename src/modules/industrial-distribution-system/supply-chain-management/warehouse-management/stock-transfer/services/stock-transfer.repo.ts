@@ -99,12 +99,14 @@ export async function fetchProducts(search?: string, limit: number = 100, offset
     ].join(","),
     limit,
     offset,
+    "filter[product_category][is_industrial][_eq]": 1,
+    "filter[is_serialized][_eq]": 1,
   };
 
   if (search) {
-    params["filter[_or][0][product_name][_icontains]"] = search;
-    params["filter[_or][1][product_code][_icontains]"] = search;
-    params["filter[_or][2][barcode][_icontains]"] = search;
+    params["filter[_and][0][_or][0][product_name][_icontains]"] = search;
+    params["filter[_and][0][_or][1][product_code][_icontains]"] = search;
+    params["filter[_and][0][_or][2][barcode][_icontains]"] = search;
   }
 
   const res = await fetchItems<ProductRow>("items/products", params);
@@ -249,6 +251,8 @@ export async function updateTransfersStatus(
     dispatched_by?: number | null;
     dispatched_at?: string | null;
     approved_by?: number | null;
+    rejected_by?: number | null;
+    rejected_at?: string | null;
   }[]
 ): Promise<void> {
   if (items.length === 0) return;
@@ -267,6 +271,8 @@ export async function updateTransfersStatus(
       ...(item.dispatched_by !== undefined ? { dispatched_by: item.dispatched_by } : {}),
       ...(item.dispatched_at !== undefined ? { dispatched_at: item.dispatched_at } : {}),
       ...(item.approved_by !== undefined ? { approved_by: item.approved_by } : {}),
+      ...(item.rejected_by !== undefined ? { rejected_by: item.rejected_by } : {}),
+      ...(item.rejected_at !== undefined ? { rejected_at: item.rejected_at } : {}),
     });
     if (!grouped[key]) grouped[key] = [];
     grouped[key].push(item.id);

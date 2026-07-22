@@ -19,8 +19,9 @@ async function fetchData<T>(url: string, init?: RequestInit): Promise<T> {
 
 const BASE = "/api/ids/scm/supplier-management/approval-of-purchase-order";
 
-export async function fetchPendingApprovalPOs(): Promise<PendingApprovalPO[]> {
-    return fetchData<PendingApprovalPO[]>(BASE);
+export async function fetchPendingApprovalPOs(status: "pending" | "approved" | "rejected" | "all" = "pending"): Promise<PendingApprovalPO[]> {
+    const url = status && status !== "pending" ? `${BASE}?status=${status}` : BASE;
+    return fetchData<PendingApprovalPO[]>(url);
 }
 
 export async function fetchPurchaseOrderDetail(id: string | number): Promise<PurchaseOrderDetail> {
@@ -37,6 +38,25 @@ export async function approvePurchaseOrder(payload: {
         method: "POST",
         body: JSON.stringify({
             ...rest,
+            approver_id: approverId,
+        }),
+    });
+}
+
+export async function rejectPurchaseOrder(payload: {
+    id: string | number;
+    approverId?: number;
+    remarks?: string;
+    [key: string]: unknown;
+}): Promise<unknown> {
+    const { approverId, ...rest } = payload;
+    return fetchData<unknown>(BASE, {
+        method: "POST",
+        body: JSON.stringify({
+            ...rest,
+            action: "reject",
+            reject: true,
+            status: "REJECTED",
             approver_id: approverId,
         }),
     });

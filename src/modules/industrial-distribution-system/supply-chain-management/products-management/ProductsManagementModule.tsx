@@ -21,8 +21,7 @@ import {
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogDescription,
-  DialogFooter
+  DialogDescription
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -34,7 +33,7 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
-import { Plus, Package, Tags, Briefcase, Trash, List, LayoutGrid, Search, AlertTriangle } from "lucide-react";
+import { Plus, Package, Tags, Briefcase, List, LayoutGrid, Search } from "lucide-react";
 import { toast } from "sonner";
 
 interface ProductsManagementModuleProps {
@@ -76,15 +75,7 @@ export default function ProductsManagementModule({
   const [editingItem, setEditingItem] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isViewOnly, setIsViewOnly] = useState(false);
-  const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
   const [viewMode, setViewMode] = useState<"list" | "catalog">("list");
-
-  // Delete Confirmation State
-  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; id: number | null; isBulk: boolean }>({
-    isOpen: false,
-    id: null,
-    isBulk: false
-  });
 
   const handleCreate = () => {
     setEditingItem(null);
@@ -104,33 +95,6 @@ export default function ProductsManagementModule({
     setEditingItem(item);
     setIsViewOnly(true);
     setIsDialogOpen(true);
-  };
-
-  const confirmDelete = (id: number) => {
-    setDeleteConfirm({ isOpen: true, id, isBulk: false });
-  };
-
-  const confirmBulkDelete = () => {
-    if (!selectedProductIds.length) return;
-    setDeleteConfirm({ isOpen: true, id: null, isBulk: true });
-  };
-
-  const executeDelete = async () => {
-    try {
-      if (deleteConfirm.isBulk) {
-        await productsService.deleteProducts(selectedProductIds);
-        toast.success("Items deleted successfully");
-        setSelectedProductIds([]);
-      } else if (deleteConfirm.id !== null) {
-        if (activeTab === "products") await productsService.deleteProduct(deleteConfirm.id);
-        toast.success("Item deleted successfully");
-      }
-      refresh();
-    } catch (error) {
-      toast.error("Delete failed: " + (error instanceof Error ? error.message : String(error)));
-    } finally {
-      setDeleteConfirm({ isOpen: false, id: null, isBulk: false });
-    }
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -276,12 +240,6 @@ export default function ProductsManagementModule({
                     </Select>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    {selectedProductIds.length > 0 && (
-                      <Button variant="destructive" onClick={confirmBulkDelete} className="animate-in fade-in slide-in-from-left-2">
-                        <Trash className="h-4 w-4 mr-2" />
-                        Delete Selected ({selectedProductIds.length})
-                      </Button>
-                    )}
                     <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as "list" | "catalog")} className="bg-background border border-border/50 rounded-xl p-0.5">
                       <ToggleGroupItem value="list" aria-label="List View" className="rounded-lg px-3 data-[state=on]:bg-primary/10 data-[state=on]:text-primary h-9">
                         <List className="w-4 h-4" />
@@ -302,10 +260,7 @@ export default function ProductsManagementModule({
                   products={products} 
                   categories={categories}
                   brands={brands}
-                  selectedIds={selectedProductIds}
-                  onSelectionChange={setSelectedProductIds}
                   onEdit={handleEdit} 
-                  onDelete={confirmDelete} 
                   onView={handleView} 
                 />
               ) : (
@@ -313,10 +268,7 @@ export default function ProductsManagementModule({
                   products={products} 
                   categories={categories}
                   brands={brands}
-                  selectedIds={selectedProductIds}
-                  onSelectionChange={setSelectedProductIds}
                   onEdit={handleEdit} 
-                  onDelete={confirmDelete} 
                   onView={handleView} 
                 />
               )}
@@ -366,7 +318,6 @@ export default function ProductsManagementModule({
               <CategoryTable 
                 categories={categories} 
                 onEdit={handleEdit} 
-                onDelete={confirmDelete} 
               />
             </TabsContent>
 
@@ -374,7 +325,6 @@ export default function ProductsManagementModule({
               <BrandTable 
                 brands={brands} 
                 onEdit={handleEdit} 
-                onDelete={confirmDelete} 
               />
             </TabsContent>
           </div>
@@ -422,31 +372,6 @@ export default function ProductsManagementModule({
               isLoading={isSaving}
             />
           )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteConfirm.isOpen} onOpenChange={(open) => !open && setDeleteConfirm({ isOpen: false, id: null, isBulk: false })}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="h-5 w-5" />
-              Confirm Deletion
-            </DialogTitle>
-            <DialogDescription className="py-4 text-base">
-              {deleteConfirm.isBulk 
-                ? `Are you sure you want to delete ${selectedProductIds.length} items? This action cannot be undone.`
-                : "Are you sure you want to delete this item? This action cannot be undone."}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setDeleteConfirm({ isOpen: false, id: null, isBulk: false })}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={executeDelete}>
-              Delete
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

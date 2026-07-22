@@ -10,6 +10,7 @@ export type ReceivingListItem = {
     poNumber: string;
     supplierName: string;
     status: POStatus;
+    inventoryStatus?: number;
     totalAmount: number;
     currency: "PHP";
     itemsCount: number;
@@ -61,6 +62,7 @@ export type ReceivingPODetail = {
     poNumber: string;
     supplier: { id: string; name: string };
     status: POStatus;
+    inventoryStatus?: number;
     totalAmount: number;
     currency: "PHP";
     allocations: Array<{
@@ -71,6 +73,8 @@ export type ReceivingPODetail = {
         receiptNo: string;
         receiptDate: string;
         isPosted: boolean;
+        isReverted?: boolean;
+        status?: string;
         itemsCount: number;
     }>;
     createdAt: string;
@@ -115,6 +119,7 @@ type Ctx = {
 
     listLoading: boolean;
     listError: string;
+    openingPOId: string;
     refreshList: () => Promise<void>;
 
     // ✅ selection
@@ -229,6 +234,7 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
     const [list, setList] = React.useState<ReceivingListItem[]>([]);
     const [listLoading, setListLoading] = React.useState(false);
     const [listError, setListError] = React.useState("");
+    const [openingPOId, setOpeningPOId] = React.useState("");
 
     const [selectedPO, setSelectedPO] = React.useState<ReceivingPODetail | null>(null);
 
@@ -385,6 +391,7 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
             const id = String(poId ?? "").trim();
             if (!id) return;
 
+            setOpeningPOId(id);
             try {
                 const r = await fetch(API_URL, {
                     method: "POST",
@@ -437,6 +444,8 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
                     setVerifyError(msg);
                     toast.error(`Error: ${msg}`);
                 }
+            } finally {
+                setOpeningPOId("");
             }
         },
         [resetSession]
@@ -458,6 +467,8 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
                 return;
             }
 
+            const matchingListItem = (list ?? []).find((item) => item.poNumber === code || item.id === code);
+            setOpeningPOId(matchingListItem?.id ?? "");
             try {
                 const r = await fetch(API_URL, {
                     method: "POST",
@@ -510,9 +521,11 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
                     setVerifyError(msg);
                     toast.error(`Verification error: ${msg}`);
                 }
+            } finally {
+                setOpeningPOId("");
             }
         },
-        [resetSession]
+        [list, resetSession]
     );
 
     const openPO = React.useCallback(
@@ -791,6 +804,7 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
 
         listLoading,
         listError,
+        openingPOId,
         refreshList,
 
         selectedPO,
