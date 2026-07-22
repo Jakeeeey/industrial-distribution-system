@@ -40,6 +40,16 @@ test("rolling range contains exactly 30 inclusive dates", () => {
   );
 });
 
+test("rolling range uses the caller local day near a +08:00 midnight", () => {
+  assert.deepEqual(
+    getRollingThirtyDayRange(new Date("2026-07-22T00:15:00+08:00")),
+    {
+      startDate: "2026-06-23",
+      endDate: "2026-07-22",
+    },
+  );
+});
+
 test("one pass aggregation reconciles all compatible views", () => {
   const rows = [
     row(),
@@ -87,6 +97,28 @@ test("one pass aggregation reconciles all compatible views", () => {
   assert.equal(result.customerRanking[1].customerName, "Unassigned Customer");
   assert.equal(result.customerRanking[1].netPurchasedQty, -2);
   assert.equal(result.returnAnalysis.overall.returnRate, 5 / 15);
+  const alphaCustomer = result.customerRanking[0];
+  assert.equal(
+    alphaCustomer.productBreakdown.reduce(
+      (sum, item) => sum + item.netPurchasedQty,
+      0,
+    ),
+    alphaCustomer.netPurchasedQty,
+  );
+  assert.equal(
+    alphaCustomer.branchBreakdown.reduce(
+      (sum, item) => sum + item.netPurchasedQty,
+      0,
+    ),
+    alphaCustomer.netPurchasedQty,
+  );
+  assert.equal(
+    alphaCustomer.salespersonBreakdown.reduce(
+      (sum, item) => sum + item.netPurchasedQty,
+      0,
+    ),
+    alphaCustomer.netPurchasedQty,
+  );
   assert.equal(
     result.customerRanking.reduce((sum, item) => sum + item.netPurchasedQty, 0),
     result.overview.netPurchasedQty,
@@ -116,6 +148,43 @@ test("zero gross produces a zero return ratio", () => {
   );
 
   assert.equal(result.returnAnalysis.overall.returnRate, 0);
+});
+
+test("fractional quantities reconcile across every aggregate view", () => {
+  const result = aggregateCylinderPurchases(
+    [
+      row({ grossPurchasedQty: 1.75, returnedQty: 0.25, netPurchasedQty: 1.5 }),
+      row({
+        productId: 50,
+        productCode: "LPG-50",
+        productName: "LPG 50KG",
+        grossPurchasedQty: 0.5,
+        returnedQty: 0.125,
+        netPurchasedQty: 0.375,
+      }),
+    ],
+    { startDate: "2026-07-01", endDate: "2026-07-22" },
+    "2026-07-22T10:00:00.000Z",
+  );
+
+  assert.deepEqual(result.overview, {
+    grossPurchasedQty: 2.25,
+    returnedQty: 0.375,
+    netPurchasedQty: 1.875,
+    uniqueCustomers: 1,
+    serializedProducts: 2,
+  });
+  for (const view of [
+    result.customerRanking,
+    result.productPerformance,
+    result.branchPerformance,
+    result.salespersonPerformance,
+  ]) {
+    assert.equal(
+      view.reduce((sum, item) => sum + item.netPurchasedQty, 0),
+      result.overview.netPurchasedQty,
+    );
+  }
 });
 
 test("equal product rankings use ascending numeric identity as a stable tie-breaker", () => {
