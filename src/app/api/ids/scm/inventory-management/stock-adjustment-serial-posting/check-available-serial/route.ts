@@ -18,13 +18,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "No access token found" }, { status: 401 });
     }
 
-    const { exists, location } = await stockAdjustmentService.checkSerialExists(
-      serial, 
-      token, 
-      branchId ? Number(branchId) : undefined
-    );
+    const productId = searchParams.get("productId");
+    const type = searchParams.get("type") || "IN";
+
+    // Call validateSerialForAdjustment to enforce Stock IN / Stock OUT workflow rules
+    const result = await stockAdjustmentService.validateSerialForAdjustment({
+      serial,
+      token,
+      branchId: branchId ? Number(branchId) : undefined,
+      productId: productId ? Number(productId) : undefined,
+      type: type as "IN" | "OUT"
+    });
     
-    return NextResponse.json({ exists, location });
+    return NextResponse.json(result);
   } catch (error) {
     return handleApiError(error);
   }
