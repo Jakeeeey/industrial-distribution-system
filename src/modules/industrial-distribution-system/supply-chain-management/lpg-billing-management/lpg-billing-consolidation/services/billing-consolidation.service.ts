@@ -877,6 +877,8 @@ export async function approveConsolidationHeader(payload: ApproveHeaderPayload):
     branch_id: branchId,
     sales_type: 6,
     invoice_type: 1,
+    // DEV-RULE: Mark is_visit = 1 for consolidated regular billing approval
+    is_visit: 1,
     modified_by: approved_by,
     posted_by: approved_by,
   });
