@@ -504,7 +504,7 @@ export async function POST(request: Request) {
                     if (detailIds.length === 0) continue;
 
                     // Step E: Fetch consolidator serial mappings associated with these detail IDs
-                    const csmRes = await fetcher(`/consolidator_serial_mappings?filter[detail_id][_in]=${detailIds.join(",")}&fields=id&limit=-1`);
+                    // const csmRes = await fetcher(`/consolidator_serial_mappings?filter[detail_id][_in]=${detailIds.join(",")}&fields=id&limit=-1`);
                     // const mappingIds = (csmRes.data || []).map((m: { id: number }) => m.id);
 
                     // Step F: Delete the retrieved serial mappings if any exist
