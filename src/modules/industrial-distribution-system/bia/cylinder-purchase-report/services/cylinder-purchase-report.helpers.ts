@@ -10,19 +10,39 @@ interface RollingThirtyDayRange {
   endDate: string;
 }
 
-function localDateOnly(date: Date): string {
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${date.getFullYear()}-${month}-${day}`;
+const REPORT_TIME_ZONE = "Asia/Manila";
+
+const reportDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: REPORT_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+function reportCalendarDate(now: Date): Date {
+  const parts = reportDateFormatter.formatToParts(now);
+  const year = Number(parts.find((part) => part.type === "year")?.value);
+  const month = Number(parts.find((part) => part.type === "month")?.value);
+  const day = Number(parts.find((part) => part.type === "day")?.value);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function calendarDateOnly(date: Date): string {
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${date.getUTCFullYear()}-${month}-${day}`;
 }
 
 export function getRollingThirtyDayRange(
   now: Date = new Date(),
 ): RollingThirtyDayRange {
-  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const end = reportCalendarDate(now);
   const start = new Date(end);
-  start.setDate(start.getDate() - 29);
-  return { startDate: localDateOnly(start), endDate: localDateOnly(end) };
+  start.setUTCDate(start.getUTCDate() - 29);
+  return {
+    startDate: calendarDateOnly(start),
+    endDate: calendarDateOnly(end),
+  };
 }
 
 export function aggregateCylinderPurchases(
