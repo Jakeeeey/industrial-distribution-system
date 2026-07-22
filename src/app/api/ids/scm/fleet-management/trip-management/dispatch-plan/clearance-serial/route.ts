@@ -226,7 +226,7 @@ export async function GET(request: Request) {
             const planInvoices = invoices
                 .filter((inv: { post_dispatch_plan_id: number }) => inv.post_dispatch_plan_id === plan.id)
                 .map((inv: { id: number; invoice_id: number; status: string; remarks: string }) => {
-                    const salesInv = salesInvoices.find((s: { invoice_id: number; customer_code: string; order_id: string; invoice_no: string; invoice_date: string; total_amount: string | number }) => s.invoice_id === inv.invoice_id);
+                    const salesInv = salesInvoices.find((s: { invoice_id: number; customer_code: string; order_id: string; invoice_no: string; invoice_date: string; total_amount: string | number; is_visit?: number }) => s.invoice_id === inv.invoice_id);
                     const custCodeRaw = salesInv?.customer_code || "";
                     const custCode = custCodeRaw.toString().trim().replace(/\s+/g, "");
                     const foundName = customerMap.get(custCode);
@@ -249,6 +249,7 @@ export async function GET(request: Request) {
                         customerName: customerName,
                         amount: Number(salesInv?.total_amount) || 0,
                         remarks: inv.remarks || '',
+                        is_visit: salesInv?.is_visit !== undefined ? salesInv.is_visit : 1,
                         // Reconciliation data restoration
                         missingQtys: (() => {
                             const transaction = transactions.find((t: { sales_invoice_id: number; id: number }) => t.sales_invoice_id === inv.invoice_id);
@@ -503,10 +504,12 @@ export async function POST(request: Request) {
                     if (detailIds.length === 0) continue;
 
                     // Step E: Fetch consolidator serial mappings associated with these detail IDs
-                    const csmRes = await fetcher(`/consolidator_serial_mappings?filter[detail_id][_in]=${detailIds.join(",")}&fields=id&limit=-1`);
-                    const mappingIds = (csmRes.data || []).map((m: { id: number }) => m.id);
+                    // const csmRes = await fetcher(`/consolidator_serial_mappings?filter[detail_id][_in]=${detailIds.join(",")}&fields=id&limit=-1`);
+                    // const mappingIds = (csmRes.data || []).map((m: { id: number }) => m.id);
 
                     // Step F: Delete the retrieved serial mappings if any exist
+                    // Commented out as requested - mappings should no longer be deleted
+                    /*
                     if (mappingIds.length > 0) {
                         console.log(`[Clearance POST] Deleting ${mappingIds.length} consolidator serial mappings for Sales Order ID ${so.order_id}`);
                         const deleteRes = await fetch(`${BASE_URL}/consolidator_serial_mappings`, {
@@ -521,6 +524,7 @@ export async function POST(request: Request) {
                             console.warn(`[Clearance POST] Failed to delete consolidator serial mappings for Sales Order ID ${so.order_id}`);
                         }
                     }
+                    */
                 }
             } catch (mappingErr) {
                 console.error('Error deleting consolidator serial mappings:', mappingErr);
