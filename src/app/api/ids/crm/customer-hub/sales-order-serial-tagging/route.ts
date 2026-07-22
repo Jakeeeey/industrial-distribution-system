@@ -593,8 +593,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "orderId, customerCode, and an array of serials are required" }, { status: 400 });
     }
 
-    // 1. Fetch Sales Order to get starting branch and customer code
-    const orderRes = await fetchDirectus(`/items/sales_order/${orderId}?fields=branch_id,customer_code`);
+    // 1. Fetch Sales Order to get starting branch, customer code, and order numbers
+    // DEV-CHANGE: Added order_id and order_no fields for linking sales_invoice
+    const orderRes = await fetchDirectus(`/items/sales_order/${orderId}?fields=order_id,order_no,branch_id,customer_code`);
     const order = orderRes.data || {};
     const branchId = order.branch_id || null;
     const finalCustomerCode = order.customer_code || customerCode;
@@ -758,6 +759,61 @@ export async function POST(req: NextRequest) {
 
       results.push(serial_number);
     }
+
+  // 4. DEV-CHANGE: Update is_visit to 1 in linked sales_invoice
+  if (results.length > 0) {
+    try {
+      const orderNoStr = order.order_no ? String(order.order_no) : null;
+
+      console.log("[sales-order-serial-tagging] orderId:", orderId);
+      console.log("[sales-order-serial-tagging] orderNo:", order.order_no);
+
+      const filters: string[] = [];
+      const parsedOrderId = Number(orderId);
+      const isOrderIdNumeric = !Number.isNaN(parsedOrderId);
+
+      if (isOrderIdNumeric) {
+        filters.push(`filter[_or][${filters.length}][order_id][_eq]=${parsedOrderId}`);
+        filters.push(`filter[_or][${filters.length}][order_id.order_id][_eq]=${parsedOrderId}`);
+      }
+
+      if (orderNoStr) {
+        filters.push(`filter[_or][${filters.length}][order_id][_eq]=${encodeURIComponent(orderNoStr)}`);
+        filters.push(`filter[_or][${filters.length}][order_id.order_no][_eq]=${encodeURIComponent(orderNoStr)}`);
+      }
+
+      const invoicesRes = await fetchDirectus(
+        `/items/sales_invoice?${filters.join("&")}&fields=invoice_id,order_id,is_visit`
+      );
+
+      console.log(
+        "[sales-order-serial-tagging] sales invoices found:",
+        JSON.stringify(invoicesRes.data, null, 2)
+      );
+
+      const invoices = invoicesRes.data || [];
+
+      console.log("[sales-order-serial-tagging] invoice count:", invoices.length);
+
+      for (const inv of invoices) {
+        const patchResult = await fetchDirectus(
+          `/items/sales_invoice/${inv.invoice_id}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              is_visit: 1,
+            }),
+          }
+        );
+        console.log(`[sales-order-serial-tagging] Patched sales_invoice ${inv.invoice_id} is_visit:`, patchResult);
+      }
+    } catch (siErr) {
+      console.warn(
+        "Could not update is_visit on linked sales_invoice:",
+        siErr
+      );
+    }
+  }
 
     return NextResponse.json({ success: true, count: results.length });
   } catch (error: unknown) {
