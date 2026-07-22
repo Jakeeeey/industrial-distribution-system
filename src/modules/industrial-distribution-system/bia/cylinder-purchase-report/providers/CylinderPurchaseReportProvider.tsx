@@ -15,6 +15,7 @@ export interface CylinderPurchaseReportContextValue {
   report: CylinderPurchaseDashboardResponse | null;
   draftFilters: CylinderPurchaseReportFilters;
   appliedFilters: CylinderPurchaseReportFilters;
+  tableResetKey: number;
   setDraftFilters: React.Dispatch<
     React.SetStateAction<CylinderPurchaseReportFilters>
   >;
@@ -58,6 +59,7 @@ export function CylinderPurchaseReportProvider({
     React.useState<CylinderPurchaseReportFilters>(initialFilters);
   const [appliedFilters, setAppliedFilters] =
     React.useState<CylinderPurchaseReportFilters>(initialFilters);
+  const [tableResetKey, setTableResetKey] = React.useState(0);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [activeView, setActiveView] =
@@ -116,6 +118,7 @@ export function CylinderPurchaseReportProvider({
 
   const applyFilters = React.useCallback(async (): Promise<void> => {
     setAppliedFilters(draftFilters);
+    setTableResetKey((currentKey) => currentKey + 1);
     setSelectedCustomer(null);
     await requestReport(draftFilters);
   }, [draftFilters, requestReport]);
@@ -124,6 +127,7 @@ export function CylinderPurchaseReportProvider({
     const nextFilters = getRollingThirtyDayRange(new Date());
     setDraftFilters(nextFilters);
     setAppliedFilters(nextFilters);
+    setTableResetKey((currentKey) => currentKey + 1);
     setSelectedCustomer(null);
     await requestReport(nextFilters);
   }, [requestReport]);
@@ -147,6 +151,7 @@ export function CylinderPurchaseReportProvider({
       report,
       draftFilters,
       appliedFilters,
+      tableResetKey,
       setDraftFilters,
       applyFilters,
       clearFilters,
@@ -173,6 +178,7 @@ export function CylinderPurchaseReportProvider({
       report,
       selectCustomer,
       selectedCustomer,
+      tableResetKey,
     ],
   );
 
