@@ -81,16 +81,16 @@ export default async function Page() {
             <Breadcrumb>
               <BreadcrumbList className="min-w-0 overflow-hidden">
                 <BreadcrumbItem className="hidden md:block shrink-0">
-                  <BreadcrumbLink href="#">CRM</BreadcrumbLink>
+                  <BreadcrumbLink href="#">INDUSTRIAL-DISTRIBUTION-SYSTEM</BreadcrumbLink>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator className="hidden md:block shrink-0" />
                 <BreadcrumbItem className="hidden md:block shrink-0">
-                  <BreadcrumbLink href="#">Customer Hub</BreadcrumbLink>
+                  <BreadcrumbLink href="#">CRM</BreadcrumbLink>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator className="hidden md:block shrink-0" />
                 <BreadcrumbItem className="min-w-0 overflow-hidden">
-                  <BreadcrumbPage className="truncate">
-                    Sales Order Serial Tagging
+                  <BreadcrumbPage className="truncate max-w-[56vw] sm:max-w-[60vw] md:max-w-none">
+                    Sales Order Tagging
                   </BreadcrumbPage>
                 </BreadcrumbItem>
               </BreadcrumbList>

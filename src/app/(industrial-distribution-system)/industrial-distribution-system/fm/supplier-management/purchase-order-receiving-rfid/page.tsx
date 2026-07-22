@@ -102,16 +102,22 @@ export default async function Page() {
                     />
 
                     <Breadcrumb>
-                        <BreadcrumbList>
-                            <BreadcrumbItem className="hidden md:block">
-                                <BreadcrumbLink href="#">
-                                    Supplier Management
-                                </BreadcrumbLink>
+                        <BreadcrumbList className="min-w-0 overflow-hidden">
+                            <BreadcrumbItem className="hidden md:block shrink-0">
+                                <BreadcrumbLink href="#">INDUSTRIAL-DISTRIBUTION-SYSTEM</BreadcrumbLink>
                             </BreadcrumbItem>
-                            <BreadcrumbSeparator className="hidden md:block" />
-                            <BreadcrumbItem>
-                                <BreadcrumbPage>
-                                    Receiving Products
+                            <BreadcrumbSeparator className="hidden md:block shrink-0" />
+                            <BreadcrumbItem className="hidden md:block shrink-0">
+                                <BreadcrumbLink href="#">FM</BreadcrumbLink>
+                            </BreadcrumbItem>
+                            <BreadcrumbSeparator className="hidden md:block shrink-0" />
+                            <BreadcrumbItem className="hidden md:block shrink-0">
+                                <BreadcrumbLink href="#">Supplier Management</BreadcrumbLink>
+                            </BreadcrumbItem>
+                            <BreadcrumbSeparator className="hidden md:block shrink-0" />
+                            <BreadcrumbItem className="min-w-0 overflow-hidden">
+                                <BreadcrumbPage className="truncate max-w-[56vw] sm:max-w-[60vw] md:max-w-none">
+                                    Purchase Order Receiving Rfid
                                 </BreadcrumbPage>
                             </BreadcrumbItem>
                         </BreadcrumbList>

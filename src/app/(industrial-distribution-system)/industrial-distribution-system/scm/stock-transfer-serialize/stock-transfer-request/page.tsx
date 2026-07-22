@@ -35,19 +35,25 @@ export default async function Page() {
                         className="mr-2 data-[orientation=vertical]:h-4"
                     />
                     <Breadcrumb>
-                        <BreadcrumbList>
-                            <BreadcrumbItem className="hidden md:block">
-                                <BreadcrumbLink href="#">Warehouse Management</BreadcrumbLink>
-                            </BreadcrumbItem>
-                            <BreadcrumbSeparator className="hidden md:block" />
-                            <BreadcrumbItem className="hidden md:block">
-                                <BreadcrumbLink href="/scm/warehouse-management/stock-transfers/request">Stock Transfer</BreadcrumbLink>
-                            </BreadcrumbItem>
-                            <BreadcrumbSeparator className="hidden md:block" />
-                            <BreadcrumbItem>
-                                <BreadcrumbPage>Request</BreadcrumbPage>
-                            </BreadcrumbItem>
-                        </BreadcrumbList>
+                        <BreadcrumbList className="min-w-0 overflow-hidden">
+                                <BreadcrumbItem className="hidden md:block shrink-0">
+                                    <BreadcrumbLink href="#">INDUSTRIAL-DISTRIBUTION-SYSTEM</BreadcrumbLink>
+                                </BreadcrumbItem>
+                                <BreadcrumbSeparator className="hidden md:block shrink-0" />
+                                <BreadcrumbItem className="hidden md:block shrink-0">
+                                    <BreadcrumbLink href="#">SCM</BreadcrumbLink>
+                                </BreadcrumbItem>
+                                <BreadcrumbSeparator className="hidden md:block shrink-0" />
+                                <BreadcrumbItem className="hidden md:block shrink-0">
+                                    <BreadcrumbLink href="#">Stock Transfer Serialize</BreadcrumbLink>
+                                </BreadcrumbItem>
+                                <BreadcrumbSeparator className="hidden md:block shrink-0" />
+                                <BreadcrumbItem className="min-w-0 overflow-hidden">
+                                    <BreadcrumbPage className="truncate max-w-[56vw] sm:max-w-[60vw] md:max-w-none">
+                                        Stock Transfer Request
+                                    </BreadcrumbPage>
+                                </BreadcrumbItem>
+                            </BreadcrumbList>
                     </Breadcrumb>
                 </div>
 
