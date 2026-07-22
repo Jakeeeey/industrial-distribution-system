@@ -50,7 +50,7 @@ function pickString(obj: Record<string, unknown> | null, keys: string[]): string
 function buildHeaderUser(token: string | null | undefined) {
   const payload = token ? decodeJwtPayload(token) : null;
   const first = pickString(payload, ["Firstname", "FirstName", "firstName", "first_name"]);
-  const last  = pickString(payload, ["LastName", "Lastname", "lastName", "last_name"]);
+  const last = pickString(payload, ["LastName", "Lastname", "lastName", "last_name"]);
   const email = pickString(payload, ["email", "Email"]);
   return {
     name: [first, last].filter(Boolean).join(" ") || email || "User",
@@ -78,14 +78,16 @@ export default async function RTOOperationPage() {
             <Breadcrumb>
               <BreadcrumbList className="min-w-0 overflow-hidden">
                 <BreadcrumbItem className="hidden md:block shrink-0">
-                  <BreadcrumbLink href="#">
-                    Business Intelligence & Analytics
-                  </BreadcrumbLink>
+                  <BreadcrumbLink href="#">INDUSTRIAL-DISTRIBUTION-SYSTEM</BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator className="hidden md:block shrink-0" />
+                <BreadcrumbItem className="hidden md:block shrink-0">
+                  <BreadcrumbLink href="#">BIA</BreadcrumbLink>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator className="hidden md:block shrink-0" />
                 <BreadcrumbItem className="min-w-0 overflow-hidden">
                   <BreadcrumbPage className="truncate max-w-[56vw] sm:max-w-[60vw] md:max-w-none">
-                    RTO Operation
+                    Rto Operation
                   </BreadcrumbPage>
                 </BreadcrumbItem>
               </BreadcrumbList>

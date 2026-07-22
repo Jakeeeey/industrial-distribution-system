@@ -92,7 +92,7 @@ export default async function Page() {
             <Breadcrumb>
               <BreadcrumbList className="min-w-0 overflow-hidden">
                 <BreadcrumbItem className="hidden md:block shrink-0">
-                  <BreadcrumbLink href="#">IDS</BreadcrumbLink>
+                  <BreadcrumbLink href="#">INDUSTRIAL-DISTRIBUTION-SYSTEM</BreadcrumbLink>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator className="hidden md:block shrink-0" />
                 <BreadcrumbItem className="hidden md:block shrink-0">
@@ -100,12 +100,16 @@ export default async function Page() {
                 </BreadcrumbItem>
                 <BreadcrumbSeparator className="hidden md:block shrink-0" />
                 <BreadcrumbItem className="hidden md:block shrink-0">
-                  <BreadcrumbLink href="#">LPG Billing Management</BreadcrumbLink>
+                  <BreadcrumbLink href="#">Lpg Billing Management</BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator className="hidden md:block shrink-0" />
+                <BreadcrumbItem className="hidden md:block shrink-0">
+                  <BreadcrumbLink href="#">Wiwo Billing</BreadcrumbLink>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator className="hidden md:block shrink-0" />
                 <BreadcrumbItem className="min-w-0 overflow-hidden">
-                  <BreadcrumbPage className="truncate max-w-[56vw] sm:max-w-[60vw] md:max-w-none font-bold">
-                    WiWO Billing Summary
+                  <BreadcrumbPage className="truncate max-w-[56vw] sm:max-w-[60vw] md:max-w-none">
+                    Wiwo Billing Summary
                   </BreadcrumbPage>
                 </BreadcrumbItem>
               </BreadcrumbList>
