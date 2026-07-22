@@ -100,6 +100,7 @@ export interface UnifiedBillingTransaction {
   billing_mode?: BillingMode;
   customer_code: string;
   lpg_site_id: number;
+  transaction_header_id?: number | null;
   sales_order_id: number | null;
   sales_order_no?: string | null;
   meter_reading_id: number | null;
