@@ -6,6 +6,11 @@ import { z } from "zod";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
+export const reportLookupQuerySchema = z.object({
+  type: z.enum(["customers", "products", "branches", "salespeople"]),
+  q: z.string().trim().max(100).default(""),
+});
+
 export const cylinderPurchaseFilterSchema = z
   .object({
     customerCode: z.string().trim().min(1).optional(),
