@@ -88,6 +88,7 @@ export function SerialInputModal({
       return;
     }
 
+    // WORKFLOW VALIDATION: Validate serial status against on-hand, WITH_CUSTOMER, and WITH_SUPPLIER checks
     if (validateSerial) {
       setIsValidating(true);
       try {
