@@ -7,13 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useCylinderPurchaseReport } from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/hooks/useCylinderPurchaseReport";
 import { useCylinderPurchaseFilterOptions } from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/hooks/useCylinderPurchaseFilterOptions";
 import {
@@ -29,6 +22,7 @@ import { ReportSearchLookupInput } from "./ReportSearchLookupInput";
 
 const ALL_OPTIONS = "all";
 
+// Development comment: Refactored filter controls to use global SearchableSelect comboboxes across all dropdowns.
 export function CylinderPurchaseFilters(): React.ReactElement {
   const {
     draftFilters,
@@ -73,24 +67,44 @@ export function CylinderPurchaseFilters(): React.ReactElement {
     );
 
   const handleCustomerChange = (value: string): void => {
-    setCustomerQuery(value);
+    const selected =
+      value === ALL_OPTIONS
+        ? undefined
+        : findLookupOption(customerOptions, value);
+    setCustomerQuery(selected ? formatReportLookupLabel(selected) : "");
     setDraftFilters((current) =>
-      applyReportLookupSelection(
-        current,
-        "customers",
-        findLookupOption(customerOptions, value),
-      ),
+      applyReportLookupSelection(current, "customers", selected),
     );
   };
 
   const handleProductChange = (value: string): void => {
-    setProductQuery(value);
+    const selected =
+      value === ALL_OPTIONS
+        ? undefined
+        : findLookupOption(productOptions, value);
+    setProductQuery(selected ? formatReportLookupLabel(selected) : "");
     setDraftFilters((current) =>
-      applyReportLookupSelection(
-        current,
-        "products",
-        findLookupOption(productOptions, value),
-      ),
+      applyReportLookupSelection(current, "products", selected),
+    );
+  };
+
+  const handleBranchChange = (value: string): void => {
+    const selected =
+      value === ALL_OPTIONS
+        ? undefined
+        : findLookupOption(branchOptions, value);
+    setDraftFilters((current) =>
+      applyReportLookupSelection(current, "branches", selected),
+    );
+  };
+
+  const handleSalespersonChange = (value: string): void => {
+    const selected =
+      value === ALL_OPTIONS
+        ? undefined
+        : findLookupOption(salespersonOptions, value);
+    setDraftFilters((current) =>
+      applyReportLookupSelection(current, "salespeople", selected),
     );
   };
 
@@ -120,90 +134,56 @@ export function CylinderPurchaseFilters(): React.ReactElement {
           <ReportSearchLookupInput
             id="cylinder-report-customer"
             label="Customer"
-            value={customerQuery}
+            value={draftFilters.customerCode ?? ALL_OPTIONS}
             options={customerOptions}
             placeholder="Search code or customer"
+            allOptionLabel="All customers"
             onValueChange={handleCustomerChange}
           />
 
           <ReportSearchLookupInput
             id="cylinder-report-product"
             label="Serialized product"
-            value={productQuery}
+            value={
+              draftFilters.productId === undefined
+                ? ALL_OPTIONS
+                : String(draftFilters.productId)
+            }
             options={productOptions}
             placeholder="Search code or product"
+            allOptionLabel="All serialized products"
             onValueChange={handleProductChange}
           />
 
-          <div className="space-y-1.5">
-            <Label htmlFor="cylinder-report-branch">Branch</Label>
-            <Select
-              value={
-                draftFilters.branchId === undefined
-                  ? ALL_OPTIONS
-                  : String(draftFilters.branchId)
-              }
-              onValueChange={(value) =>
-                setDraftFilters((current) =>
-                  applyReportLookupSelection(
-                    current,
-                    "branches",
-                    value === ALL_OPTIONS
-                      ? undefined
-                      : findLookupOption(branchOptions, value),
-                  ),
-                )
-              }
-              disabled={isMasterDataLoading}
-            >
-              <SelectTrigger id="cylinder-report-branch" className="w-full">
-                <SelectValue placeholder="All branches" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_OPTIONS}>All branches</SelectItem>
-                {branchOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {formatReportLookupLabel(option)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <ReportSearchLookupInput
+            id="cylinder-report-branch"
+            label="Branch"
+            value={
+              draftFilters.branchId === undefined
+                ? ALL_OPTIONS
+                : String(draftFilters.branchId)
+            }
+            options={branchOptions}
+            placeholder="Search branch"
+            allOptionLabel="All branches"
+            disabled={isMasterDataLoading}
+            onValueChange={handleBranchChange}
+          />
 
-          <div className="space-y-1.5">
-            <Label htmlFor="cylinder-report-salesperson">Salesperson</Label>
-            <Select
-              value={
-                draftFilters.salesmanId === undefined
-                  ? ALL_OPTIONS
-                  : String(draftFilters.salesmanId)
-              }
-              onValueChange={(value) =>
-                setDraftFilters((current) =>
-                  applyReportLookupSelection(
-                    current,
-                    "salespeople",
-                    value === ALL_OPTIONS
-                      ? undefined
-                      : findLookupOption(salespersonOptions, value),
-                  ),
-                )
-              }
-              disabled={isMasterDataLoading}
-            >
-              <SelectTrigger id="cylinder-report-salesperson" className="w-full">
-                <SelectValue placeholder="All salespeople" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_OPTIONS}>All salespeople</SelectItem>
-                {salespersonOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {formatReportLookupLabel(option)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <ReportSearchLookupInput
+            id="cylinder-report-salesperson"
+            label="Salesperson"
+            value={
+              draftFilters.salesmanId === undefined
+                ? ALL_OPTIONS
+                : String(draftFilters.salesmanId)
+            }
+            options={salespersonOptions}
+            placeholder="Search salesperson"
+            allOptionLabel="All salespeople"
+            disabled={isMasterDataLoading}
+            onValueChange={handleSalespersonChange}
+          />
 
           <div className="space-y-1.5">
             <Label htmlFor="cylinder-report-start-date">Start date</Label>
