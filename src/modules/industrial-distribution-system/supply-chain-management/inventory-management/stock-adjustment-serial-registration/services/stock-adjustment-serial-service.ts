@@ -613,14 +613,21 @@ export const stockAdjustmentService = {
 
     try {
       // 1. Check if present in v_serial_onhand using filter endpoint (case-insensitive checks)
+      // WORKFLOW RULE: For Stock IN, we check on-hand status globally (without branch constraint) to detect
+      // whether the cylinder is on-hand at the current branch or another branch.
       let onHand = false;
       let onHandProdId: number | undefined = undefined;
       let onHandBranch: string | undefined = undefined;
+      let onHandBranchId: number | undefined = undefined;
 
       const checkOnHand = async (searchSerial: string) => {
         const filterUrl = new URL(`${SPRING_API_URL}/api/v-serial-onhand/filter`);
         filterUrl.searchParams.set("serialNumber", searchSerial);
-        if (branchId) filterUrl.searchParams.set("branchId", String(branchId));
+        // Note: For OUT adjustments we filter by branchId, but for IN adjustments we query globally
+        // to properly identify cross-branch on-hand occurrences.
+        if (type === "OUT" && branchId) {
+          filterUrl.searchParams.set("branchId", String(branchId));
+        }
         if (productId) filterUrl.searchParams.set("productId", String(productId));
 
         const springRes = await fetch(filterUrl.toString(), {
@@ -659,6 +666,7 @@ export const stockAdjustmentService = {
             onHand = true;
             onHandProdId = Number(exactMatch.productId || exactMatch.product_id);
             onHandBranch = exactMatch.branch_name || (exactMatch.branch_id ? `Branch #${exactMatch.branch_id}` : "Inventory");
+            onHandBranchId = exactMatch.branch_id ? Number(exactMatch.branch_id) : undefined;
             return true;
           }
         }
@@ -673,7 +681,6 @@ export const stockAdjustmentService = {
       }
 
       // 2. Check if present in cylinder_assets (case-insensitive query using OR)
-      // Typed product_id specifically instead of 'any' to fix lint errors
       const assetRes = await directusFetch<{ data: Array<{ id: number; cylinder_status?: string; product_id?: number | { id: number } | null; serial_number?: string }> }>(
         `${DIRECTUS_URL}/items/cylinder_assets?filter={"_or":[{"serial_number":{"_eq":"${serial.trim().toUpperCase()}"}},{"serial_number":{"_eq":"${serial.trim().toLowerCase()}"}}]}&fields=id,cylinder_status,product_id,serial_number`
       );
@@ -682,24 +689,57 @@ export const stockAdjustmentService = {
         String(a.serial_number || "").toUpperCase() === cleanSerial
       );
 
+      // 3. Check if present in cylinder_assets_draft (already registered in draft table, awaiting document posting)
+      const draftRes = await directusFetch<{ data: Array<{ id: number; cylinder_status?: string; product_id?: number | { id: number } | null; serial_number?: string }> }>(
+        `${DIRECTUS_URL}/items/cylinder_assets_draft?filter={"_or":[{"serial_number":{"_eq":"${serial.trim().toUpperCase()}"}},{"serial_number":{"_eq":"${serial.trim().toLowerCase()}"}}]}&fields=id,cylinder_status,product_id,serial_number`
+      );
+
+      const draftAsset = draftRes.data?.find((a) =>
+        String(a.serial_number || "").toUpperCase() === cleanSerial
+      );
+
       if (type === "IN") {
-        // STOCK IN validation:
-        // "if the serial is present on v_serial_onhand and present on cylinder_assets and/or its cylinder_assets.cylinder_status = 'WITH_CUSTOMER' dont accept it"
+        /**
+         * WORKFLOW VALIDATION RULES FOR STOCK IN ADJUSTMENT:
+         * 1. On-Hand Check: If on-hand at current branch -> Blocked ("already present on-hand").
+         * 2. Cross-Branch Check: If on-hand at another branch -> Blocked (suggest Stock Transfer).
+         * 3. Status WITH_CUSTOMER Check: Blocked (must use Customer Cylinder Return module).
+         * 4. Status WITH_SUPPLIER Check: Blocked (must use Supplier Receiving / PO Receiving module).
+         * 5. Existing Asset Check: If in cylinder_assets or cylinder_assets_draft and NOT on-hand -> Allowed & scanned through.
+         * 6. Draft / Unregistered Check: If not in cylinder_assets or cylinder_assets_draft -> Flagged as unregistered.
+         */
         if (onHand) {
+          const isSameBranch = branchId && onHandBranchId && Number(branchId) === Number(onHandBranchId);
+          const errorMsg = isSameBranch
+            ? `Serial "${serial}" is already present on-hand in this branch.`
+            : `Serial "${serial}" is currently on-hand at ${onHandBranch}. Please perform a Stock Transfer instead.`;
+
           return {
             exists: true,
             isBlocked: true,
-            errorMsg: `Serial "${serial}" is already present on-hand in ${onHandBranch}.`,
+            errorMsg,
             productId: onHandProdId
           };
         }
 
-        if (asset && asset.cylinder_status === "WITH_CUSTOMER") {
+        const currentStatus = (asset?.cylinder_status || "").toUpperCase();
+
+        if (asset && currentStatus === "WITH_CUSTOMER") {
           const pId = typeof asset.product_id === "object" ? asset.product_id?.id : asset.product_id;
           return {
             exists: true,
             isBlocked: true,
-            errorMsg: `Serial "${serial}" is currently WITH_CUSTOMER and cannot be adjusted in.`,
+            errorMsg: `Serial "${serial}" is currently WITH_CUSTOMER. Please receive it via Customer Cylinder Return.`,
+            productId: pId ? Number(pId) : undefined
+          };
+        }
+
+        if (asset && currentStatus === "WITH_SUPPLIER") {
+          const pId = typeof asset.product_id === "object" ? asset.product_id?.id : asset.product_id;
+          return {
+            exists: true,
+            isBlocked: true,
+            errorMsg: `Serial "${serial}" is currently WITH_SUPPLIER. Please receive it via Supplier Receiving / PO Receiving.`,
             productId: pId ? Number(pId) : undefined
           };
         }
@@ -713,11 +753,22 @@ export const stockAdjustmentService = {
           };
         }
 
-        // If it does not exist anywhere, it is unregistered
+        // WORKFLOW CHECK: If present in cylinder_assets_draft, serial is already registered in draft
+        // and should pass directly without forcing re-registration. It will be promoted to cylinder_assets upon posting.
+        if (draftAsset) {
+          const pId = typeof draftAsset.product_id === "object" ? draftAsset.product_id?.id : draftAsset.product_id;
+          return {
+            exists: true,
+            productId: pId ? Number(pId) : undefined,
+            location: `Registered in Cylinder Assets Draft`
+          };
+        }
+
+        // If it does not exist in cylinder_assets or cylinder_assets_draft, it is unregistered
         return { exists: false };
       } else {
         // STOCK OUT validation:
-        // "the serial should be present on the v_serial_onhand if not open register modal and register the serial"
+        // The serial should be present on v_serial_onhand for the selected branch.
         if (onHand) {
           return {
             exists: true,
