@@ -1,4 +1,5 @@
 import {
+
     Breadcrumb,
     BreadcrumbItem,
     BreadcrumbLink,
@@ -12,6 +13,9 @@ import { NavUser } from "@/components/shared/app-sidebar/nav-user";
 
 import { cookies } from "next/headers";
 import InventoryControlModule from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/inventory-control/InventoryControlModule";
+
+
+
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,7 +78,6 @@ export default async function Page(props: {
     params: Promise<Record<string, string | string[] | undefined>>;
     searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-    await props.params;
     await props.searchParams;
 
     const cookieStore = await cookies();
@@ -97,12 +100,17 @@ export default async function Page(props: {
                         <Breadcrumb>
                             <BreadcrumbList className="min-w-0 overflow-hidden">
                                 <BreadcrumbItem className="hidden md:block shrink-0">
-                                    <BreadcrumbLink href="#">Inventory Management</BreadcrumbLink>
+                                    <BreadcrumbLink href="#">INDUSTRIAL-DISTRIBUTION-SYSTEM</BreadcrumbLink>
+                                </BreadcrumbItem>
+                                <BreadcrumbSeparator className="hidden md:block shrink-0" />
+                                <BreadcrumbItem className="hidden md:block shrink-0">
+                                    <BreadcrumbLink href="#">SCM</BreadcrumbLink>
                                 </BreadcrumbItem>
                                 <BreadcrumbSeparator className="hidden md:block shrink-0" />
                                 <BreadcrumbItem className="min-w-0 overflow-hidden">
                                     <BreadcrumbPage className="truncate max-w-[56vw] sm:max-w-[60vw] md:max-w-none">
                                         Inventory Control
+
                                     </BreadcrumbPage>
                                 </BreadcrumbItem>
                             </BreadcrumbList>
@@ -117,6 +125,8 @@ export default async function Page(props: {
 
             <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4">
                 <InventoryControlModule />
+
+
             </main>
         </div>
     );

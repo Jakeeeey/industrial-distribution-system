@@ -201,7 +201,7 @@ export function ProductForm({
               name="product_code"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Product Code</FormLabel>
+                  <FormLabel>Product Code <span className="text-red-500">*</span></FormLabel>
                   <FormControl>
                     <Input
                       placeholder="PROD-001"
@@ -220,7 +220,7 @@ export function ProductForm({
               name="product_name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Product Name</FormLabel>
+                  <FormLabel>Product Name <span className="text-red-500">*</span></FormLabel>
                   <FormControl>
                     <Input
                       placeholder="Enter product name"
@@ -241,7 +241,7 @@ export function ProductForm({
               name="product_category"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Category</FormLabel>
+                  <FormLabel>Category <span className="text-red-500">*</span></FormLabel>
                   <FormControl>
                     <SearchableSelect
                       options={categories.map((cat) => ({
@@ -264,7 +264,7 @@ export function ProductForm({
               name="product_brand"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Brand</FormLabel>
+                  <FormLabel>Brand <span className="text-red-500">*</span></FormLabel>
                   <FormControl>
                     <SearchableSelect
                       options={brands.map((brand) => ({
@@ -289,7 +289,7 @@ export function ProductForm({
               name="isActive"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Status</FormLabel>
+                  <FormLabel>Status <span className="text-red-500">*</span></FormLabel>
                   <FormControl>
                     <SearchableSelect
                       options={[
@@ -344,7 +344,7 @@ export function ProductForm({
                 name="unit_of_measurement"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Unit of Measurement</FormLabel>
+                    <FormLabel>Unit of Measurement <span className="text-red-500">*</span></FormLabel>
                     <FormControl>
                       <SearchableSelect
                         options={units.map((u) => ({

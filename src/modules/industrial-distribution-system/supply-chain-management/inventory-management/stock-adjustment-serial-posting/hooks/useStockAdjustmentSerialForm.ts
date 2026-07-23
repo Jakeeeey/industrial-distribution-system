@@ -169,18 +169,32 @@ export function useStockAdjustmentSerialForm() {
     }
   }, []);
 
-  const validateSerialAvailability = useCallback(async (serial: string, branchId?: number): Promise<{ exists: boolean; location?: string; productId?: number }> => {
+  // WORKFLOW HOOK: Validates serial availability against on-hand inventory, cylinder_assets status, and branch location.
+  const validateSerialAvailability = useCallback(async (
+    serial: string,
+    branchId?: number,
+    productId?: number,
+    type: "IN" | "OUT" = "IN"
+  ): Promise<{ exists: boolean; location?: string; productId?: number; isBlocked?: boolean; errorMsg?: string }> => {
     try {
       const params = new URLSearchParams();
       params.set("serial", serial);
       if (branchId) params.set("branchId", String(branchId));
+      if (productId) params.set("productId", String(productId));
+      params.set("type", type);
 
       const response = await fetch(
         `/api/ids/scm/inventory-management/stock-adjustment-serial-posting/check-available-serial?${params.toString()}`
       );
       if (!response.ok) return { exists: false };
       const result = await response.json();
-      return { exists: !!result.exists, location: result.location, productId: result.productId };
+      return {
+        exists: !!result.exists,
+        location: result.location,
+        productId: result.productId,
+        isBlocked: result.isBlocked,
+        errorMsg: result.errorMsg
+      };
     } catch (err) {
       console.error("Failed to validate Serial availability:", err);
       return { exists: false };

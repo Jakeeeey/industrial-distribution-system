@@ -359,26 +359,32 @@ const ClearanceModal: React.FC<ClearanceModalProps> = ({ isOpen, onClose, onSucc
                                                             <SelectValue placeholder="Select Status" />
                                                         </SelectTrigger>
                                                         <SelectContent className="rounded-xl border-border bg-popover text-popover-foreground shadow-xl overflow-hidden p-1">
-                                                            <SelectItem value="Fulfilled" className="rounded-lg mb-1 focus:bg-emerald-500/10 focus:text-emerald-500 font-bold hover:bg-emerald-500/10 data-[state=checked]:bg-emerald-600 data-[state=checked]:text-white transition-colors">
-                                                                <div className="flex items-center gap-2">
-                                                                    <PackageCheck className="w-4 h-4" /> Fulfilled
-                                                                </div>
-                                                            </SelectItem>
+                                                            {inv.is_visit !== 0 && (
+                                                                <SelectItem value="Fulfilled" className="rounded-lg mb-1 focus:bg-emerald-500/10 focus:text-emerald-500 font-bold hover:bg-emerald-500/10 data-[state=checked]:bg-emerald-600 data-[state=checked]:text-white transition-colors">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <PackageCheck className="w-4 h-4" /> Fulfilled
+                                                                    </div>
+                                                                </SelectItem>
+                                                            )}
                                                             <SelectItem value="Unfulfilled" className="rounded-lg mb-1 focus:bg-rose-500/10 focus:text-rose-500 font-bold hover:bg-rose-500/10 data-[state=checked]:bg-rose-600 data-[state=checked]:text-white transition-colors">
                                                                 <div className="flex items-center gap-2">
                                                                     <PackageX className="w-4 h-4" /> Unfulfilled
                                                                 </div>
                                                             </SelectItem>
-                                                            <SelectItem value="Fulfilled with Concerns" className="rounded-lg mb-1 focus:bg-amber-500/10 focus:text-amber-500 font-bold hover:bg-amber-500/10 data-[state=checked]:bg-amber-500 data-[state=checked]:text-white transition-colors">
-                                                                <div className="flex items-center gap-2">
-                                                                    <AlertTriangle className="w-4 h-4" /> Fulfilled with Concerns
-                                                                </div>
-                                                            </SelectItem>
-                                                            <SelectItem value="Fulfilled with Returns" className="rounded-lg focus:bg-sky-500/10 focus:text-sky-500 font-bold hover:bg-sky-500/10 data-[state=checked]:bg-sky-600 data-[state=checked]:text-white transition-colors">
-                                                                <div className="flex items-center gap-2">
-                                                                    <RotateCcw className="w-4 h-4" /> Fulfilled with Returns
-                                                                </div>
-                                                            </SelectItem>
+                                                            {inv.is_visit !== 0 && (
+                                                                <>
+                                                                    <SelectItem value="Fulfilled with Concerns" className="rounded-lg mb-1 focus:bg-amber-500/10 focus:text-amber-500 font-bold hover:bg-amber-500/10 data-[state=checked]:bg-amber-500 data-[state=checked]:text-white transition-colors">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <AlertTriangle className="w-4 h-4" /> Fulfilled with Concerns
+                                                                        </div>
+                                                                    </SelectItem>
+                                                                    <SelectItem value="Fulfilled with Returns" className="rounded-lg focus:bg-sky-500/10 focus:text-sky-500 font-bold hover:bg-sky-500/10 data-[state=checked]:bg-sky-600 data-[state=checked]:text-white transition-colors">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <RotateCcw className="w-4 h-4" /> Fulfilled with Returns
+                                                                        </div>
+                                                                    </SelectItem>
+                                                                </>
+                                                            )}
                                                         </SelectContent>
                                                     </Select>
                                                 </TableCell>
