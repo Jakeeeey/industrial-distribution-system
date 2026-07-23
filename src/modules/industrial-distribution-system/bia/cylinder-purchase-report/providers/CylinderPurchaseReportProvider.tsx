@@ -9,6 +9,7 @@ import type {
   CustomerPurchaseSummary,
   CylinderPurchaseDashboardResponse,
   CylinderPurchaseDashboardView,
+  SalespersonPurchaseSummary,
 } from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/types/cylinder-purchase-report.types";
 
 export interface CylinderPurchaseReportContextValue {
@@ -30,6 +31,9 @@ export interface CylinderPurchaseReportContextValue {
   selectedCustomer: CustomerPurchaseSummary | null;
   selectCustomer(customer: CustomerPurchaseSummary): void;
   closeCustomerDetail(): void;
+  selectedSalesperson: SalespersonPurchaseSummary | null;
+  openSalespersonDetail(salesperson: SalespersonPurchaseSummary): void;
+  closeSalespersonDetail(): void;
 }
 
 export const CylinderPurchaseReportContext =
@@ -66,6 +70,8 @@ export function CylinderPurchaseReportProvider({
     React.useState<CylinderPurchaseDashboardView>("customers");
   const [selectedCustomer, setSelectedCustomer] =
     React.useState<CustomerPurchaseSummary | null>(null);
+  const [selectedSalesperson, setSelectedSalesperson] =
+    React.useState<SalespersonPurchaseSummary | null>(null);
   const requestControllerRef = React.useRef<AbortController | null>(null);
 
   const requestReport = React.useCallback(
@@ -85,6 +91,7 @@ export function CylinderPurchaseReportProvider({
         if (controller.signal.aborted || requestControllerRef.current !== controller) {
           return;
         }
+        setSelectedSalesperson(null);
         setReport(nextReport);
       } catch (requestError) {
         if (controller.signal.aborted || isAbortError(requestError)) {
@@ -120,6 +127,7 @@ export function CylinderPurchaseReportProvider({
     setAppliedFilters(draftFilters);
     setTableResetKey((currentKey) => currentKey + 1);
     setSelectedCustomer(null);
+    setSelectedSalesperson(null);
     await requestReport(draftFilters);
   }, [draftFilters, requestReport]);
 
@@ -129,6 +137,7 @@ export function CylinderPurchaseReportProvider({
     setAppliedFilters(nextFilters);
     setTableResetKey((currentKey) => currentKey + 1);
     setSelectedCustomer(null);
+    setSelectedSalesperson(null);
     await requestReport(nextFilters);
   }, [requestReport]);
 
@@ -144,6 +153,15 @@ export function CylinderPurchaseReportProvider({
   );
   const closeCustomerDetail = React.useCallback((): void => {
     setSelectedCustomer(null);
+  }, []);
+  const openSalespersonDetail = React.useCallback(
+    (salesperson: SalespersonPurchaseSummary): void => {
+      setSelectedSalesperson(salesperson);
+    },
+    [],
+  );
+  const closeSalespersonDetail = React.useCallback((): void => {
+    setSelectedSalesperson(null);
   }, []);
 
   const value = React.useMemo<CylinderPurchaseReportContextValue>(
@@ -164,6 +182,9 @@ export function CylinderPurchaseReportProvider({
       selectedCustomer,
       selectCustomer,
       closeCustomerDetail,
+      selectedSalesperson,
+      openSalespersonDetail,
+      closeSalespersonDetail,
     }),
     [
       activeView,
@@ -171,13 +192,16 @@ export function CylinderPurchaseReportProvider({
       applyFilters,
       clearFilters,
       closeCustomerDetail,
+      closeSalespersonDetail,
       draftFilters,
       error,
       isLoading,
       refresh,
       report,
+      openSalespersonDetail,
       selectCustomer,
       selectedCustomer,
+      selectedSalesperson,
       tableResetKey,
     ],
   );

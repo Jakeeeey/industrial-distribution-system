@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { Button } from "@/components/ui/button";
 import { useCylinderPurchaseReport } from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/hooks/useCylinderPurchaseReport";
 import type { SalespersonPurchaseSummary } from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/types/cylinder-purchase-report.types";
 
@@ -12,10 +13,14 @@ import {
   type RankedReportRow,
 } from "./analytical-view.utils";
 import { ReportDataTable, type ReportColumn } from "./ReportDataTable";
+import { SalespersonPurchaseDetail } from "./SalespersonPurchaseDetail";
 
 type SalespersonPerformanceRow = RankedReportRow<SalespersonPurchaseSummary>;
 
-const columns: readonly ReportColumn<SalespersonPerformanceRow>[] = [
+function createColumns(
+  openSalespersonDetail: (salesperson: SalespersonPurchaseSummary) => void,
+): readonly ReportColumn<SalespersonPerformanceRow>[] {
+  return [
   { key: "rank", label: "Rank", value: (row) => row.rank, align: "center" },
   {
     key: "salesperson",
@@ -71,9 +76,32 @@ const columns: readonly ReportColumn<SalespersonPerformanceRow>[] = [
     render: (row) => formatQuantity(row.data.uniqueProducts),
     align: "right",
   },
-] as const;
+  {
+    key: "actions",
+    label: "Actions",
+    value: () => "",
+    render: (row) => (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => openSalespersonDetail(row.data)}
+      >
+        View details
+      </Button>
+    ),
+    align: "center",
+  },
+  ] as const;
+}
 
-function SalespersonMobileCard({ row }: { row: SalespersonPerformanceRow }) {
+function SalespersonMobileCard({
+  row,
+  onViewDetails,
+}: {
+  row: SalespersonPerformanceRow;
+  onViewDetails: (salesperson: SalespersonPurchaseSummary) => void;
+}) {
   const { data } = row;
 
   return (
@@ -127,15 +155,28 @@ function SalespersonMobileCard({ row }: { row: SalespersonPerformanceRow }) {
           </dd>
         </div>
       </dl>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="mt-4 w-full"
+        onClick={() => onViewDetails(data)}
+      >
+        View details
+      </Button>
     </div>
   );
 }
 
 export function SalespersonPerformanceView(): React.ReactElement {
-  const { report } = useCylinderPurchaseReport();
+  const { report, openSalespersonDetail } = useCylinderPurchaseReport();
   const rows = React.useMemo(
     () => rankReportRows(report?.salespersonPerformance ?? []),
     [report?.salespersonPerformance],
+  );
+  const columns = React.useMemo(
+    () => createColumns(openSalespersonDetail),
+    [openSalespersonDetail],
   );
 
   return (
@@ -146,8 +187,14 @@ export function SalespersonPerformanceView(): React.ReactElement {
         rowKey={(row) => row.data.salesmanId}
         defaultSort={{ key: "net", direction: "desc" }}
         searchLabel="Search salesperson performance"
-        renderMobileCard={(row) => <SalespersonMobileCard row={row} />}
+        renderMobileCard={(row) => (
+          <SalespersonMobileCard
+            row={row}
+            onViewDetails={openSalespersonDetail}
+          />
+        )}
       />
+      <SalespersonPurchaseDetail />
     </section>
   );
 }
