@@ -2,7 +2,6 @@
 
 import * as React from "react";
 
-import { Button } from "@/components/ui/button";
 import { useCylinderPurchaseReport } from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/hooks/useCylinderPurchaseReport";
 import type { SalespersonPurchaseSummary } from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/types/cylinder-purchase-report.types";
 
@@ -17,10 +16,7 @@ import { SalespersonPurchaseDetail } from "./SalespersonPurchaseDetail";
 
 type SalespersonPerformanceRow = RankedReportRow<SalespersonPurchaseSummary>;
 
-function createColumns(
-  openSalespersonDetail: (salesperson: SalespersonPurchaseSummary) => void,
-): readonly ReportColumn<SalespersonPerformanceRow>[] {
-  return [
+const columns: readonly ReportColumn<SalespersonPerformanceRow>[] = [
   { key: "rank", label: "Rank", value: (row) => row.rank, align: "center" },
   {
     key: "salesperson",
@@ -76,32 +72,9 @@ function createColumns(
     render: (row) => formatQuantity(row.data.uniqueProducts),
     align: "right",
   },
-  {
-    key: "actions",
-    label: "Actions",
-    value: () => "",
-    render: (row) => (
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => openSalespersonDetail(row.data)}
-      >
-        View details
-      </Button>
-    ),
-    align: "center",
-  },
-  ] as const;
-}
+ ] as const;
 
-function SalespersonMobileCard({
-  row,
-  onViewDetails,
-}: {
-  row: SalespersonPerformanceRow;
-  onViewDetails: (salesperson: SalespersonPurchaseSummary) => void;
-}) {
+function SalespersonMobileCard({ row }: { row: SalespersonPerformanceRow }) {
   const { data } = row;
 
   return (
@@ -155,15 +128,6 @@ function SalespersonMobileCard({
           </dd>
         </div>
       </dl>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="mt-4 w-full"
-        onClick={() => onViewDetails(data)}
-      >
-        View details
-      </Button>
     </div>
   );
 }
@@ -174,10 +138,6 @@ export function SalespersonPerformanceView(): React.ReactElement {
     () => rankReportRows(report?.salespersonPerformance ?? []),
     [report?.salespersonPerformance],
   );
-  const columns = React.useMemo(
-    () => createColumns(openSalespersonDetail),
-    [openSalespersonDetail],
-  );
 
   return (
     <section aria-label="Salesperson performance">
@@ -187,12 +147,11 @@ export function SalespersonPerformanceView(): React.ReactElement {
         rowKey={(row) => row.data.salesmanId}
         defaultSort={{ key: "net", direction: "desc" }}
         searchLabel="Search salesperson performance"
-        renderMobileCard={(row) => (
-          <SalespersonMobileCard
-            row={row}
-            onViewDetails={openSalespersonDetail}
-          />
-        )}
+        onRowClick={(row) => openSalespersonDetail(row.data)}
+        rowActionLabel={(row) =>
+          `View purchase details for ${row.data.salesmanName}`
+        }
+        renderMobileCard={(row) => <SalespersonMobileCard row={row} />}
       />
       <SalespersonPurchaseDetail />
     </section>

@@ -13,9 +13,12 @@ const providerPath =
 test("salesperson performance exposes an accessible detail action", () => {
   const source = readSource(`${componentRoot}/SalespersonPerformanceView.tsx`);
 
-  assert.match(source, /View details/);
+  assert.match(source, /View purchase details/);
   assert.match(source, /openSalespersonDetail/);
   assert.match(source, /SalespersonPurchaseDetail/);
+  assert.match(source, /onRowClick=\{\(row\) => openSalespersonDetail\(row\.data\)\}/);
+  assert.match(source, /rowActionLabel=\{\(row\) =>/);
+  assert.doesNotMatch(source, /key:\s*"actions"/);
 });
 
 test("salesperson detail presents customer, cylinder, and customer cylinder tabs", () => {
