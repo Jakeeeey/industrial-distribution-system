@@ -24,8 +24,12 @@ function CylinderPurchaseReportContent(): React.ReactElement {
     <div className="w-full min-w-0 space-y-4 animate-in fade-in duration-500">
       <CylinderPurchaseReportHeader />
       <CylinderPurchaseFilters />
-      {error && !report ? (
-        <ReportErrorState message={error} onRetry={refresh} />
+      {error ? (
+        <ReportErrorState
+          message={error}
+          onRetry={refresh}
+          variant={report ? "inline" : "full"}
+        />
       ) : null}
       <CylinderPurchaseOverview
         report={report}
