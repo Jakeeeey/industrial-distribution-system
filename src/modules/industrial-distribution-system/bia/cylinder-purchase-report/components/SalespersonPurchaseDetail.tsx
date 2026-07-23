@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +24,11 @@ import {
   CustomerBreakdownMobileCard,
 } from "./CustomerBreakdownDisplay";
 import { ReportDataTable, type ReportColumn } from "./ReportDataTable";
+import {
+  filterCustomerProducts,
+  selectSalespersonCustomer,
+  type SalespersonDetailTab,
+} from "./salesperson-purchase-detail.utils";
 
 const metricColumns = <T extends {
   grossPurchasedQty: number;
@@ -133,6 +139,44 @@ const customerProductColumns: readonly ReportColumn<SalespersonCustomerProductPu
 export function SalespersonPurchaseDetail(): React.ReactElement {
   const { selectedSalesperson, closeSalespersonDetail } =
     useCylinderPurchaseReport();
+  const [activeTab, setActiveTab] =
+    React.useState<SalespersonDetailTab>("customers");
+  const [selectedCustomerKey, setSelectedCustomerKey] = React.useState<
+    string | null
+  >(null);
+
+  React.useEffect(() => {
+    setActiveTab("customers");
+    setSelectedCustomerKey(null);
+  }, [selectedSalesperson?.salesmanId]);
+
+  const selectedCustomer = React.useMemo(
+    () =>
+      selectedSalesperson?.customerBreakdown.find(
+        (customer) => customer.customerKey === selectedCustomerKey,
+      ) ?? null,
+    [selectedCustomerKey, selectedSalesperson],
+  );
+  const filteredCustomerProducts = React.useMemo(
+    () =>
+      filterCustomerProducts(
+        selectedSalesperson?.customerProductBreakdown ?? [],
+        selectedCustomerKey,
+      ),
+    [selectedCustomerKey, selectedSalesperson],
+  );
+
+  const openCustomerCylinders = React.useCallback(
+    (customer: SalespersonCustomerPurchaseSummary): void => {
+      const selection = selectSalespersonCustomer(customer.customerKey);
+      setSelectedCustomerKey(selection.selectedCustomerKey);
+      setActiveTab(selection.activeTab);
+    },
+    [],
+  );
+  const handleTabChange = React.useCallback((value: string): void => {
+    setActiveTab(value as SalespersonDetailTab);
+  }, []);
 
   return (
     <Dialog
@@ -173,7 +217,11 @@ export function SalespersonPurchaseDetail(): React.ReactElement {
             />
           </dl>
 
-          <Tabs defaultValue="customers" className="min-w-0">
+          <Tabs
+            value={activeTab}
+            onValueChange={handleTabChange}
+            className="min-w-0"
+          >
             <div className="overflow-x-auto pb-1">
               <TabsList className="grid min-w-[36rem] grid-cols-3">
                 <TabsTrigger value="customers">Customers</TabsTrigger>
@@ -192,6 +240,10 @@ export function SalespersonPurchaseDetail(): React.ReactElement {
                 defaultSort={{ key: "net", direction: "desc" }}
                 searchLabel="Search salesperson customers"
                 emptyMessage="No customer purchases are available for this salesperson."
+                onRowClick={openCustomerCylinders}
+                rowActionLabel={(row) =>
+                  `View cylinders purchased by ${row.customerName}`
+                }
                 renderMobileCard={(row) => (
                   <CustomerBreakdownMobileCard
                     {...row}
@@ -221,13 +273,37 @@ export function SalespersonPurchaseDetail(): React.ReactElement {
             </TabsContent>
 
             <TabsContent value="customer-products">
+              {selectedCustomer ? (
+                <div className="mb-3 flex flex-col gap-2 rounded-lg border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      Cylinders purchased by {selectedCustomer.customerName}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {selectedCustomer.customerCode ?? "No customer code"}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedCustomerKey(null)}
+                  >
+                    Show all customers
+                  </Button>
+                </div>
+              ) : null}
               <ReportDataTable
                 columns={customerProductColumns}
-                rows={selectedSalesperson.customerProductBreakdown}
+                rows={filteredCustomerProducts}
                 rowKey={(row) => row.key}
                 defaultSort={{ key: "net", direction: "desc" }}
                 searchLabel="Search customer cylinder purchases"
-                emptyMessage="No customer cylinder purchases are available for this salesperson."
+                emptyMessage={
+                  selectedCustomer
+                    ? "No cylinder purchases are available for this customer."
+                    : "No customer cylinder purchases are available for this salesperson."
+                }
                 renderMobileCard={(row) => (
                   <CustomerBreakdownMobileCard
                     {...row}

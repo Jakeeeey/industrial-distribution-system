@@ -29,7 +29,19 @@ test("salesperson detail presents customer, cylinder, and customer cylinder tabs
   assert.match(source, /value="customer-products"/);
   assert.match(source, /selectedSalesperson\.customerBreakdown/);
   assert.match(source, /selectedSalesperson\.productBreakdown/);
-  assert.match(source, /selectedSalesperson\.customerProductBreakdown/);
+  assert.match(source, /selectedSalesperson\?\.customerProductBreakdown/);
+});
+
+test("customer rows drill into filtered cylinders in the same dialog", () => {
+  const source = readSource(`${componentRoot}/SalespersonPurchaseDetail.tsx`);
+
+  assert.match(source, /onRowClick=\{openCustomerCylinders\}/);
+  assert.match(source, /View cylinders purchased by/);
+  assert.match(source, /value=\{activeTab\}/);
+  assert.match(source, /onValueChange=\{handleTabChange\}/);
+  assert.match(source, /Cylinders purchased by/);
+  assert.match(source, /Show all customers/);
+  assert.match(source, /filteredCustomerProducts/);
 });
 
 test("report provider owns salesperson detail selection state", () => {
