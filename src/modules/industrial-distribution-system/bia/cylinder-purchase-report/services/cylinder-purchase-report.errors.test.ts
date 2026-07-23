@@ -3,9 +3,12 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  classifyCylinderPurchaseReportRouteError,
   UpstreamContractError,
   UpstreamHttpError,
 } from "./cylinder-purchase-report.errors.ts";
+import { getCylinderPurchaseDashboard } from "./cylinder-purchase-report.service.ts";
+import type { CylinderPurchaseReportFilters } from "../types/cylinder-purchase-report.types.ts";
 
 interface RouteErrorClassification {
   body: {
@@ -14,6 +17,24 @@ interface RouteErrorClassification {
     message: string;
   };
   status: number;
+}
+
+const filters: CylinderPurchaseReportFilters = {
+  startDate: "2026-06-23",
+  endDate: "2026-07-22",
+};
+
+async function captureDashboardError(fetchImpl: typeof fetch): Promise<unknown> {
+  try {
+    await getCylinderPurchaseDashboard(filters, {
+      fetchImpl,
+      now: () => new Date("2026-07-22T10:00:00.000Z"),
+      springBaseUrl: "http://spring.test",
+    });
+  } catch (error) {
+    return error;
+  }
+  assert.fail("Expected the dashboard request to reject.");
 }
 
 test("classifies upstream failures into sanitized route responses", async () => {
@@ -52,6 +73,50 @@ test("classifies upstream failures into sanitized route responses", async () => 
       ok: false,
       code: "UPSTREAM_CONTRACT_ERROR",
       message: "The report service returned invalid quantity data.",
+    },
+  });
+});
+
+test("classifies malformed Spring JSON as a sanitized upstream contract response", async () => {
+  const error = await captureDashboardError(async () =>
+    new Response("{", {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
+
+  assert.deepEqual(classifyCylinderPurchaseReportRouteError(error), {
+    status: 502,
+    body: {
+      ok: false,
+      code: "UPSTREAM_CONTRACT_ERROR",
+      message: "The report service returned invalid quantity data.",
+    },
+  });
+});
+
+test("classifies a rejected Spring body stream as sanitized upstream unavailability", async () => {
+  const bodyError = new TypeError("private response stream failure");
+  const error = await captureDashboardError(async () =>
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.error(bodyError);
+        },
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      },
+    ),
+  );
+
+  assert.deepEqual(classifyCylinderPurchaseReportRouteError(error), {
+    status: 502,
+    body: {
+      ok: false,
+      code: "UPSTREAM_UNAVAILABLE",
+      message: "The report service is unavailable.",
     },
   });
 });

@@ -97,3 +97,48 @@ test("propagates a classified Spring transport error without exposing fetch deta
       !error.message.includes("private-spring.internal"),
   );
 });
+
+test("propagates malformed Spring JSON as an upstream contract error", async () => {
+  const fetchImpl: typeof fetch = async () =>
+    new Response("{", {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+
+  await assert.rejects(
+    () =>
+      getCylinderPurchaseDashboard(filters, {
+        fetchImpl,
+        now: fixedNow,
+        springBaseUrl: "http://spring.test",
+      }),
+    (error: unknown) => error instanceof UpstreamContractError,
+  );
+});
+
+test("propagates a rejected Spring body stream as an upstream HTTP error", async () => {
+  const bodyError = new TypeError("private response stream failure");
+  const fetchImpl: typeof fetch = async () =>
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.error(bodyError);
+        },
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+
+  await assert.rejects(
+    () =>
+      getCylinderPurchaseDashboard(filters, {
+        fetchImpl,
+        now: fixedNow,
+        springBaseUrl: "http://spring.test",
+      }),
+    (error: unknown) =>
+      error instanceof UpstreamHttpError && error.cause === bodyError,
+  );
+});

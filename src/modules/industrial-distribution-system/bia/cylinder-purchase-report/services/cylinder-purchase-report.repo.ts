@@ -1,6 +1,7 @@
 import type { CylinderPurchaseReportFilters } from "../types/cylinder-purchase-report.types.ts";
 import {
   isAbortError,
+  UpstreamContractError,
   UpstreamHttpError,
 } from "./cylinder-purchase-report.errors.ts";
 
@@ -55,5 +56,17 @@ export async function fetchCylinderPurchaseRows(
   if (!response.ok) {
     throw new UpstreamHttpError(response.status, response.statusText);
   }
-  return response.json();
+  try {
+    return await response.json();
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
+    if (error instanceof SyntaxError) {
+      throw new UpstreamContractError(
+        "Spring report response was not valid JSON.",
+      );
+    }
+    throw new UpstreamHttpError(null, "", { cause: error });
+  }
 }
