@@ -140,6 +140,88 @@ test("one pass aggregation reconciles all compatible views", () => {
   );
 });
 
+test("salesperson details group customers, cylinders, and customer cylinder purchases", () => {
+  const result = aggregateCylinderPurchases(
+    [
+      row(),
+      row({
+        productId: 50,
+        productCode: "LPG-50",
+        productName: "LPG 50KG",
+        grossPurchasedQty: 4,
+        returnedQty: 0,
+        netPurchasedQty: 4,
+      }),
+      row({
+        customerCode: "C-002",
+        customerName: "Beta Store",
+        grossPurchasedQty: 3,
+        returnedQty: 0,
+        netPurchasedQty: 3,
+      }),
+      row({
+        customerCode: null,
+        customerName: null,
+        productId: 50,
+        productCode: "LPG-50",
+        productName: "LPG 50KG",
+        grossPurchasedQty: 1,
+        returnedQty: 1,
+        netPurchasedQty: 0,
+      }),
+    ],
+    { startDate: "2026-07-01", endDate: "2026-07-22" },
+    "2026-07-22T10:00:00.000Z",
+  );
+
+  const salesperson = result.salespersonPerformance[0];
+  assert.deepEqual(
+    salesperson.customerBreakdown.map((item) => ({
+      customerKey: item.customerKey,
+      products: item.uniqueProducts,
+      net: item.netPurchasedQty,
+    })),
+    [
+      { customerKey: "C-001", products: 2, net: 12 },
+      { customerKey: "C-002", products: 1, net: 3 },
+      { customerKey: "UNASSIGNED", products: 1, net: 0 },
+    ],
+  );
+  assert.equal(
+    salesperson.customerBreakdown.at(-1)?.customerName,
+    "Unassigned Customer",
+  );
+  assert.deepEqual(
+    salesperson.productBreakdown.map((item) => item.productId),
+    [11, 50],
+  );
+  assert.deepEqual(
+    salesperson.customerProductBreakdown.map((item) => item.key),
+    ["C-001::11", "C-001::50", "C-002::11", "UNASSIGNED::50"],
+  );
+  assert.equal(
+    salesperson.customerBreakdown.reduce(
+      (total, item) => total + item.netPurchasedQty,
+      0,
+    ),
+    salesperson.netPurchasedQty,
+  );
+  assert.equal(
+    salesperson.productBreakdown.reduce(
+      (total, item) => total + item.netPurchasedQty,
+      0,
+    ),
+    salesperson.netPurchasedQty,
+  );
+  assert.equal(
+    salesperson.customerProductBreakdown.reduce(
+      (total, item) => total + item.netPurchasedQty,
+      0,
+    ),
+    salesperson.netPurchasedQty,
+  );
+});
+
 test("zero gross produces a zero return ratio", () => {
   const result = aggregateCylinderPurchases(
     [row({ grossPurchasedQty: 0, returnedQty: 2, netPurchasedQty: -2 })],

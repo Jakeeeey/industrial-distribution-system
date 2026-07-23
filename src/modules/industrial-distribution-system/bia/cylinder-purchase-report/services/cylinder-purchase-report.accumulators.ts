@@ -40,6 +40,26 @@ export interface SalespersonAccumulator extends QuantityMetrics {
   salesmanName: string;
   customerKeys: Set<string>;
   productIds: Set<number>;
+  customers: Map<string, SalespersonCustomerAccumulator>;
+  products: Map<number, ProductAccumulator>;
+  customerProducts: Map<string, SalespersonCustomerProductAccumulator>;
+}
+
+export interface SalespersonCustomerAccumulator extends QuantityMetrics {
+  customerKey: string;
+  customerCode: string | null;
+  customerName: string;
+  productIds: Set<number>;
+}
+
+export interface SalespersonCustomerProductAccumulator extends QuantityMetrics {
+  key: string;
+  customerKey: string;
+  customerCode: string | null;
+  customerName: string;
+  productId: number;
+  productCode: string;
+  productName: string;
 }
 
 function customerIdentity(row: CylinderPurchaseRow): {
@@ -91,6 +111,9 @@ function salespersonAccumulator(row: CylinderPurchaseRow): SalespersonAccumulato
     salesmanName: row.salesmanName,
     customerKeys: new Set(),
     productIds: new Set(),
+    customers: new Map(),
+    products: new Map(),
+    customerProducts: new Map(),
   };
 }
 
@@ -127,6 +150,33 @@ export function accumulateSalesperson(
   addMetrics(salesperson, row);
   salesperson.customerKeys.add(customerKey);
   salesperson.productIds.add(row.productId);
+  const identity = customerIdentity(row);
+  const customer = salesperson.customers.get(customerKey) ?? {
+    ...emptyMetrics(),
+    customerKey,
+    customerCode: identity.code,
+    customerName: identity.name,
+    productIds: new Set<number>(),
+  };
+  addMetrics(customer, row);
+  customer.productIds.add(row.productId);
+  salesperson.customers.set(customerKey, customer);
+  accumulateProduct(salesperson.products, row, customerKey);
+
+  const customerProductKey = `${customerKey}::${row.productId}`;
+  const customerProduct =
+    salesperson.customerProducts.get(customerProductKey) ?? {
+      ...emptyMetrics(),
+      key: customerProductKey,
+      customerKey,
+      customerCode: identity.code,
+      customerName: identity.name,
+      productId: row.productId,
+      productCode: row.productCode,
+      productName: row.productName,
+    };
+  addMetrics(customerProduct, row);
+  salesperson.customerProducts.set(customerProductKey, customerProduct);
   salespeople.set(row.salesmanId, salesperson);
 }
 

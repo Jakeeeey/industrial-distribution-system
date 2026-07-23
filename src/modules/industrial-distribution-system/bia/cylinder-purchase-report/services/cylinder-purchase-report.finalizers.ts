@@ -3,6 +3,8 @@ import {
   type BranchAccumulator,
   type CustomerAccumulator,
   type ProductAccumulator,
+  type SalespersonCustomerAccumulator,
+  type SalespersonCustomerProductAccumulator,
   type SalespersonAccumulator,
 } from "./cylinder-purchase-report.accumulators.ts";
 import {
@@ -16,6 +18,8 @@ import type {
   ProductPurchaseSummary,
   QuantityMetrics,
   ReturnAnalysisItem,
+  SalespersonCustomerProductPurchaseSummary,
+  SalespersonCustomerPurchaseSummary,
   SalespersonPurchaseSummary,
 } from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/types/cylinder-purchase-report.types";
 
@@ -68,11 +72,63 @@ export function finalizeSalespeople(
       returnRate: returnRate(salesperson),
       uniqueCustomers: salesperson.customerKeys.size,
       uniqueProducts: salesperson.productIds.size,
+      customerBreakdown: finalizeSalespersonCustomers(salesperson.customers),
+      productBreakdown: finalizeProducts(salesperson.products),
+      customerProductBreakdown: finalizeSalespersonCustomerProducts(
+        salesperson.customerProducts,
+      ),
     }))
     .sort(
       byRank(
         (salesperson) => salesperson.salesmanName,
         (salesperson) => salesperson.salesmanId,
+      ),
+    );
+}
+
+function finalizeSalespersonCustomers(
+  customers: Map<string, SalespersonCustomerAccumulator>,
+): SalespersonCustomerPurchaseSummary[] {
+  return [...customers.values()]
+    .map((customer) => ({
+      grossPurchasedQty: customer.grossPurchasedQty,
+      returnedQty: customer.returnedQty,
+      netPurchasedQty: customer.netPurchasedQty,
+      customerKey: customer.customerKey,
+      customerCode: customer.customerCode,
+      customerName: customer.customerName,
+      returnRate: returnRate(customer),
+      uniqueProducts: customer.productIds.size,
+    }))
+    .sort(
+      byRank(
+        (customer) => customer.customerName,
+        (customer) => customer.customerKey,
+      ),
+    );
+}
+
+function finalizeSalespersonCustomerProducts(
+  customerProducts: Map<string, SalespersonCustomerProductAccumulator>,
+): SalespersonCustomerProductPurchaseSummary[] {
+  return [...customerProducts.values()]
+    .map((item) => ({
+      grossPurchasedQty: item.grossPurchasedQty,
+      returnedQty: item.returnedQty,
+      netPurchasedQty: item.netPurchasedQty,
+      key: item.key,
+      customerKey: item.customerKey,
+      customerCode: item.customerCode,
+      customerName: item.customerName,
+      productId: item.productId,
+      productCode: item.productCode,
+      productName: item.productName,
+      returnRate: returnRate(item),
+    }))
+    .sort(
+      byRank(
+        (item) => `${item.customerName}\u0000${item.productName}`,
+        (item) => item.key,
       ),
     );
 }

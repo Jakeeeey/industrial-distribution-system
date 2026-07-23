@@ -69,6 +69,29 @@ export interface SalespersonPurchaseSummary extends QuantityMetrics {
   returnRate: number;
   uniqueCustomers: number;
   uniqueProducts: number;
+  customerBreakdown: SalespersonCustomerPurchaseSummary[];
+  productBreakdown: ProductPurchaseSummary[];
+  customerProductBreakdown: SalespersonCustomerProductPurchaseSummary[];
+}
+
+export interface SalespersonCustomerPurchaseSummary extends QuantityMetrics {
+  customerKey: string;
+  customerCode: string | null;
+  customerName: string;
+  returnRate: number;
+  uniqueProducts: number;
+}
+
+export interface SalespersonCustomerProductPurchaseSummary
+  extends QuantityMetrics {
+  key: string;
+  customerKey: string;
+  customerCode: string | null;
+  customerName: string;
+  productId: number;
+  productCode: string;
+  productName: string;
+  returnRate: number;
 }
 
 export interface ReturnAnalysisItem extends QuantityMetrics {
