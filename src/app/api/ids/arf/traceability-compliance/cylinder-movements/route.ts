@@ -38,6 +38,9 @@ interface RawSerialMovement {
     customer_name?: unknown;
     supplierName?: unknown;
     supplier_name?: unknown;
+    // Added: unit of measure from updated v_serial_movements view
+    uomIds?: unknown;
+    uom_ids?: unknown;
 }
 
 /**
@@ -71,6 +74,10 @@ function normalizeRow(raw: unknown): SerialMovement {
             ? (r.supplierName ?? r.supplier_name) !== null 
                 ? String(r.supplierName ?? r.supplier_name ?? "").trim() 
                 : null 
+            : null,
+        // Normalize uom_ids — pass as null if absent or empty
+        uomIds: (r.uomIds ?? r.uom_ids) !== null && (r.uomIds ?? r.uom_ids) !== undefined
+            ? String(r.uomIds ?? r.uom_ids ?? "").trim() || null
             : null,
     };
 }

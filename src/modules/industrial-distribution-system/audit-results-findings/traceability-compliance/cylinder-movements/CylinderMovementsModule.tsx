@@ -17,13 +17,8 @@ import { toast } from "sonner";
 import { RefreshCw, HelpCircle, Database, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+// Antigravity: Removed unused Select import after converting product select to SearchableSelect
 import {
     Tabs,
     TabsContent,
@@ -98,12 +93,26 @@ export function CylinderMovementsModule() {
     const filteredCylinders = React.useMemo(() => {
         if (!selectedProductName) return [];
         if (selectedProductName === "ALL_PRODUCTS") return allCylinderSummaries;
+        if (selectedProductName.endsWith(" (EMPTY)")) {
+            const baseName = selectedProductName.replace(" (EMPTY)", "");
+            return allCylinderSummaries.filter(c => 
+                c.productName === baseName && 
+                c.movements.some(m => m.uomIds === "EMPTY" || m.uomIds === "EMPTY_CYLINDER")
+            );
+        }
         return allCylinderSummaries.filter(c => c.productName === selectedProductName);
     }, [allCylinderSummaries, selectedProductName]);
 
     const filteredLedger = React.useMemo(() => {
         if (!selectedProductName) return [];
         if (selectedProductName === "ALL_PRODUCTS") return movements;
+        if (selectedProductName.endsWith(" (EMPTY)")) {
+            const baseName = selectedProductName.replace(" (EMPTY)", "");
+            return movements.filter(m => 
+                m.productName === baseName && 
+                (m.uomIds === "EMPTY" || m.uomIds === "EMPTY_CYLINDER")
+            );
+        }
         return movements.filter(m => m.productName === selectedProductName);
     }, [movements, selectedProductName]);
 
@@ -255,24 +264,18 @@ export function CylinderMovementsModule() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1 w-full">
                         <div className="space-y-1.5">
                             <Label htmlFor="productSelect" className="text-xs font-semibold text-muted-foreground">Select Product</Label>
-                            <Select
+                            <SearchableSelect
+                                options={[
+                                    { value: "ALL_PRODUCTS", label: "All Products" },
+                                    ...productOptions.map((name) => ({ value: name, label: name })),
+                                    ...Array.from(new Set(movements.filter(m => m.uomIds === "EMPTY" || m.uomIds === "EMPTY_CYLINDER").map(m => m.productName)))
+                                        .map((name) => ({ value: `${name} (EMPTY)`, label: `${name} (EMPTY)` }))
+                                ]}
                                 value={selectedProductName}
                                 onValueChange={(val) => setSelectedProductName(val)}
-                            >
-                                <SelectTrigger id="productSelect" className="w-full h-9 border-input bg-background font-medium text-xs">
-                                    <SelectValue placeholder="Select cylinder product..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="ALL_PRODUCTS" className="text-xs font-semibold">
-                                        All Products
-                                    </SelectItem>
-                                    {productOptions.map((name) => (
-                                        <SelectItem key={name} value={name} className="text-xs">
-                                            {name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                                placeholder="Select cylinder product..."
+                                className="h-9 border-input bg-background font-medium text-xs"
+                            />
                         </div>
 
                         <div className="space-y-1.5">
