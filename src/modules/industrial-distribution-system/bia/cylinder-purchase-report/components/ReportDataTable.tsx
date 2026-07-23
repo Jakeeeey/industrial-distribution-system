@@ -29,6 +29,7 @@ import {
 import { useCylinderPurchaseReport } from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/hooks/useCylinderPurchaseReport";
 
 import {
+  getReportColumnSpan,
   paginateReportRows,
   prepareReportRows,
   type ReportSort,
@@ -43,16 +44,28 @@ export interface ReportColumn<T> {
   align?: "left" | "center" | "right";
 }
 
-export interface ReportDataTableProps<T> {
+interface ReportDataTableBaseProps<T> {
   columns: readonly ReportColumn<T>[];
   rows: readonly T[];
   rowKey(row: T): React.Key;
   defaultSort: ReportSort;
   searchText?: string;
-  onRowClick?(row: T): void;
   renderMobileCard(row: T): React.ReactNode;
   emptyMessage?: string;
 }
+
+interface ReportDataTableRowActionProps<T> {
+  onRowClick(row: T): void;
+  rowActionLabel(row: T): string;
+}
+
+interface ReportDataTableStaticProps {
+  onRowClick?: undefined;
+  rowActionLabel?: undefined;
+}
+
+export type ReportDataTableProps<T> = ReportDataTableBaseProps<T> &
+  (ReportDataTableRowActionProps<T> | ReportDataTableStaticProps);
 
 const PAGE_SIZES = [10, 25, 50] as const;
 
@@ -63,6 +76,7 @@ export function ReportDataTable<T>({
   defaultSort,
   searchText = "",
   onRowClick,
+  rowActionLabel,
   renderMobileCard,
   emptyMessage,
 }: ReportDataTableProps<T>): React.ReactElement {
@@ -102,6 +116,8 @@ export function ReportDataTable<T>({
     (searchText.trim()
       ? "No report rows match the current search."
       : "No report data is available for the selected filters.");
+  const hasRowAction = Boolean(onRowClick && rowActionLabel);
+  const columnSpan = getReportColumnSpan(columns.length, hasRowAction);
 
   const changeSort = (columnKey: string): void => {
     if (sortKey === columnKey) {
@@ -109,13 +125,6 @@ export function ReportDataTable<T>({
     } else {
       setSortKey(columnKey);
       setSortDirection("asc");
-    }
-  };
-
-  const activateRow = (row: T, event: React.KeyboardEvent): void => {
-    if (onRowClick && (event.key === "Enter" || event.key === " ")) {
-      event.preventDefault();
-      onRowClick(row);
     }
   };
 
@@ -173,6 +182,9 @@ export function ReportDataTable<T>({
                   </TableHead>
                 );
               })}
+              {hasRowAction ? (
+                <TableHead className="text-right">Action</TableHead>
+              ) : null}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -184,13 +196,18 @@ export function ReportDataTable<T>({
                         <Skeleton className="h-4 w-full max-w-28" />
                       </TableCell>
                     ))}
+                    {hasRowAction ? (
+                      <TableCell>
+                        <Skeleton className="ml-auto h-8 w-24" />
+                      </TableCell>
+                    ) : null}
                   </TableRow>
                 ))
               : null}
             {!isInitialLoading && pageRows.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={columns.length}
+                  colSpan={columnSpan}
                   className="h-28 whitespace-normal text-center text-sm text-muted-foreground"
                 >
                   {resolvedEmptyMessage}
@@ -201,11 +218,6 @@ export function ReportDataTable<T>({
               ? pageRows.map((row) => (
                   <TableRow
                     key={rowKey(row)}
-                    role={onRowClick ? "button" : undefined}
-                    tabIndex={onRowClick ? 0 : undefined}
-                    className={onRowClick ? "cursor-pointer" : undefined}
-                    onClick={onRowClick ? () => onRowClick(row) : undefined}
-                    onKeyDown={(event) => activateRow(row, event)}
                   >
                     {columns.map((column) => (
                       <TableCell
@@ -223,6 +235,19 @@ export function ReportDataTable<T>({
                           : column.value(row)}
                       </TableCell>
                     ))}
+                    {onRowClick && rowActionLabel ? (
+                      <TableCell className="text-right">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          aria-label={rowActionLabel(row)}
+                          onClick={() => onRowClick(row)}
+                        >
+                          View details
+                        </Button>
+                      </TableCell>
+                    ) : null}
                   </TableRow>
                 ))
               : null}
@@ -250,19 +275,20 @@ export function ReportDataTable<T>({
         ) : null}
         {!isInitialLoading
           ? pageRows.map((row) => (
-              <div
-                key={rowKey(row)}
-                role={onRowClick ? "button" : undefined}
-                tabIndex={onRowClick ? 0 : undefined}
-                className={
-                  onRowClick
-                    ? "cursor-pointer rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    : undefined
-                }
-                onClick={onRowClick ? () => onRowClick(row) : undefined}
-                onKeyDown={(event) => activateRow(row, event)}
-              >
+              <div key={rowKey(row)} className="space-y-2">
                 {renderMobileCard(row)}
+                {onRowClick && rowActionLabel ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    aria-label={rowActionLabel(row)}
+                    onClick={() => onRowClick(row)}
+                  >
+                    View details
+                  </Button>
+                ) : null}
               </div>
             ))
           : null}

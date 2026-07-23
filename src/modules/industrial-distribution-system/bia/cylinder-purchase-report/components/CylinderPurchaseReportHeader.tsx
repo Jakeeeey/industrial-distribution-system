@@ -20,7 +20,9 @@ import {
 import { useCylinderPurchaseReport } from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/hooks/useCylinderPurchaseReport";
 
 export function CylinderPurchaseReportHeader(): React.ReactElement {
-  const { report, refresh, isRefreshing } = useCylinderPurchaseReport();
+  const { report, refresh, isInitialLoading, isRefreshing } =
+    useCylinderPurchaseReport();
+  const isRequestPending = isInitialLoading || isRefreshing;
   let generatedAt = "Not generated yet";
   if (report?.generatedAt) {
     const generatedDate = new Date(report.generatedAt);
@@ -57,14 +59,18 @@ export function CylinderPurchaseReportHeader(): React.ReactElement {
           variant="outline"
           size="sm"
           onClick={() => void refresh()}
-          disabled={isRefreshing}
+          disabled={isRequestPending}
         >
-          {isRefreshing ? (
+          {isRequestPending ? (
             <Loader2 aria-hidden="true" className="animate-spin" />
           ) : (
             <RefreshCw aria-hidden="true" />
           )}
-          {isRefreshing ? "Refreshing" : "Refresh"}
+          {isInitialLoading
+            ? "Loading report"
+            : isRefreshing
+              ? "Refreshing"
+              : "Refresh"}
         </Button>
 
         <DropdownMenu>

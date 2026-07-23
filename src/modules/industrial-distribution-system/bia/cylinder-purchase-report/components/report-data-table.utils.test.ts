@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  getReportColumnSpan,
   paginateReportRows,
   prepareReportRows,
 } from "./report-data-table.utils.ts";
@@ -62,4 +63,9 @@ test("paginates immutably and clamps an out-of-range requested page", () => {
   assert.equal(result.lastVisibleRow, 21);
   assert.deepEqual(result.pageRows, [rows[20]]);
   assert.notEqual(result.pageRows, rows);
+});
+
+test("adds one table column when a row action is available", () => {
+  assert.equal(getReportColumnSpan(6, false), 6);
+  assert.equal(getReportColumnSpan(6, true), 7);
 });
