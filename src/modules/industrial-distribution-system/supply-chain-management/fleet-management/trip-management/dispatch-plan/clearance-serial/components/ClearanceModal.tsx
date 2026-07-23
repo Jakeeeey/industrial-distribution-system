@@ -419,6 +419,9 @@ const ClearanceModal: React.FC<ClearanceModalProps> = ({ isOpen, onClose, onSucc
                         reconciliation={activeReconciliation}
                         onSave={handleConfirmProductReconciliation}
                         serialNumbers={serialNumbers}
+                        globalScannedSerials={invoices
+                            .filter(inv => inv.id !== activeReconciliation.id)
+                            .flatMap(inv => Object.values(inv.scannedSerials || {}).flat())}
                     />
                 )}
             </DialogContent>

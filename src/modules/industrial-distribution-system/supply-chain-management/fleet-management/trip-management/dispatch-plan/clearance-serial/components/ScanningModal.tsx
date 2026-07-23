@@ -35,6 +35,7 @@ interface ScanningModalProps {
     serialNumbers?: SerialMapping[];
     initialScanned?: Record<string | number, number>;
     initialScannedSerials?: Record<string | number, string[]>;
+    globalScannedSerials?: string[];
 }
 
 const ScanningModal: React.FC<ScanningModalProps> = ({
@@ -44,7 +45,8 @@ const ScanningModal: React.FC<ScanningModalProps> = ({
     items,
     initialScanned = {},
     initialScannedSerials = {},
-    serialNumbers = []
+    serialNumbers = [],
+    globalScannedSerials = []
 }) => {
     const [scannedQtys, setScannedQtys] = useState<Record<string | number, number>>(initialScanned);
     const scannedQtysRef = useRef<Record<string | number, number>>(initialScanned);
@@ -112,7 +114,7 @@ const ScanningModal: React.FC<ScanningModalProps> = ({
         }
     }, [isOpen, initialScanned, initialScannedSerials]);
 
-    const handleSerialScan = (input: string) => {
+    const handleSerialScan = async (input: string) => {
         const rawInput = input.trim().toUpperCase();
         if (!rawInput) return;
 
@@ -128,11 +130,17 @@ const ScanningModal: React.FC<ScanningModalProps> = ({
 
         if (tags.length === 0) return;
 
-        tags.forEach(tag => {
+        for (const tag of tags) {
+            if (globalScannedSerials.includes(tag)) {
+                if (tags.length < 5) toast.warning(`Serial ${tag} has already been scanned in another invoice in this dispatch!`);
+                playSound('error');
+                continue;
+            }
+
             if (scannedTagsRef.current.has(tag)) {
                 if (tags.length < 5) toast.warning(`Serial ${tag} already scanned!`);
                 playSound('error');
-                return;
+                continue;
             }
 
             const mapping = serialNumbers.find(t => t.serial?.toUpperCase() === tag);
@@ -140,7 +148,7 @@ const ScanningModal: React.FC<ScanningModalProps> = ({
             if (!mapping) {
                 toast.error(`Invalid Serial Number: ${tag.substring(0, 8)}...`);
                 playSound('error');
-                return;
+                continue;
             }
 
             const item = items.find(i => Number(i.product_id) === Number(mapping.product_id));
@@ -148,7 +156,7 @@ const ScanningModal: React.FC<ScanningModalProps> = ({
             if (!item || item.is_serialized !== 1) {
                 toast.error(`Product for Serial ${tag.substring(0, 8)}... is not a serialized item.`);
                 playSound('error');
-                return;
+                continue;
             }
 
             const currentQty = scannedQtysRef.current[item.id] || 0;
@@ -158,7 +166,32 @@ const ScanningModal: React.FC<ScanningModalProps> = ({
                 // Track so we don't warn again rapidly
                 scannedTagsRef.current.add(tag);
                 setScannedTags(new Set(scannedTagsRef.current));
-                return;
+                continue;
+            }
+
+            // Check if the serial is currently on hand in inventory and validate product ID
+            try {
+                const res = await fetch(`/api/ids/scm/fleet-management/trip-management/dispatch-plan/clearance-serial/validate-onhand?serial=${encodeURIComponent(tag)}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    console.log("Validation debug info for " + tag + ":", data);
+                    
+                    if (data.assetProductId && Number(data.assetProductId) !== Number(item.product_id)) {
+                        toast.error(`Cannot add serial "${tag}": Product mismatch in database.`);
+                        playSound('error');
+                        continue;
+                    }
+
+                    if (data.isOnHand) {
+                        toast.error(`Cannot add serial "${tag}": Serial is currently on hand in inventory`);
+                        playSound('error');
+                        continue;
+                    }
+                } else {
+                    console.error("Validation failed with status: ", res.status);
+                }
+            } catch (err) {
+                console.error("Failed to validate serial against onhand inventory", err);
             }
 
             const newQty = currentQty + 1;
@@ -176,7 +209,7 @@ const ScanningModal: React.FC<ScanningModalProps> = ({
             
             if (tags.length < 5) toast.success(`Scanned: ${item.product_name}`);
             playSound('success');
-        });
+        }
 
         // Check if all items are scanned after the entire batch of tags is processed
         const totalRequired = items.reduce((acc, i) => acc + i.qty, 0);
