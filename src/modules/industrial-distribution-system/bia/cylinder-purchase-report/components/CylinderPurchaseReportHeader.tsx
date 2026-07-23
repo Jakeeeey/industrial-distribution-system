@@ -8,6 +8,7 @@ import {
   Printer,
   RefreshCw,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -18,11 +19,45 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useCylinderPurchaseReport } from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/hooks/useCylinderPurchaseReport";
+import {
+  exportConsolidatedPdf,
+  exportDashboardPdf,
+  printDashboardPdf,
+} from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/services/cylinder-purchase-report.pdf";
+import {
+  exportConsolidatedWorkbook,
+  exportDashboardWorkbook,
+} from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/services/cylinder-purchase-report.xlsx";
+import type { CylinderPurchaseDashboardResponse } from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/types/cylinder-purchase-report.types";
 
 export function CylinderPurchaseReportHeader(): React.ReactElement {
-  const { report, refresh, isInitialLoading, isRefreshing } =
-    useCylinderPurchaseReport();
+  const {
+    report,
+    refresh,
+    isInitialLoading,
+    isRefreshing,
+    activeView,
+    selectedCustomer,
+  } = useCylinderPurchaseReport();
   const isRequestPending = isInitialLoading || isRefreshing;
+  const exportsDisabled = report === null;
+
+  function runExport(
+    label: string,
+    action: (loadedReport: CylinderPurchaseDashboardResponse) => void,
+  ): void {
+    if (!report) {
+      toast.error("Generate the cylinder purchase report before exporting.");
+      return;
+    }
+
+    try {
+      action(report);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Unknown error";
+      toast.error(`Unable to ${label}. ${detail}`);
+    }
+  }
   let generatedAt = "Not generated yet";
   if (report?.generatedAt) {
     const generatedDate = new Date(report.generatedAt);
@@ -75,22 +110,77 @@ export function CylinderPurchaseReportHeader(): React.ReactElement {
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button type="button" variant="outline" size="sm">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={exportsDisabled}
+            >
               <Download aria-hidden="true" />
               Export
               <ChevronDown aria-hidden="true" className="size-3" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Export report</DropdownMenuLabel>
-            <DropdownMenuItem disabled>Active dashboard</DropdownMenuItem>
-            <DropdownMenuItem disabled>Consolidated report</DropdownMenuItem>
+            <DropdownMenuLabel>
+              {selectedCustomer ? "Selected customer detail" : "Active dashboard"}
+            </DropdownMenuLabel>
+            <DropdownMenuItem
+              disabled={exportsDisabled}
+              onSelect={() =>
+                runExport("export the active dashboard as PDF", (loadedReport) =>
+                  exportDashboardPdf(loadedReport, activeView, selectedCustomer),
+                )
+              }
+            >
+              Export PDF
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={exportsDisabled}
+              onSelect={() =>
+                runExport("export the active dashboard as XLSX", (loadedReport) =>
+                  exportDashboardWorkbook(
+                    loadedReport,
+                    activeView,
+                    selectedCustomer,
+                  ),
+                )
+              }
+            >
+              Export XLSX
+            </DropdownMenuItem>
+            <DropdownMenuLabel>Consolidated report</DropdownMenuLabel>
+            <DropdownMenuItem
+              disabled={exportsDisabled}
+              onSelect={() =>
+                runExport("export the consolidated report as PDF", (loadedReport) =>
+                  exportConsolidatedPdf(loadedReport),
+                )
+              }
+            >
+              Export PDF
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={exportsDisabled}
+              onSelect={() =>
+                runExport("export the consolidated report as XLSX", (loadedReport) =>
+                  exportConsolidatedWorkbook(loadedReport),
+                )
+              }
+            >
+              Export XLSX
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button type="button" variant="outline" size="sm">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={exportsDisabled}
+            >
               <Printer aria-hidden="true" />
               Print
               <ChevronDown aria-hidden="true" className="size-3" />
@@ -98,7 +188,16 @@ export function CylinderPurchaseReportHeader(): React.ReactElement {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>Print report</DropdownMenuLabel>
-            <DropdownMenuItem disabled>Active dashboard</DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={exportsDisabled}
+              onSelect={() =>
+                runExport("open the active dashboard print view", (loadedReport) =>
+                  printDashboardPdf(loadedReport, activeView, selectedCustomer),
+                )
+              }
+            >
+              {selectedCustomer ? "Selected customer detail" : "Active dashboard"}
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
