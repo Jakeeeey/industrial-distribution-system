@@ -1256,17 +1256,46 @@ export async function processRegularSwap(payload: {
     });
   }
 
-  // Use provided sales invoice (fallback to null if not provided)
-  const invoiceId = payload.salesInvoiceId ?? null;
-  const invoiceNo = payload.salesInvoiceNo ?? null;
+  // Use provided sales invoice with robust fallbacks from existing transaction or header link
+  let invoiceId = payload.salesInvoiceId ?? null;
+  let invoiceNo = payload.salesInvoiceNo ?? null;
 
   let meterReadingId: number | null = null;
   if (payload.transactionId) {
     const existingTx = await fetchWiwoBillingTransactionById(payload.transactionId);
-    if (existingTx && existingTx.meter_reading_id) {
-      meterReadingId = typeof existingTx.meter_reading_id === "object"
-        ? (existingTx.meter_reading_id as unknown as { id: number }).id
-        : existingTx.meter_reading_id;
+    if (existingTx) {
+      if (existingTx.meter_reading_id) {
+        meterReadingId = typeof existingTx.meter_reading_id === "object"
+          ? (existingTx.meter_reading_id as unknown as { id: number }).id
+          : existingTx.meter_reading_id;
+      }
+      if (!invoiceId && existingTx.sales_invoice_id) {
+        invoiceId = typeof existingTx.sales_invoice_id === "object"
+          ? (existingTx.sales_invoice_id as unknown as { id: number }).id
+          : Number(existingTx.sales_invoice_id);
+        if (!invoiceNo && existingTx.sales_invoice_no) {
+          invoiceNo = existingTx.sales_invoice_no;
+        }
+      }
+    }
+  }
+
+  if (!invoiceId && payload.transactionHeaderId) {
+    try {
+      const headerInvRes = await directusFetch<{ data: { sales_invoice_id: number | { id: number }; sales_invoice_no?: string }[] }>(
+        `${DIRECTUS_URL}/items/lpg_transaction_header_invoices?filter[header_id][_eq]=${payload.transactionHeaderId}&limit=1`
+      );
+      const link = headerInvRes.data?.[0];
+      if (link?.sales_invoice_id) {
+        invoiceId = typeof link.sales_invoice_id === "object"
+          ? link.sales_invoice_id.id
+          : Number(link.sales_invoice_id);
+        if (!invoiceNo && link.sales_invoice_no) {
+          invoiceNo = link.sales_invoice_no;
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to resolve invoice from transaction header link:", e);
     }
   }
 
@@ -1486,40 +1515,48 @@ export async function processRegularSwap(payload: {
       }
     );
     parentTxData = parentRes.data;
+  }
 
-    // Link / Update invoice status to POSTED on the header linking table
-    if (invoiceId) {
-      try {
-        const checkRes = await directusFetch<{ data: { id: number }[] }>(
-          `${DIRECTUS_URL}/items/lpg_transaction_header_invoices?filter[header_id][_eq]=${payload.transactionHeaderId}&filter[sales_invoice_id][_eq]=${invoiceId}&limit=1`
-        );
-        const existingLink = checkRes.data?.[0];
-        if (existingLink) {
-          await directusFetch(
-            `${DIRECTUS_URL}/items/lpg_transaction_header_invoices/${existingLink.id}`,
-            {
-              method: "PATCH",
-              body: JSON.stringify({
-                status: "POSTED",
-                linked_by: payload.userId,
-              }),
-            }
-          );
-        } else {
-          await directusFetch(`${DIRECTUS_URL}/items/lpg_transaction_header_invoices`, {
-            method: "POST",
+  // Link / Update invoice status to POSTED on the header linking table and update is_visit to 1 on sales_invoice
+  if (invoiceId) {
+    try {
+      const checkRes = await directusFetch<{ data: { id: number }[] }>(
+        `${DIRECTUS_URL}/items/lpg_transaction_header_invoices?filter[header_id][_eq]=${payload.transactionHeaderId}&filter[sales_invoice_id][_eq]=${invoiceId}&limit=1`
+      );
+      const existingLink = checkRes.data?.[0];
+      if (existingLink) {
+        await directusFetch(
+          `${DIRECTUS_URL}/items/lpg_transaction_header_invoices/${existingLink.id}`,
+          {
+            method: "PATCH",
             body: JSON.stringify({
-              header_id: payload.transactionHeaderId,
-              sales_invoice_id: invoiceId,
-              invoice_role: "SOURCE_DELIVERY",
-              linked_by: payload.userId,
               status: "POSTED",
+              linked_by: payload.userId,
             }),
-          });
-        }
-      } catch (e) {
-        console.warn("Failed to update lpg_transaction_header_invoices status to POSTED", e);
+          }
+        );
+      } else {
+        await directusFetch(`${DIRECTUS_URL}/items/lpg_transaction_header_invoices`, {
+          method: "POST",
+          body: JSON.stringify({
+            header_id: payload.transactionHeaderId,
+            sales_invoice_id: invoiceId,
+            invoice_role: "SOURCE_DELIVERY",
+            linked_by: payload.userId,
+            status: "POSTED",
+          }),
+        });
       }
+
+      // DEV-RULE: Mark sales_invoice.is_visit = 1 upon completing regular billing (strictly excluded for onboarding)
+      await directusFetch(`${DIRECTUS_URL}/items/sales_invoice/${invoiceId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          is_visit: 1,
+        }),
+      });
+    } catch (e) {
+      console.warn("Failed to update lpg_transaction_header_invoices status or sales_invoice.is_visit to 1", e);
     }
   }
 

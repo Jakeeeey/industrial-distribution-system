@@ -14,6 +14,7 @@ export default function ApprovalPurchaseOrderModule({ approverId, approverName }
     const [loadingDetail, setLoadingDetail] = React.useState(false);
     const [error, setError] = React.useState("");
 
+    const [statusTab, setStatusTab] = React.useState<"pending" | "approved" | "rejected" | "all">("pending");
     const [pending, setPending] = React.useState<PendingApprovalPO[]>([]);
     const [selectedId, setSelectedId] = React.useState<string | null>(null);
     const [detail, setDetail] = React.useState<PurchaseOrderDetail | null>(null);
@@ -24,7 +25,7 @@ export default function ApprovalPurchaseOrderModule({ approverId, approverName }
             setLoadingList(true);
             setError("");
             const [data, terms] = await Promise.all([
-                provider.fetchPendingApprovalPOs(),
+                provider.fetchPendingApprovalPOs(statusTab),
                 provider.fetchPaymentTerms(),
             ]);
             setPending(data);
@@ -38,7 +39,7 @@ export default function ApprovalPurchaseOrderModule({ approverId, approverName }
         } finally {
             setLoadingList(false);
         }
-    }, []);
+    }, [statusTab]);
 
     React.useEffect(() => {
         refreshList();
@@ -106,6 +107,31 @@ export default function ApprovalPurchaseOrderModule({ approverId, approverName }
         [selectedId, refreshList, approverId]
     );
 
+    const onReject = React.useCallback(
+        async (opts: { remarks?: string }) => {
+            if (!selectedId) return;
+
+            try {
+                setError("");
+                await provider.rejectPurchaseOrder({
+                    id: selectedId,
+                    remarks: opts?.remarks,
+                    approverId: approverId,
+                });
+
+                await refreshList();
+                setSelectedId(null);
+                setDetail(null);
+            } catch (e: unknown) {
+                const msg = String(e instanceof Error ? e.message : e);
+                setError(msg);
+                toast.error(`Rejection failed: ${msg}`);
+                throw e;
+            }
+        },
+        [selectedId, refreshList, approverId]
+    );
+
     return (
         <div className="w-full min-w-0 space-y-4">
             <div className="space-y-1">
@@ -127,6 +153,12 @@ export default function ApprovalPurchaseOrderModule({ approverId, approverName }
                     selectedId={selectedId}
                     onSelect={onSelect}
                     disabled={loadingList}
+                    statusTab={statusTab}
+                    onTabChange={(tab) => {
+                        setStatusTab(tab);
+                        setSelectedId(null);
+                        setDetail(null);
+                    }}
                 />
 
                 <PurchaseOrderReviewPanel
@@ -135,6 +167,7 @@ export default function ApprovalPurchaseOrderModule({ approverId, approverName }
                     disabled={loadingList}
                     paymentTerms={paymentTerms}
                     onApprove={onApprove}
+                    onReject={onReject}
                     approverName={approverName}
                 />
             </div>

@@ -87,10 +87,17 @@ export async function generatePostingPOPrint(data: PrintData): Promise<jsPDF> {
       doc.text('PO NUMBER', col2x, y);
       y += 4;
 
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(0, 0, 0);
-      doc.text(po.createdAt ? new Date(po.createdAt).toLocaleDateString('en-PH') : "—", col1x, y);
+      const parsePHT = (dateStr?: string | null) => {
+          if (!dateStr) return null;
+          let iso = dateStr.trim();
+          if (!iso.endsWith("Z") && !iso.includes("+") && !iso.includes("-", 10)) {
+              iso = iso.replace(" ", "T") + "Z";
+          }
+          const d = new Date(iso);
+          return Number.isNaN(d.getTime()) ? null : d;
+      };
+      const dateObj = parsePHT(po.createdAt);
+      doc.text(dateObj ? dateObj.toLocaleDateString('en-PH', { timeZone: 'Asia/Manila' }) : "—", col1x, y);
       doc.text(po.poNumber || 'Unknown PO', col2x, y);
       y += 10;
 

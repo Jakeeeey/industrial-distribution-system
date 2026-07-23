@@ -262,6 +262,19 @@ export function ReviewReceiptStep({ onBack, receiverName }: { onBack: () => void
 
     return (
         <div className="h-full flex flex-col overflow-hidden">
+            {/* ✅ Fix: ReceiptPreviewModal rendered unconditionally so Print Receipt works in both pre and post-save states - AG 2026-07-14 */}
+            {previewOpen && (
+                <ReceiptPreviewModal
+                    isOpen={previewOpen}
+                    onClose={() => setPreviewOpen(false)}
+                    data={previewData}
+                    poNumber={selectedPO?.poNumber || "N/A"}
+                    supplierName={selectedPO?.supplier?.name || "N/A"}
+                    priceType={selectedPO?.priceType || "VAT Inclusive"}
+                    isInvoice={!!((receiptSaved as ReceiptSavedInfo | null)?.isInvoice ?? selectedPO?.isInvoice)}
+                />
+            )}
+
             {receiptSaved ? (
                 <div className="flex-1 flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in duration-500">
                     <div className="w-20 h-20 rounded-full bg-emerald-500/10 flex items-center justify-center mb-6 border-2 border-emerald-500/20">
@@ -430,17 +443,7 @@ export function ReviewReceiptStep({ onBack, receiverName }: { onBack: () => void
                         </div>
                     </div>
 
-                    {previewOpen && (selectedPO || receiptSaved) && (
-                        <ReceiptPreviewModal
-                            isOpen={previewOpen}
-                            onClose={() => setPreviewOpen(false)}
-                            data={previewData}
-                            poNumber={selectedPO?.poNumber || "N/A"}
-                            supplierName={selectedPO?.supplier?.name || "N/A"}
-                            priceType={selectedPO?.priceType || "VAT Inclusive"}
-                            isInvoice={!!((receiptSaved as ReceiptSavedInfo | null)?.isInvoice ?? selectedPO?.isInvoice)}
-                        />
-                    )}
+                    {/* ✅ Modal moved to top-level render; no duplicate needed here - AG 2026-07-14 */}
 
                     {/* ✅ Partial Receipt Confirmation Modal */}
                     <AlertDialog open={isPartialModalOpen} onOpenChange={setIsPartialModalOpen}>

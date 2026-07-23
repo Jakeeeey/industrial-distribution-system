@@ -40,6 +40,8 @@ const CylinderTaggingModal: React.FC<CylinderTaggingModalProps> = ({
     const [serials, setSerials] = useState<string[]>([]);
     // unregisteredSerials = serials not found in cylinder_assets table
     const [unregisteredSerials, setUnregisteredSerials] = useState<string[]>([]);
+    // Track condition of each added serial
+    const [serialConditions, setSerialConditions] = useState<Record<string, 'GOOD' | 'FOR_REPAIR' | 'DAMAGED' | 'SCRAP'>>({});
     
     const [inputValue, setInputValue] = useState('');
     const [isValidating, setIsValidating] = useState(false);
@@ -48,7 +50,7 @@ const CylinderTaggingModal: React.FC<CylinderTaggingModalProps> = ({
     const inputRef = useRef<HTMLInputElement>(null);
 
     // Product states
-    const [products, setProducts] = useState<{ product_id: number; product_name: string; product_code: string }[]>([]);
+    const [products, setProducts] = useState<{ product_id: number; product_name: string; product_code: string; uom_ids?: string }[]>([]);
     const [isLoadingProducts, setIsLoadingProducts] = useState(false);
     const [selectedProductId, setSelectedProductId] = useState<string>('');
 
@@ -61,7 +63,7 @@ const CylinderTaggingModal: React.FC<CylinderTaggingModalProps> = ({
                 .then(data => {
                     const fetched = data.data || [];
                     if (allowedProductNames && allowedProductNames.length > 0) {
-                        setProducts(fetched.filter((p: { product_id: number; product_name: string; product_code: string }) => allowedProductNames.includes(p.product_name)));
+                        setProducts(fetched.filter((p: { product_id: number; product_name: string; product_code: string; uom_ids?: string }) => allowedProductNames.includes(p.product_name)));
                     } else {
                         setProducts(fetched);
                     }
@@ -81,6 +83,7 @@ const CylinderTaggingModal: React.FC<CylinderTaggingModalProps> = ({
         if (isOpen) {
             setSerials([]);
             setUnregisteredSerials([]);
+            setSerialConditions({});
             setInputValue('');
             setSelectedProductId('');
             setIsConfirming(false);
@@ -102,16 +105,28 @@ const CylinderTaggingModal: React.FC<CylinderTaggingModalProps> = ({
 
         setIsValidating(true);
         try {
+            // Find selected product name to check if it's an empty cylinder (uom_ids is 'EMPTY')
+            const product = products.find(p => String(p.product_id) === selectedProductId);
+            const isProductEmpty = product?.uom_ids === 'EMPTY';
+
             const response = await fetch(
-                `/api/ids/scm/fleet-management/trip-management/dispatch-plan/clearance-serial/cylinder-assets?serial_number=${encodeURIComponent(trimmed)}`
+                `/api/ids/scm/fleet-management/trip-management/dispatch-plan/clearance-serial/cylinder-assets?serial_number=${encodeURIComponent(trimmed)}&is_empty=${isProductEmpty}`
             );
             if (!response.ok) {
                 throw new Error('API failure');
             }
             const data = await response.json();
 
-            if (data.exists) {
+            // Check if the serial number is flagged as duplicate (e.g. on hand or already cleared)
+            if (data.isDuplicate) {
+                toast.error(`Cannot add serial "${trimmed}": ${data.reason || 'Duplicate serial detected.'}`);
+            } else if (data.exists) {
                 setSerials(prev => [trimmed, ...prev]);
+                // Save the existing cylinder condition returned from backend, or default to GOOD
+                setSerialConditions(prev => ({
+                    ...prev,
+                    [trimmed]: data.asset?.cylinder_condition || 'GOOD'
+                }));
                 toast.success(`Serial verified and added: ${trimmed}`);
             } else {
                 setUnregisteredSerials(prev => [...prev, trimmed]);
@@ -131,7 +146,13 @@ const CylinderTaggingModal: React.FC<CylinderTaggingModalProps> = ({
     };
 
     const handleRemoveSerial = (indexToRemove: number) => {
+        const serialToRemove = serials[indexToRemove];
         setSerials(prev => prev.filter((_, idx) => idx !== indexToRemove));
+        setSerialConditions(prev => {
+            const next = { ...prev };
+            delete next[serialToRemove];
+            return next;
+        });
     };
 
     const handleRemoveUnregistered = (indexToRemove: number) => {
@@ -144,6 +165,13 @@ const CylinderTaggingModal: React.FC<CylinderTaggingModalProps> = ({
 
     const handleRegisterSuccess = (registeredList: string[]) => {
         setSerials(prev => [...registeredList, ...prev]);
+        setSerialConditions(prev => {
+            const next = { ...prev };
+            registeredList.forEach(sn => {
+                if (!next[sn]) next[sn] = 'GOOD';
+            });
+            return next;
+        });
         setUnregisteredSerials([]);
     };
 
@@ -159,7 +187,8 @@ const CylinderTaggingModal: React.FC<CylinderTaggingModalProps> = ({
                     body: JSON.stringify({
                         serials,
                         selectedProductId,
-                        invoiceId
+                        invoiceId,
+                        conditions: serialConditions // Pass mapped conditions to database
                     })
                 });
                 
@@ -334,13 +363,31 @@ const CylinderTaggingModal: React.FC<CylinderTaggingModalProps> = ({
                                             <span className="font-mono text-sm font-bold text-foreground">
                                                 {serial}
                                             </span>
-                                            <button
-                                                onClick={() => handleRemoveSerial(index)}
-                                                className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors opacity-80 group-hover:opacity-100"
-                                                title="Remove serial"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
+                                            <div className="flex items-center gap-2">
+                                                <select
+                                                    value={serialConditions[serial] || 'GOOD'}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value as 'GOOD' | 'FOR_REPAIR' | 'DAMAGED' | 'SCRAP';
+                                                        setSerialConditions(prev => ({
+                                                            ...prev,
+                                                            [serial]: val
+                                                        }));
+                                                    }}
+                                                    className="h-8 rounded-lg border border-border bg-background px-2 py-1 text-xs font-semibold shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20 text-foreground cursor-pointer"
+                                                >
+                                                    <option value="GOOD">GOOD</option>
+                                                    <option value="FOR_REPAIR">FOR REPAIR</option>
+                                                    <option value="DAMAGED">DAMAGED</option>
+                                                    <option value="SCRAP">SCRAP</option>
+                                                </select>
+                                                <button
+                                                    onClick={() => handleRemoveSerial(index)}
+                                                    className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors opacity-80 group-hover:opacity-100"
+                                                    title="Remove serial"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>

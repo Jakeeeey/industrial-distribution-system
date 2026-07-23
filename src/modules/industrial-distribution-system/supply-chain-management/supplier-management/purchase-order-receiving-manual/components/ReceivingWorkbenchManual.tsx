@@ -6,10 +6,13 @@ import { ReceiptDetailsStep } from "./steps/ReceiptDetailsStep";
 import { ProductVerificationStep } from "./steps/ProductVerificationStep";
 import { ManualProductsStep } from "./steps/ManualProductsStep";
 import { ReviewReceiptStep } from "./steps/ReviewReceiptStep";
+import { ReadonlyReceivingPODetails } from "./ReadonlyReceivingPODetails";
 
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { ReceivingWorkbenchRefillManual } from "./ReceivingWorkbenchRefillManual";
+import { receivingManualWorkbenchMode, shouldShowReceivingWorkbenchSkeleton } from "../utils/receivingManualView";
 
 function StepDot({ active }: { active: boolean }) {
     return (
@@ -20,10 +23,12 @@ function StepDot({ active }: { active: boolean }) {
 }
 
 export function ReceivingWorkbenchManual({ receiverName }: { receiverName?: string }) {
-    const { selectedPO, receiptSaved } = useReceivingProductsManual();
+    const { selectedPO, receiptSaved, openingPOId } = useReceivingProductsManual();
 
     // Hooks must be called unconditionally before any early returns - AG 2026-06-26
     const [step, setStep] = React.useState(0);
+    const workbenchMode = receivingManualWorkbenchMode(selectedPO);
+    const showSkeleton = shouldShowReceivingWorkbenchSkeleton(openingPOId);
 
     // Reset to step 0 if PO is deselected - AG 2026-06-26
     React.useEffect(() => {
@@ -37,6 +42,29 @@ export function ReceivingWorkbenchManual({ receiverName }: { receiverName?: stri
             setStep(3);
         }
     }, [receiptSaved]);
+
+    if (showSkeleton) {
+        return <ReceivingWorkbenchSkeleton />;
+    }
+
+    if (workbenchMode === "readonly") {
+        return (
+            <Card className="p-4 h-full flex flex-col overflow-hidden">
+                <div className="flex items-start justify-between gap-3 shrink-0">
+                    <div>
+                        <div className="text-base font-semibold">Purchase Order Receiving Details</div>
+                        <div className="text-xs text-muted-foreground">
+                            Review received items and receipt history for {selectedPO?.poNumber}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mt-4 flex-1 overflow-hidden flex flex-col">
+                    <ReadonlyReceivingPODetails />
+                </div>
+            </Card>
+        );
+    }
 
     // Delegate to dedicated refill workbench if selected PO is a refill PO.
     // Moved after hooks to comply with Rules of Hooks. - AG 2026-06-26
@@ -88,6 +116,59 @@ export function ReceivingWorkbenchManual({ receiverName }: { receiverName?: stri
                 ) : step === 3 ? (
                     <ReviewReceiptStep onBack={() => setStep(2)} receiverName={receiverName} />
                 ) : null}
+            </div>
+        </Card>
+    );
+}
+
+function ReceivingWorkbenchSkeleton() {
+    return (
+        <Card className="p-4 h-full flex flex-col overflow-hidden">
+            <div className="flex items-start justify-between gap-3 shrink-0">
+                <div className="space-y-2">
+                    <Skeleton className="h-5 w-64" />
+                    <Skeleton className="h-3 w-96 max-w-full" />
+                </div>
+                <div className="flex items-center gap-2">
+                    <Skeleton className="h-2.5 w-2.5 rounded-full" />
+                    <Skeleton className="h-2.5 w-2.5 rounded-full" />
+                    <Skeleton className="h-2.5 w-2.5 rounded-full" />
+                </div>
+            </div>
+
+            <div className="mt-4 flex-1 overflow-hidden flex flex-col gap-4">
+                <Card className="p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                        <Skeleton className="h-3 w-44" />
+                        <Skeleton className="h-5 w-16 rounded-full" />
+                    </div>
+                    <div className="mt-6 grid grid-cols-2 gap-y-4 gap-x-4">
+                        {Array.from({ length: 4 }).map((_, index) => (
+                            <React.Fragment key={index}>
+                                <Skeleton className="h-3 w-32" />
+                                <Skeleton className="h-3 w-full max-w-72 justify-self-end" />
+                            </React.Fragment>
+                        ))}
+                    </div>
+                    <Skeleton className="mt-6 h-9 w-full rounded-lg" />
+                </Card>
+
+                <Card className="p-4 shadow-sm">
+                    <Skeleton className="h-3 w-48" />
+                    <div className="mt-4 space-y-3">
+                        <Skeleton className="h-10 w-full rounded-lg" />
+                        <Skeleton className="h-10 w-full rounded-lg" />
+                    </div>
+                </Card>
+
+                <Card className="p-4 shadow-sm flex-1">
+                    <Skeleton className="h-3 w-36" />
+                    <div className="mt-6 space-y-3">
+                        {Array.from({ length: 4 }).map((_, index) => (
+                            <Skeleton key={index} className="h-9 w-full rounded-lg" />
+                        ))}
+                    </div>
+                </Card>
             </div>
         </Card>
     );

@@ -76,17 +76,6 @@ function BranchTable({
 
     const columns = React.useMemo<ColumnDef<FlatItem, any>[]>(() => [
         {
-            id: "index",
-            header: "#",
-            cell: ({ row }) => (
-                <span className="text-muted-foreground font-mono text-[9px]">
-                    {row.index + 1}
-                </span>
-            ),
-            size: 40,
-            enableHiding: false,
-        },
-        {
             accessorKey: "brand",
             header: "Brand",
             cell: ({ getValue }) => (
@@ -97,7 +86,7 @@ function BranchTable({
         },
         {
             accessorKey: "category",
-            header: "Category",
+            header: "category",
             cell: ({ getValue }) => (
                 <span className="text-muted-foreground font-bold uppercase text-[9px]">
                     {getValue() as string}
@@ -116,15 +105,6 @@ function BranchTable({
             ),
         },
         {
-            accessorKey: "price",
-            header: () => <div className="text-right">Price</div>,
-            cell: ({ getValue }) => (
-                <div className="text-right font-bold text-foreground/80 text-[10px]">
-                    {money.format(getValue() as number).replace("PHP", "").trim()}
-                </div>
-            ),
-        },
-        {
             accessorKey: "uom",
             header: () => <div className="text-center">UOM</div>,
             cell: ({ getValue }) => (
@@ -132,6 +112,15 @@ function BranchTable({
                     <span className="px-1.5 py-0.5 bg-secondary text-secondary-foreground text-[8px] font-black rounded uppercase">
                         {getValue() as string}
                     </span>
+                </div>
+            ),
+        },
+        {
+            accessorKey: "price",
+            header: () => <div className="text-right">Price</div>,
+            cell: ({ getValue }) => (
+                <div className="text-right font-bold text-foreground/80 text-[10px]">
+                    {money.format(getValue() as number).replace("PHP", "").trim()}
                 </div>
             ),
         },
@@ -193,17 +182,8 @@ function BranchTable({
             ),
         },
         {
-            accessorKey: "grossAmount",
-            header: () => <div className="text-right">Gross</div>,
-            cell: ({ getValue }) => (
-                <div className="text-right font-bold text-muted-foreground text-[10px]">
-                    {money.format(getValue() as number).replace("PHP", "").trim()}
-                </div>
-            ),
-        },
-        {
             id: "discType",
-            header: () => <div className="text-center">Disc Type</div>,
+            header: () => <div className="text-center">Disc. Type</div>,
             cell: ({ row }) => {
                 const dt = row.original.discountTypeId
                     ? discountTypeById.get(row.original.discountTypeId)
@@ -220,7 +200,7 @@ function BranchTable({
         },
         {
             accessorKey: "discAmount",
-            header: () => <div className="text-right">Disc Amt</div>,
+            header: () => <div className="text-right">Disc. Amount</div>,
             cell: ({ getValue }) => (
                 <div className="text-right font-bold text-emerald-600/80 text-[10px]">
                     {money.format(getValue() as number).replace("PHP", "").trim()}
@@ -229,7 +209,7 @@ function BranchTable({
         },
         {
             accessorKey: "netAmount",
-            header: () => <div className="text-right">Net</div>,
+            header: () => <div className="text-right">Net Amount</div>,
             cell: ({ getValue }) => (
                 <div className="text-right font-black text-primary text-[11px] tracking-tighter">
                     {money.format(getValue() as number).replace("PHP", "").trim()}

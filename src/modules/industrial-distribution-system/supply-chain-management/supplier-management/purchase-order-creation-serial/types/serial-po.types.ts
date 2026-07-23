@@ -50,6 +50,7 @@ export type SerialTaggingPODetail = {
     date: string;
     remark?: string;
     inventoryStatus: number;
+    inventoryStatusLabel?: string;
     isTagged: boolean;
     lines: SerialTaggingLine[];
 };

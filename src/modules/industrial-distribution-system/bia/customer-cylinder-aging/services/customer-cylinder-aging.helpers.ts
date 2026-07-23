@@ -56,11 +56,11 @@ export function formatDaysWithCustomer(days: number | null): string {
 export function formatRecommendedAction(action: RecommendedAction | null): string {
   if (!action) return "—";
   const MAP: Record<RecommendedAction, string> = {
-    NO_ACTION_REQUIRED:  "No Action Required",
-    MONITOR_CUSTOMER:    "Monitor Customer",
-    FOLLOW_UP_CUSTOMER:  "Follow Up Customer",
+    NO_ACTION_REQUIRED: "No Action Required",
+    MONITOR_CUSTOMER: "Monitor Customer",
+    FOLLOW_UP_CUSTOMER: "Follow Up Customer",
     FOR_PULL_OUT_REVIEW: "For Pull-Out Review",
-    VERIFY_CUSTOMER:     "Verify Customer",
+    VERIFY_CUSTOMER: "Verify Customer",
   };
   return MAP[action] ?? action;
 }
@@ -72,13 +72,13 @@ export function formatRecommendedAction(action: RecommendedAction | null): strin
 export function formatActivityStatus(status: CustomerActivityStatus | null): string {
   if (!status) return "—";
   const MAP: Record<CustomerActivityStatus, string> = {
-    ACTIVE:                "Active",
-    MONITORING:            "Monitoring",
-    WARNING:               "Warning",
-    INACTIVE:              "Inactive",
-    CRITICAL:              "Critical",
+    ACTIVE: "Active",
+    MONITORING: "Monitoring",
+    WARNING: "Warning",
+    INACTIVE: "Inactive",
+    CRITICAL: "Critical",
     NO_TRANSACTION_RECORD: "No Transaction",
-    UNKNOWN:               "Unknown",
+    UNKNOWN: "Unknown",
   };
   return MAP[status] ?? status;
 }
@@ -90,10 +90,10 @@ export function formatActivityStatus(status: CustomerActivityStatus | null): str
 export function formatAgingBasisSource(source: AgingBasisSource | null): string {
   if (!source) return "—";
   const MAP: Record<AgingBasisSource, string> = {
-    DEPLOYED_DATE:                   "Deploy Date",
-    LAST_TRANSACTION_DATE:           "Last Transaction",
+    DEPLOYED_DATE: "Deploy Date",
+    LAST_TRANSACTION_DATE: "Last Transaction",
     CYLINDER_MODIFIED_DATE_FALLBACK: "Modified Date (Fallback)",
-    CYLINDER_CREATED_DATE_FALLBACK:  "Created Date (Fallback)",
+    CYLINDER_CREATED_DATE_FALLBACK: "Created Date (Fallback)",
   };
   return MAP[source] ?? source;
 }

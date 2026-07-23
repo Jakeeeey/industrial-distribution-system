@@ -92,6 +92,8 @@ export function PODetailsBreakdownCard() {
 
                                             if (it.discountLabel && discountAmt > 0) {
                                                 discountDisplay = `${it.discountLabel} ${money(discountAmt, selectedPO.currency || "PHP")}`;
+                                            } else if (it.discountLabel) {
+                                                discountDisplay = it.discountLabel;
                                             } else if (discountAmt > 0) {
                                                 discountDisplay = money(discountAmt, selectedPO.currency || "PHP");
                                             }

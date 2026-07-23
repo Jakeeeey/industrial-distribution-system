@@ -53,25 +53,48 @@ function now() {
 }
 
 function isoDateOnlyFrom(value?: string | Date | number | null) {
-    if (!value) return now().toISOString().slice(0, 10);
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return now().toISOString().slice(0, 10);
-    return d.toISOString().slice(0, 10);
+    const d = value ? new Date(value) : now();
+    if (Number.isNaN(d.getTime())) {
+        return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(now());
+    }
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(d);
 }
 
 function isoDateTimeFrom(value?: string | Date | number | null) {
-    if (!value) return now().toISOString();
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return now().toISOString();
-    return d.toISOString();
+    const d = value ? new Date(value) : now();
+    if (Number.isNaN(d.getTime())) {
+        const fallback = now();
+        const datePart = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(fallback);
+        const timePart = new Intl.DateTimeFormat("en-US", {
+            timeZone: "Asia/Manila",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false
+        }).format(fallback);
+        return `${datePart} ${timePart}`;
+    }
+    const datePart = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(d);
+    const timePart = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Manila",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+    }).format(d);
+    return `${datePart} ${timePart}`;
 }
 
 function timeHHMMSSFrom(value?: string | Date | number | null) {
     const d = value ? new Date(value) : now();
-    const hh = String(d.getHours()).padStart(2, "0");
-    const mm = String(d.getMinutes()).padStart(2, "0");
-    const ss = String(d.getSeconds()).padStart(2, "0");
-    return `${hh}:${mm}:${ss}`;
+    const formatter = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Manila",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+    });
+    return formatter.format(d);
 }
 
 function numOrZero(v: unknown) {

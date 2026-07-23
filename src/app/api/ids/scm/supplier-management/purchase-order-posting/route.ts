@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { formatTareWeightForCommit, mergeReceivingItemsPreferSerialTare, resolvePostingDiscountContext } from "./postingInventoryLogic";
 
 // =====================
 // DIRECTUS HELPERS
@@ -142,6 +143,7 @@ const PO_PRODUCTS_COLLECTION = "purchase_order_products";
 const SUPPLIERS_COLLECTION = "suppliers";
 const PRODUCTS_COLLECTION = "products";
 const BRANCHES_COLLECTION = "branches";
+const PRODUCT_SUPPLIER_COLLECTION = "product_per_supplier";
 
 const POR_COLLECTION = "purchase_order_receiving";
 const POR_ITEMS_COLLECTION = "purchase_order_receiving_items";
@@ -432,7 +434,7 @@ async function fetchReceivingItems(base: string, filterPorIds?: number[]) {
             rfid_code: `M-${toStr(r.serial_number)}`,
             created_at: toStr(r.created_at),
             serial_no: toStr(r.serial_number),
-            tare_weight: toNum(r.tare_weight) || undefined,
+            tare_weight: formatTareWeightForCommit(r.tare_weight) || undefined,
             sourceTable: 'serial' as const
         }));
     } catch (e) {
@@ -440,19 +442,7 @@ async function fetchReceivingItems(base: string, filterPorIds?: number[]) {
         console.error("Failed to fetch from purchase_order_receiving_serial:", e instanceof Error ? e.message : String(e));
     }
 
-    // 3. Combine them ensuring no duplicate serial_no
-    const combined: ReceivingItem[] = [...items1];
-    const existingSerials = new Set(items1.map(i => toStr(i.serial_no).toUpperCase()).filter(Boolean));
-
-    for (const item of items2) {
-        const snUpper = toStr(item.serial_no).toUpperCase();
-        if (snUpper && !existingSerials.has(snUpper)) {
-            combined.push(item);
-            existingSerials.add(snUpper);
-        }
-    }
-
-    return combined;
+    return mergeReceivingItemsPreferSerialTare(items1, items2);
 }
 
 async function patchPO(base: string, poId: number, payload: unknown) {
@@ -463,6 +453,22 @@ async function patchPO(base: string, poId: number, payload: unknown) {
 async function patchPOR(base: string, porId: number, payload: unknown) {
     const url = `${base}/items/${POR_COLLECTION}/${encodeURIComponent(String(porId))}`;
     await fetchJson(url, { method: "PATCH", body: JSON.stringify(payload) });
+}
+
+async function fetchProductSupplierLinks(base: string, supplierId: number) {
+    const fields = encodeURIComponent("id,product_id,supplier_id,discount_type.*,discount_type.line_per_discount_type.line_id.*");
+    const url =
+        `${base}/items/${PRODUCT_SUPPLIER_COLLECTION}?limit=-1` +
+        `&filter[supplier_id][_eq]=${encodeURIComponent(String(supplierId))}` +
+        `&fields=${fields}`;
+    const j = await fetchJson(url) as { data: Array<Record<string, unknown>> };
+    const rows = Array.isArray(j?.data) ? j.data : [];
+    const map = new Map<number, Record<string, unknown>>();
+    for (const r of rows) {
+        const pid = toNum(r?.product_id);
+        if (pid) map.set(pid, r);
+    }
+    return map;
 }
 
 
@@ -488,11 +494,13 @@ function groupRfidsByPorId(rows: ReceivingItem[]) {
 }
 
 function hasReceiptEvidence(por: PORRow) {
+    if (toNum(por?.isPosted) === 2) return false; // REVERTED receipts do not count
     return Boolean(toStr(por?.receipt_no) || toStr(por?.receipt_date) || toStr(por?.received_date));
 }
 
 function effectiveReceivedQty(por: PORRow) {
     // IMPORTANT: treat numeric/string consistently
+    if (toNum(por?.isPosted) === 2) return 0; // REVERTED receipts do not contribute to received qty
     const posted = toNum(por?.isPosted) === 1;
     if (posted) return Math.max(0, toNum(por?.received_quantity ?? 0));
     if (!hasReceiptEvidence(por)) return 0;
@@ -790,7 +798,7 @@ async function registerCylinders(
                 current_branch_id: por ? toNum(por.branch_id) : null,
                 acquisition_date: nowISO().split("T")[0],
                 expiration_date: item.expiry_date ? new Date(item.expiry_date).toISOString().split("T")[0] : null,
-                tare_weight: item.tare_weight ? toNum(item.tare_weight) : null,
+                tare_weight: formatTareWeightForCommit(item.tare_weight),
                 cost: por ? toNum(por.unit_price) : toNum(p.cost_per_unit),
                 created_by: userId || null
             };
@@ -877,13 +885,29 @@ async function registerCylinders(
             if (!sn) continue;
 
             const pid = toNum(item.product_id);
-            const p = productsMap.get(pid);
+            let p = productsMap.get(pid);
+            if (!p) {
+                try {
+                    const pj = await fetchJson<{ data: Product }>(`${base}/items/${PRODUCTS_COLLECTION}/${pid}?fields=product_id,product_name,barcode,product_code,cost_per_unit,is_serialized,parent_id`);
+                    if (pj?.data) {
+                        p = {
+                            ...pj.data,
+                            product_id: toNum(pj.data.product_id),
+                            is_serialized: !!(pj.data.is_serialized),
+                            parent_id: pj.data.parent_id ? toNum(pj.data.parent_id) : null
+                        } as Product;
+                        productsMap.set(pid, p);
+                    }
+                } catch (err) {
+                    console.error(`[registerCylinders] Failed to fetch product info for pid ${pid}:`, err);
+                }
+            }
 
-            // Only register if the product is serialized
-            if (!p || !p.is_serialized) continue;
+            // Only register if product is serialized or was explicitly tracked in receiving
+            if (p && !p.is_serialized) continue;
 
             // Resolve target product_id (use parent_id if available)
-            const resolvedProductId = p.parent_id ? p.parent_id : pid;
+            const resolvedProductId = (p && p.parent_id) ? p.parent_id : pid;
 
             const porId = toNum(item.purchase_order_product_id);
             const por = porRows.find(r => toNum(r.purchase_order_product_id) === porId);
@@ -903,8 +927,8 @@ async function registerCylinders(
                         cylinder_status: "AVAILABLE",
                         current_branch_id: por ? toNum(por.branch_id) : null,
                         expiration_date: item.expiry_date ? new Date(item.expiry_date).toISOString().split("T")[0] : null,
-                        tare_weight: item.tare_weight ? toNum(item.tare_weight) : null,
-                        cost: por ? toNum(por.unit_price) : toNum(p.cost_per_unit),
+                        tare_weight: formatTareWeightForCommit(item.tare_weight),
+                        cost: por ? toNum(por.unit_price) : toNum(p?.cost_per_unit),
                         modified_by: userId || null
                     };
 
@@ -923,8 +947,8 @@ async function registerCylinders(
                         current_branch_id: por ? toNum(por.branch_id) : null,
                         acquisition_date: nowISO().split("T")[0],
                         expiration_date: item.expiry_date ? new Date(item.expiry_date).toISOString().split("T")[0] : null,
-                        tare_weight: item.tare_weight ? toNum(item.tare_weight) : null,
-                        cost: por ? toNum(por.unit_price) : toNum(p.cost_per_unit),
+                        tare_weight: formatTareWeightForCommit(item.tare_weight),
+                        cost: por ? toNum(por.unit_price) : toNum(p?.cost_per_unit),
                         created_by: userId || null
                     };
 
@@ -1256,15 +1280,9 @@ export async function POST(req: NextRequest) {
             const productsMap = await fetchProductsMap(base, productIds);
             const branchesMap = await fetchBranchesMap(base, branchIds);
             const discountTypesMap = await fetchDiscountTypesMap(base);
-            // Removed: Live Sourcing of productSupplierLinks is no longer done here.
-            // The Inventory module trusts the financials saved by the Amounts module.
+            const productSupplierLinks = sid ? await fetchProductSupplierLinks(base, sid) : new Map<number, Record<string, unknown>>();
 
-            // ── Resolve PO-level discount percent (Total Percent Source of Truth) ──
-            const poDType = po?.discount_type as Record<string, unknown> | null;
-            const poDiscountName = toStr(poDType?.discount_type || poDType?.name, "");
-            const poDiscountPercent = resolveDiscountPercent(poDType);
-
-            console.log("[DEBUG open_po] PO-level discount:", { poDType: JSON.stringify(poDType), poDiscountName, poDiscountPercent });
+            const poDType = po?.discount_type as Record<string, unknown> | string | number | null;
 
             const porIdsByKey = buildPorIdsByKey(porRows);
 
@@ -1314,17 +1332,15 @@ export async function POST(req: NextRequest) {
                 let lineGrossAmt = 0;
                 let lineDiscount = 0;
                 let lineNet = 0;
-                let discountTypeId = "";
-                let resolvedLabel = "—";
 
                 const linePorRows = porRows.filter(r => porIdsForLine.includes(toNum(r.purchase_order_product_id)));
                 const srcRow = linePorRows.find(r => toNum(r.unit_price) > 0) || linePorRows.find(r => toNum(r.isPosted) === 1) || linePorRows[0];
-                
-                discountTypeId = toStr(srcRow?.discount_type);
-                if (discountTypeId) {
-                    const dt = discountTypesMap.get(toNum(discountTypeId));
-                    resolvedLabel = toStr(dt?.name, "—");
-                }
+                const discountContext = resolvePostingDiscountContext({
+                    savedDiscountType: srcRow?.discount_type,
+                    discountTypesMap,
+                    productSupplierDiscountType: productSupplierLinks.get(pid)?.discount_type as Record<string, unknown> | string | number | null | undefined,
+                    poDiscountType: poDType,
+                });
                 
                 unitPrice = toNum(srcRow?.unit_price) || toNum(ln?.unit_price) || toNum(p?.cost_per_unit);
                 lineGrossAmt = linePorRows.reduce((sum, r) => sum + (toNum(r.unit_price) * effectiveReceivedQty(r)), 0);
@@ -1352,8 +1368,8 @@ export async function POST(req: NextRequest) {
                     grossAmount: lineGrossAmt,
                     discountAmount: lineDiscount,
                     netAmount: lineNet,
-                    discountTypeId: discountTypeId || undefined,
-                    discountLabel: resolvedLabel !== "—" ? resolvedLabel : undefined,
+                    discountTypeId: discountContext.discountTypeId,
+                    discountLabel: discountContext.discountLabel,
                 };
 
                 const arr = itemsByBranch.get(bid) ?? [];
@@ -1604,7 +1620,10 @@ export async function POST(req: NextRequest) {
             // Fetch receiving items and products map for the rows being posted
             const targetPorIds = toPost.map(r => r.porId).filter(Boolean);
             const targetReceivingItems = targetPorIds.length ? await fetchReceivingItems(base, targetPorIds) : [];
-            const allProductIds = Array.from(new Set(porRows.map(r => toNum(r?.product_id)).filter(Boolean)));
+            const allProductIds = Array.from(new Set([
+                ...porRows.map(r => toNum(r?.product_id)),
+                ...targetReceivingItems.map(item => toNum(item.product_id))
+            ].filter(Boolean)));
             const productsMap = await fetchProductsMap(base, allProductIds);
             
             // Execute cylinder registration
@@ -1726,7 +1745,10 @@ export async function POST(req: NextRequest) {
             // Fetch receiving items and products map for the rows being posted
             const targetPorIdsAll = toPost.map(r => toNum(r?.purchase_order_product_id)).filter(Boolean);
             const targetReceivingItemsAll = targetPorIdsAll.length ? await fetchReceivingItems(base, targetPorIdsAll) : [];
-            const allProductIdsAll = Array.from(new Set(porRows.map(r => toNum(r?.product_id)).filter(Boolean)));
+            const allProductIdsAll = Array.from(new Set([
+                ...porRows.map(r => toNum(r?.product_id)),
+                ...targetReceivingItemsAll.map(item => toNum(item.product_id))
+            ].filter(Boolean)));
             const productsMapAll = await fetchProductsMap(base, allProductIdsAll);
             
             // Execute cylinder registration
@@ -1788,15 +1810,10 @@ export async function POST(req: NextRequest) {
                 if (popId) targetPopIds.push(popId);
 
                 if (pop) {
+                    // Instead of zeroing out properties, just mark it as REVERTED (isPosted = 2) 
+                    // so it remains in history for audit visibility and correction.
                     await patchPOR(base, porId, {
-                        received_quantity: 0,
-                        receipt_no: null,
-                        receipt_date: null,
-                        received_date: null,
-                        discounted_amount: 0,
-                        vat_amount: 0,
-                        withholding_amount: 0,
-                        total_amount: 0,
+                        isPosted: 2,
                     });
                 } else {
                     // Extra product: delete completely to prevent ghost records
@@ -1812,37 +1829,9 @@ export async function POST(req: NextRequest) {
                 }
             }
 
-            // 4.5. Delete associated RFID tags (legacy POP linkages)
-
-            const allLinkIds = [...targetPorIds, ...targetPopIds];
-
-            if (allLinkIds.length > 0) {
-                try {
-                    const linkedItems = await fetchReceivingItems(base, allLinkIds);
-                    const itemIdsToDelete = linkedItems.filter(it => it.sourceTable === 'items').map(it => toNum(it.receiving_item_id)).filter(id => id > 0);
-                    if (itemIdsToDelete.length > 0) {
-                        const deleteUrl = `${base}/items/${POR_ITEMS_COLLECTION}`;
-                        await fetch(deleteUrl, {
-                            method: "DELETE",
-                            headers: directusHeaders(),
-                            body: JSON.stringify(itemIdsToDelete),
-                        });
-                    }
-
-                    const serialIdsToDelete = linkedItems.filter(it => it.sourceTable === 'serial').map(it => toNum(it.receiving_item_id)).filter(id => id > 0);
-                    if (serialIdsToDelete.length > 0) {
-                        const deleteUrl = `${base}/items/purchase_order_receiving_serial`;
-                        await fetch(deleteUrl, {
-                            method: "DELETE",
-                            headers: directusHeaders(),
-                            body: JSON.stringify(serialIdsToDelete),
-                        });
-                    }
-                } catch (err) {
-                    console.error("Failed to delete RFID tags/serials during receipt revert:", err);
-                }
-            }
-
+            // 4.5. Deleted: We no longer delete associated RFID tags during revert. 
+            // The serial transaction records remain intact inside the database.
+            // When the user resubmits the receipt, the receiving API will purge the old serials and insert the new ones.
             // 5. Re-evaluate PO status based on remaining activity
             const updatedPorRows = await fetchPORByPOIds(base, [poId]);
 

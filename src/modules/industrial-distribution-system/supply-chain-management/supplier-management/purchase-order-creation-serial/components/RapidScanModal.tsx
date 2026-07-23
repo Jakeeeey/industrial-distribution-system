@@ -118,7 +118,15 @@ export function RapidScanModal({ poId, open, onClose, lines, onAddSerial }: Rapi
             }
 
             // Prefer a line that still needs serials
-            const target = matchedLines.find((l) => l.currentCount < l.orderedQty) ?? matchedLines[0];
+            const target = matchedLines.find((l) => l.currentCount < l.orderedQty);
+            if (!target) {
+                store.addRapidScanLog(poId, {
+                    serial: sn, lineId: null, productName: assetProductName,
+                    branchName: "—", status: "error", message: "Exceeds ordered quantity"
+                });
+                toast.error(`Scanning exceeds ordered quantity for "${assetProductName}".`);
+                return;
+            }
 
             // Check for duplicates within this line
             if (target.allSerialNumbers.includes(sn)) {

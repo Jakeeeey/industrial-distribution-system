@@ -99,7 +99,7 @@ export async function fetchActiveSiteCylinders(
     "cylinder_asset_id.cylinder_status,cylinder_asset_id.cylinder_condition";
   const res = await directusFetch<{ data: Record<string, unknown>[] }>(
     `${DIRECTUS_URL}/items/lpg_customer_site_cylinders?fields=${fields}` +
-      `&filter[lpg_site_id][_eq]=${siteId}&filter[site_cylinder_status][_in]=CONNECTED,STANDBY&limit=-1`
+    `&filter[lpg_site_id][_eq]=${siteId}&filter[site_cylinder_status][_in]=CONNECTED,STANDBY&limit=-1`
   );
   return ((res.data ?? []) as Record<string, unknown>[]).map((raw) => {
     const asset = raw["cylinder_asset_id"] as Record<string, unknown> | null;
@@ -108,12 +108,12 @@ export async function fetchActiveSiteCylinders(
       cylinder_asset_id: asset ? Number(asset["id"]) : raw["cylinder_asset_id"],
       cylinder_asset: asset
         ? {
-            id: Number(asset["id"]),
-            serial_number: String(asset["serial_number"] ?? ""),
-            tare_weight: Number(asset["tare_weight"] ?? 0),
-            cylinder_status: String(asset["cylinder_status"] ?? ""),
-            cylinder_condition: String(asset["cylinder_condition"] ?? ""),
-          }
+          id: Number(asset["id"]),
+          serial_number: String(asset["serial_number"] ?? ""),
+          tare_weight: Number(asset["tare_weight"] ?? 0),
+          cylinder_status: String(asset["cylinder_status"] ?? ""),
+          cylinder_condition: String(asset["cylinder_condition"] ?? ""),
+        }
         : undefined,
     } as unknown as CustomerSiteCylinder;
   });
@@ -124,8 +124,8 @@ export async function fetchAvailableCylinders(
 ): Promise<CylinderAsset[]> {
   const res = await directusFetch<{ data: Record<string, unknown>[] }>(
     `${DIRECTUS_URL}/items/lpg_cylinder_assets` +
-      `?fields=id,serial_number,tare_weight,cylinder_status,cylinder_condition` +
-      `&filter[cylinder_status][_in]=AVAILABLE,REFILLED&filter[customer_code][_eq]=${encodeURIComponent(customerCode)}&limit=-1`
+    `?fields=id,serial_number,tare_weight,cylinder_status,cylinder_condition` +
+    `&filter[cylinder_status][_in]=AVAILABLE,REFILLED&filter[customer_code][_eq]=${encodeURIComponent(customerCode)}&limit=-1`
   );
   return (res.data ?? []) as unknown as CylinderAsset[];
 }
@@ -432,7 +432,50 @@ export async function postTransaction(
       body: JSON.stringify({ status: "POSTED", modified_by: userId ?? null }),
     }
   );
-  return res.data;
+
+  const tx = res.data;
+
+  // DEV-RULE: Mark sales_invoice.is_visit = 1 upon posting regular billing (strictly excluded for onboarding)
+  if (tx && tx.transaction_type !== "ONBOARDING_BASELINE") {
+    let invoiceId: number | null = null;
+    if (tx.sales_invoice_id) {
+      invoiceId = typeof tx.sales_invoice_id === "object"
+        ? (tx.sales_invoice_id as unknown as { id: number }).id
+        : Number(tx.sales_invoice_id);
+    }
+
+    if (!invoiceId && tx.transaction_header_id) {
+      const headerId = typeof tx.transaction_header_id === "object"
+        ? (tx.transaction_header_id as unknown as { id: number }).id
+        : Number(tx.transaction_header_id);
+      try {
+        const linkRes = await directusFetch<{ data: { sales_invoice_id: number | { id: number } }[] }>(
+          `${DIRECTUS_URL}/items/lpg_transaction_header_invoices?filter[header_id][_eq]=${headerId}&limit=1`
+        );
+        const link = linkRes.data?.[0];
+        if (link?.sales_invoice_id) {
+          invoiceId = typeof link.sales_invoice_id === "object"
+            ? link.sales_invoice_id.id
+            : Number(link.sales_invoice_id);
+        }
+      } catch (e) {
+        console.warn("Failed to resolve invoice from transaction header link in postTransaction:", e);
+      }
+    }
+
+    if (invoiceId) {
+      try {
+        await directusFetch(`${DIRECTUS_URL}/items/sales_invoice/${invoiceId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ is_visit: 1 }),
+        });
+      } catch (err) {
+        console.warn("Failed to update sales_invoice.is_visit to 1 in postTransaction:", err);
+      }
+    }
+  }
+
+  return tx;
 }
 
 export async function cancelTransaction(

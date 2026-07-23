@@ -103,45 +103,62 @@ export function useSerializeDispatch() {
   };
 
   const handleSerialInput = async (serial: string) => {
-// ... existing handleSerialInput ...
+    console.log("[Serialize Dispatch Hook] handleSerialInput called with:", serial);
     if (!base.selectedOrderNo || !selectedGroup) {
+      console.warn("[Serialize Dispatch Hook] No selected order or group.");
       toast.error("Please select an order first.");
       return;
     }
 
     const serialTrimmed = serial.trim();
-    if (serialTrimmed.length < 3) return;
+    if (serialTrimmed.length < 1) {
+      console.warn("[Serialize Dispatch Hook] Serial is empty.");
+      return;
+    }
 
     try {
       const currentScans = scannedSerialsState[base.selectedOrderNo!] || [];
       if (currentScans.some(s => s.status === 'SUCCESS' && s.serialNumber === serialTrimmed)) {
+        console.warn("[Serialize Dispatch Hook] Serial already scanned:", serialTrimmed);
         toast.warning("Serial already scanned in this order.");
         return;
       }
 
+      console.log("[Serialize Dispatch Hook] Fetching serial from API...");
       // Validate against v_serial_onhand via API
-      // sourceBranch can be a number or a Directus expanded object { id, branch_name, ... }
       const rawBranch = selectedGroup.sourceBranch;
       const branchIdNum = typeof rawBranch === 'object' && rawBranch !== null 
         ? (rawBranch as Record<string, unknown>).id as number 
         : rawBranch as number;
+      
+      console.log("[Serialize Dispatch Hook] Branch ID:", branchIdNum);
       const match = await serializeLifecycleService.lookupSerial(serialTrimmed, branchIdNum || undefined);
+      console.log("[Serialize Dispatch Hook] Lookup match found:", match);
       
       const itemInOrder = selectedGroup.items.find(i => {
         const pid = (typeof i.product_id === 'object' ? i.product_id.product_id : i.product_id) as number;
         return pid === match.productId;
       });
 
-      if (!itemInOrder) {
-        throw new Error(`Product ${match.productName} is not in this order.`);
-      }
+      console.log("[Serialize Dispatch Hook] Item in order:", itemInOrder);
 
-      if ((itemInOrder.product_id as ProductRow)?.is_serialized === 0) {
+      if (!itemInOrder) {
+        throw new Error(`Serial ${serialTrimmed} (${match.productName}) is not in this order.`);
+      } 
+
+      const product = itemInOrder.product_id as ProductRow;
+      const isSerializedVal = typeof product === 'object' && product !== null ? product.is_serialized : undefined;
+      console.log("[Serialize Dispatch Hook] Product is_serialized:", isSerializedVal);
+
+      if (isSerializedVal === 0) {
         throw new Error(`Product ${match.productName} is not serialized. Use manual input.`);
       }
 
       const targetQty = itemInOrder.allocated_quantity || 0;
-      if ((itemInOrder as SerialOrderGroupItem).scannedSerialQty! >= targetQty) {
+      const currentScannedQty = (itemInOrder as SerialOrderGroupItem).scannedSerialQty || 0;
+      console.log("[Serialize Dispatch Hook] Quantities -> Scanned:", currentScannedQty, "Target:", targetQty);
+
+      if (currentScannedQty >= targetQty) {
         throw new Error(`Quantity limit reached for ${match.productName}.`);
       }
 
@@ -153,6 +170,7 @@ export function useSerializeDispatch() {
         status: 'SUCCESS'
       };
 
+      console.log("[Serialize Dispatch Hook] Adding scan log to state:", newScan);
       setScannedSerialsState(prev => ({
         ...prev,
         [base.selectedOrderNo!]: [newScan, ...(prev[base.selectedOrderNo!] || [])]
@@ -160,6 +178,7 @@ export function useSerializeDispatch() {
 
       toast.success(`Serial ${serialTrimmed} added.`);
     } catch (err) {
+      console.error("[Serialize Dispatch Hook] Error in handleSerialInput:", err);
       toast.error(err instanceof Error ? err.message : String(err));
     }
   };
@@ -185,11 +204,7 @@ export function useSerializeDispatch() {
       const itemsPayload = group.items.map(i => ({ 
         id: i.id, 
         status: 'For Loading',
-        // In the database update, we should probably update received_quantity 
-        // if this was receiving, but for dispatching it might be different.
-        // For now we just update status. 
-        // Wait, if it's non-serialized, we need to save the scanned count somewhere?
-        // Usually it's received_quantity / allocated_quantity.
+        picked_quantity: i.scannedQty
       }));
 
       await serializeLifecycleService.submitStatusUpdate({

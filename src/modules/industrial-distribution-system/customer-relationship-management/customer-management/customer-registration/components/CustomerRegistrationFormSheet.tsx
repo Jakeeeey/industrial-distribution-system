@@ -620,7 +620,7 @@ export function CustomerRegistrationFormSheet({ open, onOpenChange, customer, on
                                                 name="province"
                                                 render={({ field }) => (
                                                     <FormItem>
-                                                        <FormLabel className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground px-1">Province</FormLabel>
+                                                        <FormLabel className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground px-1">Province *</FormLabel>
                                                         <SearchableCombobox
                                                             items={provincesList}
                                                             value={field.value}
@@ -638,7 +638,7 @@ export function CustomerRegistrationFormSheet({ open, onOpenChange, customer, on
                                                     name="city"
                                                     render={({ field }) => (
                                                         <FormItem className="flex flex-col min-w-0">
-                                                            <FormLabel className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground px-1 truncate">City / Mun.</FormLabel>
+                                                            <FormLabel className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground px-1 truncate">City / Mun. *</FormLabel>
                                                             <SearchableCombobox
                                                                 items={citiesList}
                                                                 value={field.value}
@@ -656,7 +656,7 @@ export function CustomerRegistrationFormSheet({ open, onOpenChange, customer, on
                                                     name="brgy"
                                                     render={({ field }) => (
                                                         <FormItem className="flex flex-col min-w-0">
-                                                            <FormLabel className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground px-1 truncate">Barangay</FormLabel>
+                                                            <FormLabel className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground px-1 truncate">Barangay *</FormLabel>
                                                             <SearchableCombobox
                                                                 items={barangaysList}
                                                                 value={field.value}
@@ -715,7 +715,11 @@ export function CustomerRegistrationFormSheet({ open, onOpenChange, customer, on
                                                 name="contact_number"
                                                 render={({ field }) => (
                                                     <FormItem>
-                                                        <FormLabel className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground px-1">Mobile Number</FormLabel>
+                                                        <FormLabel
+                                                            className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground px-1"
+                                                        >
+                                                            Mobile Number * 
+                                                        </FormLabel>
                                                         <FormControl>
                                                             <Input
                                                                 {...field}

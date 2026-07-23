@@ -25,7 +25,12 @@ interface SerialInputModalProps {
   type: "IN" | "OUT";
   branchId?: number;
   productId?: number;
-  validateSerial?: (serial: string, branchId?: number) => Promise<{ exists: boolean; location?: string }>;
+  validateSerial?: (
+    serial: string,
+    branchId?: number,
+    productId?: number,
+    type?: "IN" | "OUT"
+  ) => Promise<{ exists: boolean; location?: string; isBlocked?: boolean; errorMsg?: string }>;
   excludeSerials?: string[];
   unitName?: string;
 }
@@ -83,17 +88,29 @@ export function SerialInputModal({
       return;
     }
 
-    if (type === "IN" && validateSerial) {
+    // WORKFLOW VALIDATION: Validate serial status against on-hand, WITH_CUSTOMER, and WITH_SUPPLIER checks
+    if (validateSerial) {
       setIsValidating(true);
       try {
-        const { exists } = await validateSerial(rawSerial, branchId);
-        if (exists) {
+        const res = await validateSerial(rawSerial, branchId, productId, type);
+        
+        if (res.isBlocked) {
+          toast.error("Validation Failed", {
+            description: res.errorMsg || `Serial "${rawSerial}" is invalid for this adjustment.`,
+            duration: 5000,
+          });
+          return;
+        }
+
+        if (res.exists) {
           setSerials((prev) => Array.from(new Set([...prev, rawSerial])));
-          toast.success(`Serial ${rawSerial} added (Already Registered)`);
+          toast.success(`Serial "${rawSerial}" added successfully.`);
         } else {
           setUnregisteredSerials((prev) => Array.from(new Set([...prev, rawSerial])));
-          toast.info(`Serial ${rawSerial} detected as unregistered`, {
-            description: "Please register it before adding to the adjustment.",
+          toast.info(`Serial "${rawSerial}" requires registration`, {
+            description: type === "OUT" 
+              ? "Serial is not currently on-hand. Please register it before adding to the adjustment."
+              : "Serial does not exist. Please register it before adding to the adjustment.",
           });
         }
       } catch (err) {

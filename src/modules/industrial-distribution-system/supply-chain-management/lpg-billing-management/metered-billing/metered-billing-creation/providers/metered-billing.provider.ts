@@ -628,6 +628,152 @@ async function buildBridgePayload(
     return payload.transaction_no || payload.reading_no || "";
   };
 
+  const resolvedSalesInvoiceId = resolveField("sales_invoice_id", null);
+  let resolvedSalesInvoiceNo = resolveField("sales_invoice_no", null);
+  if (typeof resolvedSalesInvoiceNo === "object" && resolvedSalesInvoiceNo !== null) {
+    const invObj = resolvedSalesInvoiceNo as Record<string, unknown>;
+    resolvedSalesInvoiceNo = String(invObj.invoice_no ?? invObj.no ?? "");
+  }
+
+  const rawSalesOrderId = resolveField("sales_order_id", null);
+  const rawSalesOrderNo = resolveField("sales_order_no", null);
+  const rawWiwoHeaderId = resolveField("wiwo_header_id", null);
+
+  let resolvedSalesOrderId: number | string | null = null;
+  if (typeof rawSalesOrderId === "object" && rawSalesOrderId !== null) {
+    const oObj = rawSalesOrderId as Record<string, unknown>;
+    const val = oObj.id ?? oObj.order_id;
+    resolvedSalesOrderId = val !== undefined && val !== null ? (typeof val === "number" || typeof val === "string" ? val : null) : null;
+  } else if (typeof rawSalesOrderId === "number" || typeof rawSalesOrderId === "string") {
+    resolvedSalesOrderId = rawSalesOrderId;
+  }
+
+  let resolvedSalesOrderNo: string | null = null;
+  if (typeof rawSalesOrderNo === "object" && rawSalesOrderNo !== null) {
+    const oObj = rawSalesOrderNo as Record<string, unknown>;
+    const val = oObj.order_no ?? oObj.no;
+    resolvedSalesOrderNo = val !== undefined && val !== null ? String(val) : null;
+  } else if (typeof rawSalesOrderNo === "string" || typeof rawSalesOrderNo === "number") {
+    resolvedSalesOrderNo = String(rawSalesOrderNo);
+  }
+
+  let resolvedWiwoHeaderId: number | null =
+    typeof rawWiwoHeaderId === "object" && rawWiwoHeaderId !== null
+      ? Number((rawWiwoHeaderId as Record<string, unknown>).id)
+      : typeof rawWiwoHeaderId === "number"
+        ? rawWiwoHeaderId
+        : null;
+
+  // Developer Comment: Auto-resolve sales_order_id, sales_order_no, and wiwo_header_id from sales_invoice when missing
+  if (resolvedSalesInvoiceId && (!resolvedSalesOrderId || !resolvedSalesOrderNo || !resolvedWiwoHeaderId)) {
+    try {
+      // 1. Fetch sales_invoice row to get invoice_no and order_id relation (stores sales_order.order_no string)
+      const invRes = await directusFetch<{
+        data?: {
+          invoice_id?: number;
+          invoice_no?: string;
+          order_id?: string;
+        };
+      }>(
+        `${DIRECTUS_URL}/items/sales_invoice/${resolvedSalesInvoiceId}?fields=invoice_id,invoice_no,order_id`
+      );
+
+      const invData = invRes?.data;
+      if (invData) {
+        if (!resolvedSalesInvoiceNo && invData.invoice_no) {
+          resolvedSalesInvoiceNo = invData.invoice_no;
+        }
+
+        const orderNo = invData.order_id?.trim();
+        console.log("[buildBridgePayload] invoice.order_id (sales_order.order_no):", orderNo);
+
+        if (orderNo) {
+          const soRes = await directusFetch<{
+            data?: Array<{
+              order_id: number;
+              order_no: string;
+            }>;
+          }>(
+            `${DIRECTUS_URL}/items/sales_order` +
+            `?filter[order_no][_eq]=${encodeURIComponent(orderNo)}` +
+            `&fields=order_id,order_no` +
+            `&limit=1`
+          );
+
+          const so = soRes.data?.[0];
+          console.log("[buildBridgePayload] sales_order:", so);
+
+          if (so) {
+            resolvedSalesOrderId = so.order_id;
+            resolvedSalesOrderNo = so.order_no;
+          }
+        }
+      }
+    } catch (invErr) {
+      console.warn("[buildBridgePayload] Could not auto-resolve sales_order from sales_invoice:", invErr);
+    }
+
+    // 2. Auto-resolve wiwo_header_id from sales_invoice or sales_invoice_no if missing
+    if (!resolvedWiwoHeaderId) {
+      try {
+        console.log("[buildBridgePayload] Resolving wiwo_header_id for invoiceId:", resolvedSalesInvoiceId, "invoiceNo:", resolvedSalesInvoiceNo);
+
+        const wiwoFilters: string[] = [];
+        if (resolvedSalesInvoiceId) {
+          wiwoFilters.push(`filter[_or][0][sales_invoice_id][_eq]=${resolvedSalesInvoiceId}`);
+          wiwoFilters.push(`filter[_or][1][sales_invoice_id.invoice_id][_eq]=${resolvedSalesInvoiceId}`);
+        }
+        if (resolvedSalesInvoiceNo) {
+          const idx = wiwoFilters.length;
+          wiwoFilters.push(`filter[_or][${idx}][sales_invoice_no][_eq]=${encodeURIComponent(resolvedSalesInvoiceNo)}`);
+        }
+
+        if (wiwoFilters.length > 0) {
+          const wiwoRes = await directusFetch<{ data?: { id: number }[] }>(
+            `${DIRECTUS_URL}/items/lpg_wiwo_headers?${wiwoFilters.join("&")}&fields=id&sort=-id&limit=1`
+          );
+          console.log("[buildBridgePayload] wiwoRes by invoice:", JSON.stringify(wiwoRes.data, null, 2));
+
+          if (wiwoRes?.data?.[0]?.id) {
+            resolvedWiwoHeaderId = wiwoRes.data[0].id;
+          }
+        }
+      } catch (wiwoErr) {
+        console.warn("[buildBridgePayload] Could not auto-resolve wiwo_header_id from sales_invoice:", wiwoErr);
+      }
+    }
+
+    // 3. Fallback by siteId, customer_code & transaction_date if still missing
+    const siteId = resolveField("lpg_site_id", 0);
+    const customerCode = resolveField("customer_code", "");
+    const txDate = resolveField("transaction_date", new Date().toISOString().split("T")[0]);
+
+    if (!resolvedWiwoHeaderId && siteId && customerCode) {
+      try {
+        const siteWiwoRes = await directusFetch<{ data?: { id: number }[] }>(
+          `${DIRECTUS_URL}/items/lpg_wiwo_headers?filter[lpg_site_id][_eq]=${siteId}&filter[customer_code][_eq]=${encodeURIComponent(String(customerCode))}&filter[transaction_date][_eq]=${encodeURIComponent(String(txDate))}&fields=id&sort=-id&limit=1`
+        );
+        console.log("[buildBridgePayload] siteWiwoRes:", JSON.stringify(siteWiwoRes.data, null, 2));
+
+        if (siteWiwoRes?.data?.[0]?.id) {
+          resolvedWiwoHeaderId = siteWiwoRes.data[0].id;
+        }
+      } catch (sWiwoErr) {
+        console.warn("[buildBridgePayload] Could not auto-resolve wiwo_header_id from site/customer/date:", sWiwoErr);
+      }
+    }
+  }
+
+  // Fallback for wiwo_header_id from transaction_header_id if still missing
+  const headerId = payload.transaction_header_id || (isUpdate && existing ? existing.transaction_header_id : null);
+  if (!resolvedWiwoHeaderId && headerId) {
+    try {
+      resolvedWiwoHeaderId = await fetchWiwoHeaderByTransactionHeader(headerId);
+    } catch (whErr) {
+      console.warn("[buildBridgePayload] Could not auto-resolve wiwo_header_id from transaction_header_id:", whErr);
+    }
+  }
+
   const data: Record<string, unknown> = {
     transaction_no: resolveReadingNoField(),
     transaction_type: resolveField("transaction_type", "REGULAR_BILLING"),
@@ -636,7 +782,7 @@ async function buildBridgePayload(
     customer_code: resolveField("customer_code", ""),
     lpg_site_id: resolveField("lpg_site_id", 0),
     meter_reading_id: readingId || (isUpdate && existing ? existing.meter_reading_id : null),
-    wiwo_header_id: resolveField("wiwo_header_id", null),
+    wiwo_header_id: resolvedWiwoHeaderId,
     metered_kg: resolveField("metered_kg", 0),
     wiwo_kg: resolveField("wiwo_kg", 0),
     variance_kg: resolveField("variance_kg", 0),
@@ -647,10 +793,10 @@ async function buildBridgePayload(
     vat_amount: resolveField("vat_amount", 0),
     net_amount: resolveField("net_amount", 0),
     discount_amount: resolveField("discount_amount", 0),
-    sales_invoice_id: resolveField("sales_invoice_id", null),
-    sales_invoice_no: resolveField("sales_invoice_no", null),
-    sales_order_id: resolveField("sales_order_id", null),
-    sales_order_no: resolveField("sales_order_no", null),
+    sales_invoice_id: resolvedSalesInvoiceId,
+    sales_invoice_no: resolvedSalesInvoiceNo,
+    sales_order_id: resolvedSalesOrderId,
+    sales_order_no: resolvedSalesOrderNo,
     status: resolveField("status", "DRAFT"),
     remarks: resolveField("remarks", null),
     pressure_line: resolveField("pressure_line", null),
@@ -762,6 +908,20 @@ export async function createMeteredTransaction(
     }
   }
 
+  // 5b. DEV-CHANGE: Update is_visit to 1 on only the selected onboarding sales_invoice when finishing ONBOARDING_BASELINE setup
+  if (payload.transaction_type === "ONBOARDING_BASELINE" && invoiceId) {
+    try {
+      console.log(`[createMeteredTransaction] Patching sales_invoice ${invoiceId} is_visit: 1`);
+      const patchRes = await directusFetch(`${DIRECTUS_URL}/items/sales_invoice/${invoiceId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ is_visit: 1 }),
+      });
+      console.log(`[createMeteredTransaction] Patched sales_invoice ${invoiceId} response:`, JSON.stringify(patchRes, null, 2));
+    } catch (siErr) {
+      console.warn("[createMeteredTransaction] Could not update is_visit on selected onboarding sales_invoice:", siErr);
+    }
+  }
+
   // 6. Save attachments
   if (payload.attachments && payload.attachments.length > 0) {
     for (const att of payload.attachments) {
@@ -845,8 +1005,8 @@ export async function updateMeteredTransaction(
   const invoiceId = payload.sales_invoice_id || existing?.sales_invoice_id || null;
   if (headerId && invoiceId) {
     try {
-      const headerInvoiceStatus =
-        (payload.status || existing?.status) === "POSTED" ? "POSTED" : "DRAFT";
+      const isPosted = (payload.status || existing?.status) === "POSTED";
+      const headerInvoiceStatus = isPosted ? "POSTED" : "DRAFT";
 
       const checkRes = await directusFetch<{ data: { id: number }[] }>(
         `${DIRECTUS_URL}/items/lpg_transaction_header_invoices?filter[header_id][_eq]=${headerId}&filter[sales_invoice_id][_eq]=${invoiceId}&limit=1`
@@ -877,8 +1037,36 @@ export async function updateMeteredTransaction(
           }),
         });
       }
+
+      // DEV-RULE: Mark sales_invoice.is_visit = 1 upon completing regular metered billing (strictly excluded for onboarding)
+      const txType = payload.transaction_type || existing?.transaction_type;
+      if (isPosted && txType !== "ONBOARDING_BASELINE") {
+        await directusFetch(`${DIRECTUS_URL}/items/sales_invoice/${invoiceId}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            is_visit: 1,
+          }),
+        });
+      }
     } catch (linkErr) {
-      console.warn("[updateMeteredTransaction] Failed to link/update invoice status to header:", linkErr);
+      console.warn("[updateMeteredTransaction] Failed to link/update invoice status to header or update is_visit:", linkErr);
+    }
+  }
+
+  // 6b. DEV-CHANGE: Update is_visit to 1 on only the selected onboarding sales_invoice when finishing ONBOARDING_BASELINE setup
+  const targetTxType = payload.transaction_type || existing?.transaction_type;
+  const targetStatus = payload.status || existing?.status;
+
+  if (targetTxType === "ONBOARDING_BASELINE" && targetStatus === "POSTED" && invoiceId) {
+    try {
+      console.log(`[updateMeteredTransaction] Patching sales_invoice ${invoiceId} is_visit: 1`);
+      const patchRes = await directusFetch(`${DIRECTUS_URL}/items/sales_invoice/${invoiceId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ is_visit: 1 }),
+      });
+      console.log(`[updateMeteredTransaction] Patched sales_invoice ${invoiceId} response:`, JSON.stringify(patchRes, null, 2));
+    } catch (siErr) {
+      console.warn("[updateMeteredTransaction] Could not update is_visit on selected onboarding sales_invoice:", siErr);
     }
   }
 
@@ -1209,7 +1397,7 @@ export async function fetchWiwoHeaderByTransactionHeader(headerId: number): Prom
     const resLinks = await directusFetch<{ data: { sales_invoice_id: number | { invoice_id: number } }[] }>(
       `${DIRECTUS_URL}/items/lpg_transaction_header_invoices?filter[header_id][_eq]=${headerId}&limit=10`
     );
-    const invoiceIds = (resLinks.data ?? []).map(link => 
+    const invoiceIds = (resLinks.data ?? []).map(link =>
       typeof link.sales_invoice_id === "object" && link.sales_invoice_id !== null
         ? link.sales_invoice_id.invoice_id
         : link.sales_invoice_id

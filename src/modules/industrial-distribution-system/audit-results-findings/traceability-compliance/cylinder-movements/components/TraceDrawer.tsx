@@ -12,6 +12,9 @@ import {
 } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { History, Clock } from "lucide-react";
 
 interface TraceDrawerProps {
     isOpen: boolean;
@@ -22,143 +25,167 @@ interface TraceDrawerProps {
 export function TraceDrawer({ isOpen, onClose, cylinder }: TraceDrawerProps) {
     if (!cylinder) return null;
 
-    // Helper to get inferred custody label & style for header
     const getCustodyBadge = () => {
         let label = "OUTSIDE BRANCH";
-        let color = "bg-rose-500/10 text-rose-600 dark:text-rose-400";
+        let color = "bg-muted text-muted-foreground border-border";
 
         if (cylinder.direction === "IN") {
             label = "IN BRANCH";
-            color = "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
+            color = "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400 border-emerald-200/50";
         } else if (cylinder.direction === "Review") {
             label = "NEEDS REVIEW";
-            color = "bg-amber-500/10 text-amber-600 dark:text-amber-400";
+            color = "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 border-amber-200/50";
         } else {
             const doc = cylinder.lastMovementType.toLowerCase();
             if (doc.includes("pos") || doc.includes("sales invoice") || doc.includes("sales_invoice")) {
                 label = "WITH CUSTOMER";
-                color = "bg-blue-500/10 text-blue-600 dark:text-blue-400";
+                color = "bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400 border-blue-200/50";
             } else if (doc.includes("refill") || doc.includes("return to supplier") || doc.includes("rts")) {
                 label = "SUPPLIER / REFILL";
-                color = "bg-amber-500/10 text-amber-600 dark:text-amber-400";
+                color = "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 border-amber-200/50";
             } else if (doc.includes("transfer") || doc.includes("dispatch")) {
                 label = "IN TRANSIT";
-                color = "bg-purple-500/10 text-purple-600 dark:text-purple-400";
+                color = "bg-purple-50 text-purple-700 dark:bg-purple-950/30 dark:text-purple-400 border-purple-200/50";
             }
         }
 
         return (
-            <span className={cn("inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider", color)}>
+            <Badge variant="outline" className={cn("px-2.5 py-0.5 text-[10px] font-semibold tracking-wider", color)}>
                 {label}
-            </span>
+            </Badge>
         );
     };
 
     return (
         <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <SheetContent side="right" className="w-[92vw] sm:max-w-[550px] p-0 flex flex-col h-full bg-background border-l shadow-2xl">
-                <SheetHeader className="px-6 py-5 border-b shrink-0 bg-muted/20">
+            <SheetContent side="right" className="w-[92vw] sm:max-w-[500px] p-0 flex flex-col h-full bg-background border-l border-border shadow-xl">
+                {/* Header */}
+                <SheetHeader className="px-6 py-5 border-b shrink-0 bg-card shadow-none">
                     <div className="flex items-center justify-between">
-                        <SheetTitle className="text-lg font-bold text-foreground">Cylinder Trace Details</SheetTitle>
+                        <SheetTitle className="text-base font-bold text-foreground flex items-center gap-2">
+                            <History className="w-4 h-4 text-muted-foreground" />
+                            Cylinder Trace Details
+                        </SheetTitle>
                     </div>
-                    <SheetDescription className="text-xs text-muted-foreground">
-                        Trace the complete transaction history and custody timeline for serial {cylinder.serialNumber}.
+                    <SheetDescription className="text-xs text-muted-foreground mt-0.5">
+                        Historical transaction records and timeline for serial {cylinder.serialNumber}.
                     </SheetDescription>
                 </SheetHeader>
 
-                <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+                {/* Content body */}
+                <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6 bg-muted/10">
                     {/* Cylinder Summary Card */}
-                    <div className="rounded-xl border bg-gradient-to-b from-muted/30 to-background p-5 space-y-4">
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <h3 className="text-xl font-bold text-foreground font-mono leading-none mb-1">
-                                    {cylinder.serialNumber}
-                                </h3>
-                                <p className="text-xs font-semibold text-muted-foreground truncate max-w-[300px]" title={cylinder.productName}>
-                                    {cylinder.productName}
-                                </p>
+                    <Card className="border border-border/80 bg-card shadow-xs">
+                        <CardContent className="p-5 space-y-4">
+                            <div className="flex justify-between items-center">
+                                <div className="space-y-0.5">
+                                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Serial Asset</span>
+                                    <h3 className="text-lg font-bold text-foreground font-mono">
+                                        {cylinder.serialNumber}
+                                    </h3>
+                                </div>
+                                {getCustodyBadge()}
                             </div>
-                            {getCustodyBadge()}
-                        </div>
 
-                        <Separator className="bg-border" />
+                            <Separator />
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <span className="block text-[10px] font-extrabold uppercase text-muted-foreground tracking-wider mb-0.5">Last Handling Branch</span>
-                                <span className="text-sm font-semibold text-foreground leading-tight block">{cylinder.lastHandlingBranch}</span>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <span className="block text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Product</span>
+                                    <span className="text-xs font-semibold text-foreground leading-tight block">{cylinder.productName}</span>
+                                </div>
+                                <div>
+                                    <span className="block text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Last Branch</span>
+                                    <span className="text-xs font-semibold text-foreground leading-tight block">{cylinder.lastHandlingBranch}</span>
+                                </div>
+                                <div>
+                                    <span className="block text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Last Movement</span>
+                                    <span className="text-xs font-semibold text-foreground leading-tight block">{cylinder.lastMovementType}</span>
+                                </div>
+                                <div>
+                                    <span className="block text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Document No.</span>
+                                    <span className="text-xs font-mono font-medium text-foreground leading-tight block">{cylinder.lastDocumentNo}</span>
+                                </div>
+                                <div>
+                                    <span className="block text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Last Moved Date</span>
+                                    <span className="text-xs font-semibold text-foreground leading-tight block">{cylinder.lastMovementDate}</span>
+                                </div>
+                                <div>
+                                    <span className="block text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Transactions</span>
+                                    <span className="text-xs font-semibold text-foreground leading-tight block">{cylinder.movementCount} total movements</span>
+                                </div>
                             </div>
-                            <div>
-                                <span className="block text-[10px] font-extrabold uppercase text-muted-foreground tracking-wider mb-0.5">Last Transaction</span>
-                                <span className="text-sm font-semibold text-foreground leading-tight block">{cylinder.lastMovementType}</span>
-                            </div>
-                            <div>
-                                <span className="block text-[10px] font-extrabold uppercase text-muted-foreground tracking-wider mb-0.5">Last Document No.</span>
-                                <span className="text-sm font-mono font-medium text-foreground leading-tight block">{cylinder.lastDocumentNo}</span>
-                            </div>
-                            <div>
-                                <span className="block text-[10px] font-extrabold uppercase text-muted-foreground tracking-wider mb-0.5">Last Movement Date</span>
-                                <span className="text-sm font-semibold text-foreground leading-tight block">{cylinder.lastMovementDate}</span>
-                            </div>
-                            <div>
-                                <span className="block text-[10px] font-extrabold uppercase text-muted-foreground tracking-wider mb-0.5">Total Transactions</span>
-                                <span className="text-sm font-bold text-foreground leading-tight block">{cylinder.movementCount} movement{cylinder.movementCount === 1 ? "" : "s"}</span>
-                            </div>
-                            <div>
-                                <span className="block text-[10px] font-extrabold uppercase text-muted-foreground tracking-wider mb-0.5">Latest Direction</span>
-                                <span className={cn(
-                                    "text-sm font-extrabold leading-tight block",
-                                    cylinder.direction === "IN" && "text-emerald-600 dark:text-emerald-400",
-                                    cylinder.direction === "OUT" && "text-rose-600 dark:text-rose-400",
-                                    cylinder.direction === "Review" && "text-amber-600 dark:text-amber-400"
-                                )}>
-                                    {cylinder.direction === "IN" && "↙ IN"}
-                                    {cylinder.direction === "OUT" && "↗ OUT"}
-                                    {cylinder.direction === "Review" && "⚠ Needs Review"}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
+
+                            {/* Custodian/Supplier Section */}
+                            {(cylinder.movements[0]?.customerName || cylinder.movements[0]?.supplierName) && (
+                                <div className="pt-2 border-t border-border/40">
+                                    <span className="block text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">
+                                        {cylinder.movements[0]?.customerName ? "Current Custodian (Customer)" : "Last Supplier / Refiller"}
+                                    </span>
+                                    <span className="text-xs font-bold text-primary leading-tight block">
+                                        {cylinder.movements[0]?.customerName 
+                                            ? `${cylinder.movements[0].customerName} (${cylinder.movements[0].customerCode})` 
+                                            : cylinder.movements[0]?.supplierName}
+                                    </span>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
 
                     {/* Timeline section */}
-                    <div className="space-y-4">
-                        <h4 className="text-sm font-bold text-foreground uppercase tracking-wider">Movement Timeline</h4>
-                        <div className="relative pl-6 space-y-6 before:absolute before:left-[7px] before:top-2 before:bottom-2 before:w-[2px] before:bg-border">
+                    <div className="space-y-4 pt-2">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Movement Timeline</span>
+                        
+                        <div className="relative pl-5 space-y-6 before:absolute before:left-[4px] before:top-2 before:bottom-2 before:w-0.5 before:bg-border">
                             {cylinder.movements.map((m, idx) => {
                                 const isIN = m.inQty > 0 && m.outQty === 0;
                                 const isOUT = m.outQty > 0 && m.inQty === 0;
                                 return (
-                                    <div key={`${m.documentNo}-${idx}`} className="relative group">
-                                        {/* Dot */}
+                                    <div key={`${m.documentNo}-${idx}`} className="relative pl-2">
+                                        {/* Simple Dot */}
                                         <span 
                                             className={cn(
-                                                "absolute -left-[25px] top-1.5 w-4.5 h-4.5 rounded-full border-4 border-background ring-1 ring-border z-10 transition-all",
+                                                "absolute -left-[24px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-background z-10",
                                                 isIN && "bg-emerald-500",
                                                 isOUT && "bg-rose-500",
                                                 (!isIN && !isOUT) && "bg-amber-500"
                                             )}
                                         />
                                         
-                                        {/* Content */}
+                                        {/* Clean text row */}
                                         <div className="space-y-1">
-                                            <div className="text-[11px] font-bold text-muted-foreground">{m.movementAt}</div>
-                                            <div className="text-sm font-bold text-foreground leading-tight">{m.documentType}</div>
+                                            <div className="flex justify-between items-center text-xs">
+                                                <span className="font-semibold text-foreground">{m.documentType}</span>
+                                                <span className="text-[10px] text-muted-foreground flex items-center gap-1 font-medium">
+                                                    <Clock className="w-3 h-3 text-muted-foreground/60" />
+                                                    {m.movementAt}
+                                                </span>
+                                            </div>
                                             <div className="text-xs text-muted-foreground">
-                                                <strong className={cn(
-                                                    "font-bold",
+                                                <span className={cn(
+                                                    "font-bold text-[9px] uppercase tracking-wider",
                                                     isIN && "text-emerald-600 dark:text-emerald-400",
                                                     isOUT && "text-rose-600 dark:text-rose-400",
                                                     (!isIN && !isOUT) && "text-amber-600 dark:text-amber-400"
                                                 )}>
-                                                    {isIN && "↙ IN"}
-                                                    {isOUT && "↗ OUT"}
-                                                    {(!isIN && !isOUT) && "⚠ Review"}
-                                                </strong>
+                                                    {isIN ? "IN" : isOUT ? "OUT" : "REVIEW"}
+                                                </span>
                                                 {" · "}
-                                                <span>Document: <strong className="font-mono font-medium select-all">{m.documentNo}</strong></span>
-                                            </div>
-                                            <div className="text-xs text-muted-foreground font-medium italic">
-                                                {isIN ? `Cylinder received into ${m.branchName || "branch"}.` : `Cylinder dispatched out from ${m.branchName || "branch"}.`}
+                                                <span>Doc: <span className="font-mono text-foreground font-semibold">{m.documentNo}</span></span>
+                                                {m.branchName && (
+                                                    <span> · <span className="font-medium text-foreground">{m.branchName}</span></span>
+                                                )}
+                                                
+                                                {m.customerName && (
+                                                    <div className="mt-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 bg-blue-500/5 px-2 py-0.5 rounded border border-blue-500/10 inline-block">
+                                                        Sold/Delivered to: {m.customerName} ({m.customerCode})
+                                                    </div>
+                                                )}
+                                                {m.supplierName && (
+                                                    <div className="mt-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/5 px-2 py-0.5 rounded border border-amber-500/10 inline-block">
+                                                        Refilled at: {m.supplierName}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </div>

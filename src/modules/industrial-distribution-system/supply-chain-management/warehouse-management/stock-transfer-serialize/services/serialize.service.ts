@@ -61,12 +61,16 @@ export async function updateTransferWithSerials(payload: UpdateSerializeTransfer
   }
 
   // 3. Prepare main table updates
+  const phNow = new Date().toISOString();
   const transferUpdates = validated.items.map(item => ({
     id: item.id,
     status: validated.status,
     ...(item.received_quantity !== undefined ? { received_quantity: item.received_quantity } : {}),
-    ...(validated.scanType === "DISPATCH" ? { date_encoded: new Date().toISOString() } : {}),
-    ...(validated.scanType === "RECEIVE" ? { date_received: new Date().toISOString(), receiver_id: userId } : {}),
+    ...(item.picked_quantity !== undefined ? { picked_quantity: item.picked_quantity } : {}),
+    ...(validated.status === "Rejected" ? { rejected_by: userId || null, rejected_at: phNow } : {}),
+    ...(validated.status === "For Picking" ? { approved_by: userId || null } : {}),
+    ...(validated.scanType === "DISPATCH" || validated.status === "For Loading" ? { dispatched_by: userId || null, dispatched_at: phNow } : {}),
+    ...(validated.scanType === "RECEIVE" || validated.status === "Received" ? { receiver_id: userId || null, date_received: phNow } : {}),
   }));
 
   // 4. Execute updates

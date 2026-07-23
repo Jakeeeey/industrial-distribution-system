@@ -46,21 +46,76 @@ export async function GET(request: Request) {
     }
 
     try {
-        // Query Directus cylinder_assets collection for the serial number
+        // Query Directus cylinder_assets collection for the serial number, including the related product's uom_ids
         const encodedSerial = encodeURIComponent(serialNumber.trim());
-        const response = await fetcher(`/cylinder_assets?filter[serial_number][_eq]=${encodedSerial}&fields=id,serial_number,product_id`);
+        const response = await fetcher(`/cylinder_assets?filter[serial_number][_eq]=${encodedSerial}&fields=id,serial_number,product_id,product_id.uom_ids,cylinder_condition`);
         const data = response.data || [];
 
-        if (data.length > 0) {
-            return NextResponse.json({ exists: true, asset: data[0] });
+        // Check if the serial is currently on hand in inventory using the Spring Boot API
+        const SPRING_API_BASE_URL = process.env.SPRING_API_BASE_URL;
+        let isOnHand = false;
+        if (SPRING_API_BASE_URL) {
+            try {
+                const targetUrl = `${SPRING_API_BASE_URL.replace(/\/$/, "")}/api/v-serial-onhand/filter?serialNumber=${encodedSerial}`;
+                const springRes = await fetch(targetUrl, { method: 'GET', cache: 'no-store' });
+                if (springRes.ok) {
+                    const text = await springRes.text();
+                    const parsed = text ? JSON.parse(text) : null;
+                    // Check if response contains active inventory details
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        isOnHand = true;
+                    } else if (parsed && typeof parsed === 'object') {
+                        if ('productId' in parsed || (Array.isArray(parsed.content) && parsed.content.length > 0) || (Array.isArray(parsed.data) && parsed.data.length > 0)) {
+                            isOnHand = true;
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('Spring v-serial-onhand validation error:', err);
+            }
         }
 
-        return NextResponse.json({ exists: false });
+        const existsInCylinderAssets = data.length > 0;
+        // Resolve the uom_ids of the serial's current product in the database
+        const existingAssetProduct = data[0]?.product_id;
+        const existingAssetUom = typeof existingAssetProduct === 'object' && existingAssetProduct !== null 
+            ? (existingAssetProduct as Record<string, unknown>).uom_ids 
+            : null;
+        
+        const isCurrentAssetEmpty = existsInCylinderAssets && existingAssetUom === 'EMPTY';
+
+        // 1. If the serial is currently on hand in inventory, ALWAYS block it regardless of product status
+        if (isOnHand) {
+            return NextResponse.json({
+                exists: existsInCylinderAssets,
+                asset: data[0] || null,
+                isDuplicate: true,
+                reason: 'Serial is currently on hand in inventory'
+            });
+        }
+
+        // 2. If it is NOT on hand, but exists as an EMPTY Cylinder Asset, block it
+        if (isCurrentAssetEmpty) {
+            return NextResponse.json({
+                exists: existsInCylinderAssets,
+                asset: data[0] || null,
+                isDuplicate: true,
+                reason: 'Serial already exists as an EMPTY Cylinder Asset'
+            });
+        }
+
+        // For non-empty products (NULL, SWAP, OUTRIGHT, DEPOSIT, REFILL) that are NOT on hand, allow them to be confirmed
+        return NextResponse.json({ 
+            exists: existsInCylinderAssets,
+            asset: data[0] || null,
+            isDuplicate: false
+        });
     } catch (err) {
         console.error('Cylinder Asset API Error:', err);
         return NextResponse.json({ error: 'Failed to verify Cylinder Asset' }, { status: 500 });
     }
 }
+
 
 export async function POST(request: Request) {
     try {

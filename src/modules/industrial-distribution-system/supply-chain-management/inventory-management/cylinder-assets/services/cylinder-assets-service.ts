@@ -1,16 +1,19 @@
 import { directusFetch, getDirectusBase } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/cylinder-assets/utils/directus";
 import { CylinderAsset } from "../types";
 
+import { format, addDays } from "date-fns";
+
 const DIRECTUS_URL = getDirectusBase();
 
 export const cylinderAssetsService = {
-  async fetchAll(params?: { search?: string; status?: string; branchId?: number; productId?: number; condition?: string; page?: number; limit?: number; sort?: string; serials?: string }) {
+  async fetchAll(params?: { search?: string; status?: string; branchId?: number; productId?: number; condition?: string; expirationStatus?: string; page?: number; limit?: number; sort?: string; serials?: string }) {
     const page = params?.page || 1;
     const limit = params?.limit || 10;
     const offset = (page - 1) * limit;
     const sort = params?.sort || "-id";
 
-    let query = `fields=id,product_id,serial_number,cylinder_status,cylinder_condition,current_branch_id,current_customer_code,acquisition_date,expiration_date,tare_weight,cost,remarks,created_date,created_by.user_fname,created_by.user_lname&sort=${sort}&limit=${limit}&offset=${offset}&meta=total_count`;
+    // Change meta parameter from total_count to filter_count to fetch correct matching records count for pagination
+    let query = `fields=id,product_id,serial_number,cylinder_status,cylinder_condition,current_branch_id,current_customer_code,acquisition_date,expiration_date,tare_weight,cost,remarks,created_date,created_by.user_fname,created_by.user_lname&sort=${sort}&limit=${limit}&offset=${offset}&meta=filter_count`;
 
     const filters: Record<string, unknown> = {};
 
@@ -28,14 +31,27 @@ export const cylinderAssetsService = {
       const serialsList = params.serials.split(",");
       filters.serial_number = { _in: serialsList };
     }
+    
+    if (params?.expirationStatus === "EXPIRED") {
+      filters.expiration_date = { _lt: format(new Date(), "yyyy-MM-dd") };
+    } else if (params?.expirationStatus === "NEAR_EXPIRATION") {
+      const today = format(new Date(), "yyyy-MM-dd");
+      const next30Days = format(addDays(new Date(), 30), "yyyy-MM-dd");
+      filters._and = [
+        ...(filters._and as Record<string, unknown>[] || []),
+        { expiration_date: { _gte: today } },
+        { expiration_date: { _lte: next30Days } }
+      ];
+    }
 
     if (Object.keys(filters).length > 0) {
       query += `&filter=${encodeURIComponent(JSON.stringify(filters))}`;
     }
 
-    const res = await directusFetch<{ data: CylinderAsset[]; meta?: { total_count: number } }>(`${DIRECTUS_URL}/items/cylinder_assets?${query}`);
+    const res = await directusFetch<{ data: CylinderAsset[]; meta?: { filter_count?: number; total_count?: number } }>(`${DIRECTUS_URL}/items/cylinder_assets?${query}`);
     const assets = res.data;
-    const total = res.meta?.total_count || assets.length;
+    // Fallback to filter_count, then total_count, then data length
+    const total = res.meta?.filter_count ?? res.meta?.total_count ?? assets.length;
 
     if (assets.length === 0) return { data: [], total: 0 };
 
