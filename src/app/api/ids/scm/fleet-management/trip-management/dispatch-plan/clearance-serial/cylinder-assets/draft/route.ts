@@ -1,6 +1,17 @@
 import { NextResponse } from 'next/server';
 import { cookies } from "next/headers";
 
+function getPhilippineTime() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}+08:00`;
+}
+
 function getUserIdFromToken(token: string | undefined | null): number | null {
     if (!token) return null;
     try {
@@ -45,7 +56,7 @@ export async function POST(request: Request) {
         const cookieStore = await cookies();
         const token = cookieStore.get("vos_access_token")?.value;
         const userId = getUserIdFromToken(token);
-        const now = new Date().toISOString();
+        const now = getPhilippineTime();
 
         if (!Array.isArray(body)) {
             return NextResponse.json({ error: 'Body must be an array of assets' }, { status: 400 });
@@ -60,7 +71,7 @@ export async function POST(request: Request) {
             expiration_date: asset.expiration_date || null,
             tare_weight: asset.tare_weight ? Number(asset.tare_weight) : null,
             cost: asset.cost ? Number(asset.cost) : null,
-            acquisition_date: new Date().toISOString().split('T')[0],
+            acquisition_date: getPhilippineTime().split('T')[0],
             ...(userId ? { created_by: userId, modified_by: userId } : {}),
             modified_date: now
         }));

@@ -55,6 +55,7 @@ interface ReconciliationDetailModalProps {
     reconciliation: ReconciliationRow | null;
     onSave: (invoiceId: number, status: string, remarks: string, missingQtys: Record<string | number, number>, scannedQtys: Record<string | number, number>, scannedSerials: Record<string | number, string[]>) => void;
     serialNumbers?: SerialMapping[];
+    globalScannedSerials?: string[];
 }
 
 const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
@@ -62,7 +63,8 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
     onClose,
     onSave,
     reconciliation,
-    serialNumbers = []
+    serialNumbers = [],
+    globalScannedSerials = []
 }) => {
     const [detail, setDetail] = useState<InvoiceDetail | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -682,6 +684,7 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                     initialScanned={scannedQtys}
                     initialScannedSerials={scannedSerials}
                     serialNumbers={serialNumbers}
+                    globalScannedSerials={globalScannedSerials}
                 />
 
                 <CylinderTaggingModal
