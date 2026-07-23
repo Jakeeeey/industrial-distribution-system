@@ -1,6 +1,22 @@
 import { NextResponse } from 'next/server';
 import { cookies } from "next/headers";
 
+function getPhilippineTime() {
+    const now = new Date();
+    const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
+    const phTime = new Date(utcMs + (8 * 3600000));
+    
+    const year = phTime.getFullYear();
+    const month = String(phTime.getMonth() + 1).padStart(2, '0');
+    const day = String(phTime.getDate()).padStart(2, '0');
+    const hours = String(phTime.getHours()).padStart(2, '0');
+    const minutes = String(phTime.getMinutes()).padStart(2, '0');
+    const seconds = String(phTime.getSeconds()).padStart(2, '0');
+    
+    // Return with Z so Directus treats it as UTC and passes it to the DB as exactly this value
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}Z`;
+}
+
 function getUserIdFromToken(token: string | undefined | null): number | null {
     if (!token) return null;
     try {
@@ -92,7 +108,7 @@ export async function POST(request: Request) {
         const cookieStore = await cookies();
         const token = cookieStore.get("vos_access_token")?.value;
         const userId = getUserIdFromToken(token);
-        const now = new Date().toISOString();
+        const now = getPhilippineTime();
 
         if (!Array.isArray(serials) || !selectedProductId) {
             return NextResponse.json({ error: 'serials array and selectedProductId are required' }, { status: 400 });
