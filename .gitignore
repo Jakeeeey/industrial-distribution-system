@@ -42,7 +42,6 @@ next-env.d.ts
 
 # agent workflow
 /.agent
-/.worktrees/
 # assets/audio/*.mp3
 lint.log
 
