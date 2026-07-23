@@ -4,8 +4,7 @@ import {
   cylinderPurchaseFilterSchema,
 } from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/types/cylinder-purchase-report.schema";
 import {
-  UpstreamContractError,
-  UpstreamHttpError,
+  classifyCylinderPurchaseReportRouteError,
 } from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/services/cylinder-purchase-report.errors";
 import { getCylinderPurchaseDashboard } from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/services/cylinder-purchase-report.service";
 
@@ -19,44 +18,10 @@ function reportErrorResponse(error: unknown): NextResponse {
     message: "Cylinder purchase report request failed.",
   });
 
-  if (error instanceof UpstreamContractError) {
-    return NextResponse.json(
-      {
-        ok: false,
-        code: "UPSTREAM_CONTRACT_ERROR",
-        message: "The report service returned invalid quantity data.",
-      },
-      { status: 502 },
-    );
-  }
-  if (error instanceof DOMException && error.name === "AbortError") {
-    return NextResponse.json(
-      {
-        ok: false,
-        code: "UPSTREAM_TIMEOUT",
-        message: "The report service timed out.",
-      },
-      { status: 504 },
-    );
-  }
-  if (error instanceof UpstreamHttpError) {
-    return NextResponse.json(
-      {
-        ok: false,
-        code: "UPSTREAM_UNAVAILABLE",
-        message: "The report service is unavailable.",
-      },
-      { status: 502 },
-    );
-  }
-  return NextResponse.json(
-    {
-      ok: false,
-      code: "INTERNAL_ERROR",
-      message: "Unable to load the cylinder purchase report.",
-    },
-    { status: 500 },
-  );
+  const classification = classifyCylinderPurchaseReportRouteError(error);
+  return NextResponse.json(classification.body, {
+    status: classification.status,
+  });
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {

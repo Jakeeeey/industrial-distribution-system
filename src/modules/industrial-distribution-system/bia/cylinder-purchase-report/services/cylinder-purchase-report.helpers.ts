@@ -1,7 +1,7 @@
 import { buildCylinderPurchaseAggregates } from "./cylinder-purchase-report.aggregation.ts";
 import type {
+  AppliedFilterContext,
   CylinderPurchaseDashboardResponse,
-  CylinderPurchaseReportFilters,
   CylinderPurchaseRow,
 } from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/types/cylinder-purchase-report.types";
 
@@ -47,7 +47,7 @@ export function getRollingThirtyDayRange(
 
 export function aggregateCylinderPurchases(
   rows: CylinderPurchaseRow[],
-  filters: CylinderPurchaseReportFilters,
+  filters: AppliedFilterContext,
   generatedAt: string = new Date().toISOString(),
 ): CylinderPurchaseDashboardResponse {
   const aggregates = buildCylinderPurchaseAggregates(rows);

@@ -28,6 +28,13 @@ export interface CylinderPurchaseReportFilters {
   endDate: string;
 }
 
+export interface AppliedFilterContext extends CylinderPurchaseReportFilters {
+  customerLabel?: string;
+  productLabel?: string;
+  branchLabel?: string;
+  salespersonLabel?: string;
+}
+
 export interface CustomerPurchaseSummary extends QuantityMetrics {
   customerKey: string;
   customerCode: string | null;
@@ -99,7 +106,7 @@ export type CylinderPurchaseDashboardView =
   | "salespeople";
 
 export interface CylinderPurchaseDashboardResponse {
-  filters: CylinderPurchaseReportFilters;
+  filters: AppliedFilterContext;
   generatedAt: string;
   sourceRowCount: number;
   overview: QuantityMetrics & {

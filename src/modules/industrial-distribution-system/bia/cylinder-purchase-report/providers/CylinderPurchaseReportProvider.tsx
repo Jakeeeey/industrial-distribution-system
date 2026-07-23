@@ -5,19 +5,19 @@ import * as React from "react";
 import { fetchCylinderPurchaseDashboard } from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/services";
 import { getRollingThirtyDayRange } from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/services/cylinder-purchase-report.helpers";
 import type {
+  AppliedFilterContext,
   CustomerPurchaseSummary,
   CylinderPurchaseDashboardResponse,
   CylinderPurchaseDashboardView,
-  CylinderPurchaseReportFilters,
 } from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/types/cylinder-purchase-report.types";
 
 export interface CylinderPurchaseReportContextValue {
   report: CylinderPurchaseDashboardResponse | null;
-  draftFilters: CylinderPurchaseReportFilters;
-  appliedFilters: CylinderPurchaseReportFilters;
+  draftFilters: AppliedFilterContext;
+  appliedFilters: AppliedFilterContext;
   tableResetKey: number;
   setDraftFilters: React.Dispatch<
-    React.SetStateAction<CylinderPurchaseReportFilters>
+    React.SetStateAction<AppliedFilterContext>
   >;
   applyFilters(): Promise<void>;
   clearFilters(): Promise<void>;
@@ -50,15 +50,15 @@ function isAbortError(error: unknown): boolean {
 export function CylinderPurchaseReportProvider({
   children,
 }: CylinderPurchaseReportProviderProps) {
-  const [initialFilters] = React.useState<CylinderPurchaseReportFilters>(() =>
+  const [initialFilters] = React.useState<AppliedFilterContext>(() =>
     getRollingThirtyDayRange(new Date()),
   );
   const [report, setReport] =
     React.useState<CylinderPurchaseDashboardResponse | null>(null);
   const [draftFilters, setDraftFilters] =
-    React.useState<CylinderPurchaseReportFilters>(initialFilters);
+    React.useState<AppliedFilterContext>(initialFilters);
   const [appliedFilters, setAppliedFilters] =
-    React.useState<CylinderPurchaseReportFilters>(initialFilters);
+    React.useState<AppliedFilterContext>(initialFilters);
   const [tableResetKey, setTableResetKey] = React.useState(0);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -69,7 +69,7 @@ export function CylinderPurchaseReportProvider({
   const requestControllerRef = React.useRef<AbortController | null>(null);
 
   const requestReport = React.useCallback(
-    async (filters: CylinderPurchaseReportFilters): Promise<void> => {
+    async (filters: AppliedFilterContext): Promise<void> => {
       requestControllerRef.current?.abort();
 
       const controller = new AbortController();

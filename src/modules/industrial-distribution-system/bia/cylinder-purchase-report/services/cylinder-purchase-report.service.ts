@@ -2,8 +2,8 @@ import {
   cylinderPurchaseRowsSchema,
 } from "../types/cylinder-purchase-report.schema.ts";
 import type {
+  AppliedFilterContext,
   CylinderPurchaseDashboardResponse,
-  CylinderPurchaseReportFilters,
 } from "../types/cylinder-purchase-report.types.ts";
 import { UpstreamContractError } from "./cylinder-purchase-report.errors.ts";
 import { aggregateCylinderPurchases } from "./cylinder-purchase-report.helpers.ts";
@@ -19,7 +19,7 @@ export interface ReportServiceDependencies {
 }
 
 export async function getCylinderPurchaseDashboard(
-  filters: CylinderPurchaseReportFilters,
+  filters: AppliedFilterContext,
   dependencies: ReportServiceDependencies = {},
 ): Promise<CylinderPurchaseDashboardResponse> {
   const controller = new AbortController();

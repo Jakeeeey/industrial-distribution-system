@@ -14,11 +14,14 @@ import { useCylinderPurchaseReport } from "@/modules/industrial-distribution-sys
 import type {
   BranchPurchaseSummary,
   ProductPurchaseSummary,
-  QuantityMetrics,
   SalespersonPurchaseSummary,
 } from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/types/cylinder-purchase-report.types";
 
 import { formatQuantity, formatReturnRate } from "./analytical-view.utils";
+import {
+  CustomerBreakdownIdentity,
+  CustomerBreakdownMobileCard,
+} from "./CustomerBreakdownDisplay";
 import { ReportDataTable, type ReportColumn } from "./ReportDataTable";
 
 const productColumns: readonly ReportColumn<ProductPurchaseSummary>[] = [
@@ -26,7 +29,12 @@ const productColumns: readonly ReportColumn<ProductPurchaseSummary>[] = [
     key: "product",
     label: "Product",
     value: (row) => row.productName,
-    render: (row) => <Identity name={row.productName} code={row.productCode} />,
+    render: (row) => (
+      <CustomerBreakdownIdentity
+        name={row.productName}
+        code={row.productCode}
+      />
+    ),
   },
   {
     key: "gross",
@@ -63,7 +71,12 @@ const branchColumns: readonly ReportColumn<BranchPurchaseSummary>[] = [
     key: "branch",
     label: "Branch",
     value: (row) => row.branchName,
-    render: (row) => <Identity name={row.branchName} code={row.branchCode} />,
+    render: (row) => (
+      <CustomerBreakdownIdentity
+        name={row.branchName}
+        code={row.branchCode}
+      />
+    ),
   },
   {
     key: "gross",
@@ -100,7 +113,12 @@ const salespersonColumns: readonly ReportColumn<SalespersonPurchaseSummary>[] = 
     key: "salesperson",
     label: "Salesperson",
     value: (row) => row.salesmanName,
-    render: (row) => <Identity name={row.salesmanName} code={row.salesmanCode} />,
+    render: (row) => (
+      <CustomerBreakdownIdentity
+        name={row.salesmanName}
+        code={row.salesmanCode}
+      />
+    ),
   },
   {
     key: "gross",
@@ -131,63 +149,6 @@ const salespersonColumns: readonly ReportColumn<SalespersonPurchaseSummary>[] = 
     align: "right",
   },
 ] as const;
-
-function Identity({ name, code }: { name: string; code: string }) {
-  return (
-    <div className="min-w-48">
-      <p className="font-semibold text-foreground">{name}</p>
-      <p className="text-xs text-muted-foreground">{code}</p>
-    </div>
-  );
-}
-
-interface BreakdownMobileCardProps extends QuantityMetrics {
-  name: string;
-  code: string;
-  returnRate: number;
-}
-
-function BreakdownMobileCard({
-  name,
-  code,
-  grossPurchasedQty,
-  returnedQty,
-  netPurchasedQty,
-  returnRate,
-}: BreakdownMobileCardProps) {
-  return (
-    <div className="rounded-lg border bg-card p-4 shadow-xs">
-      <p className="truncate font-semibold text-foreground">{name}</p>
-      <p className="text-xs text-muted-foreground">{code}</p>
-      <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-        <div>
-          <dt className="text-xs text-muted-foreground">Gross</dt>
-          <dd className="font-semibold tabular-nums">
-            {formatQuantity(grossPurchasedQty)}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">Returned</dt>
-          <dd className="font-semibold tabular-nums">
-            {formatQuantity(returnedQty)}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">Net</dt>
-          <dd className="font-semibold tabular-nums">
-            {formatQuantity(netPurchasedQty)}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">Return Rate</dt>
-          <dd className="font-semibold tabular-nums">
-            {formatReturnRate(returnRate, grossPurchasedQty)}
-          </dd>
-        </div>
-      </dl>
-    </div>
-  );
-}
 
 export function CustomerPurchaseDetail(): React.ReactElement {
   const { selectedCustomer, closeCustomerDetail } =
@@ -246,9 +207,10 @@ export function CustomerPurchaseDetail(): React.ReactElement {
                 rows={selectedCustomer.productBreakdown}
                 rowKey={(row) => row.productId}
                 defaultSort={{ key: "net", direction: "desc" }}
+                searchLabel="Search customer product breakdown"
                 emptyMessage="No product breakdown is available for this customer."
                 renderMobileCard={(row) => (
-                  <BreakdownMobileCard
+                  <CustomerBreakdownMobileCard
                     {...row}
                     name={row.productName}
                     code={row.productCode}
@@ -262,9 +224,10 @@ export function CustomerPurchaseDetail(): React.ReactElement {
                 rows={selectedCustomer.branchBreakdown}
                 rowKey={(row) => row.branchId}
                 defaultSort={{ key: "net", direction: "desc" }}
+                searchLabel="Search customer branch breakdown"
                 emptyMessage="No branch breakdown is available for this customer."
                 renderMobileCard={(row) => (
-                  <BreakdownMobileCard
+                  <CustomerBreakdownMobileCard
                     {...row}
                     name={row.branchName}
                     code={row.branchCode}
@@ -278,9 +241,10 @@ export function CustomerPurchaseDetail(): React.ReactElement {
                 rows={selectedCustomer.salespersonBreakdown}
                 rowKey={(row) => row.salesmanId}
                 defaultSort={{ key: "net", direction: "desc" }}
+                searchLabel="Search customer salesperson breakdown"
                 emptyMessage="No salesperson breakdown is available for this customer."
                 renderMobileCard={(row) => (
-                  <BreakdownMobileCard
+                  <CustomerBreakdownMobileCard
                     {...row}
                     name={row.salesmanName}
                     code={row.salesmanCode}

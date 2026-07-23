@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { UpstreamContractError } from "./cylinder-purchase-report.errors.ts";
+import {
+  UpstreamContractError,
+  UpstreamHttpError,
+} from "./cylinder-purchase-report.errors.ts";
 import { getCylinderPurchaseDashboard } from "./cylinder-purchase-report.service.ts";
 import type {
+  AppliedFilterContext,
   CylinderPurchaseReportFilters,
   CylinderPurchaseRow,
 } from "../types/cylinder-purchase-report.types.ts";
@@ -40,8 +44,13 @@ test("forwards only defined Spring filters", async () => {
     return Response.json([validRow]);
   };
 
-  await getCylinderPurchaseDashboard(
-    { ...filters, branchId: 196 },
+  const appliedFilters: AppliedFilterContext = {
+    ...filters,
+    branchId: 196,
+    branchLabel: "Main Branch (B196)",
+  };
+  const report = await getCylinderPurchaseDashboard(
+    appliedFilters,
     {
       fetchImpl,
       now: fixedNow,
@@ -53,6 +62,7 @@ test("forwards only defined Spring filters", async () => {
     requested,
     "http://spring.test/api/v-bia-cylinder-purchases/filter?branchId=196&startDate=2026-06-23&endDate=2026-07-22",
   );
+  assert.deepEqual(report.filters, appliedFilters);
 });
 
 test("rejects an inconsistent upstream net quantity", async () => {
@@ -67,5 +77,23 @@ test("rejects an inconsistent upstream net quantity", async () => {
         springBaseUrl: "http://spring.test",
       }),
     (error: unknown) => error instanceof UpstreamContractError,
+  );
+});
+
+test("propagates a classified Spring transport error without exposing fetch details", async () => {
+  const fetchImpl: typeof fetch = async () => {
+    throw new TypeError("getaddrinfo ENOTFOUND private-spring.internal");
+  };
+
+  await assert.rejects(
+    () =>
+      getCylinderPurchaseDashboard(filters, {
+        fetchImpl,
+        now: fixedNow,
+        springBaseUrl: "http://spring.test",
+      }),
+    (error: unknown) =>
+      error instanceof UpstreamHttpError &&
+      !error.message.includes("private-spring.internal"),
   );
 });

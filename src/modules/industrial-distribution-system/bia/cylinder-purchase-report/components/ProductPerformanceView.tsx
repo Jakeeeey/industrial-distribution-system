@@ -132,6 +132,7 @@ export function ProductPerformanceView(): React.ReactElement {
         rows={rows}
         rowKey={(row) => row.data.productId}
         defaultSort={{ key: "net", direction: "desc" }}
+        searchLabel="Search product performance"
         renderMobileCard={(row) => <ProductMobileCard row={row} />}
       />
     </section>

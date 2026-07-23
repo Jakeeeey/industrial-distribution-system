@@ -11,6 +11,7 @@ import type {
 import {
   buildConsolidatedExportSections,
   buildDashboardExportSections,
+  buildReportFilterContext,
   type ReportExportCell,
   type ReportExportSection,
 } from "./cylinder-purchase-report.export-model.ts";
@@ -43,14 +44,9 @@ function formatCell(column: string, value: ReportExportCell): string {
 }
 
 function filterContext(report: CylinderPurchaseDashboardResponse): string {
-  const { filters } = report;
-  return [
-    `Date: ${filters.startDate} to ${filters.endDate}`,
-    `Customer: ${filters.customerCode ?? "All"}`,
-    `Product ID: ${filters.productId ?? "All"}`,
-    `Branch ID: ${filters.branchId ?? "All"}`,
-    `Salesperson ID: ${filters.salesmanId ?? "All"}`,
-  ].join("  |  ");
+  return buildReportFilterContext(report.filters)
+    .map(({ label, value }) => `${label}: ${value}`)
+    .join("  |  ");
 }
 
 function overviewContext(report: CylinderPurchaseDashboardResponse): string {

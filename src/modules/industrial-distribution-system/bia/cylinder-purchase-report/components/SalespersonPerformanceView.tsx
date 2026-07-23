@@ -145,6 +145,7 @@ export function SalespersonPerformanceView(): React.ReactElement {
         rows={rows}
         rowKey={(row) => row.data.salesmanId}
         defaultSort={{ key: "net", direction: "desc" }}
+        searchLabel="Search salesperson performance"
         renderMobileCard={(row) => <SalespersonMobileCard row={row} />}
       />
     </section>

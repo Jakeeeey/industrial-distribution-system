@@ -1,8 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Filter, Loader2, RotateCcw, Search } from "lucide-react";
-import { toast } from "sonner";
+import { Filter, Loader2, RotateCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,11 +15,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCylinderPurchaseReport } from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/hooks/useCylinderPurchaseReport";
-import { fetchReportLookups } from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/services";
+import { useCylinderPurchaseFilterOptions } from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/hooks/useCylinderPurchaseFilterOptions";
+import {
+  applyReportLookupSelection,
+  formatReportLookupLabel,
+} from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/services/cylinder-purchase-report.filter-context";
 import type {
-  CylinderPurchaseReportFilters,
+  AppliedFilterContext,
   ReportLookupOption,
 } from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/types/cylinder-purchase-report.types";
+
+import { ReportSearchLookupInput } from "./ReportSearchLookupInput";
 
 const ALL_OPTIONS = "all";
 
@@ -34,126 +39,59 @@ export function CylinderPurchaseFilters(): React.ReactElement {
     isRefreshing,
   } = useCylinderPurchaseReport();
   const [customerQuery, setCustomerQuery] = React.useState(
-    draftFilters.customerCode ?? "",
+    draftFilters.customerLabel ?? draftFilters.customerCode ?? "",
   );
   const [productQuery, setProductQuery] = React.useState(
-    draftFilters.productId === undefined ? "" : String(draftFilters.productId),
+    draftFilters.productLabel ??
+      (draftFilters.productId === undefined
+        ? ""
+        : String(draftFilters.productId)),
   );
-  const [customerOptions, setCustomerOptions] = React.useState<
-    ReportLookupOption[]
-  >([]);
-  const [productOptions, setProductOptions] = React.useState<
-    ReportLookupOption[]
-  >([]);
-  const [branchOptions, setBranchOptions] = React.useState<
-    ReportLookupOption[]
-  >([]);
-  const [salespersonOptions, setSalespersonOptions] = React.useState<
-    ReportLookupOption[]
-  >([]);
-  const [isMasterDataLoading, setIsMasterDataLoading] = React.useState(true);
+  const {
+    branchOptions,
+    customerOptions,
+    isMasterDataLoading,
+    productOptions,
+    salespersonOptions,
+  } = useCylinderPurchaseFilterOptions(customerQuery, productQuery);
 
-  React.useEffect(() => {
-    const controller = new AbortController();
-    void Promise.all([
-      fetchReportLookups("branches", "", controller.signal),
-      fetchReportLookups("salespeople", "", controller.signal),
-    ])
-      .then(([branches, salespeople]) => {
-        setBranchOptions(branches);
-        setSalespersonOptions(salespeople);
-      })
-      .catch((error: unknown) => {
-        if (!(error instanceof Error) || error.name !== "AbortError") {
-          toast.error(
-            error instanceof Error
-              ? error.message
-              : "Unable to load branch and salesperson options.",
-          );
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setIsMasterDataLoading(false);
-        }
-      });
-
-    return () => controller.abort();
-  }, []);
-
-  React.useEffect(() => {
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => {
-      void fetchReportLookups("customers", customerQuery, controller.signal)
-        .then(setCustomerOptions)
-        .catch((error: unknown) => {
-          if (!(error instanceof Error) || error.name !== "AbortError") {
-            toast.error(
-              error instanceof Error
-                ? error.message
-                : "Unable to load customer options.",
-            );
-          }
-        });
-    }, 250);
-
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [customerQuery]);
-
-  React.useEffect(() => {
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => {
-      void fetchReportLookups("products", productQuery, controller.signal)
-        .then(setProductOptions)
-        .catch((error: unknown) => {
-          if (!(error instanceof Error) || error.name !== "AbortError") {
-            toast.error(
-              error instanceof Error
-                ? error.message
-                : "Unable to load product options.",
-            );
-          }
-        });
-    }, 250);
-
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [productQuery]);
-
-  const setFilter = <Key extends keyof CylinderPurchaseReportFilters>(
+  const setFilter = <Key extends keyof AppliedFilterContext>(
     key: Key,
-    value: CylinderPurchaseReportFilters[Key],
+    value: AppliedFilterContext[Key],
   ): void => {
     setDraftFilters((current) => ({ ...current, [key]: value }));
   };
 
-  const formatLookupOption = (option: ReportLookupOption): string =>
-    option.code && option.code !== option.label
-      ? `${option.code} — ${option.label}`
-      : option.label;
+  const findLookupOption = (
+    options: ReportLookupOption[],
+    value: string,
+  ): ReportLookupOption | undefined =>
+    options.find(
+      (candidate) =>
+        formatReportLookupLabel(candidate) === value ||
+        candidate.value === value,
+    );
 
   const handleCustomerChange = (value: string): void => {
     setCustomerQuery(value);
-    const option = customerOptions.find(
-      (candidate) =>
-        formatLookupOption(candidate) === value || candidate.value === value,
+    setDraftFilters((current) =>
+      applyReportLookupSelection(
+        current,
+        "customers",
+        findLookupOption(customerOptions, value),
+      ),
     );
-    setFilter("customerCode", option?.value || undefined);
   };
 
   const handleProductChange = (value: string): void => {
     setProductQuery(value);
-    const option = productOptions.find(
-      (candidate) =>
-        formatLookupOption(candidate) === value || candidate.value === value,
+    setDraftFilters((current) =>
+      applyReportLookupSelection(
+        current,
+        "products",
+        findLookupOption(productOptions, value),
+      ),
     );
-    const productId = option ? Number(option.value) : Number.NaN;
-    setFilter("productId", Number.isFinite(productId) ? productId : undefined);
   };
 
   const handleClear = async (): Promise<void> => {
@@ -179,53 +117,23 @@ export function CylinderPurchaseFilters(): React.ReactElement {
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-          <div className="space-y-1.5">
-            <Label htmlFor="cylinder-report-customer">Customer</Label>
-            <div className="relative">
-              <Search
-                aria-hidden="true"
-                className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-              />
-              <Input
-                id="cylinder-report-customer"
-                list="cylinder-report-customer-options"
-                value={customerQuery}
-                onChange={(event) => handleCustomerChange(event.target.value)}
-                placeholder="Search code or customer"
-                autoComplete="off"
-                className="pl-8"
-              />
-              <datalist id="cylinder-report-customer-options">
-                {customerOptions.map((option) => (
-                  <option key={option.value} value={formatLookupOption(option)} />
-                ))}
-              </datalist>
-            </div>
-          </div>
+          <ReportSearchLookupInput
+            id="cylinder-report-customer"
+            label="Customer"
+            value={customerQuery}
+            options={customerOptions}
+            placeholder="Search code or customer"
+            onValueChange={handleCustomerChange}
+          />
 
-          <div className="space-y-1.5">
-            <Label htmlFor="cylinder-report-product">Serialized product</Label>
-            <div className="relative">
-              <Search
-                aria-hidden="true"
-                className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-              />
-              <Input
-                id="cylinder-report-product"
-                list="cylinder-report-product-options"
-                value={productQuery}
-                onChange={(event) => handleProductChange(event.target.value)}
-                placeholder="Search code or product"
-                autoComplete="off"
-                className="pl-8"
-              />
-              <datalist id="cylinder-report-product-options">
-                {productOptions.map((option) => (
-                  <option key={option.value} value={formatLookupOption(option)} />
-                ))}
-              </datalist>
-            </div>
-          </div>
+          <ReportSearchLookupInput
+            id="cylinder-report-product"
+            label="Serialized product"
+            value={productQuery}
+            options={productOptions}
+            placeholder="Search code or product"
+            onValueChange={handleProductChange}
+          />
 
           <div className="space-y-1.5">
             <Label htmlFor="cylinder-report-branch">Branch</Label>
@@ -236,9 +144,14 @@ export function CylinderPurchaseFilters(): React.ReactElement {
                   : String(draftFilters.branchId)
               }
               onValueChange={(value) =>
-                setFilter(
-                  "branchId",
-                  value === ALL_OPTIONS ? undefined : Number(value),
+                setDraftFilters((current) =>
+                  applyReportLookupSelection(
+                    current,
+                    "branches",
+                    value === ALL_OPTIONS
+                      ? undefined
+                      : findLookupOption(branchOptions, value),
+                  ),
                 )
               }
               disabled={isMasterDataLoading}
@@ -250,7 +163,7 @@ export function CylinderPurchaseFilters(): React.ReactElement {
                 <SelectItem value={ALL_OPTIONS}>All branches</SelectItem>
                 {branchOptions.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
-                    {formatLookupOption(option)}
+                    {formatReportLookupLabel(option)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -266,9 +179,14 @@ export function CylinderPurchaseFilters(): React.ReactElement {
                   : String(draftFilters.salesmanId)
               }
               onValueChange={(value) =>
-                setFilter(
-                  "salesmanId",
-                  value === ALL_OPTIONS ? undefined : Number(value),
+                setDraftFilters((current) =>
+                  applyReportLookupSelection(
+                    current,
+                    "salespeople",
+                    value === ALL_OPTIONS
+                      ? undefined
+                      : findLookupOption(salespersonOptions, value),
+                  ),
                 )
               }
               disabled={isMasterDataLoading}
@@ -280,7 +198,7 @@ export function CylinderPurchaseFilters(): React.ReactElement {
                 <SelectItem value={ALL_OPTIONS}>All salespeople</SelectItem>
                 {salespersonOptions.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
-                    {formatLookupOption(option)}
+                    {formatReportLookupLabel(option)}
                   </SelectItem>
                 ))}
               </SelectContent>

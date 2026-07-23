@@ -143,6 +143,7 @@ export function ReturnAnalysisView(): React.ReactElement {
         rows={rows}
         rowKey={(row) => row.key}
         defaultSort={{ key: "returned", direction: "desc" }}
+        searchLabel="Search return analysis"
         renderMobileCard={(row) => <ReturnAnalysisMobileCard row={row} />}
       />
     </section>

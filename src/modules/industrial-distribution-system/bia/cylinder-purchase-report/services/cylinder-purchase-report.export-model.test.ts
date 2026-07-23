@@ -150,3 +150,38 @@ test("export rows preserve raw numeric values for renderer formatting", () => {
   ]);
   assert.ok(customerSection.rows[0].slice(3).every((value) => typeof value === "number"));
 });
+
+test("renderer-neutral export context prefers business labels over raw identifiers", async () => {
+  const exportModelModule = (await import(
+    "./cylinder-purchase-report.export-model.ts"
+  )) as Record<string, unknown>;
+  const buildFilterContext = exportModelModule.buildReportFilterContext as
+    | ((filters: typeof reportFixture.filters) => Array<{ label: string; value: string }>)
+    | undefined;
+
+  assert.equal(typeof buildFilterContext, "function");
+  if (!buildFilterContext) return;
+
+  const context = buildFilterContext({
+    ...reportFixture.filters,
+    customerCode: "C-001",
+    customerLabel: "Alpha Store (C-001)",
+    productId: 11,
+    productLabel: "LPG 11KG (LPG-11)",
+    branchId: 1,
+    branchLabel: "Main Branch (B01)",
+    salesmanId: 7,
+    salespersonLabel: "Ana (S07)",
+  });
+  const values = Object.fromEntries(
+    context.map((item) => [item.label, item.value]),
+  );
+
+  assert.equal(values.Customer, "Alpha Store (C-001)");
+  assert.equal(values.Product, "LPG 11KG (LPG-11)");
+  assert.equal(values.Branch, "Main Branch (B01)");
+  assert.equal(values.Salesperson, "Ana (S07)");
+  assert.notEqual(values.Product, "11");
+  assert.notEqual(values.Branch, "1");
+  assert.notEqual(values.Salesperson, "7");
+});

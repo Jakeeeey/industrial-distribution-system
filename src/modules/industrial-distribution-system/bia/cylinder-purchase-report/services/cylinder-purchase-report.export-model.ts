@@ -1,4 +1,5 @@
 import type {
+  AppliedFilterContext,
   BranchPurchaseSummary,
   CustomerPurchaseSummary,
   CylinderPurchaseDashboardResponse,
@@ -14,6 +15,52 @@ export interface ReportExportSection {
   title: string;
   columns: string[];
   rows: ReportExportCell[][];
+}
+
+export interface ReportExportFilterContextItem {
+  label: string;
+  value: string;
+}
+
+function selectedFilterValue(
+  displayLabel: string | undefined,
+  stableValue: string | number | undefined,
+): string {
+  const normalizedLabel = displayLabel?.trim();
+  if (normalizedLabel) {
+    return normalizedLabel;
+  }
+  return stableValue === undefined ? "All" : String(stableValue);
+}
+
+export function buildReportFilterContext(
+  filters: AppliedFilterContext,
+): ReportExportFilterContextItem[] {
+  return [
+    {
+      label: "Date",
+      value: `${filters.startDate} to ${filters.endDate}`,
+    },
+    {
+      label: "Customer",
+      value: selectedFilterValue(filters.customerLabel, filters.customerCode),
+    },
+    {
+      label: "Product",
+      value: selectedFilterValue(filters.productLabel, filters.productId),
+    },
+    {
+      label: "Branch",
+      value: selectedFilterValue(filters.branchLabel, filters.branchId),
+    },
+    {
+      label: "Salesperson",
+      value: selectedFilterValue(
+        filters.salespersonLabel,
+        filters.salesmanId,
+      ),
+    },
+  ];
 }
 
 function buildOverviewSection(

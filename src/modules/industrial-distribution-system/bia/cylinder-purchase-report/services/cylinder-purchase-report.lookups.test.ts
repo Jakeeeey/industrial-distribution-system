@@ -84,3 +84,41 @@ test("uses bounded customer search and unbounded branch master lookups", async (
   assert.equal(branchUrl.searchParams.get("limit"), "-1");
   assert.equal(branchUrl.searchParams.has("filter[_or][0][branch_code][_icontains]"), false);
 });
+
+test("requests the salesperson master and normalizes salesperson labels", async () => {
+  let request: Request | null = null;
+  const fetchImpl: typeof fetch = async (input, init) => {
+    request = new Request(input, init);
+    return Response.json({
+      data: [
+        { id: 8, salesman_code: "S08", salesman_name: "  Zoe  " },
+        { id: 7, salesman_code: "S07", salesman_name: "Ana" },
+        { id: 9, salesman_code: "S09", salesman_name: null },
+        { id: null, salesman_code: "DISCARD", salesman_name: "Discard" },
+      ],
+    });
+  };
+
+  const options = await fetchReportLookups(
+    { type: "salespeople", q: "ignored" },
+    { directusBaseUrl: "https://directus.test", fetchImpl },
+  );
+
+  assert.ok(request);
+  const url = new URL((request as Request).url);
+  assert.equal(url.pathname, "/items/salesman");
+  assert.equal(url.searchParams.get("fields"), "id,salesman_code,salesman_name");
+  assert.equal(url.searchParams.get("sort"), "salesman_name");
+  assert.equal(url.searchParams.get("limit"), "-1");
+  assert.equal(
+    url.searchParams.has(
+      "filter[_or][0][salesman_name][_icontains]",
+    ),
+    false,
+  );
+  assert.deepEqual(options, [
+    { value: "7", label: "Ana", code: "S07" },
+    { value: "9", label: "S09", code: "S09" },
+    { value: "8", label: "Zoe", code: "S08" },
+  ]);
+});

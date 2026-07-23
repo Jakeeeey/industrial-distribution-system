@@ -145,6 +145,7 @@ export function BranchPerformanceView(): React.ReactElement {
         rows={rows}
         rowKey={(row) => row.data.branchId}
         defaultSort={{ key: "net", direction: "desc" }}
+        searchLabel="Search branch performance"
         renderMobileCard={(row) => <BranchMobileCard row={row} />}
       />
     </section>

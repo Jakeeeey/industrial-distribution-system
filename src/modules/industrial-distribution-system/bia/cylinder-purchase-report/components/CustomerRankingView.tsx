@@ -128,6 +128,7 @@ export function CustomerRankingView(): React.ReactElement {
         rows={rows}
         rowKey={(row) => row.data.customerKey}
         defaultSort={{ key: "net", direction: "desc" }}
+        searchLabel="Search customer ranking"
         onRowClick={(row) => selectCustomer(row.data)}
         rowActionLabel={(row) =>
           `View purchase details for ${row.data.customerName}`

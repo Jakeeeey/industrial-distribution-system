@@ -1,13 +1,13 @@
 import type {
+  AppliedFilterContext,
   CylinderPurchaseDashboardResponse,
-  CylinderPurchaseReportFilters,
   ReportLookupOption,
   ReportLookupResponse,
   ReportLookupType,
 } from "@/modules/industrial-distribution-system/bia/cylinder-purchase-report/types/cylinder-purchase-report.types";
 
 export async function fetchCylinderPurchaseDashboard(
-  filters: CylinderPurchaseReportFilters,
+  filters: AppliedFilterContext,
   signal?: AbortSignal,
 ): Promise<CylinderPurchaseDashboardResponse> {
   const params = new URLSearchParams();

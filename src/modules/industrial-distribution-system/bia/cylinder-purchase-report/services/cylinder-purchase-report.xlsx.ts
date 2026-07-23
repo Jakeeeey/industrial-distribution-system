@@ -9,6 +9,7 @@ import type {
 import {
   buildConsolidatedExportSections,
   buildDashboardExportSections,
+  buildReportFilterContext,
   type ReportExportCell,
   type ReportExportSection,
 } from "./cylinder-purchase-report.export-model.ts";
@@ -35,12 +36,9 @@ function buildFiltersSheet(
   const { filters } = report;
   const rows: ReportExportCell[][] = [
     ["Filter", "Applied Value"],
-    ["Start Date", filters.startDate],
-    ["End Date", filters.endDate],
-    ["Customer Code", filters.customerCode ?? "All"],
-    ["Product ID", filters.productId ?? "All"],
-    ["Branch ID", filters.branchId ?? "All"],
-    ["Salesperson ID", filters.salesmanId ?? "All"],
+    ...buildReportFilterContext(filters).map(
+      ({ label, value }): ReportExportCell[] => [label, value],
+    ),
     ["Generated At", formatTimestamp(report.generatedAt)],
     ["Overview - Gross Purchased", report.overview.grossPurchasedQty],
     ["Overview - Returned Cylinders", report.overview.returnedQty],

@@ -5,18 +5,9 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -35,6 +26,13 @@ import {
   type ReportSort,
   type ReportSortDirection,
 } from "./report-data-table.utils";
+import {
+  REPORT_PAGE_SIZES,
+  ReportTablePagination,
+  type ReportPageSize,
+} from "./ReportTablePagination";
+import { ReportTableMobileRows } from "./ReportTableMobileRows";
+import { ReportTableSearch } from "./ReportTableSearch";
 
 export interface ReportColumn<T> {
   key: string;
@@ -49,7 +47,8 @@ interface ReportDataTableBaseProps<T> {
   rows: readonly T[];
   rowKey(row: T): React.Key;
   defaultSort: ReportSort;
-  searchText?: string;
+  searchLabel: string;
+  searchPlaceholder?: string;
   renderMobileCard(row: T): React.ReactNode;
   emptyMessage?: string;
 }
@@ -67,26 +66,26 @@ interface ReportDataTableStaticProps {
 export type ReportDataTableProps<T> = ReportDataTableBaseProps<T> &
   (ReportDataTableRowActionProps<T> | ReportDataTableStaticProps);
 
-const PAGE_SIZES = [10, 25, 50] as const;
-
 export function ReportDataTable<T>({
   columns,
   rows,
   rowKey,
   defaultSort,
-  searchText = "",
+  searchLabel,
+  searchPlaceholder,
   onRowClick,
   rowActionLabel,
   renderMobileCard,
   emptyMessage,
 }: ReportDataTableProps<T>): React.ReactElement {
   const { tableResetKey, isInitialLoading } = useCylinderPurchaseReport();
+  const [searchText, setSearchText] = React.useState("");
   const [sortKey, setSortKey] = React.useState(defaultSort.key);
   const [sortDirection, setSortDirection] =
     React.useState<ReportSortDirection>(defaultSort.direction);
   const [page, setPage] = React.useState(1);
-  const [pageSize, setPageSize] = React.useState<(typeof PAGE_SIZES)[number]>(
-    PAGE_SIZES[0],
+  const [pageSize, setPageSize] = React.useState<ReportPageSize>(
+    REPORT_PAGE_SIZES[0],
   );
 
   React.useEffect(() => {
@@ -130,6 +129,14 @@ export function ReportDataTable<T>({
 
   return (
     <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
+      <ReportTableSearch
+        disabled={isInitialLoading}
+        label={searchLabel}
+        placeholder={searchPlaceholder ?? searchLabel}
+        value={searchText}
+        onValueChange={setSearchText}
+      />
+
       <div className="hidden overflow-x-auto md:block">
         <Table>
           <TableHeader className="bg-muted/20">
@@ -255,108 +262,35 @@ export function ReportDataTable<T>({
         </Table>
       </div>
 
-      <div className="space-y-3 p-3 md:hidden">
-        {isInitialLoading
-          ? Array.from({ length: 8 }, (_, rowIndex) => (
-              <div
-                key={`mobile-skeleton-${rowIndex}`}
-                className="space-y-3 rounded-lg border p-4"
-              >
-                <Skeleton className="h-4 w-2/3" />
-                <Skeleton className="h-3 w-1/3" />
-                <Skeleton className="h-10 w-full" />
-              </div>
-            ))
-          : null}
-        {!isInitialLoading && pageRows.length === 0 ? (
-          <div className="rounded-lg border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
-            {resolvedEmptyMessage}
-          </div>
-        ) : null}
-        {!isInitialLoading
-          ? pageRows.map((row) => (
-              <div key={rowKey(row)} className="space-y-2">
-                {renderMobileCard(row)}
-                {onRowClick && rowActionLabel ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="w-full"
-                    aria-label={rowActionLabel(row)}
-                    onClick={() => onRowClick(row)}
-                  >
-                    View details
-                  </Button>
-                ) : null}
-              </div>
-            ))
-          : null}
-      </div>
+      <ReportTableMobileRows
+        emptyMessage={resolvedEmptyMessage}
+        isLoading={isInitialLoading}
+        rows={pageRows}
+        rowKey={rowKey}
+        renderMobileCard={renderMobileCard}
+        onRowClick={onRowClick}
+        rowActionLabel={rowActionLabel}
+      />
 
-      <div className="flex flex-col gap-3 border-t bg-muted/5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-xs text-muted-foreground" aria-live="polite">
-          Showing{" "}
-          <span className="font-semibold text-foreground">
-            {firstVisibleRow}–{lastVisibleRow}
-          </span>{" "}
-          of {preparedRows.length.toLocaleString()} rows
-        </p>
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Rows per page</span>
-            <Select
-              value={String(pageSize)}
-              onValueChange={(value) => {
-                setPageSize(Number(value) as (typeof PAGE_SIZES)[number]);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger
-                size="sm"
-                className="w-18"
-                aria-label="Rows per page"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PAGE_SIZES.map((size) => (
-                  <SelectItem key={size} value={String(size)}>
-                    {size}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center gap-1">
-            <Button
-              type="button"
-              variant="outline"
-              size="icon-sm"
-              aria-label="Previous page"
-              disabled={safePage <= 1 || isInitialLoading}
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-            >
-              <ChevronLeft aria-hidden="true" />
-            </Button>
-            <span className="min-w-16 text-center text-xs font-semibold tabular-nums">
-              {safePage} / {totalPages}
-            </span>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon-sm"
-              aria-label="Next page"
-              disabled={safePage >= totalPages || isInitialLoading}
-              onClick={() =>
-                setPage((current) => Math.min(totalPages, current + 1))
-              }
-            >
-              <ChevronRight aria-hidden="true" />
-            </Button>
-          </div>
-        </div>
-      </div>
+      <ReportTablePagination
+        firstVisibleRow={firstVisibleRow}
+        isLoading={isInitialLoading}
+        lastVisibleRow={lastVisibleRow}
+        pageSize={pageSize}
+        safePage={safePage}
+        totalPages={totalPages}
+        totalRows={preparedRows.length}
+        onPageSizeChange={(nextPageSize) => {
+          setPageSize(nextPageSize);
+          setPage(1);
+        }}
+        onPreviousPage={() =>
+          setPage((current) => Math.max(1, current - 1))
+        }
+        onNextPage={() =>
+          setPage((current) => Math.min(totalPages, current + 1))
+        }
+      />
     </div>
   );
 }

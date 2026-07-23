@@ -6,13 +6,15 @@ import {
   fetchReportLookups,
 } from "./cylinder-purchase-report.client.ts";
 import type {
+  AppliedFilterContext,
   CylinderPurchaseDashboardResponse,
-  CylinderPurchaseReportFilters,
 } from "../types/cylinder-purchase-report.types.ts";
 
-const filters: CylinderPurchaseReportFilters = {
+const filters: AppliedFilterContext = {
   customerCode: "C-001",
+  customerLabel: "Alpha Store (C-001)",
   productId: 7,
+  productLabel: "LPG 11KG (LPG-11)",
   startDate: "2026-06-23",
   endDate: "2026-07-22",
 };
@@ -59,7 +61,7 @@ test("serializes defined dashboard filters and forwards the abort signal", async
     );
     assert.equal(
       requestedUrl,
-      "/api/ids/bia/cylinder-purchase-report?customerCode=C-001&productId=7&startDate=2026-06-23&endDate=2026-07-22",
+      "/api/ids/bia/cylinder-purchase-report?customerCode=C-001&customerLabel=Alpha+Store+%28C-001%29&productId=7&productLabel=LPG+11KG+%28LPG-11%29&startDate=2026-06-23&endDate=2026-07-22",
     );
     assert.equal(requestedInit?.cache, "no-store");
     assert.equal(requestedInit?.signal, controller.signal);
