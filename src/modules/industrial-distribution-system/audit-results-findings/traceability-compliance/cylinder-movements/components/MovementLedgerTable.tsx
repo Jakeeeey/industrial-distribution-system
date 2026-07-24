@@ -43,6 +43,7 @@ const ITEMS_PER_PAGE = 15;
 export function MovementLedgerTable({ data, onViewTrace, productNameFilter }: MovementLedgerTableProps) {
     const [searchQuery, setSearchQuery] = React.useState("");
     const [directionFilter, setDirectionFilter] = React.useState("all");
+    const [docTypeFilter, setDocTypeFilter] = React.useState("all");
     const [sortBy, setSortBy] = React.useState<"movementAt" | "serialNumber" | "documentType" | "documentNo" | null>(null);
     const [sortOrder, setSortOrder] = React.useState<"asc" | "desc">("desc");
     const [currentPage, setCurrentPage] = React.useState(1);
@@ -50,6 +51,12 @@ export function MovementLedgerTable({ data, onViewTrace, productNameFilter }: Mo
     // Reset page when data changes
     React.useEffect(() => {
         setCurrentPage(1);
+    }, [data]);
+
+    // Unique document types dynamically extracted from dataset
+    const uniqueDocTypes = React.useMemo(() => {
+        const set = new Set(data.map(r => r.documentType).filter(Boolean));
+        return Array.from(set).sort((a, b) => a.localeCompare(b));
     }, [data]);
 
     // ─── Filter Logic ────────────────────────────────────────────────────────
@@ -65,16 +72,20 @@ export function MovementLedgerTable({ data, onViewTrace, productNameFilter }: Mo
             
             const isIN = r.inQty > 0 && r.outQty === 0;
             const isOUT = r.outQty > 0 && r.inQty === 0;
+            // Assignment: in_qty=0 AND out_qty=0 (e.g. Sales Order Assignment, Customer Cylinder Assignment)
+            const isAssignment = r.inQty === 0 && r.outQty === 0;
             
             let direction = "Review";
             if (isIN) direction = "IN";
             else if (isOUT) direction = "OUT";
+            else if (isAssignment) direction = "Assignment";
 
             const matchesDirection = directionFilter === "all" || direction === directionFilter;
+            const matchesDocType = docTypeFilter === "all" || r.documentType === docTypeFilter;
 
-            return matchesSearch && matchesDirection;
+            return matchesSearch && matchesDirection && matchesDocType;
         });
-    }, [data, searchQuery, directionFilter]);
+    }, [data, searchQuery, directionFilter, docTypeFilter]);
 
     // ─── Sort Logic ──────────────────────────────────────────────────────────
     const sortedData = React.useMemo(() => {
@@ -140,10 +151,12 @@ export function MovementLedgerTable({ data, onViewTrace, productNameFilter }: Mo
         const exportRows = sortedData.map((r) => ({
             "Date & Time": r.movementAt,
             "Serial Number": r.serialNumber,
-            "Product": r.productName,
+            // Include UOM alongside product name in export
+            "Product": r.uomIds ? `${r.productName} (${r.uomIds})` : r.productName,
             "Transaction Type": r.documentType,
             "Document No.": r.documentNo,
-            "Movement Direction": r.inQty > 0 ? "IN" : (r.outQty > 0 ? "OUT" : "Review"),
+            // Assignment direction for in_qty=0 AND out_qty=0 rows
+            "Movement Direction": r.inQty > 0 ? "IN" : r.outQty > 0 ? "OUT" : (r.inQty === 0 && r.outQty === 0 ? "Assignment" : "Review"),
             "In Qty": r.inQty,
             "Out Qty": r.outQty,
             "Customer Code": r.customerCode || "—",
@@ -199,14 +212,35 @@ export function MovementLedgerTable({ data, onViewTrace, productNameFilter }: Mo
                             setCurrentPage(1);
                         }}
                     >
-                        <SelectTrigger className="w-full sm:w-[180px] h-8 text-xs bg-background border-input">
+                        <SelectTrigger className="w-full sm:w-[160px] h-8 text-xs bg-background border-input">
                             <SelectValue placeholder="All Directions" />
                         </SelectTrigger>
                         <SelectContent className="text-xs">
                             <SelectItem value="all">All Directions</SelectItem>
                             <SelectItem value="IN">Inward</SelectItem>
                             <SelectItem value="OUT">Outward</SelectItem>
+                            {/* Assignment: in_qty=0, out_qty=0 movements */}
+                            <SelectItem value="Assignment">Assignment</SelectItem>
                             <SelectItem value="Review">Needs Review</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Select
+                        value={docTypeFilter}
+                        onValueChange={(val) => {
+                            setDocTypeFilter(val);
+                            setCurrentPage(1);
+                        }}
+                    >
+                        <SelectTrigger className="w-full sm:w-[190px] h-8 text-xs bg-background border-input">
+                            <SelectValue placeholder="All Transaction Types" />
+                        </SelectTrigger>
+                        <SelectContent className="text-xs">
+                            <SelectItem value="all">All Transaction Types</SelectItem>
+                            {uniqueDocTypes.map((type) => (
+                                <SelectItem key={type} value={type}>
+                                    {type}
+                                </SelectItem>
+                            ))}
                         </SelectContent>
                     </Select>
                 </div>
@@ -266,6 +300,8 @@ export function MovementLedgerTable({ data, onViewTrace, productNameFilter }: Mo
                                 paginatedData.map((r, idx) => {
                                     const isIN = r.inQty > 0 && r.outQty === 0;
                                     const isOUT = r.outQty > 0 && r.inQty === 0;
+                                    // Assignment: in_qty=0 AND out_qty=0 — distinct from Review
+                                    const isAssignment = !isIN && !isOUT && r.inQty === 0 && r.outQty === 0;
                                     return (
                                         <TableRow 
                                             key={`${r.serialNumber}-${r.documentNo}-${idx}`}
@@ -278,8 +314,23 @@ export function MovementLedgerTable({ data, onViewTrace, productNameFilter }: Mo
                                             <TableCell className="font-bold text-primary select-all font-mono tracking-wider">
                                                 {r.serialNumber}
                                             </TableCell>
-                                            <TableCell className="max-w-[150px] truncate font-semibold text-foreground/90" title={r.productName}>
-                                                {r.productName}
+                                            <TableCell className="max-w-[280px]" title={r.uomIds ? `${r.productName} (${r.uomIds})` : r.productName}>
+                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                    <span className="truncate font-semibold text-foreground/90">{r.productName}</span>
+                                                    {r.uomIds && (
+                                                        <Badge 
+                                                            variant="outline" 
+                                                            className={cn(
+                                                                "text-[10px] font-bold px-1.5 py-0 rounded shrink-0",
+                                                                (r.uomIds === "EMPTY" || r.uomIds === "EMPTY_CYLINDER")
+                                                                    ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                                                                    : "bg-muted text-muted-foreground border-border"
+                                                            )}
+                                                        >
+                                                            {r.uomIds}
+                                                        </Badge>
+                                                    )}
+                                                </div>
                                             </TableCell>
                                             <TableCell className="font-bold text-foreground truncate max-w-[150px] text-xs">{r.documentType}</TableCell>
                                             <TableCell className="font-mono text-xs text-muted-foreground select-all">{r.documentNo}</TableCell>
@@ -290,12 +341,15 @@ export function MovementLedgerTable({ data, onViewTrace, productNameFilter }: Mo
                                                         "inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border-none",
                                                         isIN && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
                                                         isOUT && "bg-rose-500/10 text-rose-600 dark:text-rose-400",
-                                                        (!isIN && !isOUT) && "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                                                        // Assignment badge: blue — distinct from amber Review
+                                                        isAssignment && "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+                                                        (!isIN && !isOUT && !isAssignment) && "bg-amber-500/10 text-amber-600 dark:text-amber-400"
                                                     )}
                                                 >
                                                     {isIN && "INWARD"}
                                                     {isOUT && "OUTWARD"}
-                                                    {!isIN && !isOUT && "REVIEW"}
+                                                    {isAssignment && "ASSIGN"}
+                                                    {!isIN && !isOUT && !isAssignment && "REVIEW"}
                                                 </Badge>
                                             </TableCell>
                                             <TableCell className="max-w-[200px] truncate">

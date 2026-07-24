@@ -7,6 +7,7 @@ export type SerialMovement = {
     movementAt: string;     // ts
     productId: number;      // product_id
     productName: string;    // product_name
+    uomIds: string | null;  // uom_ids — used to display unit of measure alongside product name
     serialNumber: string;   // serial_number
     branchId: number;       // branch_id
     branchName: string;     // branch_name
@@ -29,7 +30,7 @@ export type CylinderSummary = {
     lastHandlingBranch: string;
     lastMovementType: string;
     lastDocumentNo: string;
-    direction: "IN" | "OUT" | "Review";
+    direction: "IN" | "OUT" | "Review" | "Assignment";
     lastMovementDate: string;
     movementCount: number;
     movements: SerialMovement[];

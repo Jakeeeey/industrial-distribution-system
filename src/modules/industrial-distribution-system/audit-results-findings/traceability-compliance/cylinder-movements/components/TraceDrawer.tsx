@@ -32,6 +32,10 @@ export function TraceDrawer({ isOpen, onClose, cylinder }: TraceDrawerProps) {
         if (cylinder.direction === "IN") {
             label = "IN BRANCH";
             color = "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400 border-emerald-200/50";
+        } else if (cylinder.direction === "Assignment") {
+            // Assignment: in_qty=0, out_qty=0 — asset assigned but no physical move
+            label = "ASSIGNED";
+            color = "bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400 border-blue-200/50";
         } else if (cylinder.direction === "Review") {
             label = "NEEDS REVIEW";
             color = "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 border-amber-200/50";
@@ -140,6 +144,8 @@ export function TraceDrawer({ isOpen, onClose, cylinder }: TraceDrawerProps) {
                             {cylinder.movements.map((m, idx) => {
                                 const isIN = m.inQty > 0 && m.outQty === 0;
                                 const isOUT = m.outQty > 0 && m.inQty === 0;
+                                // Assignment: in_qty=0 AND out_qty=0 — blue dot, no physical stock movement
+                                const isAssignment = !isIN && !isOUT && m.inQty === 0 && m.outQty === 0;
                                 return (
                                     <div key={`${m.documentNo}-${idx}`} className="relative pl-2">
                                         {/* Simple Dot */}
@@ -148,7 +154,9 @@ export function TraceDrawer({ isOpen, onClose, cylinder }: TraceDrawerProps) {
                                                 "absolute -left-[24px] top-1.5 w-2.5 h-2.5 rounded-full border-2 border-background z-10",
                                                 isIN && "bg-emerald-500",
                                                 isOUT && "bg-rose-500",
-                                                (!isIN && !isOUT) && "bg-amber-500"
+                                                // Assignment: blue dot — no physical stock movement
+                                                isAssignment && "bg-blue-500",
+                                                (!isIN && !isOUT && !isAssignment) && "bg-amber-500"
                                             )}
                                         />
                                         
@@ -166,9 +174,11 @@ export function TraceDrawer({ isOpen, onClose, cylinder }: TraceDrawerProps) {
                                                     "font-bold text-[9px] uppercase tracking-wider",
                                                     isIN && "text-emerald-600 dark:text-emerald-400",
                                                     isOUT && "text-rose-600 dark:text-rose-400",
-                                                    (!isIN && !isOUT) && "text-amber-600 dark:text-amber-400"
+                                                    // Assignment: blue text label
+                                                    isAssignment && "text-blue-600 dark:text-blue-400",
+                                                    (!isIN && !isOUT && !isAssignment) && "text-amber-600 dark:text-amber-400"
                                                 )}>
-                                                    {isIN ? "IN" : isOUT ? "OUT" : "REVIEW"}
+                                                    {isIN ? "IN" : isOUT ? "OUT" : isAssignment ? "ASSIGN" : "REVIEW"}
                                                 </span>
                                                 {" · "}
                                                 <span>Doc: <span className="font-mono text-foreground font-semibold">{m.documentNo}</span></span>
@@ -177,8 +187,17 @@ export function TraceDrawer({ isOpen, onClose, cylinder }: TraceDrawerProps) {
                                                 )}
                                                 
                                                 {m.customerName && (
-                                                    <div className="mt-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 bg-blue-500/5 px-2 py-0.5 rounded border border-blue-500/10 inline-block">
-                                                        Sold/Delivered to: {m.customerName} ({m.customerCode})
+                                                    <div className={cn(
+                                                        "mt-1 text-[11px] font-bold px-2 py-0.5 rounded border inline-block",
+                                                        isIN
+                                                            ? "text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 border-emerald-500/10"
+                                                            : "text-blue-600 dark:text-blue-400 bg-blue-500/5 border-blue-500/10"
+                                                    )}>
+                                                        {m.documentType?.toLowerCase().includes("re-delivery") || m.documentType?.toLowerCase().includes("returned")
+                                                            ? `Unfulfilled transaction with: ${m.customerName} (${m.customerCode})`
+                                                            : isIN
+                                                            ? `Trade-in / Refill from: ${m.customerName} (${m.customerCode})`
+                                                            : `Sold/Delivered to: ${m.customerName} (${m.customerCode})`}
                                                     </div>
                                                 )}
                                                 {m.supplierName && (
