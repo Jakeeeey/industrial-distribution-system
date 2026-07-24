@@ -1,5 +1,21 @@
 import { NextResponse } from 'next/server';
 
+function getPhilippineTime() {
+    const now = new Date();
+    const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
+    const phTime = new Date(utcMs + (8 * 3600000));
+    
+    const year = phTime.getFullYear();
+    const month = String(phTime.getMonth() + 1).padStart(2, '0');
+    const day = String(phTime.getDate()).padStart(2, '0');
+    const hours = String(phTime.getHours()).padStart(2, '0');
+    const minutes = String(phTime.getMinutes()).padStart(2, '0');
+    const seconds = String(phTime.getSeconds()).padStart(2, '0');
+    
+    // Return with Z so Directus treats it as UTC and passes it to the DB as exactly this value
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}Z`;
+}
+
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL + '/items';
 const TOKEN = process.env.DIRECTUS_STATIC_TOKEN;
 
@@ -366,6 +382,7 @@ export async function POST(request: Request) {
                 id: inv.id,
                 status: pdiStatus,
                 remarks: inv.remarks || null,
+                date_updated: getPhilippineTime()
             };
         });
 
@@ -390,7 +407,7 @@ export async function POST(request: Request) {
                     'Authorization': `Bearer ${TOKEN}`,
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ status: 'Posted' }),
+                body: JSON.stringify({ status: 'Posted', date_updated: getPhilippineTime() }),
             });
     
             if (!planResponse.ok) {
@@ -408,7 +425,8 @@ export async function POST(request: Request) {
     
                 const update: Record<string, unknown> = {
                     invoice_id: inv.invoiceId,
-                    transaction_status: siStatus
+                    transaction_status: siStatus,
+                    date_updated: getPhilippineTime()
                 };
 
                 // If Not Delivered, reset isDispatched to 0
@@ -452,7 +470,8 @@ export async function POST(request: Request) {
                     
                     return {
                         order_id: so.order_id,
-                        order_status: soStatus
+                        order_status: soStatus,
+                        date_updated: getPhilippineTime()
                     };
                 }).filter(Boolean);
     
@@ -606,7 +625,7 @@ export async function POST(request: Request) {
                 const payload: Record<string, unknown> = {
                     sales_invoice_id: inv.invoiceId,
                     nte: inv.remarks || '',
-                    date_acknowledged: new Date().toISOString(),
+                    date_acknowledged: getPhilippineTime(),
                     variance_amount: Number.isNaN(varianceAmount) ? 0 : varianceAmount
                 };
                 
@@ -628,7 +647,7 @@ export async function POST(request: Request) {
                             'Authorization': `Bearer ${TOKEN}`,
                             'Content-Type': 'application/json',
                         },
-                        body: JSON.stringify({ ...payload, date_created: existingTransaction.date_created || new Date().toISOString() }), // Keep existing date_created if any or default
+                        body: JSON.stringify({ ...payload, date_created: existingTransaction.date_created || getPhilippineTime() }), // Keep existing date_created if any or default
                     });
                     
                     if (!patchRes.ok) {
@@ -678,7 +697,7 @@ export async function POST(request: Request) {
                     }
                 } else {
                     // Create new header
-                    payload.date_created = new Date().toISOString();
+                    payload.date_created = getPhilippineTime();
                     const transactionRes = await poster<{ data: { id: number } }>('/unfulfilled_sales_transaction', payload);
                     transactionId = transactionRes.data.id;
                 }
@@ -687,7 +706,8 @@ export async function POST(request: Request) {
                 if (detailLogs.length > 0) {
                     const finalDetailLogs = detailLogs.map(log => ({
                         ...log,
-                        unfulfilled_sales_transaction_id: transactionId
+                        unfulfilled_sales_transaction_id: transactionId,
+                        date_created: getPhilippineTime()
                     }));
 
                     // We could also check and patch existing details here, but typically there are no collision constraints on these details
@@ -713,7 +733,7 @@ export async function POST(request: Request) {
                                     const serialLog: Record<string, unknown> = {
                                         unfulfilled_sales_transaction_detail_id: createdDetail.id,
                                         serial_number: tag,
-                                        created_at: new Date().toISOString()
+                                        created_at: getPhilippineTime()
                                     };
                                     
                                     if (validCheckedBy) {
