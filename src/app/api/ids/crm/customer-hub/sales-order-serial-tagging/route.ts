@@ -418,37 +418,95 @@ export async function GET(req: NextRequest) {
           }
         }
 
-        // 1. Fetch dispatch plan details for this Sales Order
-        const dpdRes = await fetchDirectus(`/items/dispatch_plan_details?filter[sales_order_id][_eq]=${orderId}&fields=dispatch_id`);
-        const dpd = dpdRes.data?.[0];
-        if (!dpd) {
+        // 1. Fetch dispatch plan details for this Sales Order (Pre-Dispatch Plan link)
+        // DEV-CHANGE: Handle multiple dispatch plan details for the order
+        const dpdRes = await fetchDirectus(`/items/dispatch_plan_details?filter[sales_order_id][_eq]=${orderId}&fields=dispatch_id&limit=-1`);
+        const dpdList = dpdRes.data || [];
+        
+        const initialDispatchIds = Array.from(new Set(
+          dpdList.map((d: { dispatch_id: unknown }) => {
+            if (typeof d.dispatch_id === "object" && d.dispatch_id !== null) {
+              const obj = d.dispatch_id as Record<string, unknown>;
+              return Number(obj.id || obj.dispatch_id);
+            }
+            return Number(d.dispatch_id);
+          }).filter((id: number) => !isNaN(id) && id > 0)
+        )) as number[];
+
+        if (initialDispatchIds.length === 0) {
           return NextResponse.json({ data: [] }); // No dispatch plan associated yet
         }
 
-        // 2. Fetch dispatch plan to get the dispatch_no
-        const dpRes = await fetchDirectus(`/items/dispatch_plan/${dpd.dispatch_id}?fields=dispatch_no`);
-        const dispatchNo = dpRes.data?.dispatch_no;
-        if (!dispatchNo) {
+        // 2. DEV-CHANGE: Check post_dispatch_dispatch_plans junction table to find merged Post-Dispatch Plans (truck trip)
+        // Multiple pre-dispatch plans can be merged into 1 post-dispatch plan representing the actual truck load
+        let allDispatchIds = [...initialDispatchIds];
+        try {
+          const pdpJunctionRes = await fetchDirectus(
+            `/items/post_dispatch_dispatch_plans?filter[dispatch_plan_id][_in]=${initialDispatchIds.join(",")}&fields=post_dispatch_plan_id&limit=-1`
+          );
+          const pdpJunctions = pdpJunctionRes.data || [];
+          const postDispatchPlanIds = Array.from(new Set(
+            pdpJunctions.map((j: { post_dispatch_plan_id: unknown }) => {
+              if (typeof j.post_dispatch_plan_id === "object" && j.post_dispatch_plan_id !== null) {
+                const obj = j.post_dispatch_plan_id as Record<string, unknown>;
+                return Number(obj.id);
+              }
+              return Number(j.post_dispatch_plan_id);
+            }).filter((id: number) => !isNaN(id) && id > 0)
+          )) as number[];
+
+          if (postDispatchPlanIds.length > 0) {
+            // Fetch ALL pre-dispatch plans linked to these merged post-dispatch plans (the truck)
+            const allLinkedRes = await fetchDirectus(
+              `/items/post_dispatch_dispatch_plans?filter[post_dispatch_plan_id][_in]=${postDispatchPlanIds.join(",")}&fields=dispatch_plan_id&limit=-1`
+            );
+            const allLinked = allLinkedRes.data || [];
+            const linkedDispatchIds = allLinked.map((j: { dispatch_plan_id: unknown }) => {
+              if (typeof j.dispatch_plan_id === "object" && j.dispatch_plan_id !== null) {
+                const obj = j.dispatch_plan_id as Record<string, unknown>;
+                return Number(obj.dispatch_id || obj.id);
+              }
+              return Number(j.dispatch_plan_id);
+            }).filter((id: number) => !isNaN(id) && id > 0);
+
+            allDispatchIds = Array.from(new Set([...allDispatchIds, ...linkedDispatchIds]));
+          }
+        } catch (pdpErr) {
+          console.warn("Could not retrieve post_dispatch_dispatch_plans junction records:", pdpErr);
+        }
+
+        // 3. Fetch dispatch plans to get their dispatch_no values
+        const dpRes = await fetchDirectus(`/items/dispatch_plan?filter[dispatch_id][_in]=${allDispatchIds.join(",")}&fields=dispatch_id,dispatch_no&limit=-1`);
+        const dpList = dpRes.data || [];
+        const dispatchNos = Array.from(new Set(
+          dpList.map((dp: { dispatch_no?: string }) => dp.dispatch_no).filter(Boolean)
+        )) as string[];
+
+        if (dispatchNos.length === 0) {
           return NextResponse.json({ data: [] });
         }
 
-        // 3. Fetch consolidator linked to this dispatch
-        const cdispRes = await fetchDirectus(`/items/consolidator_dispatches?filter[dispatch_no][_eq]=${encodeURIComponent(dispatchNo)}&fields=consolidator_id`);
-        const cdisp = cdispRes.data?.[0];
-        if (!cdisp) {
+        // 4. Fetch consolidator dispatches linked to these dispatch numbers
+        const encodedDispatchNos = dispatchNos.map((no) => encodeURIComponent(no)).join(",");
+        const cdispRes = await fetchDirectus(`/items/consolidator_dispatches?filter[dispatch_no][_in]=${encodedDispatchNos}&fields=consolidator_id&limit=-1`);
+        const cdispList = cdispRes.data || [];
+        
+        const consolidatorIds = Array.from(new Set(
+          cdispList.map((cd: { consolidator_id: unknown }) => {
+            if (typeof cd.consolidator_id === "object" && cd.consolidator_id !== null) {
+              const obj = cd.consolidator_id as Record<string, unknown>;
+              return obj.id;
+            }
+            return cd.consolidator_id;
+          }).filter(Boolean)
+        ));
+
+        if (consolidatorIds.length === 0) {
           return NextResponse.json({ data: [] });
         }
 
-        const consolidatorId = typeof cdisp.consolidator_id === "object" && cdisp.consolidator_id !== null
-          ? cdisp.consolidator_id.id
-          : cdisp.consolidator_id;
-
-        if (!consolidatorId) {
-          return NextResponse.json({ data: [] });
-        }
-
-        // 4. Fetch consolidator details to get the detail IDs
-        const cdRes = await fetchDirectus(`/items/consolidator_details?filter[consolidator_id][_eq]=${consolidatorId}&fields=id,product_id`);
+        // 5. Fetch consolidator details to get detail IDs and product IDs
+        const cdRes = await fetchDirectus(`/items/consolidator_details?filter[consolidator_id][_in]=${consolidatorIds.join(",")}&fields=id,product_id&limit=-1`);
         const consolidatorDetails = cdRes.data || [];
         const detailIds = consolidatorDetails.map((cd: { id: string | number }) => cd.id);
 
@@ -456,7 +514,7 @@ export async function GET(req: NextRequest) {
           return NextResponse.json({ data: [] });
         }
 
-        // 5. Fetch serial mappings associated with these details
+        // 6. Fetch serial mappings associated with these details
         const csmRes = await fetchDirectus(`/items/consolidator_serial_mappings?filter[detail_id][_in]=${detailIds.join(",")}&fields=serial_number,detail_id.id,detail_id.product_id&limit=-1`);
         const mappings = csmRes.data || [];
 
@@ -622,8 +680,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 2. Fetch Dispatch Plan details to associate vehicle, driver, and plan
+    // 2. DEV-CHANGE: Fetch Dispatch Plan details & Post-Dispatch Plan to associate vehicle, driver, and plan
     let dispatchPlanId = null;
+    let postDispatchPlanId = null;
     let vehicleId = null;
     let driverId = null;
 
@@ -631,16 +690,43 @@ export async function POST(req: NextRequest) {
       const dpdRes = await fetchDirectus(`/items/dispatch_plan_details?filter[sales_order_id][_eq]=${orderId}&fields=dispatch_id`);
       const dpd = dpdRes.data?.[0];
       if (dpd?.dispatch_id) {
-        const dpRes = await fetchDirectus(`/items/dispatch_plan/${dpd.dispatch_id}?fields=dispatch_id,vehicle_id,driver_id`);
-        const dp = dpRes.data;
-        if (dp) {
-          dispatchPlanId = dp.dispatch_id || null;
-          vehicleId = dp.vehicle_id || null;
-          driverId = dp.driver_id || null;
+        const rawDpId = typeof dpd.dispatch_id === "object" && dpd.dispatch_id !== null
+          ? (dpd.dispatch_id as { id?: number; dispatch_id?: number }).id || (dpd.dispatch_id as { dispatch_id?: number }).dispatch_id
+          : dpd.dispatch_id;
+        dispatchPlanId = rawDpId ? Number(rawDpId) : null;
+
+        if (dispatchPlanId) {
+          const dpRes = await fetchDirectus(`/items/dispatch_plan/${dispatchPlanId}?fields=dispatch_id,vehicle_id,driver_id`);
+          const dp = dpRes.data;
+          if (dp) {
+            vehicleId = dp.vehicle_id || null;
+            driverId = dp.driver_id || null;
+          }
+
+          // Check if linked to a post_dispatch_plan via post_dispatch_dispatch_plans junction table
+          const pdpJunctionRes = await fetchDirectus(
+            `/items/post_dispatch_dispatch_plans?filter[dispatch_plan_id][_eq]=${dispatchPlanId}&fields=post_dispatch_plan_id`
+          );
+          const pdpJunction = pdpJunctionRes.data?.[0];
+          if (pdpJunction?.post_dispatch_plan_id) {
+            const pdpId = typeof pdpJunction.post_dispatch_plan_id === "object" && pdpJunction.post_dispatch_plan_id !== null
+              ? (pdpJunction.post_dispatch_plan_id as { id?: number }).id
+              : pdpJunction.post_dispatch_plan_id;
+            postDispatchPlanId = pdpId ? Number(pdpId) : null;
+
+            if (postDispatchPlanId) {
+              const pdpRes = await fetchDirectus(`/items/post_dispatch_plan/${postDispatchPlanId}?fields=id,vehicle_id,driver_id`);
+              const pdp = pdpRes.data;
+              if (pdp) {
+                if (!vehicleId && pdp.vehicle_id) vehicleId = pdp.vehicle_id;
+                if (!driverId && pdp.driver_id) driverId = pdp.driver_id;
+              }
+            }
+          }
         }
       }
     } catch (dpErr) {
-      console.warn("Could not retrieve dispatch plan mappings: ", dpErr);
+      console.warn("Could not retrieve dispatch plan / post dispatch plan mappings: ", dpErr);
     }
 
     // 2b. Fetch Sales Order Details to map detail_id to product_id and product_name
@@ -770,16 +856,18 @@ export async function POST(req: NextRequest) {
 
       const filters: string[] = [];
       const parsedOrderId = Number(orderId);
-      const isOrderIdNumeric = !Number.isNaN(parsedOrderId);
+      const isOrderIdNumeric = !Number.isNaN(parsedOrderId) && parsedOrderId > 0;
 
       if (isOrderIdNumeric) {
         filters.push(`filter[_or][${filters.length}][order_id][_eq]=${parsedOrderId}`);
-        filters.push(`filter[_or][${filters.length}][order_id.order_id][_eq]=${parsedOrderId}`);
       }
 
       if (orderNoStr) {
         filters.push(`filter[_or][${filters.length}][order_id][_eq]=${encodeURIComponent(orderNoStr)}`);
-        filters.push(`filter[_or][${filters.length}][order_id.order_no][_eq]=${encodeURIComponent(orderNoStr)}`);
+      }
+
+      if (filters.length === 0) {
+        filters.push(`filter[order_id][_eq]=${encodeURIComponent(String(orderId))}`);
       }
 
       const invoicesRes = await fetchDirectus(
