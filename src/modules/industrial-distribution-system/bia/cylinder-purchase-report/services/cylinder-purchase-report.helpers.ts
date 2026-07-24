@@ -1,4 +1,4 @@
-import { buildCylinderPurchaseAggregates } from "./cylinder-purchase-report.aggregation.ts";
+import { buildCylinderPurchaseAggregates } from "./cylinder-purchase-report.aggregation";
 import type {
   AppliedFilterContext,
   CylinderPurchaseDashboardResponse,

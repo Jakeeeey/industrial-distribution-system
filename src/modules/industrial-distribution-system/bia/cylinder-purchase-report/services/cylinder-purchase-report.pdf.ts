@@ -14,7 +14,7 @@ import {
   buildReportFilterContext,
   type ReportExportCell,
   type ReportExportSection,
-} from "./cylinder-purchase-report.export-model.ts";
+} from "./cylinder-purchase-report.export-model";
 
 const quantityFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 3,

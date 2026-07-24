@@ -12,8 +12,8 @@ import {
   buildReportFilterContext,
   type ReportExportCell,
   type ReportExportSection,
-} from "./cylinder-purchase-report.export-model.ts";
-import { buildReportFilename } from "./cylinder-purchase-report.pdf.ts";
+} from "./cylinder-purchase-report.export-model";
+import { buildReportFilename } from "./cylinder-purchase-report.pdf";
 
 type ExportWorksheet = XLSX.WorkSheet & {
   "!freeze"?: { xSplit: number; ySplit: number };

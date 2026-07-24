@@ -4,12 +4,12 @@ import test from "node:test";
 import {
   aggregateCylinderPurchases,
   getRollingThirtyDayRange,
-} from "./cylinder-purchase-report.helpers.ts";
+} from "./cylinder-purchase-report.helpers";
 import {
   cylinderPurchaseFilterSchema,
   cylinderPurchaseRowsSchema,
-} from "../types/cylinder-purchase-report.schema.ts";
-import type { CylinderPurchaseRow } from "../types/cylinder-purchase-report.types.ts";
+} from "../types/cylinder-purchase-report.schema";
+import type { CylinderPurchaseRow } from "../types/cylinder-purchase-report.types";
 
 const row = (patch: Partial<CylinderPurchaseRow> = {}): CylinderPurchaseRow => ({
   customerCode: "C-001",

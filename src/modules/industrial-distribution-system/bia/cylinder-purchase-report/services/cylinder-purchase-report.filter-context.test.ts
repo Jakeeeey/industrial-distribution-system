@@ -5,7 +5,7 @@ import type {
   AppliedFilterContext,
   ReportLookupOption,
   ReportLookupType,
-} from "../types/cylinder-purchase-report.types.ts";
+} from "../types/cylinder-purchase-report.types";
 
 type ApplySelection = (
   filters: AppliedFilterContext,
@@ -15,7 +15,7 @@ type ApplySelection = (
 
 test("lookup selections update and clear their stable value and display label together", async () => {
   const filterContextModule = (await import(
-    "./cylinder-purchase-report.filter-context.ts"
+    "./cylinder-purchase-report.filter-context"
   ).catch(() => null)) as Record<string, unknown> | null;
 
   assert.ok(filterContextModule);
@@ -47,7 +47,7 @@ test("lookup selections update and clear their stable value and display label to
 
 test("numeric lookup selections preserve labels and reject invalid identifiers", async () => {
   const filterContextModule = (await import(
-    "./cylinder-purchase-report.filter-context.ts"
+    "./cylinder-purchase-report.filter-context"
   ).catch(() => null)) as Record<string, unknown> | null;
 
   assert.ok(filterContextModule);

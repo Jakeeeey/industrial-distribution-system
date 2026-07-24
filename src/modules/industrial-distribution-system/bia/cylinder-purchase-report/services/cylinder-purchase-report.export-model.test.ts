@@ -4,12 +4,12 @@ import test from "node:test";
 import type {
   CylinderPurchaseRow,
   CustomerPurchaseSummary,
-} from "../types/cylinder-purchase-report.types.ts";
+} from "../types/cylinder-purchase-report.types";
 import {
   buildConsolidatedExportSections,
   buildDashboardExportSections,
-} from "./cylinder-purchase-report.export-model.ts";
-import { aggregateCylinderPurchases } from "./cylinder-purchase-report.helpers.ts";
+} from "./cylinder-purchase-report.export-model";
+import { aggregateCylinderPurchases } from "./cylinder-purchase-report.helpers";
 
 const row = (patch: Partial<CylinderPurchaseRow> = {}): CylinderPurchaseRow => ({
   customerCode: "C-001",
@@ -153,7 +153,7 @@ test("export rows preserve raw numeric values for renderer formatting", () => {
 
 test("renderer-neutral export context prefers business labels over raw identifiers", async () => {
   const exportModelModule = (await import(
-    "./cylinder-purchase-report.export-model.ts"
+    "./cylinder-purchase-report.export-model"
   )) as Record<string, unknown>;
   const buildFilterContext = exportModelModule.buildReportFilterContext as
     | ((filters: typeof reportFixture.filters) => Array<{ label: string; value: string }>)

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { fetchReportLookups } from "./cylinder-purchase-report.lookups.ts";
+import { fetchReportLookups } from "./cylinder-purchase-report.lookups";
 
 test("requests bounded serialized product search results and normalizes them", async () => {
   let request: Request | null = null;

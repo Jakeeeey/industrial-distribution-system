@@ -1,7 +1,7 @@
 import {
   addMetrics,
   emptyMetrics,
-} from "./cylinder-purchase-report.metrics.ts";
+} from "./cylinder-purchase-report.metrics";
 import type {
   CylinderPurchaseRow,
   QuantityMetrics,

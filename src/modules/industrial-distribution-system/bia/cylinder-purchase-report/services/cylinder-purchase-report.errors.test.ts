@@ -6,9 +6,9 @@ import {
   classifyCylinderPurchaseReportRouteError,
   UpstreamContractError,
   UpstreamHttpError,
-} from "./cylinder-purchase-report.errors.ts";
-import { getCylinderPurchaseDashboard } from "./cylinder-purchase-report.service.ts";
-import type { CylinderPurchaseReportFilters } from "../types/cylinder-purchase-report.types.ts";
+} from "./cylinder-purchase-report.errors";
+import { getCylinderPurchaseDashboard } from "./cylinder-purchase-report.service";
+import type { CylinderPurchaseReportFilters } from "../types/cylinder-purchase-report.types";
 
 interface RouteErrorClassification {
   body: {
@@ -39,7 +39,7 @@ async function captureDashboardError(fetchImpl: typeof fetch): Promise<unknown> 
 
 test("classifies upstream failures into sanitized route responses", async () => {
   const errorsModule = (await import(
-    "./cylinder-purchase-report.errors.ts"
+    "./cylinder-purchase-report.errors"
   )) as Record<string, unknown>;
   const classify = errorsModule.classifyCylinderPurchaseReportRouteError as
     | ((error: unknown) => RouteErrorClassification)

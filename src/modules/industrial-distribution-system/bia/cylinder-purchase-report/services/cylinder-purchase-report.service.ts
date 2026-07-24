@@ -1,13 +1,13 @@
 import {
   cylinderPurchaseRowsSchema,
-} from "../types/cylinder-purchase-report.schema.ts";
+} from "../types/cylinder-purchase-report.schema";
 import type {
   AppliedFilterContext,
   CylinderPurchaseDashboardResponse,
-} from "../types/cylinder-purchase-report.types.ts";
-import { UpstreamContractError } from "./cylinder-purchase-report.errors.ts";
-import { aggregateCylinderPurchases } from "./cylinder-purchase-report.helpers.ts";
-import { fetchCylinderPurchaseRows } from "./cylinder-purchase-report.repo.ts";
+} from "../types/cylinder-purchase-report.types";
+import { UpstreamContractError } from "./cylinder-purchase-report.errors";
+import { aggregateCylinderPurchases } from "./cylinder-purchase-report.helpers";
+import { fetchCylinderPurchaseRows } from "./cylinder-purchase-report.repo";
 
 const QUANTITY_EPSILON = 1e-9;
 

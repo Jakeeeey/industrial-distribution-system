@@ -4,13 +4,13 @@ import test from "node:test";
 import {
   UpstreamContractError,
   UpstreamHttpError,
-} from "./cylinder-purchase-report.errors.ts";
-import { getCylinderPurchaseDashboard } from "./cylinder-purchase-report.service.ts";
+} from "./cylinder-purchase-report.errors";
+import { getCylinderPurchaseDashboard } from "./cylinder-purchase-report.service";
 import type {
   AppliedFilterContext,
   CylinderPurchaseReportFilters,
   CylinderPurchaseRow,
-} from "../types/cylinder-purchase-report.types.ts";
+} from "../types/cylinder-purchase-report.types";
 
 const filters: CylinderPurchaseReportFilters = {
   startDate: "2026-06-23",

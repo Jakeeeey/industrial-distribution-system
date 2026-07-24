@@ -6,11 +6,11 @@ import {
   type SalespersonCustomerAccumulator,
   type SalespersonCustomerProductAccumulator,
   type SalespersonAccumulator,
-} from "./cylinder-purchase-report.accumulators.ts";
+} from "./cylinder-purchase-report.accumulators";
 import {
   byRank,
   returnRate,
-} from "./cylinder-purchase-report.metrics.ts";
+} from "./cylinder-purchase-report.metrics";
 import type {
   BranchPurchaseSummary,
   CustomerPurchaseSummary,

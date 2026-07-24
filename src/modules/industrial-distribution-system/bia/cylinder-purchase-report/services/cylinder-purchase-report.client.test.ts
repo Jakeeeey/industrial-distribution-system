@@ -4,11 +4,11 @@ import test from "node:test";
 import {
   fetchCylinderPurchaseDashboard,
   fetchReportLookups,
-} from "./cylinder-purchase-report.client.ts";
+} from "./cylinder-purchase-report.client";
 import type {
   AppliedFilterContext,
   CylinderPurchaseDashboardResponse,
-} from "../types/cylinder-purchase-report.types.ts";
+} from "../types/cylinder-purchase-report.types";
 
 const filters: AppliedFilterContext = {
   customerCode: "C-001",

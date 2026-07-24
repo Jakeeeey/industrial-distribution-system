@@ -5,7 +5,7 @@ import {
   getReportColumnSpan,
   paginateReportRows,
   prepareReportRows,
-} from "./report-data-table.utils.ts";
+} from "./report-data-table.utils";
 
 interface Row {
   id: number;

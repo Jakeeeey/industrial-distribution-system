@@ -7,7 +7,7 @@ import {
   formatReturnRate,
   getReturnAnalysisRows,
   rankReportRows,
-} from "./analytical-view.utils.ts";
+} from "./analytical-view.utils";
 
 test("assigns ranks without changing the payload order or source array", () => {
   const rows = [{ name: "Alpha" }, { name: "Beta" }];

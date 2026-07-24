@@ -1,9 +1,9 @@
-import type { CylinderPurchaseReportFilters } from "../types/cylinder-purchase-report.types.ts";
+import type { CylinderPurchaseReportFilters } from "../types/cylinder-purchase-report.types";
 import {
   isAbortError,
   UpstreamContractError,
   UpstreamHttpError,
-} from "./cylinder-purchase-report.errors.ts";
+} from "./cylinder-purchase-report.errors";
 
 const REPORT_PATH = "/api/v-bia-cylinder-purchases/filter";
 

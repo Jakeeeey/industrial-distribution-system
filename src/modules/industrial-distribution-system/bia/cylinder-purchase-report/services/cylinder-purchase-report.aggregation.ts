@@ -7,18 +7,18 @@ import {
   type CustomerAccumulator,
   type ProductAccumulator,
   type SalespersonAccumulator,
-} from "./cylinder-purchase-report.accumulators.ts";
+} from "./cylinder-purchase-report.accumulators";
 import {
   buildReturnAnalysis,
   finalizeBranches,
   finalizeCustomers,
   finalizeProducts,
   finalizeSalespeople,
-} from "./cylinder-purchase-report.finalizers.ts";
+} from "./cylinder-purchase-report.finalizers";
 import {
   addMetrics,
   emptyMetrics,
-} from "./cylinder-purchase-report.metrics.ts";
+} from "./cylinder-purchase-report.metrics";
 import type {
   BranchPurchaseSummary,
   CustomerPurchaseSummary,

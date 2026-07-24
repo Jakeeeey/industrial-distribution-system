@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   cylinderPurchaseFilterSchema,
   reportLookupQuerySchema,
-} from "./cylinder-purchase-report.schema.ts";
+} from "./cylinder-purchase-report.schema";
 
 test("defaults a valid lookup query search term to an empty string", () => {
   assert.deepEqual(reportLookupQuerySchema.parse({ type: "branches" }), {

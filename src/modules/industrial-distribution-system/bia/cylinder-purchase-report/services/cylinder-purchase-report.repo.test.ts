@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { CylinderPurchaseReportFilters } from "../types/cylinder-purchase-report.types.ts";
+import type { CylinderPurchaseReportFilters } from "../types/cylinder-purchase-report.types";
 import {
   UpstreamContractError,
   UpstreamHttpError,
-} from "./cylinder-purchase-report.errors.ts";
-import { fetchCylinderPurchaseRows } from "./cylinder-purchase-report.repo.ts";
+} from "./cylinder-purchase-report.errors";
+import { fetchCylinderPurchaseRows } from "./cylinder-purchase-report.repo";
 
 const filters: CylinderPurchaseReportFilters = {
   startDate: "2026-06-23",
