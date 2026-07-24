@@ -188,13 +188,19 @@ export function SerialInputModal({
                   Input Serial Number
                 </label>
                 <div className="flex gap-2">
+                  {/* Serial number input with auto-uppercase conversion for typed and scanned characters */}
                   <Input
                     ref={inputRef}
                     placeholder="Type or scan serial number..."
                     value={currentInput}
                     onChange={(e) => setCurrentInput(e.target.value.toUpperCase())}
+                    onInput={(e: React.FormEvent<HTMLInputElement>) => {
+                      // Development Note: Auto-convert typed or scanned characters to uppercase in real-time
+                      const target = e.currentTarget;
+                      target.value = target.value.toUpperCase();
+                    }}
                     onKeyDown={handleKeyDown}
-                    className="flex-1 h-11 border-primary/20 focus:border-primary focus:ring-primary/20 rounded-xl"
+                    className="flex-1 h-11 border-primary/20 focus:border-primary focus:ring-primary/20 rounded-xl uppercase font-mono tracking-wider"
                     disabled={isValidating}
                   />
                   <Button 
@@ -286,15 +292,19 @@ export function SerialInputModal({
                 </Badge>
               </div>
             </div>
+            {/* 
+              Development Note: Removed p-4 from ScrollArea root and added pb-8 padding to the inner grid 
+              to prevent items past 20+ serials from being cut off at the bottom of the container.
+            */}
             <div className="border border-border rounded-xl bg-muted/10 overflow-hidden flex-1 flex flex-col min-h-0">
-              <ScrollArea className="flex-1 w-full p-4">
+              <ScrollArea className="flex-1 w-full h-full">
                 {serials.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center opacity-40 py-12">
+                  <div className="h-full flex flex-col items-center justify-center opacity-40 py-12 p-4">
                     <Tag className="h-10 w-10 text-muted-foreground mb-2" />
                     <p className="text-sm font-medium text-muted-foreground">No serial numbers added yet</p>
                   </div>
                 ) : (
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2 p-4 pb-8 max-w-full">
                     {serials.map((serial, idx) => {
                       const isPermanent = initialSerialsSet.has(serial);
                       return (

@@ -1536,14 +1536,19 @@ export function StockAdjustmentForm({
 
                 {/* Scan Input & Logs */}
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-stretch mt-1">
-                  {/* Manual input / capture field */}
+                  {/* Manual input / capture field with auto-uppercase conversion */}
                   <div className="md:col-span-4 relative flex items-center">
                     <input
                       ref={globalScanInputRef}
                       type="text"
                       placeholder="Scan Serial number..."
                       value={globalScanInputVal}
-                      onChange={(e) => setGlobalScanInputVal(e.target.value)}
+                      onChange={(e) => setGlobalScanInputVal(e.target.value.toUpperCase())}
+                      onInput={(e: React.FormEvent<HTMLInputElement>) => {
+                        // Development Note: Auto-convert typed or scanned characters to uppercase in real-time
+                        const target = e.currentTarget;
+                        target.value = target.value.toUpperCase();
+                      }}
                       onKeyDown={async (e) => {
                         if (e.key === "Enter") {
                           e.preventDefault();
@@ -1552,7 +1557,7 @@ export function StockAdjustmentForm({
                           await handleGlobalScan(val);
                         }
                       }}
-                      className="w-full h-10 pl-9 pr-24 text-xs font-semibold border border-primary/40 focus:border-primary rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm transition-all uppercase"
+                      className="w-full h-10 pl-9 pr-24 text-xs font-semibold border border-primary/40 focus:border-primary rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm transition-all uppercase font-mono tracking-wider"
                       disabled={isGlobalScanValidating}
                     />
                     <ScanLine className="absolute left-3 h-4 w-4 text-muted-foreground/60" />
