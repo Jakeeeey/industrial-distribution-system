@@ -276,13 +276,57 @@ export async function fetchWiwoBillingTransactionById(id: number): Promise<Meter
   }
   return null;
 }
-
-// ─── Reference Lookups ────────────────────────────────────────────────────────
-export async function fetchCustomers(): Promise<{ customer_code: string; customer_name: string }[]> {
+export async function fetchCustomers(userId?: number): Promise<{ customer_code: string; customer_name: string }[]> {
   const res = await directusFetch<{ data: { customer_code: string; customer_name: string }[] }>(
     `${DIRECTUS_URL}/items/customer?fields=customer_code,customer_name&filter[isActive][_eq]=1&limit=-1&sort=customer_name`
   );
-  return res.data ?? [];
+  const customers = res.data ?? [];
+
+  if (userId) {
+    try {
+      const pdpRes = await directusFetch<{ data: { id: number }[] }>(
+        `${DIRECTUS_URL}/items/post_dispatch_plan?filter[driver_id][_eq]=${userId}&fields=id&limit=-1`
+      );
+      let pdpIds = (pdpRes.data || []).map(p => Number(p.id)).filter(Boolean);
+
+      try {
+        const staffRes = await directusFetch<{ data: { post_dispatch_plan_id: number }[] }>(
+          `${DIRECTUS_URL}/items/post_dispatch_plan_staff?filter[user_id][_eq]=${userId}&fields=post_dispatch_plan_id&limit=-1`
+        );
+        const staffPdpIds = (staffRes.data || []).map(s => Number(s.post_dispatch_plan_id)).filter(Boolean);
+        pdpIds = Array.from(new Set([...pdpIds, ...staffPdpIds]));
+      } catch {
+        // Ignore staff error
+      }
+
+      if (pdpIds.length > 0) {
+        const junctionRes = await directusFetch<{ data: { dispatch_plan_id: number | { id: number } }[] }>(
+          `${DIRECTUS_URL}/items/post_dispatch_dispatch_plans?filter[post_dispatch_plan_id][_in]=${pdpIds.join(",")}&fields=dispatch_plan_id&limit=-1`
+        );
+        const dpIds = (junctionRes.data || []).map(j => typeof j.dispatch_plan_id === "object" ? j.dispatch_plan_id.id : j.dispatch_plan_id).filter(Boolean);
+
+        const driverCustCodes = new Set<string>();
+        if (dpIds.length > 0) {
+          const dpdRes = await directusFetch<{ data: { sales_order_id: number | string | { customer_code?: string } }[] }>(
+            `${DIRECTUS_URL}/items/dispatch_plan_details?filter[dispatch_id][_in]=${dpIds.join(",")}&fields=sales_order_id.customer_code,sales_order_id.order_id&limit=-1`
+          );
+          (dpdRes.data || []).forEach(d => {
+            if (typeof d.sales_order_id === "object" && d.sales_order_id?.customer_code) {
+              driverCustCodes.add(d.sales_order_id.customer_code.trim());
+            }
+          });
+        }
+
+        if (driverCustCodes.size > 0) {
+          return customers.filter(c => driverCustCodes.has(c.customer_code.trim()));
+        }
+      }
+    } catch (err) {
+      console.warn("Could not filter customers by PDP driver:", err);
+    }
+  }
+
+  return customers;
 }
 
 export async function fetchSites(customerCode?: string): Promise<CustomerSite[]> {
@@ -304,7 +348,7 @@ export async function checkSiteOnboarded(siteId: number): Promise<boolean> {
   return (res.data ?? []).length > 0;
 }
 
-export async function fetchInvoicesForCustomer(customerCode?: string): Promise<{
+export async function fetchInvoicesForCustomer(customerCode?: string, userId?: number): Promise<{
   invoice_id: number;
   invoice_no: string;
   total_amount: number;
@@ -320,6 +364,57 @@ export async function fetchInvoicesForCustomer(customerCode?: string): Promise<{
   };
   if (customerCode) {
     filters.customer_code = { _eq: customerCode };
+  }
+
+  // PDP Driver Filter logic: Resolve assigned PDP orders and invoices for logged-in driver
+  let driverInvoiceIds: Set<number> | null = null;
+  let driverOrderRefs: Set<string> | null = null;
+
+  if (userId) {
+    try {
+      const pdpRes = await directusFetch<{ data: { id: number }[] }>(
+        `${DIRECTUS_URL}/items/post_dispatch_plan?filter[driver_id][_eq]=${userId}&fields=id&limit=-1`
+      );
+      let pdpIds = (pdpRes.data || []).map(p => Number(p.id)).filter(Boolean);
+
+      try {
+        const staffRes = await directusFetch<{ data: { post_dispatch_plan_id: number }[] }>(
+          `${DIRECTUS_URL}/items/post_dispatch_plan_staff?filter[user_id][_eq]=${userId}&fields=post_dispatch_plan_id&limit=-1`
+        );
+        const staffPdpIds = (staffRes.data || []).map(s => Number(s.post_dispatch_plan_id)).filter(Boolean);
+        pdpIds = Array.from(new Set([...pdpIds, ...staffPdpIds]));
+      } catch {
+        // Ignore staff error
+      }
+
+      if (pdpIds.length > 0) {
+        driverInvoiceIds = new Set<number>();
+        driverOrderRefs = new Set<string>();
+
+        const junctionRes = await directusFetch<{ data: { dispatch_plan_id: number | { id: number } }[] }>(
+          `${DIRECTUS_URL}/items/post_dispatch_dispatch_plans?filter[post_dispatch_plan_id][_in]=${pdpIds.join(",")}&fields=dispatch_plan_id&limit=-1`
+        );
+        const dpIds = (junctionRes.data || []).map(j => typeof j.dispatch_plan_id === "object" ? j.dispatch_plan_id.id : j.dispatch_plan_id).filter(Boolean);
+
+        if (dpIds.length > 0) {
+          const dpdRes = await directusFetch<{ data: { sales_order_id: number | string }[] }>(
+            `${DIRECTUS_URL}/items/dispatch_plan_details?filter[dispatch_id][_in]=${dpIds.join(",")}&fields=sales_order_id&limit=-1`
+          );
+          (dpdRes.data || []).forEach(d => {
+            if (d.sales_order_id) driverOrderRefs!.add(String(d.sales_order_id).trim().toUpperCase());
+          });
+        }
+
+        const pdInvoicesRes = await directusFetch<{ data: { invoice_id: number }[] }>(
+          `${DIRECTUS_URL}/items/post_dispatch_invoices?filter[post_dispatch_plan_id][_in]=${pdpIds.join(",")}&fields=invoice_id&limit=-1`
+        );
+        (pdInvoicesRes.data || []).forEach(i => {
+          if (i.invoice_id) driverInvoiceIds!.add(Number(i.invoice_id));
+        });
+      }
+    } catch (err) {
+      console.warn("Could not resolve PDP driver invoices:", err);
+    }
   }
 
   // Fetch header-invoice linkings to exclude POSTED ones
@@ -396,7 +491,21 @@ export async function fetchInvoicesForCustomer(customerCode?: string): Promise<{
   
   const rawInvoices = res.data ?? [];
   return rawInvoices
-    .filter(inv => !postedInvoiceIds.has(inv.invoice_id) && !postedTxInvoiceIds.has(inv.invoice_id))
+    .filter(inv => {
+      if (postedInvoiceIds.has(inv.invoice_id) || postedTxInvoiceIds.has(inv.invoice_id)) {
+        return false;
+      }
+      if (driverInvoiceIds !== null || driverOrderRefs !== null) {
+        const matchesInvoiceId = driverInvoiceIds ? driverInvoiceIds.has(inv.invoice_id) : false;
+        const orderObj = inv.order_id && typeof inv.order_id === "object" ? (inv.order_id as { order_id: number; order_no: string }) : null;
+        const orderIdStr = orderObj ? String(orderObj.order_id).trim().toUpperCase() : inv.order_id ? String(inv.order_id).trim().toUpperCase() : "";
+        const orderNoStr = orderObj ? String(orderObj.order_no).trim().toUpperCase() : "";
+        const matchesOrderRef = driverOrderRefs ? (driverOrderRefs.has(orderIdStr) || driverOrderRefs.has(orderNoStr)) : false;
+
+        return matchesInvoiceId || matchesOrderRef;
+      }
+      return true;
+    })
     .map(inv => {
       const orderObj =
         inv.order_id && typeof inv.order_id === "object"

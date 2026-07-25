@@ -40,8 +40,15 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type");
 
+    const authorization = request.headers.get("authorization");
+    const bearerToken = authorization?.startsWith("Bearer ")
+      ? authorization.slice(7).trim()
+      : undefined;
+    const token = request.cookies.get("vos_access_token")?.value ?? bearerToken;
+    const userId = getUserIdFromToken(token);
+
     if (type === "sites") {
-      const sites = await fetchMeteredSites();
+      const sites = await fetchMeteredSites(userId ?? undefined);
       return NextResponse.json({ data: sites });
     }
 
@@ -71,13 +78,13 @@ export async function GET(request: NextRequest) {
     }
 
     if (type === "customers") {
-      const data = await fetchCustomers();
+      const data = await fetchCustomers(userId ?? undefined);
       return NextResponse.json({ data });
     }
 
     if (type === "invoices") {
       const customerCode = searchParams.get("customerCode") || undefined;
-      const data = await fetchInvoicesForCustomer(customerCode);
+      const data = await fetchInvoicesForCustomer(customerCode, userId ?? undefined);
       return NextResponse.json({ data });
     }
 
