@@ -44,6 +44,10 @@ export const rawSerialMovementSchema = z.object({
     
     supplier_name: z.string().nullable().optional(),
     supplierName: z.string().nullable().optional(),
+
+    // Added: unit of measure field from updated v_serial_movements view
+    uom_ids: z.string().nullable().optional(),
+    uomIds: z.string().nullable().optional(),
 });
 
 export const rawSerialMovementListSchema = z.array(rawSerialMovementSchema);
