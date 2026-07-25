@@ -85,12 +85,15 @@ export const groupMovementsBySerial = (movements: SerialMovement[]): CylinderSum
 
         const latest = sortedForLatest[0];
 
-        // Determine direction: IN (inQty > 0), OUT (outQty > 0), Review (conflicting or 0)
-        let direction: "IN" | "OUT" | "Review" = "Review";
+        // Determine direction: IN, OUT, Assignment (0/0), or Review (conflicting)
+        let direction: "IN" | "OUT" | "Review" | "Assignment" = "Review";
         if (latest.inQty > 0 && latest.outQty === 0) {
             direction = "IN";
         } else if (latest.outQty > 0 && latest.inQty === 0) {
             direction = "OUT";
+        } else if (latest.inQty === 0 && latest.outQty === 0) {
+            // in_qty=0 AND out_qty=0 → Assignment movement (e.g. Sales Order Assignment, Customer Cylinder Assignment)
+            direction = "Assignment";
         } else {
             direction = "Review";
         }
