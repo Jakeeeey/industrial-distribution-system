@@ -23,6 +23,7 @@ import {
   RefreshCcw,
 } from "lucide-react";
 
+
 interface LineItemSerialsListProps {
   productMappedSerials: MappedSerial[];
   taggedSerials: TaggedSerial[];

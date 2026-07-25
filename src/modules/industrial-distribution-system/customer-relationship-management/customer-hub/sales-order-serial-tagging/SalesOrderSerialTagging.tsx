@@ -112,7 +112,7 @@ export default function SalesOrderSerialTagging() {
       setLoadingOrders(true);
       setOrdersError(null);
       try {
-        const data = await fetchProvider.listOrders();
+        const data = await fetchProvider.listOrders(branchFilter);
         setOrders(data);
       } catch (err: unknown) {
         console.error(err);
@@ -124,7 +124,7 @@ export default function SalesOrderSerialTagging() {
     };
 
     loadOrdersList();
-  }, []);
+  }, [branchFilter]);
 
   const handleSelectOrder = (id: number) => {
     const idStr = String(id);
