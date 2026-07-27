@@ -60,7 +60,7 @@ export function BulkRegisterModal({
   const [showErrors, setShowErrors] = useState(false);
 
   // Bulk fields
-  const [bulkCondition, setBulkCondition] = useState("GOOD");
+  const [bulkCondition, setBulkCondition] = useState("");
   const [bulkExpiration, setBulkExpiration] = useState("");
   const [bulkTare, setBulkTare] = useState("");
   const [bulkRemarks, setBulkRemarks] = useState("");
@@ -70,16 +70,17 @@ export function BulkRegisterModal({
       setData(
         serials.map((s) => ({
           serial: s,
-          condition: "GOOD",
+          condition: "",
           expiration: "",
           tare: "",
           remarks: "",
         }))
       );
-      setBulkCondition("GOOD");
+      setBulkCondition("");
       setBulkExpiration("");
       setBulkTare("");
       setBulkRemarks("");
+      setShowErrors(false);
     }
   }, [open, serials]);
 
@@ -110,14 +111,14 @@ export function BulkRegisterModal({
       return;
     }
 
-    // Check if any serial is missing an expiration date or a valid tare weight
+    // Check if any serial is missing an expiration date, a valid tare weight, or a cylinder condition
     const hasMissingFields = data.some(
-      (item) => !item.expiration || !item.tare || parseFloat(item.tare) <= 0
+      (item) => !item.condition || !item.expiration || !item.tare || parseFloat(item.tare) <= 0
     );
 
     if (hasMissingFields) {
       setShowErrors(true);
-      toast.error("Expiration date and tare weight are required for all serials.");
+      toast.error("Condition, expiration date, and tare weight are required for all serials.");
       return;
     }
 
@@ -198,9 +199,9 @@ export function BulkRegisterModal({
               </div>
               <Select value={bulkCondition} onValueChange={setBulkCondition}>
                 <SelectTrigger className="h-10 bg-background">
-                  <SelectValue />
+                  <SelectValue placeholder="Select condition..." />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent side="bottom" className="z-[300]">
                   <SelectItem value="GOOD">GOOD</SelectItem>
                   <SelectItem value="FOR_REPAIR">FOR REPAIR</SelectItem>
                   <SelectItem value="DAMAGED">DAMAGED</SelectItem>
@@ -254,7 +255,7 @@ export function BulkRegisterModal({
           {/* Table Header */}
           <div className="grid grid-cols-5 gap-4 px-6 py-2 bg-slate-100 dark:bg-slate-800/50 rounded-lg text-[10px] font-black uppercase tracking-widest text-muted-foreground border border-border/50">
             <div>Serial Number</div>
-            <div>Cylinder Condition</div>
+            <div>Cylinder Condition <span className="text-destructive">*</span></div>
             <div>Expiration Date <span className="text-destructive">*</span></div>
             <div>Tare Weight (KG) <span className="text-destructive">*</span></div>
             <div>Remarks</div>
@@ -272,12 +273,15 @@ export function BulkRegisterModal({
                   <div>
                     <Select
                       value={item.condition}
-                      onValueChange={(val) => setData(prev => prev.map((d, i) => i === idx ? { ...d, condition: val } : d))}
+                      onValueChange={(val) => {
+                        setData(prev => prev.map((d, i) => i === idx ? { ...d, condition: val } : d));
+                        if (showErrors && val) setShowErrors(false);
+                      }}
                     >
-                      <SelectTrigger className="h-9">
-                        <SelectValue />
+                      <SelectTrigger className={`h-9 ${showErrors && !item.condition ? 'border-destructive focus-visible:ring-destructive' : ''}`}>
+                        <SelectValue placeholder="Select condition..." />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="z-[300]">
                         <SelectItem value="GOOD">GOOD</SelectItem>
                         <SelectItem value="FOR_REPAIR">FOR REPAIR</SelectItem>
                         <SelectItem value="DAMAGED">DAMAGED</SelectItem>
