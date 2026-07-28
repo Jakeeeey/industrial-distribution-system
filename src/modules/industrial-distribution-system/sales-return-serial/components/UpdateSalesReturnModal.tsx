@@ -345,8 +345,8 @@ export function UpdateSalesReturnModal({
       const updatedItem = { ...current, ...updates };
       
       if (updates.newSerial) {
-        const serial = updates.newSerial.toUpperCase();
-        const alreadyHas = next.some(row => row.serialNumbers?.some(sn => (typeof sn === "string" ? sn.toUpperCase() : sn.serialNumber.toUpperCase()) === serial));
+        const serial = updates.newSerial;
+        const alreadyHas = next.some(row => row.serialNumbers?.some(sn => (typeof sn === "string" ? sn : sn.serialNumber) === serial));
         if (alreadyHas) {
           toast.warning("Serial Number already added");
           return prev;
@@ -378,14 +378,14 @@ export function UpdateSalesReturnModal({
   };
 
   const handleAddSerial = async (serialVal?: string) => {
-    const serial = (serialVal || "").trim().toUpperCase();
+    const serial = (serialVal || "").trim();
     if (!serial || selectedRowIndex === null) return;
     const selectedRow = details[selectedRowIndex];
     if (!selectedRow) return;
 
     const isGlobalSessionDuplicate = details.some((item) => 
-      item.serialNumbers?.some(sn => (typeof sn === "string" ? sn.toUpperCase() : sn.serialNumber.toUpperCase()) === serial)
-    ) || unregisteredSerials.some(sn => sn.toUpperCase() === serial);
+      item.serialNumbers?.some(sn => (typeof sn === "string" ? sn : sn.serialNumber) === serial)
+    ) || unregisteredSerials.some(sn => sn === serial);
     if (isGlobalSessionDuplicate) {
       toast.error("Duplicate Serial", { description: `Serial "${serial}" is already added to this return session.` });
       return;
@@ -838,8 +838,22 @@ export function UpdateSalesReturnModal({
                       <div className="flex flex-wrap gap-1 mt-1.5">
                         {unregisteredSerials.map(sn => (
                           <Badge key={sn} variant="outline" className="bg-amber-100/80 border-amber-300 text-amber-800 flex items-center gap-1 py-0.5 px-2 font-mono text-[10px]">
-                            {sn}
-                            <X className="h-3 w-3 cursor-pointer text-amber-600 hover:text-amber-900" onClick={() => setUnregisteredSerials(prev => prev.filter(s => s !== sn))} />
+                             {sn}
+                            <button
+                              type="button"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                setUnregisteredSerials(prev => prev.filter(s => s !== sn));
+                                try {
+                                  await SalesReturnProvider.deleteDraftAsset(sn);
+                                } catch (err) {
+                                  console.error("Failed to delete draft serial", err);
+                                }
+                              }}
+                              className="hover:bg-amber-200/60 p-0.5 rounded-full transition-colors flex items-center justify-center shrink-0 ml-0.5"
+                            >
+                              <X className="h-3 w-3 text-amber-600 hover:text-amber-900" />
+                            </button>
                           </Badge>
                         ))}
                       </div>
@@ -980,7 +994,6 @@ export function UpdateSalesReturnModal({
         {/* FOOTER */}
         <div className="border-t border-border p-5 bg-background flex justify-end gap-3 shrink-0">
           <Button variant="outline" onClick={handlePrintInNewTab}><Printer className="h-4 w-4 mr-2" /> Print Slip</Button>
-          <Button variant="outline" onClick={onClose}>Close</Button>
           <Button onClick={() => {
             if (unregisteredSerials.length > 0) {
               toast.error("Submission Blocked", {

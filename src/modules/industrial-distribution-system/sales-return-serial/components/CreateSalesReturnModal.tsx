@@ -346,7 +346,7 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
    * Manual Serial Entry Handler
    */
   const handleAddSerial = async (serialVal?: string) => {
-    const serial = (serialVal || "").trim().toUpperCase();
+    const serial = (serialVal || "").trim();
     if (!serial) return;
 
     const selectedSalesmanObj = salesmen.find(s => s.id.toString() === selectedSalesmanId);
@@ -371,8 +371,8 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
 
     // 1. Session Check (Global within Modal)
     const isGlobalSessionDuplicate = items.some((item) => 
-      item.serialNumbers?.some(sn => (typeof sn === "string" ? sn.toUpperCase() : sn.serialNumber.toUpperCase()) === serial)
-    ) || Object.values(unregisteredSerialsMap).some(serials => serials.some(sn => sn.toUpperCase() === serial));
+      item.serialNumbers?.some(sn => (typeof sn === "string" ? sn : sn.serialNumber) === serial)
+    ) || Object.values(unregisteredSerialsMap).some(serials => serials.some(sn => sn === serial));
     if (isGlobalSessionDuplicate) {
       toast.error("Duplicate Serial", { description: `Serial "${serial}" is already added to this return session.` });
       return;
@@ -417,7 +417,7 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
       setItems((prev) => {
         // Final Session Check (Race Condition Protection)
         const exists = prev.some((item) => 
-          item.serialNumbers?.some(sn => (typeof sn === "string" ? sn.toUpperCase() : sn.serialNumber.toUpperCase()) === serial)
+          item.serialNumbers?.some(sn => (typeof sn === "string" ? sn : sn.serialNumber) === serial)
         );
         if (exists) {
           toast.warning("Serial Number already added");
@@ -789,6 +789,7 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
         const unitPrice = Math.round(Number(item.unitPrice || 0) * 100) / 100;
         
         const isSerialized = item.isSerialized === 1 || item.isSerialized === true;
+        const tempId = item.tempId || `temp-${Date.now()}-${productId}-${Math.random().toString(36).substring(2, 9)}`;
         const quantity = 0;
         const grossAmount = 0;
         
@@ -801,6 +802,7 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
         return {
           ...item,
           productId,
+          tempId,
           code: item.code || "N/A",
           description: item.description || "Unknown Item",
           unit,
@@ -1145,19 +1147,30 @@ export function CreateSalesReturnModal({ isOpen, onClose, onSuccess }: Props) {
                         {currentUnregisteredSerials.map((sn: string) => (
                           <Badge key={sn} variant="outline" className="bg-amber-100/80 border-amber-300 text-amber-800 flex items-center gap-1 py-0.5 px-2 font-mono text-[10px]">
                             {sn}
-                            <X className="h-3 w-3 cursor-pointer text-amber-600 hover:text-amber-900" onClick={() => {
-                              const rowTempId = items[selectedRowIndex]?.tempId;
-                              if (rowTempId) {
-                                const key = rowTempId;
+                            <button
+                              type="button"
+                              onClick={async (e) => {
+                                e.stopPropagation();
                                 setUnregisteredSerialsMap(prev => {
-                                  const currentSerials = prev[key] || [];
-                                  return {
-                                    ...prev,
-                                    [key]: currentSerials.filter(s => s !== sn)
-                                  };
+                                  const nextMap = { ...prev };
+                                  for (const key in nextMap) {
+                                    nextMap[key] = nextMap[key].filter(s => s !== sn);
+                                    if (nextMap[key].length === 0) {
+                                      delete nextMap[key];
+                                    }
+                                  }
+                                  return nextMap;
                                 });
-                              }
-                            }} />
+                                try {
+                                  await SalesReturnProvider.deleteDraftAsset(sn);
+                                } catch (err) {
+                                  console.error("Failed to delete draft serial", err);
+                                }
+                              }}
+                              className="hover:bg-amber-200/60 p-0.5 rounded-full transition-colors flex items-center justify-center shrink-0 ml-0.5"
+                            >
+                              <X className="h-3 w-3 text-amber-600 hover:text-amber-900" />
+                            </button>
                           </Badge>
                         ))}
                       </div>
