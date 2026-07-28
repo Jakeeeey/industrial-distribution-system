@@ -7,7 +7,7 @@ import { LpgSiteView } from "./components/LpgSiteView";
 import { MapPin, Info } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export default function LpgSiteManagementModule() {
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -66,8 +66,12 @@ export default function LpgSiteManagementModule() {
         <LpgSiteList onEdit={handleEdit} onCreate={handleCreate} onView={handleView} />
       </div>
 
+      {/* Form Modal: Render accessible screen-reader DialogHeader/DialogTitle to fulfill Radix UI Dialog accessibility requirement */}
       <Dialog open={isFormModalOpen} onOpenChange={setIsFormModalOpen}>
         <DialogContent showCloseButton={false} className="max-w-6xl sm:max-w-6xl w-[95vw] max-h-[90vh] overflow-y-auto bg-zinc-50 dark:bg-zinc-950 p-0 border-none">
+          <DialogHeader className="sr-only">
+            <DialogTitle>{selectedId ? "Edit LPG Site" : "Register New LPG Site"}</DialogTitle>
+          </DialogHeader>
           <LpgSiteForm 
             id={selectedId} 
             onSuccess={handleSuccess} 
@@ -76,8 +80,12 @@ export default function LpgSiteManagementModule() {
         </DialogContent>
       </Dialog>
 
+      {/* View Modal: Render accessible screen-reader DialogHeader/DialogTitle to fulfill Radix UI Dialog accessibility requirement */}
       <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
         <DialogContent showCloseButton={false} className="max-w-6xl sm:max-w-6xl w-[95vw] max-h-[90vh] overflow-y-auto bg-zinc-50 dark:bg-zinc-950 p-0 border-none">
+          <DialogHeader className="sr-only">
+            <DialogTitle>LPG Site Details</DialogTitle>
+          </DialogHeader>
           {selectedId && (
             <LpgSiteView
               id={selectedId}
