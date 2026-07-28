@@ -363,6 +363,12 @@ export async function updateReturn(
           } catch (err) {
             console.warn(`Failed to delete cylinder asset ${s.serial_number}:`, err);
           }
+          try {
+            const { deleteCylinderAssetDraftBySerial } = await import("./sales-return-cylinder.repo");
+            await deleteCylinderAssetDraftBySerial(s.serial_number);
+          } catch (err) {
+            console.warn(`Failed to delete cylinder draft ${s.serial_number}:`, err);
+          }
         }
 
         const currentSerialStrings = existingSerials.map(es => es.serial_number);
@@ -409,6 +415,63 @@ export async function updateStatus(
     isReceived,
     receivedAt: received_at
   });
+
+  if (validated.status === "Received") {
+    try {
+      const { directusGet } = await import("./sales-return.client");
+      const headerRes = await directusGet<{ data: any }>(
+        `/items/sales_return/${id}?fields=return_id,return_number,salesman_id`
+      );
+      const salesmanId = headerRes?.data?.salesman_id;
+      const returnNumber = headerRes?.data?.return_number;
+
+      let branchId: number | null = null;
+      if (salesmanId) {
+        const salesmanData = await directusGet<{ data: any }>(
+          `/items/salesman/${salesmanId}?fields=id,branch_code`
+        );
+        branchId = salesmanData?.data?.branch_code ?? null;
+      }
+
+      if (returnNumber) {
+        const serialsRes = await lookupRepo.getSerialsByReturnNumber(returnNumber);
+        const serialNumbers = (serialsRes.data || []).map((r: any) => r.serial_number);
+
+        if (serialNumbers.length > 0) {
+          const { getDraftsBySerialNumbers, deleteCylinderAssetDraftBySerial, createCylinderAsset } =
+            await import("./sales-return-cylinder.repo");
+
+          const draftsRes = await getDraftsBySerialNumbers(serialNumbers);
+          const drafts = (draftsRes.data || []) as any[];
+          const phNow = getManilaTimestamp();
+
+          for (const draft of drafts) {
+            await createCylinderAsset({
+              product_id: draft.product_id,
+              serial_number: draft.serial_number,
+              cylinder_status: "AVAILABLE",
+              cylinder_condition: draft.cylinder_condition,
+              current_branch_id: branchId,
+              current_customer_code: null,
+              expiration_date: draft.expiration_date ?? null,
+              tare_weight: draft.tare_weight ?? null,
+              remarks: draft.remarks ?? null,
+              created_by: draft.created_by,
+              created_date: draft.created_date,
+              modified_by: draft.modified_by ?? null,
+              modified_date: phNow,
+              is_deleted: 0,
+            });
+
+            await deleteCylinderAssetDraftBySerial(String(draft.serial_number));
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`[updateStatus] Failed to promote cylinder drafts for SR ${id}:`, err);
+    }
+  }
+
   return transactionRepo.updateReturnStatus(
     validated.id, 
     validated.status, 

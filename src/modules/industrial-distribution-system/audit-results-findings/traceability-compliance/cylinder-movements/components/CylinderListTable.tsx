@@ -41,6 +41,7 @@ const ITEMS_PER_PAGE = 10;
 export function CylinderListTable({ data, onViewTrace }: CylinderListTableProps) {
     const [searchQuery, setSearchQuery] = React.useState("");
     const [directionFilter, setDirectionFilter] = React.useState("all");
+    const [movementTypeFilter, setMovementTypeFilter] = React.useState("all");
     const [sortBy, setSortBy] = React.useState<"serialNumber" | "lastHandlingBranch" | "direction" | "lastMovementDate" | "movementCount" | null>(null);
     const [sortOrder, setSortOrder] = React.useState<"asc" | "desc">("asc");
     const [currentPage, setCurrentPage] = React.useState(1);
@@ -48,6 +49,12 @@ export function CylinderListTable({ data, onViewTrace }: CylinderListTableProps)
     // Reset pagination when data changes
     React.useEffect(() => {
         setCurrentPage(1);
+    }, [data]);
+
+    // Unique movement types dynamically extracted from dataset
+    const uniqueMovementTypes = React.useMemo(() => {
+        const set = new Set(data.map(c => c.lastMovementType).filter(Boolean));
+        return Array.from(set).sort((a, b) => a.localeCompare(b));
     }, [data]);
 
     // ─── Filter Logic ────────────────────────────────────────────────────────
@@ -60,10 +67,11 @@ export function CylinderListTable({ data, onViewTrace }: CylinderListTableProps)
                 c.lastDocumentNo.toLowerCase().includes(searchQuery.toLowerCase());
             
             const matchesDirection = directionFilter === "all" || c.direction === directionFilter;
+            const matchesMovementType = movementTypeFilter === "all" || c.lastMovementType === movementTypeFilter;
             
-            return matchesSearch && matchesDirection;
+            return matchesSearch && matchesDirection && matchesMovementType;
         });
-    }, [data, searchQuery, directionFilter]);
+    }, [data, searchQuery, directionFilter, movementTypeFilter]);
 
     // ─── Sort Logic ──────────────────────────────────────────────────────────
     const sortedData = React.useMemo(() => {
@@ -160,14 +168,35 @@ export function CylinderListTable({ data, onViewTrace }: CylinderListTableProps)
                             setCurrentPage(1);
                         }}
                     >
-                        <SelectTrigger className="w-full sm:w-[180px] h-8 text-xs bg-background border-input">
+                        <SelectTrigger className="w-full sm:w-[160px] h-8 text-xs bg-background border-input">
                             <SelectValue placeholder="All Directions" />
                         </SelectTrigger>
                         <SelectContent className="text-xs">
                             <SelectItem value="all">All Directions</SelectItem>
                             <SelectItem value="IN">In Branch</SelectItem>
                             <SelectItem value="OUT">Outside Branch</SelectItem>
+                            {/* Assignment: in_qty=0, out_qty=0 (e.g. Sales Order / Cylinder Assignment) */}
+                            <SelectItem value="Assignment">Assignment</SelectItem>
                             <SelectItem value="Review">Needs Review</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Select
+                        value={movementTypeFilter}
+                        onValueChange={(val) => {
+                            setMovementTypeFilter(val);
+                            setCurrentPage(1);
+                        }}
+                    >
+                        <SelectTrigger className="w-full sm:w-[190px] h-8 text-xs bg-background border-input">
+                            <SelectValue placeholder="All Movement Types" />
+                        </SelectTrigger>
+                        <SelectContent className="text-xs">
+                            <SelectItem value="all">All Movement Types</SelectItem>
+                            {uniqueMovementTypes.map((type) => (
+                                <SelectItem key={type} value={type}>
+                                    {type}
+                                </SelectItem>
+                            ))}
                         </SelectContent>
                     </Select>
                 </div>
@@ -241,8 +270,23 @@ export function CylinderListTable({ data, onViewTrace }: CylinderListTableProps)
                                         <TableCell className="font-semibold text-foreground font-mono select-all">
                                             {c.serialNumber}
                                         </TableCell>
-                                        <TableCell className="max-w-[200px] truncate" title={c.productName}>
-                                            {c.productName}
+                                        <TableCell className="max-w-[280px]" title={c.movements[0]?.uomIds ? `${c.productName} (${c.movements[0].uomIds})` : c.productName}>
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                <span className="truncate font-semibold text-foreground">{c.productName}</span>
+                                                {c.movements[0]?.uomIds && (
+                                                    <Badge 
+                                                        variant="outline" 
+                                                        className={cn(
+                                                            "text-[10px] font-bold px-1.5 py-0 rounded shrink-0",
+                                                            (c.movements[0].uomIds === "EMPTY" || c.movements[0].uomIds === "EMPTY_CYLINDER")
+                                                                ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                                                                : "bg-muted text-muted-foreground border-border"
+                                                        )}
+                                                    >
+                                                        {c.movements[0].uomIds}
+                                                    </Badge>
+                                                )}
+                                            </div>
                                         </TableCell>
                                         <TableCell className="text-muted-foreground">{c.lastHandlingBranch}</TableCell>
                                         <TableCell className="text-center">
@@ -252,11 +296,14 @@ export function CylinderListTable({ data, onViewTrace }: CylinderListTableProps)
                                                     "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border-none",
                                                     c.direction === "IN" && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
                                                     c.direction === "OUT" && "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+                                                    // Assignment: in_qty=0, out_qty=0 — blue badge, distinct from Review
+                                                    c.direction === "Assignment" && "bg-blue-500/10 text-blue-600 dark:text-blue-400",
                                                     c.direction === "Review" && "bg-amber-500/10 text-amber-600 dark:text-amber-400"
                                                 )}
                                             >
                                                 {c.direction === "IN" && "IN"}
                                                 {c.direction === "OUT" && "OUT"}
+                                                {c.direction === "Assignment" && "ASSIGN"}
                                                 {c.direction === "Review" && "REVIEW"}
                                             </Badge>
                                         </TableCell>
