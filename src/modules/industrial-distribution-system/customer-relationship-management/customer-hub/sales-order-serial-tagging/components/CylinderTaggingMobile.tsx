@@ -43,18 +43,18 @@ function LineItemSerialsList({
   // Construct the union of all serial numbers
   const allSerials = useMemo(() => {
     const set = new Set<string>();
-    productMappedSerials.forEach((ms) => set.add(ms.serial_number.toUpperCase()));
-    taggedSerials.forEach((t) => set.add(t.serial_number.toUpperCase()));
-    sessionScans.forEach((s) => set.add(s.serial_number.toUpperCase()));
+    productMappedSerials.forEach((ms) => set.add(ms.serial_number));
+    taggedSerials.forEach((t) => set.add(t.serial_number));
+    sessionScans.forEach((s) => set.add(s.serial_number));
     return Array.from(set);
   }, [productMappedSerials, taggedSerials, sessionScans]);
 
   // Map each serial to its status and other info
   const serialItems = useMemo(() => {
     const items = allSerials.map((serial) => {
-      const sessionScan = sessionScans.find((s) => s.serial_number.toUpperCase() === serial);
-      const dbTag = taggedSerials.find((t) => t.serial_number.toUpperCase() === serial);
-      const mapped = productMappedSerials.find((ms) => ms.serial_number.toUpperCase() === serial);
+      const sessionScan = sessionScans.find((s) => s.serial_number === serial);
+      const dbTag = taggedSerials.find((t) => t.serial_number === serial);
+      const mapped = productMappedSerials.find((ms) => ms.serial_number === serial);
 
       let status = "not tagged";
       if (sessionScan) {
@@ -527,7 +527,7 @@ export default function CylinderTaggingMobile({
                       value={scanInput}
                       onChange={handleInputChange}
                       onPaste={handlePaste}
-                      className="font-mono  tracking-widest pl-10 h-12 text-[12px] border-2 border-primary/20 uppercase disabled:opacity-90 disabled:bg-emerald-500/5 disabled:border-emerald-500/30"
+                      className="font-mono  tracking-widest pl-10 h-12 text-[12px] border-2 border-primary/20  disabled:opacity-90 disabled:bg-emerald-500/5 disabled:border-emerald-500/30"
                       disabled={submitting || isProcessingScan}
                     />
                     <Scan className="absolute left-3 top-3.5 w-5 h-5 text-primary" />

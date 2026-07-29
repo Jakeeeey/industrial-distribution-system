@@ -37,23 +37,23 @@ function LineItemSerialsList({
   onRemove,
 }: LineItemSerialsListProps) {
   const [filterQuery, setFilterQuery] = useState("");
-  
+
   // Construct the union of all serial numbers
   const allSerials = useMemo(() => {
     const set = new Set<string>();
-    productMappedSerials.forEach((ms) => set.add(ms.serial_number.toUpperCase()));
-    taggedSerials.forEach((t) => set.add(t.serial_number.toUpperCase()));
-    sessionScans.forEach((s) => set.add(s.serial_number.toUpperCase()));
+    productMappedSerials.forEach((ms) => set.add(ms.serial_number));
+    taggedSerials.forEach((t) => set.add(t.serial_number));
+    sessionScans.forEach((s) => set.add(s.serial_number));
     return Array.from(set);
   }, [productMappedSerials, taggedSerials, sessionScans]);
 
   // Map each serial to its status and other info
   const serialItems = useMemo(() => {
     const items = allSerials.map((serial) => {
-      const sessionScan = sessionScans.find((s) => s.serial_number.toUpperCase() === serial);
-      const dbTag = taggedSerials.find((t) => t.serial_number.toUpperCase() === serial);
-      const mapped = productMappedSerials.find((ms) => ms.serial_number.toUpperCase() === serial);
-      
+      const sessionScan = sessionScans.find((s) => s.serial_number === serial);
+      const dbTag = taggedSerials.find((t) => t.serial_number === serial);
+      const mapped = productMappedSerials.find((ms) => ms.serial_number === serial);
+
       let status = "not tagged";
       if (sessionScan) {
         status = "new";
@@ -131,13 +131,24 @@ function LineItemSerialsList({
                   <Badge
                     key={item.serial_number}
                     className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-mono text-[9px] flex items-center justify-between px-1.5 py-0.5 shrink-0"
-                    title={`${item.serial_number} (New)`}
+                    title={`${item.serial_number} ( Waiting for Tagging Confirmation )`}
                   >
-                    <span>{item.serial_number}</span>
-                    <Trash2
-                      className="w-2.5 h-2.5 cursor-pointer hover:text-red-500 ml-1.5 shrink-0"
+                    <span>{item.serial_number} </span>
+                    {/* <span className="text-[8px] font-sans ml-1.5  select-none uppercase font-bold">
+                      Waiting for Tagging Confirmation
+                    </span> */}
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      className="h-2.5 w-2.5 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 ml-1.5 shrink-0 cursor-pointer"
                       onClick={() => onRemove(item.serial_number)}
-                    />
+                    >
+                      <Trash2 className="w-1.5 h-1.5 hover:text-red-500 shrink-0"
+
+
+                      />
+                    </Button>
+
                   </Badge>
                 );
               }
@@ -164,17 +175,15 @@ function LineItemSerialsList({
                 <Badge
                   key={item.serial_number}
                   variant="outline"
-                  className={`font-mono text-[9px] border px-1.5 py-0.5 flex items-center shrink-0 ${
-                    isTagged 
-                      ? "bg-blue-500/5 text-blue-500 border-blue-500/25" 
+                  className={`font-mono text-[9px] border px-1.5 py-0.5 flex items-center shrink-0 ${isTagged
+                      ? "bg-blue-500/5 text-blue-500 border-blue-500/25"
                       : "bg-amber-500/5 text-amber-500 border-amber-500/25"
-                  }`}
+                    }`}
                   // Dev-rule: If serial is not tagged, hide it like a password using * characters
-                  title={`${
-                    item.status === "not tagged"
+                  title={`${item.status === "not tagged"
                       ? "*".repeat(item.serial_number.length)
                       : item.serial_number
-                  } (${isTagged ? "Tagged" : "Not Tagged"})`}
+                    } (${isTagged ? "Tagged" : "Not Tagged"})`}
                 >
                   <span>
                     {item.status === "not tagged"
@@ -245,7 +254,7 @@ export default function CylinderTaggingDesktop({
     const value = e.target.value;
     const diff = value.length - scanInput.length;
     setScanInput(value);
-    
+
     if (autoEnter && diff > 2 && !isProcessingScan) {
       const serial = value.trim();
       if (serial) {
@@ -443,129 +452,129 @@ export default function CylinderTaggingDesktop({
       </div>
 
       {/* RIGHT COLUMN: Scanning Controls & Inputs (lg:col-span-5) */}
-      <Card 
+      <Card
         onClick={() => inputRef.current?.focus()}
         className="lg:col-span-5 border border-primary/20 shadow-md relative overflow-hidden bg-card/40 backdrop-blur-md py-3 gap-2 flex flex-col h-full w-full cursor-text"
       >
-          <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full blur-xl pointer-events-none" />
-          <CardHeader className="p-0 px-4 pb-1.5 shrink-0">
-            <CardTitle className="text-sm font-bold flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <Scan className="w-4 h-4 text-primary animate-pulse" />
-                Serial Number Scanner
+        <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full blur-xl pointer-events-none" />
+        <CardHeader className="p-0 px-4 pb-1.5 shrink-0">
+          <CardTitle className="text-sm font-bold flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <Scan className="w-4 h-4 text-primary animate-pulse" />
+              Serial Number Scanner
+            </span>
+            <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-1.5 select-none cursor-pointer" onClick={() => setAutoEnter(!autoEnter)}>
+                <span title="Automatically processes and submits scanned or pasted input." className="text-[10px] text-muted-foreground font-semibold">Fast Mode</span>
+                <Switch checked={autoEnter} onCheckedChange={setAutoEnter} size="sm" id="auto-enter-toggle" />
+              </div>
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                AUTO-FOCUS ON
               </span>
-              <div className="flex items-center gap-2.5">
-                <div className="flex items-center gap-1.5 select-none cursor-pointer" onClick={() => setAutoEnter(!autoEnter)}>
-                  <span title="Automatically processes and submits scanned or pasted input." className="text-[10px] text-muted-foreground font-semibold">Fast Mode</span>
-                  <Switch checked={autoEnter} onCheckedChange={setAutoEnter} size="sm" id="auto-enter-toggle" />
+            </div>
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Input or scan cylinder serial numbers. Only loaded consolidator mappings are accepted ({mappedSerials.length} loaded).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 px-4 pb-0 flex-1 flex flex-col min-h-0">
+          <form onSubmit={handleScanSubmit} className="space-y-1 shrink-0">
+            <div className="relative">
+              <Input
+                ref={inputRef}
+                type="text"
+                placeholder="Scan or type serial number..."
+                value={scanInput}
+                onChange={handleInputChange}
+                onPaste={handlePaste}
+                className="font-mono text-xs tracking-widest pl-8 h-9 border border-primary/20 focus:border-primary disabled:opacity-90 disabled:bg-emerald-500/5 disabled:border-emerald-500/30"
+                disabled={submitting || isProcessingScan}
+              />
+              <Scan className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
+            </div>
+            <p className="text-[10px] text-muted-foreground font-semibold italic mt-0.5">
+              Tip: If using a hardware barcode scanner, it will automatically hit &apos;Enter&apos; to submit.
+            </p>
+          </form>
+
+          {/* Session Scanned Queue */}
+          <div className="border rounded bg-secondary/20 overflow-hidden flex flex-col h-[280px]">
+            <div className="p-2 px-3 bg-secondary/35 border-b flex justify-between items-center shrink-0">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                <Cylinder className="w-3.5 h-3.5 text-primary" />
+                Scanned in this Session ({scannedList.length})
+              </span>
+              {scannedList.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-[10px] font-bold text-red-500 hover:text-red-600 hover:bg-red-500/10 px-1.5"
+                  onClick={onClear}
+                >
+                  Clear All
+                </Button>
+              )}
+            </div>
+            <div className="flex-1 overflow-y-auto min-h-0">
+              {scannedList.length === 0 ? (
+                <div className="p-4 text-center text-[11px] text-muted-foreground flex flex-col justify-center items-center h-full">
+                  <p className="font-semibold">No serials scanned yet.</p>
+                  <p className="mt-0.5 opacity-80">Awaiting cylinder barcode scans...</p>
                 </div>
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                  AUTO-FOCUS ON
-                </span>
-              </div>
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Input or scan cylinder serial numbers. Only loaded consolidator mappings are accepted ({mappedSerials.length} loaded).
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 px-4 pb-0 flex-1 flex flex-col min-h-0">
-            <form onSubmit={handleScanSubmit} className="space-y-1 shrink-0">
-              <div className="relative">
-                <Input
-                  ref={inputRef}
-                  type="text"
-                  placeholder="Scan or type serial number..."
-                  value={scanInput}
-                  onChange={handleInputChange}
-                  onPaste={handlePaste}
-                  className="font-mono text-xs tracking-widest pl-8 h-9 border border-primary/20 focus:border-primary uppercase disabled:opacity-90 disabled:bg-emerald-500/5 disabled:border-emerald-500/30"
-                  disabled={submitting || isProcessingScan}
-                />
-                <Scan className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
-              </div>
-              <p className="text-[10px] text-muted-foreground font-semibold italic mt-0.5">
-                Tip: If using a hardware barcode scanner, it will automatically hit &apos;Enter&apos; to submit.
-              </p>
-            </form>
-
-            {/* Session Scanned Queue */}
-            <div className="border rounded bg-secondary/20 overflow-hidden flex flex-col h-[280px]">
-              <div className="p-2 px-3 bg-secondary/35 border-b flex justify-between items-center shrink-0">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                  <Cylinder className="w-3.5 h-3.5 text-primary" />
-                  Scanned in this Session ({scannedList.length})
-                </span>
-                {scannedList.length > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 text-[10px] font-bold text-red-500 hover:text-red-600 hover:bg-red-500/10 px-1.5"
-                    onClick={onClear}
-                  >
-                    Clear All
-                  </Button>
-                )}
-              </div>
-              <div className="flex-1 overflow-y-auto min-h-0">
-                {scannedList.length === 0 ? (
-                  <div className="p-4 text-center text-[11px] text-muted-foreground flex flex-col justify-center items-center h-full">
-                    <p className="font-semibold">No serials scanned yet.</p>
-                    <p className="mt-0.5 opacity-80">Awaiting cylinder barcode scans...</p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-border">
-                    <AnimatePresence initial={false}>
-                      {scannedList.map((item) => (
-                        <motion.div
-                          key={item.serial_number}
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.15 }}
-                          className="p-2 flex justify-between items-center hover:bg-secondary/30 transition-colors overflow-hidden"
+              ) : (
+                <div className="divide-y divide-border">
+                  <AnimatePresence initial={false}>
+                    {scannedList.map((item) => (
+                      <motion.div
+                        key={item.serial_number}
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.15 }}
+                        className="p-2 flex justify-between items-center hover:bg-secondary/30 transition-colors overflow-hidden"
+                      >
+                        <div className="space-y-0.5">
+                          <span className="font-mono font-bold text-xs text-foreground">{item.serial_number}</span>
+                          <p className="text-[10px] text-muted-foreground line-clamp-1">{item.product_name}</p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-red-500 hover:bg-red-500/10"
+                          onClick={() => onRemove(item.serial_number)}
                         >
-                          <div className="space-y-0.5">
-                            <span className="font-mono font-bold text-xs text-foreground">{item.serial_number}</span>
-                            <p className="text-[10px] text-muted-foreground line-clamp-1">{item.product_name}</p>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-muted-foreground hover:text-red-500 hover:bg-red-500/10"
-                            onClick={() => onRemove(item.serial_number)}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        </motion.div>
-                      ))}
-                    </AnimatePresence>
-                  </div>
-                )}
-              </div>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )}
             </div>
+          </div>
 
-            {/* Action Buttons */}
-            <div className="grid grid-cols-1 pt-1 pb-3 shrink-0">
-              <Button
-                onClick={onSubmit}
-                className="w-full h-10 font-bold text-xs tracking-wide bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg flex items-center justify-center gap-1.5 group transition-all duration-200 active:scale-98"
-                disabled={scannedList.length === 0 || submitting}
-              >
-                {submitting ? (
-                  <>
-                    <Clock className="w-4 h-4 animate-spin" />
-                    SUBMITTING TAGS...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                    CONFIRM DELIVERY TAGGING ({scannedList.length})
-                  </>
-                )}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+          {/* Action Buttons */}
+          <div className="grid grid-cols-1 pt-1 pb-3 shrink-0">
+            <Button
+              onClick={onSubmit}
+              className="w-full h-10 font-bold text-xs tracking-wide bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg flex items-center justify-center gap-1.5 group transition-all duration-200 active:scale-98"
+              disabled={scannedList.length === 0 || submitting}
+            >
+              {submitting ? (
+                <>
+                  <Clock className="w-4 h-4 animate-spin" />
+                  SUBMITTING TAGS...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                  CONFIRM DELIVERY TAGGING ({scannedList.length})
+                </>
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* FULL WIDTH BOTTOM: Customer Holdings Table */}
       <div className="lg:col-span-12">
@@ -619,23 +628,22 @@ export default function CylinderTaggingDesktop({
                 ) : (
                   customerAssets.map((asset) => {
                     const highlightDays = asset.days_at_site > 30;
-                      return (
-                        <TableRow key={asset.serial_number} className="hover:bg-secondary/5">
-                          <TableCell className="font-mono font-bold py-2 px-4 text-xs text-foreground flex items-center gap-1.5">
-                            <Cylinder className="w-3.5 h-3.5 text-primary" />
-                            {asset.serial_number}
-                          </TableCell>
-                          <TableCell className="py-2 px-4 text-xs">{asset.product_name}</TableCell>
-                          <TableCell className="text-right py-2 px-4 text-xs font-semibold">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              highlightDays 
-                                ? "bg-amber-500/10 text-amber-500 border border-amber-500/20" 
-                                : "bg-secondary text-muted-foreground border"
+                    return (
+                      <TableRow key={asset.serial_number} className="hover:bg-secondary/5">
+                        <TableCell className="font-mono font-bold py-2 px-4 text-xs text-foreground flex items-center gap-1.5">
+                          <Cylinder className="w-3.5 h-3.5 text-primary" />
+                          {asset.serial_number}
+                        </TableCell>
+                        <TableCell className="py-2 px-4 text-xs">{asset.product_name}</TableCell>
+                        <TableCell className="text-right py-2 px-4 text-xs font-semibold">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${highlightDays
+                              ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                              : "bg-secondary text-muted-foreground border"
                             }`}>
-                              <Clock className="w-3 h-3" />
-                              {asset.days_at_site} days
-                            </span>
-                          </TableCell>
+                            <Clock className="w-3 h-3" />
+                            {asset.days_at_site} days
+                          </span>
+                        </TableCell>
                         <TableCell className="text-right py-2 px-4">
                           <Badge variant="outline" className="border-blue-500 text-blue-500 bg-blue-500/5 font-bold py-0 px-1.5 text-[10px]">
                             With Customer

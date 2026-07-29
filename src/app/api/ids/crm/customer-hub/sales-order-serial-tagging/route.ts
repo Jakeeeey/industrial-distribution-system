@@ -542,18 +542,18 @@ export async function GET(req: NextRequest) {
         // Authorization check for truck driver & salesman
         const userId = getUserIdFromToken(req);
 
-        // DEV-CHANGE: Authorization check for truck driver
+        // DEV-CHANGE: Role-based authorization check (Driver vs Salesman)
         const driverOrderIds = await getDriverSalesOrderIds(userId);
         if (driverOrderIds !== null) {
           const driverOrderSet = new Set(driverOrderIds.map((id) => String(id)));
           if (!driverOrderSet.has(String(orderId)) && !driverOrderSet.has(String(order.order_id)) && !driverOrderSet.has(String(order.order_no))) {
             return NextResponse.json({ error: "Unauthorized: Sales order is not assigned to logged-in driver" }, { status: 403 });
           }
-        }
-
-        const allowedCustomerCodes = await getSalesmanCustomerCodes(userId);
-        if (allowedCustomerCodes !== null && (!order.customer_code || !allowedCustomerCodes.includes(order.customer_code))) {
-          return NextResponse.json({ error: "Unauthorized access to this Sales Order" }, { status: 403 });
+        } else {
+          const allowedCustomerCodes = await getSalesmanCustomerCodes(userId);
+          if (allowedCustomerCodes !== null && (!order.customer_code || !allowedCustomerCodes.includes(order.customer_code))) {
+            return NextResponse.json({ error: "Unauthorized access to this Sales Order" }, { status: 403 });
+          }
         }
 
         // Fetch Customer Details
@@ -714,7 +714,7 @@ export async function GET(req: NextRequest) {
           // Ignore fetch error if not found by primary key
         }
 
-        // DEV-CHANGE: Authorization check for truck driver
+        // DEV-CHANGE: Role-based authorization check (Driver vs Salesman)
         const driverOrderIds = await getDriverSalesOrderIds(userId);
         if (driverOrderIds !== null) {
           const driverOrderSet = new Set(driverOrderIds.map((id) => String(id)));
@@ -725,12 +725,12 @@ export async function GET(req: NextRequest) {
           ) {
             return NextResponse.json({ error: "Unauthorized: Sales order mapping is not assigned to logged-in driver" }, { status: 403 });
           }
-        }
-
-        const allowedCustomerCodes = await getSalesmanCustomerCodes(userId);
-        if (allowedCustomerCodes !== null) {
-          if (!orderObj.customer_code || !allowedCustomerCodes.includes(orderObj.customer_code)) {
-            return NextResponse.json({ error: "Unauthorized access to this Sales Order mappings" }, { status: 403 });
+        } else {
+          const allowedCustomerCodes = await getSalesmanCustomerCodes(userId);
+          if (allowedCustomerCodes !== null) {
+            if (!orderObj.customer_code || !allowedCustomerCodes.includes(orderObj.customer_code)) {
+              return NextResponse.json({ error: "Unauthorized access to this Sales Order mappings" }, { status: 403 });
+            }
           }
         }
 
@@ -855,12 +855,12 @@ export async function GET(req: NextRequest) {
               serial_number: string;
               cylinder_status?: string;
             }
-            const encodedSerials = serialNumbers.map((s: string) => encodeURIComponent(s.trim().toUpperCase())).join(",");
+            const encodedSerials = serialNumbers.map((s: string) => encodeURIComponent(s.trim())).join(",");
             const assetsRes = await fetchDirectus(`/items/cylinder_assets?filter[serial_number][_in]=${encodedSerials}&fields=serial_number,cylinder_status&limit=-1`);
             const assets = (assetsRes.data || []) as AssetMin[];
             for (const asset of assets) {
               if (asset.serial_number) {
-                statusMap.set(asset.serial_number.toUpperCase(), asset.cylinder_status || "LOADED");
+                statusMap.set(asset.serial_number.trim(), asset.cylinder_status || "LOADED");
               }
             }
           } catch (assetErr) {
@@ -892,7 +892,7 @@ export async function GET(req: NextRequest) {
           }
 
           const cylStatus = mapping.serial_number
-            ? (statusMap.get(mapping.serial_number.toUpperCase()) || "LOADED")
+            ? (statusMap.get(mapping.serial_number.trim()) || "LOADED")
             : "LOADED";
 
           return {
@@ -911,11 +911,14 @@ export async function GET(req: NextRequest) {
           return NextResponse.json({ error: "customerCode is required" }, { status: 400 });
         }
 
-        // Authorization check for salesman
+        // Authorization check for driver & salesman
         const userId = getUserIdFromToken(req);
-        const allowedCustomerCodes = await getSalesmanCustomerCodes(userId);
-        if (allowedCustomerCodes !== null && !allowedCustomerCodes.includes(customerCode)) {
-          return NextResponse.json({ error: "Unauthorized access to this Customer's assets" }, { status: 403 });
+        const driverOrderIds = await getDriverSalesOrderIds(userId);
+        if (driverOrderIds === null) {
+          const allowedCustomerCodes = await getSalesmanCustomerCodes(userId);
+          if (allowedCustomerCodes !== null && !allowedCustomerCodes.includes(customerCode)) {
+            return NextResponse.json({ error: "Unauthorized access to this Customer's assets" }, { status: 403 });
+          }
         }
 
         // Fetch cylinder assets currently with the customer
@@ -974,19 +977,18 @@ export async function POST(req: NextRequest) {
     const branchId = order.branch_id || null;
     const finalCustomerCode = order.customer_code || customerCode;
 
-    // Authorization check for truck driver & salesman
-    // DEV-CHANGE: Driver authorization check for serial tagging submission
+    // Role-based authorization check (Driver vs Salesman)
     const driverOrderIds = await getDriverSalesOrderIds(userId);
     if (driverOrderIds !== null) {
       const driverOrderSet = new Set(driverOrderIds.map((id) => String(id)));
       if (!driverOrderSet.has(String(orderId)) && !driverOrderSet.has(String(order.order_id)) && !driverOrderSet.has(String(order.order_no))) {
         return NextResponse.json({ error: "Unauthorized: Cannot tag serials for Sales Order not assigned to logged-in driver" }, { status: 403 });
       }
-    }
-
-    const allowedCustomerCodes = await getSalesmanCustomerCodes(userId);
-    if (allowedCustomerCodes !== null && !allowedCustomerCodes.includes(finalCustomerCode)) {
-      return NextResponse.json({ error: "Unauthorized access to target Customer" }, { status: 403 });
+    } else {
+      const allowedCustomerCodes = await getSalesmanCustomerCodes(userId);
+      if (allowedCustomerCodes !== null && !allowedCustomerCodes.includes(finalCustomerCode)) {
+        return NextResponse.json({ error: "Unauthorized access to target Customer" }, { status: 403 });
+      }
     }
 
     // Fetch Customer Name
@@ -1115,7 +1117,8 @@ export async function POST(req: NextRequest) {
     // 3. Map all serials in database
     const results = [];
     for (const serialObj of serials) {
-      const { sales_order_detail_id, serial_number } = serialObj;
+      const { sales_order_detail_id, serial_number: rawSerial } = serialObj;
+      const serial_number = typeof rawSerial === "string" ? rawSerial.trim() : rawSerial;
       if (!sales_order_detail_id || !serial_number) continue;
 
       // Check if already mapped to this detail line to avoid duplicates
@@ -1174,39 +1177,50 @@ export async function POST(req: NextRequest) {
     // 4. DEV-CHANGE: Update is_visit to 1 in linked sales_invoice
     if (results.length > 0) {
       try {
-        const orderNoStr = order.order_no ? String(order.order_no) : null;
+        const targetKeys = Array.from(
+          new Set(
+            [
+              String(orderId).trim(),
+              order.order_id ? String(order.order_id).trim() : null,
+              order.order_no ? String(order.order_no).trim() : null,
+            ].filter(Boolean) as string[]
+          )
+        );
 
-        console.log("[sales-order-serial-tagging] orderId:", orderId);
-        console.log("[sales-order-serial-tagging] orderNo:", order.order_no);
+        console.log("[sales-order-serial-tagging] Updating is_visit for target order keys:", targetKeys);
 
-        const filters: string[] = [];
-        const parsedOrderId = Number(orderId);
-        const isOrderIdNumeric = !Number.isNaN(parsedOrderId) && parsedOrderId > 0;
-
-        if (isOrderIdNumeric) {
-          filters.push(`filter[_or][${filters.length}][order_id][_eq]=${parsedOrderId}`);
-        }
-
-        if (orderNoStr) {
-          filters.push(`filter[_or][${filters.length}][order_id][_eq]=${encodeURIComponent(orderNoStr)}`);
-        }
-
-        if (filters.length === 0) {
-          filters.push(`filter[order_id][_eq]=${encodeURIComponent(String(orderId))}`);
-        }
+        // Query sales_invoice using scalar filter[order_id][_in] without forbidden relational dot notation
+        const encodedKeys = targetKeys.map((k) => encodeURIComponent(k)).join(",");
+        const queryStr = `filter[order_id][_in]=${encodedKeys}`;
 
         const invoicesRes = await fetchDirectus(
-          `/items/sales_invoice?${filters.join("&")}&fields=invoice_id,order_id,is_visit`
+          `/items/sales_invoice?${queryStr}&fields=invoice_id,order_id,is_visit`
         );
 
-        console.log(
-          "[sales-order-serial-tagging] sales invoices found:",
-          JSON.stringify(invoicesRes.data, null, 2)
-        );
+        let invoices = (invoicesRes.data || []) as { invoice_id: number | string; order_id: unknown; is_visit?: number }[];
 
-        const invoices = invoicesRes.data || [];
+        // Fallback: If Directus filter yielded 0 results, fetch all sales_invoice records and match in JS
+        if (invoices.length === 0) {
+          console.log("[sales-order-serial-tagging] Direct query returned 0, attempting fallback query...");
+          const allInvoicesRes = await fetchDirectus(
+            `/items/sales_invoice?fields=invoice_id,order_id,is_visit&limit=-1`
+          );
+          const allInvoices = (allInvoicesRes.data || []) as { invoice_id: number | string; order_id: unknown; is_visit?: number }[];
+          
+          invoices = allInvoices.filter((inv) => {
+            if (!inv.order_id) return false;
+            let refStr = "";
+            if (typeof inv.order_id === "object" && inv.order_id !== null) {
+              const obj = inv.order_id as Record<string, unknown>;
+              refStr = String(obj.order_id || obj.order_no || obj.id || "").trim();
+            } else {
+              refStr = String(inv.order_id).trim();
+            }
+            return targetKeys.includes(refStr);
+          });
+        }
 
-        console.log("[sales-order-serial-tagging] invoice count:", invoices.length);
+        console.log("[sales-order-serial-tagging] Total linked sales invoices to patch:", invoices.length);
 
         for (const inv of invoices) {
           const patchResult = await fetchDirectus(
@@ -1218,7 +1232,7 @@ export async function POST(req: NextRequest) {
               }),
             }
           );
-          console.log(`[sales-order-serial-tagging] Patched sales_invoice ${inv.invoice_id} is_visit:`, patchResult);
+          console.log(`[sales-order-serial-tagging] Successfully patched sales_invoice ${inv.invoice_id} is_visit: 1`, patchResult);
         }
       } catch (siErr) {
         console.warn(
