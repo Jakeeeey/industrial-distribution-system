@@ -167,13 +167,13 @@ function LineItemSerialsList({
                   key={item.serial_number}
                   variant="outline"
                   className={`font-mono text-[9px] border px-1.5 py-0.5 flex items-center shrink-0 ${isTagged
-                      ? "bg-blue-500/5 text-blue-500 border-blue-500/25"
-                      : "bg-amber-500/5 text-amber-500 border-amber-500/25"
+                    ? "bg-blue-500/5 text-blue-500 border-blue-500/25"
+                    : "bg-amber-500/5 text-amber-500 border-amber-500/25"
                     }`}
                   // Dev-rule: If serial is not tagged, hide it like a password using * characters
                   title={`${item.status === "not tagged"
-                      ? "*".repeat(item.serial_number.length)
-                      : item.serial_number
+                    ? "*".repeat(item.serial_number.length)
+                    : item.serial_number
                     } (${isTagged ? "Tagged" : "Not Tagged"})`}
                 >
                   <span>
@@ -473,8 +473,8 @@ export default function CylinderTaggingMobile({
                           </div>
                           <div className="text-right">
                             <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold ${highlightDays
-                                ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
-                                : "bg-secondary text-muted-foreground border"
+                              ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                              : "bg-secondary text-muted-foreground border"
                               }`}>
                               <Clock className="w-2.5 h-2.5" />
                               {asset.days_at_site} days

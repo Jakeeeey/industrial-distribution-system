@@ -1117,8 +1117,7 @@ export async function POST(req: NextRequest) {
     // 3. Map all serials in database
     const results = [];
     for (const serialObj of serials) {
-      const { sales_order_detail_id, serial_number: rawSerial } = serialObj;
-      const serial_number = typeof rawSerial === "string" ? rawSerial.trim() : rawSerial;
+      const { sales_order_detail_id, serial_number } = serialObj;
       if (!sales_order_detail_id || !serial_number) continue;
 
       // Check if already mapped to this detail line to avoid duplicates
@@ -1177,50 +1176,39 @@ export async function POST(req: NextRequest) {
     // 4. DEV-CHANGE: Update is_visit to 1 in linked sales_invoice
     if (results.length > 0) {
       try {
-        const targetKeys = Array.from(
-          new Set(
-            [
-              String(orderId).trim(),
-              order.order_id ? String(order.order_id).trim() : null,
-              order.order_no ? String(order.order_no).trim() : null,
-            ].filter(Boolean) as string[]
-          )
-        );
+        const orderNoStr = order.order_no ? String(order.order_no) : null;
 
-        console.log("[sales-order-serial-tagging] Updating is_visit for target order keys:", targetKeys);
+        console.log("[sales-order-serial-tagging] orderId:", orderId);
+        console.log("[sales-order-serial-tagging] orderNo:", order.order_no);
 
-        // Query sales_invoice using scalar filter[order_id][_in] without forbidden relational dot notation
-        const encodedKeys = targetKeys.map((k) => encodeURIComponent(k)).join(",");
-        const queryStr = `filter[order_id][_in]=${encodedKeys}`;
+        const filters: string[] = [];
+        const parsedOrderId = Number(orderId);
+        const isOrderIdNumeric = !Number.isNaN(parsedOrderId) && parsedOrderId > 0;
 
-        const invoicesRes = await fetchDirectus(
-          `/items/sales_invoice?${queryStr}&fields=invoice_id,order_id,is_visit`
-        );
-
-        let invoices = (invoicesRes.data || []) as { invoice_id: number | string; order_id: unknown; is_visit?: number }[];
-
-        // Fallback: If Directus filter yielded 0 results, fetch all sales_invoice records and match in JS
-        if (invoices.length === 0) {
-          console.log("[sales-order-serial-tagging] Direct query returned 0, attempting fallback query...");
-          const allInvoicesRes = await fetchDirectus(
-            `/items/sales_invoice?fields=invoice_id,order_id,is_visit&limit=-1`
-          );
-          const allInvoices = (allInvoicesRes.data || []) as { invoice_id: number | string; order_id: unknown; is_visit?: number }[];
-          
-          invoices = allInvoices.filter((inv) => {
-            if (!inv.order_id) return false;
-            let refStr = "";
-            if (typeof inv.order_id === "object" && inv.order_id !== null) {
-              const obj = inv.order_id as Record<string, unknown>;
-              refStr = String(obj.order_id || obj.order_no || obj.id || "").trim();
-            } else {
-              refStr = String(inv.order_id).trim();
-            }
-            return targetKeys.includes(refStr);
-          });
+        if (isOrderIdNumeric) {
+          filters.push(`filter[_or][${filters.length}][order_id][_eq]=${parsedOrderId}`);
         }
 
-        console.log("[sales-order-serial-tagging] Total linked sales invoices to patch:", invoices.length);
+        if (orderNoStr) {
+          filters.push(`filter[_or][${filters.length}][order_id][_eq]=${encodeURIComponent(orderNoStr)}`);
+        }
+
+        if (filters.length === 0) {
+          filters.push(`filter[order_id][_eq]=${encodeURIComponent(String(orderId))}`);
+        }
+
+        const invoicesRes = await fetchDirectus(
+          `/items/sales_invoice?${filters.join("&")}&fields=invoice_id,order_id,is_visit`
+        );
+
+        console.log(
+          "[sales-order-serial-tagging] sales invoices found:",
+          JSON.stringify(invoicesRes.data, null, 2)
+        );
+
+        const invoices = invoicesRes.data || [];
+
+        console.log("[sales-order-serial-tagging] invoice count:", invoices.length);
 
         for (const inv of invoices) {
           const patchResult = await fetchDirectus(
@@ -1232,7 +1220,7 @@ export async function POST(req: NextRequest) {
               }),
             }
           );
-          console.log(`[sales-order-serial-tagging] Successfully patched sales_invoice ${inv.invoice_id} is_visit: 1`, patchResult);
+          console.log(`[sales-order-serial-tagging] Patched sales_invoice ${inv.invoice_id} is_visit:`, patchResult);
         }
       } catch (siErr) {
         console.warn(

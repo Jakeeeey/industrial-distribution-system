@@ -37,7 +37,7 @@ export function useCylinderTagging(orderId: string | null) {
     const map = new Map<string, MappedSerial>();
     for (const m of mappedSerials) {
       if (m.serial_number) {
-        map.set(m.serial_number.trim() , m);
+        map.set(m.serial_number.trim(), m);
       }
     }
     return map;
@@ -90,7 +90,7 @@ export function useCylinderTagging(orderId: string | null) {
   }, [orderId, loadData]);
 
   const handleScan = useCallback((serialInput: string) => {
-    const serial = serialInput.trim() ;
+    const serial = serialInput.trim();
     if (!serial) return;
 
     if (!orderDetails) {
@@ -207,7 +207,7 @@ export function useCylinderTagging(orderId: string | null) {
 
       toast.success(`Successfully tagged ${currentScannedList.length} cylinder(s) to customer.`);
       setScannedList([]);
-      
+
       // Reload order details & customer assets to update the UI views
       await loadData(orderId);
     } catch (err: unknown) {

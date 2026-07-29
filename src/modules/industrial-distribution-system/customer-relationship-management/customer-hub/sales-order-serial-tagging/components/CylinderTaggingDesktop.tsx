@@ -176,13 +176,13 @@ function LineItemSerialsList({
                   key={item.serial_number}
                   variant="outline"
                   className={`font-mono text-[9px] border px-1.5 py-0.5 flex items-center shrink-0 ${isTagged
-                      ? "bg-blue-500/5 text-blue-500 border-blue-500/25"
-                      : "bg-amber-500/5 text-amber-500 border-amber-500/25"
+                    ? "bg-blue-500/5 text-blue-500 border-blue-500/25"
+                    : "bg-amber-500/5 text-amber-500 border-amber-500/25"
                     }`}
                   // Dev-rule: If serial is not tagged, hide it like a password using * characters
                   title={`${item.status === "not tagged"
-                      ? "*".repeat(item.serial_number.length)
-                      : item.serial_number
+                    ? "*".repeat(item.serial_number.length)
+                    : item.serial_number
                     } (${isTagged ? "Tagged" : "Not Tagged"})`}
                 >
                   <span>
@@ -637,8 +637,8 @@ export default function CylinderTaggingDesktop({
                         <TableCell className="py-2 px-4 text-xs">{asset.product_name}</TableCell>
                         <TableCell className="text-right py-2 px-4 text-xs font-semibold">
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${highlightDays
-                              ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
-                              : "bg-secondary text-muted-foreground border"
+                            ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                            : "bg-secondary text-muted-foreground border"
                             }`}>
                             <Clock className="w-3 h-3" />
                             {asset.days_at_site} days
