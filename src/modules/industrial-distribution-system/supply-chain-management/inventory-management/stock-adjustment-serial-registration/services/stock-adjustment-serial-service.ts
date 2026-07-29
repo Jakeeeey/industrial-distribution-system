@@ -15,6 +15,14 @@ interface DraftCylinder {
   [key: string]: unknown;
 }
 
+/**
+ * Returns current Asia/Manila (UTC+8) timestamp formatted as YYYY-MM-DDTHH:mm:ss.
+ * Ensures stock adjustment database records save Philippines local time (+8).
+ */
+function nowPH(): string {
+  return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Manila" }).replace(" ", "T");
+}
+
 interface RawItem {
   id?: number;
   doc_no: string;
@@ -802,17 +810,22 @@ export const stockAdjustmentService = {
       finalRemarks = `${finalRemarks}\n[SUPPLIER_ID: ${header.supplier_id}]`.trim();
     }
 
+    // Asia/Manila (+08:00) timestamp for database record creation
+    const phNow = nowPH();
+
     const headerRes = await directusFetch<{ data: { id: number } }>(`${DIRECTUS_URL}/items/stock_adjustment_header`, {
       method: "POST",
       body: JSON.stringify({
         doc_no: header.doc_no,
-        branch_id: header.branch_id,
+        date: header.date,
+        branch_id: Number(header.branch_id),
         supplier_id: header.supplier_id,
         type: header.type,
         remarks: finalRemarks,
         amount: header.amount || items.reduce((acc: number, item: StockAdjustmentItem) => acc + (item.quantity * (item.cost_per_unit || 0)), 0),
         isPosted: 0,
         created_by: payload.userId,
+        created_at: phNow,
       }),
     });
     const headerId = headerRes.data.id;
@@ -826,7 +839,8 @@ export const stockAdjustmentService = {
       quantity: Number(item.quantity),
       remarks: item.remarks,
       unit_id: item.unit_id ? Number(item.unit_id) : null,
-      created_by: payload.userId
+      created_by: payload.userId,
+      created_at: phNow,
     }));
 
     const itemsRes = await directusFetch<{ data: Array<{ id: number }> | { id: number } }>(`${DIRECTUS_URL}/items/stock_adjustment`, {
@@ -835,7 +849,8 @@ export const stockAdjustmentService = {
     });
     const createdItems = Array.isArray(itemsRes.data) ? itemsRes.data : [itemsRes.data];
 
-    const serialPayload: { serial_number: string; stock_adjustment_id: number; created_by?: number }[] = [];
+    // Pass created_at explicitly in Asia/Manila time zone to stock_adjustment_serial table
+    const serialPayload: { serial_number: string; stock_adjustment_id: number; created_by?: number; created_at?: string }[] = [];
     items.forEach((item: StockAdjustmentItem, index: number) => {
       if (item.serial_numbers && Array.isArray(item.serial_numbers) && createdItems[index]) {
         const itemId = createdItems[index].id;
@@ -843,7 +858,8 @@ export const stockAdjustmentService = {
           serialPayload.push({
             serial_number: serial,
             stock_adjustment_id: itemId,
-            created_by: payload.userId
+            created_by: payload.userId,
+            created_at: phNow,
           });
         });
       }
@@ -945,6 +961,9 @@ export const stockAdjustmentService = {
       });
     }
 
+    // Asia/Manila (+08:00) timestamp for updated records
+    const phNow = nowPH();
+
     const itemsPayload = payload.items.map((item: StockAdjustmentItem) => ({
       doc_no: payload.header.doc_no,
       stock_adjustment_id: id,
@@ -954,7 +973,8 @@ export const stockAdjustmentService = {
       quantity: Number(item.quantity),
       remarks: item.remarks,
       unit_id: item.unit_id ? Number(item.unit_id) : null,
-      created_by: payload.userId
+      created_by: payload.userId,
+      created_at: phNow,
     }));
 
     const itemsRes = await directusFetch<{ data: Array<{ id: number }> | { id: number } }>(`${DIRECTUS_URL}/items/stock_adjustment`, {
@@ -963,7 +983,8 @@ export const stockAdjustmentService = {
     });
     const createdItems = Array.isArray(itemsRes.data) ? itemsRes.data : [itemsRes.data];
 
-    const serialPayload: { serial_number: string; stock_adjustment_id: number; created_by?: number }[] = [];
+    // Pass created_at explicitly in Asia/Manila time zone to stock_adjustment_serial table
+    const serialPayload: { serial_number: string; stock_adjustment_id: number; created_by?: number; created_at?: string }[] = [];
     payload.items.forEach((item: StockAdjustmentItem, index: number) => {
       if (item.serial_numbers && Array.isArray(item.serial_numbers) && createdItems[index]) {
         const itemId = createdItems[index].id;
@@ -971,7 +992,8 @@ export const stockAdjustmentService = {
           serialPayload.push({
             serial_number: serial,
             stock_adjustment_id: itemId,
-            created_by: payload.userId
+            created_by: payload.userId,
+            created_at: phNow,
           });
         });
       }
@@ -1009,6 +1031,7 @@ export const stockAdjustmentService = {
    * Post (finalize) a Stock Adjustment (promoting cylinder drafts to assets)
    */
   async postStockAdjustment(id: number, userId?: number) {
+    const phNow = nowPH();
     try {
       const headerRes = await directusFetch<{ data: { doc_no: string } }>(
         `${DIRECTUS_URL}/items/stock_adjustment_header/${id}?fields=doc_no`
@@ -1078,7 +1101,8 @@ export const stockAdjustmentService = {
                   }
                 }
 
-                const postingDate = new Date().toISOString().split("T")[0];
+                // Use Asia/Manila date for cylinder acquisition date
+                const postingDate = phNow.split("T")[0];
                 const copy: Record<string, unknown> = {};
                 for (const key in c) {
                   if (key !== "id" && key !== "acquisition_date") {
@@ -1114,12 +1138,13 @@ export const stockAdjustmentService = {
       throw err;
     }
 
+    // Save postedAt in Asia/Manila (+08:00) local time
     const res = await directusFetch<{ data: unknown }>(`${DIRECTUS_URL}/items/stock_adjustment_header/${id}`, {
       method: "PATCH",
       body: JSON.stringify({
         isPosted: 1,
         posted_by: userId,
-        postedAt: new Date().toISOString()
+        postedAt: phNow
       }),
     });
     return res;

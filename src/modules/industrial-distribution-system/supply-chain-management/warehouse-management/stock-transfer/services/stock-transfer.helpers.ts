@@ -4,10 +4,21 @@
 import type { BranchRow, OrderGroup, OrderGroupItem, StockTransferRow } from "../types/stock-transfer.types";
 
 /**
+ * Returns current Asia/Manila (UTC+8) timestamp formatted as YYYY-MM-DDTHH:mm:ss.
+ * Used to ensure all stock transfer and serial tracking database fields save Philippines local time (+8).
+ */
+export function nowPH(): string {
+  // Using Swedish locale ('sv-SE') with timeZone 'Asia/Manila' to produce 'YYYY-MM-DD HH:mm:ss' formatted string
+  return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Manila" }).replace(" ", "T");
+}
+
+/**
  * Generates a unique order number: ST-YYYYMMDDHHMMSS-{src}-{tgt}
+ * Uses Asia/Manila (UTC+8) timestamp for accurate order sequence date tagging.
  */
 export function generateOrderNo(sourceBranch: string, targetBranch: string): string {
-  const now = new Date().toISOString();
+  // Use Asia/Manila timestamp to format date part for order number generation
+  const now = nowPH();
   const datePart = now.replace(/[-:.TZ]/g, "").slice(0, 14);
   return `ST-${datePart}-${sourceBranch ?? "0"}-${targetBranch ?? "0"}`;
 }

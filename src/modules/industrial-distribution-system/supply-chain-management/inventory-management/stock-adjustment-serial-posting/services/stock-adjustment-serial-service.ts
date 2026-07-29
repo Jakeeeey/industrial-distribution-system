@@ -14,6 +14,14 @@ interface DraftCylinder {
   [key: string]: unknown;
 }
 
+/**
+ * Returns current Asia/Manila (UTC+8) timestamp formatted as YYYY-MM-DDTHH:mm:ss.
+ * Ensures stock adjustment database records save Philippines local time (+8).
+ */
+function nowPH(): string {
+  return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Manila" }).replace(" ", "T");
+}
+
 // NOTE: Duplicate DraftCylinder interface definition removed to fix TS2374 error.
 
 interface RawItem {
@@ -764,6 +772,9 @@ export const stockAdjustmentService = {
       finalRemarks = `${finalRemarks}\n[SUPPLIER_ID: ${header.supplier_id}]`.trim();
     }
 
+    // Asia/Manila (+08:00) timestamp for database record creation
+    const phNow = nowPH();
+
     const headerRes = await directusFetch<{ data: { id: number } }>(`${DIRECTUS_URL}/items/stock_adjustment_header`, {
       method: "POST",
       body: JSON.stringify({
@@ -775,6 +786,7 @@ export const stockAdjustmentService = {
         amount: header.amount || items.reduce((acc: number, item: StockAdjustmentItem) => acc + (item.quantity * (item.cost_per_unit || 0)), 0),
         isPosted: 0,
         created_by: payload.userId,
+        created_at: phNow,
       }),
     });
     const headerId = headerRes.data.id;
@@ -788,7 +800,8 @@ export const stockAdjustmentService = {
       quantity: Number(item.quantity),
       remarks: item.remarks,
       unit_id: item.unit_id ? Number(item.unit_id) : null,
-      created_by: payload.userId
+      created_by: payload.userId,
+      created_at: phNow,
     }));
 
     const itemsRes = await directusFetch<{ data: Array<{ id: number }> | { id: number } }>(`${DIRECTUS_URL}/items/stock_adjustment`, {
@@ -797,7 +810,8 @@ export const stockAdjustmentService = {
     });
     const createdItems = Array.isArray(itemsRes.data) ? itemsRes.data : [itemsRes.data];
 
-    const serialPayload: { serial_number: string; stock_adjustment_id: number; created_by?: number }[] = [];
+    // Pass created_at explicitly in Asia/Manila time zone to stock_adjustment_serial table
+    const serialPayload: { serial_number: string; stock_adjustment_id: number; created_by?: number; created_at?: string }[] = [];
     items.forEach((item: StockAdjustmentItem, index: number) => {
       if (item.serial_numbers && Array.isArray(item.serial_numbers) && createdItems[index]) {
         const itemId = createdItems[index].id;
@@ -805,7 +819,8 @@ export const stockAdjustmentService = {
           serialPayload.push({
             serial_number: serial,
             stock_adjustment_id: itemId,
-            created_by: payload.userId
+            created_by: payload.userId,
+            created_at: phNow,
           });
         });
       }
@@ -1047,7 +1062,9 @@ export const stockAdjustmentService = {
                 // Copy all properties except `id` and `acquisition_date`.
                 // `acquisition_date` is required NOT NULL in cylinder_assets but the draft
                 // table doesn't have it — always inject the posting date explicitly.
-                const postingDate = new Date().toISOString().split("T")[0];
+                // Asia/Manila (+08:00) timestamp for posting and acquisition_date
+                const phNow = nowPH();
+                const postingDate = phNow.split("T")[0];
                 const copy: Record<string, unknown> = {};
                 for (const key in c) {
                   if (key !== "id" && key !== "acquisition_date") {
@@ -1084,12 +1101,14 @@ export const stockAdjustmentService = {
       throw err;
     }
 
+    // Save postedAt in Asia/Manila (+08:00) local time
+    const phNow = nowPH();
     const res = await directusFetch<{ data: unknown }>(`${DIRECTUS_URL}/items/stock_adjustment_header/${id}`, {
       method: "PATCH",
       body: JSON.stringify({
         isPosted: 1,
         posted_by: userId,
-        postedAt: new Date().toISOString()
+        postedAt: phNow
       }),
     });
     return res;
