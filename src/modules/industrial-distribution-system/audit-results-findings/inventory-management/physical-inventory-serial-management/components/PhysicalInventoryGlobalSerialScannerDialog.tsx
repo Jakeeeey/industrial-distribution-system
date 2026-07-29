@@ -551,10 +551,20 @@ export function PhysicalInventoryGlobalSerialScannerDialog(props: Props) {
                     return;
                 }
 
-                // Enforce that it exists in cylinder_assets
+                // Enforce that it exists in cylinder_assets and belongs to the active branch
                 const cylinderAsset = await fetchCylinderAssetBySerial(normalized);
                 if (!cylinderAsset) {
                     const message = "Serial is not registered as a Cylinder Asset. Please register it via the Specific Product Modal.";
+                    toast.error(message, {
+                        description: `Serial: ${normalized}`,
+                    });
+                    setTemporarySignal("error", message, normalized);
+                    return;
+                }
+
+                // Strict Branch Restriction: Block cross-branch serial numbers
+                if (cylinderAsset.current_branch_id !== null && cylinderAsset.current_branch_id !== undefined && cylinderAsset.current_branch_id !== branchId) {
+                    const message = `Serial ${normalized} belongs to Branch ${cylinderAsset.current_branch_id} and cannot be scanned under Branch ${branchId}.`;
                     toast.error(message, {
                         description: `Serial: ${normalized}`,
                     });

@@ -218,6 +218,7 @@ export function CylinderAssetsForm({
   };
 
   /* ---- Submit ---- */
+  // Handles form submission for both single asset editing and bulk cylinder asset registration
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!productId) return;
@@ -225,29 +226,48 @@ export function CylinderAssetsForm({
     setApiDuplicateSerials([]);
     try {
       if (id) {
-        // Edit: single update
+        // Edit mode: single asset update
+        // Enforce tare_weight validation: cannot be blank, set to 0, or negative (must be > 0)
+        const editTareNum = editData.tare_weight !== null && editData.tare_weight !== undefined && String(editData.tare_weight).trim() !== ""
+          ? Number(editData.tare_weight)
+          : NaN;
+
+        if (isNaN(editTareNum) || editTareNum <= 0) {
+          setShowValidation(true);
+          toast.error("Tare weight is required and must be greater than zero.");
+          setLoading(false);
+          return;
+        }
+
+        // Sanitize expiration_date: convert empty string "" to null to avoid SQL DATE type 500 error
+        const sanitizedExpirationDate = editData.expiration_date && String(editData.expiration_date).trim() !== ""
+          ? String(editData.expiration_date).trim()
+          : null;
+
         await updateAsset(id, {
           ...editData,
           product_id: Number(productId),
           current_branch_id: branchId ? Number(branchId) : null,
           remarks,
           current_customer_code: editData.current_customer_code || null,
-          tare_weight: (editData.tare_weight !== null && editData.tare_weight !== undefined && String(editData.tare_weight) !== "" && !isNaN(Number(editData.tare_weight)))
-            ? Number(editData.tare_weight)
-            : null,
+          expiration_date: sanitizedExpirationDate,
+          tare_weight: editTareNum,
         } as Partial<CylinderAsset>);
       } else {
-        // Bulk create
+        // Create mode: bulk registration
         const activeRows = rows.filter((r) => r.serial_number.trim() !== "");
         if (activeRows.length === 0) {
           setLoading(false);
           return;
         }
 
-        const hasEmptyFields = activeRows.some((r) => !r.expiration_date || !r.tare_weight || isNaN(Number(r.tare_weight)));
-        if (hasEmptyFields) {
+        // Enforce tare_weight validation: block registration if tare weight is blank, set to 0, or negative
+        const hasInvalidTareWeight = activeRows.some(
+          (r) => !r.tare_weight || String(r.tare_weight).trim() === "" || isNaN(Number(r.tare_weight)) || Number(r.tare_weight) <= 0
+        );
+        if (hasInvalidTareWeight) {
           setShowValidation(true);
-          toast.error("Please fill in the expiration date and tare weight for all entered serial numbers.");
+          toast.error("Tare weight is required and must be greater than zero for all registered assets.");
           setLoading(false);
           return;
         }
@@ -264,8 +284,6 @@ export function CylinderAssetsForm({
           return;
         }
 
-
-
         const payloads = activeRows
           .map((r) => ({
             product_id: Number(productId),
@@ -273,8 +291,9 @@ export function CylinderAssetsForm({
             serial_number: r.serial_number.trim(),
             cylinder_status: r.cylinder_status,
             cylinder_condition: r.cylinder_condition,
-            expiration_date: r.expiration_date || null,
-            tare_weight: (r.tare_weight && !isNaN(Number(r.tare_weight))) ? Number(r.tare_weight) : null,
+            // Convert empty string expiration_date to null for SQL DATE column compatibility
+            expiration_date: r.expiration_date && r.expiration_date.trim() !== "" ? r.expiration_date.trim() : null,
+            tare_weight: Number(r.tare_weight),
             current_customer_code: r.cylinder_status === "WITH_CUSTOMER" ? r.customer_code || null : null,
             remarks,
           }));
@@ -376,6 +395,8 @@ export function CylinderAssetsForm({
                     rows.filter(r => r.serial_number.trim().toLowerCase() === row.serial_number.trim().toLowerCase()).length > 1) ||
                     (apiDuplicateSerials.includes(row.serial_number.trim()));
                   
+                  const isTareInvalid = !row.tare_weight || isNaN(Number(row.tare_weight)) || Number(row.tare_weight) <= 0;
+
                   return (
                     <div key={row.id} className="rounded-xl border border-border/60 bg-card shadow-sm overflow-hidden flex flex-col relative animate-in fade-in slide-in-from-bottom-2 duration-300">
                       <div className="bg-muted/30 px-3 py-2 flex items-center justify-between border-b border-border/60">
@@ -435,12 +456,12 @@ export function CylinderAssetsForm({
                               type="date"
                               value={row.expiration_date}
                               onChange={(e) => updateRow(row.id, "expiration_date", e.target.value)}
-                              className={`h-11 text-sm shadow-sm border-border/60 ${showValidation && !row.expiration_date ? 'border-red-500 bg-red-50/50 text-red-900 focus-visible:ring-red-500 dark:border-red-500/50 dark:bg-red-500/10 dark:text-red-200' : ''}`}
+                              className="h-11 text-sm shadow-sm border-border/60"
                               disabled={!productId}
                             />
                           </div>
                           <div className="space-y-1.5">
-                            <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest ml-0.5 opacity-70">Tare Weight (kg)</Label>
+                            <Label className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest ml-0.5 opacity-70">Tare Weight (kg) <span className="text-red-500">*</span></Label>
                             <Input
                               type="number"
                               step="0.01"
@@ -453,7 +474,7 @@ export function CylinderAssetsForm({
                                   updateRow(row.id, "tare_weight", val.toFixed(2));
                                 }
                               }}
-                              className={`h-11 text-sm shadow-sm border-border/60 ${showValidation && (!row.tare_weight || isNaN(Number(row.tare_weight))) ? 'border-red-500 bg-red-50/50 text-red-900 focus-visible:ring-red-500 dark:border-red-500/50 dark:bg-red-500/10 dark:text-red-200' : ''}`}
+                              className={`h-11 text-sm shadow-sm border-border/60 ${showValidation && isTareInvalid ? 'border-red-500 bg-red-50/50 text-red-900 focus-visible:ring-red-500 dark:border-red-500/50 dark:bg-red-500/10 dark:text-red-200' : ''}`}
                               disabled={!productId}
                             />
                           </div>
@@ -478,7 +499,7 @@ export function CylinderAssetsForm({
                     Expiration
                   </span>
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">
-                    Tare (kg)
+                    Tare (kg) <span className="text-red-500">*</span>
                   </span>
                   <span className="w-8" />
                 </div>
@@ -488,6 +509,8 @@ export function CylinderAssetsForm({
                     const isDuplicated = (row.serial_number.trim() !== "" &&
                       rows.filter(r => r.serial_number.trim().toLowerCase() === row.serial_number.trim().toLowerCase()).length > 1) ||
                       (apiDuplicateSerials.includes(row.serial_number.trim()));
+                    const isTareInvalid = !row.tare_weight || isNaN(Number(row.tare_weight)) || Number(row.tare_weight) <= 0;
+
                     return (
                       <div key={row.id} className="px-3 py-2 hover:bg-muted/10 transition-colors space-y-2 group">
                         {/* Main row: serial / status / condition / delete / expiration */}
@@ -522,7 +545,7 @@ export function CylinderAssetsForm({
                               type="date"
                               value={row.expiration_date}
                               onChange={(e) => updateRow(row.id, "expiration_date", e.target.value)}
-                              className={`h-9 text-[11px] px-2 flex-1 min-w-0 shadow-sm border-border/60 ${showValidation && !row.expiration_date ? 'border-red-500 bg-red-50/50 text-red-900 focus-visible:ring-red-500 dark:border-red-500/50 dark:bg-red-500/10 dark:text-red-200' : ''}`}
+                              className="h-9 text-[11px] px-2 flex-1 min-w-0 shadow-sm border-border/60"
                               disabled={!productId}
                             />
                           </div>
@@ -539,7 +562,7 @@ export function CylinderAssetsForm({
                                   updateRow(row.id, "tare_weight", val.toFixed(2));
                                 }
                               }}
-                              className={`h-9 text-xs flex-1 shadow-sm border-border/60 ${showValidation && (!row.tare_weight || isNaN(Number(row.tare_weight))) ? 'border-red-500 bg-red-50/50 text-red-900 focus-visible:ring-red-500 dark:border-red-500/50 dark:bg-red-500/10 dark:text-red-200' : ''}`}
+                              className={`h-9 text-xs flex-1 shadow-sm border-border/60 ${showValidation && isTareInvalid ? 'border-red-500 bg-red-50/50 text-red-900 focus-visible:ring-red-500 dark:border-red-500/50 dark:bg-red-500/10 dark:text-red-200' : ''}`}
                               disabled={!productId}
                             />
                           </div>
@@ -583,7 +606,7 @@ export function CylinderAssetsForm({
             </div>
           )}
 
-          {/* Edit mode: status, condition, customer only */}
+          {/* Edit mode: status, condition, expiration, tare_weight, customer */}
           {!isCreateMode && (
             <div className="mt-4 rounded-lg border border-border/60 overflow-hidden">
               {/* Read-only info banner */}
@@ -633,7 +656,7 @@ export function CylinderAssetsForm({
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Tare Weight (kg)</Label>
+                  <Label>Tare Weight (kg) <span className="text-red-500">*</span></Label>
                   <Input
                     type="number"
                     step="0.01"
@@ -646,6 +669,16 @@ export function CylinderAssetsForm({
                         setEditData((p) => ({ ...p, tare_weight: val.toFixed(2) }));
                       }
                     }}
+                    className={
+                      showValidation &&
+                      (editData.tare_weight === undefined ||
+                        editData.tare_weight === null ||
+                        String(editData.tare_weight).trim() === "" ||
+                        isNaN(Number(editData.tare_weight)) ||
+                        Number(editData.tare_weight) <= 0)
+                        ? 'border-red-500 bg-red-50/50 text-red-900 focus-visible:ring-red-500 dark:border-red-500/50 dark:bg-red-500/10 dark:text-red-200'
+                        : ''
+                    }
                   />
                 </div>
                 <div className="space-y-2">
