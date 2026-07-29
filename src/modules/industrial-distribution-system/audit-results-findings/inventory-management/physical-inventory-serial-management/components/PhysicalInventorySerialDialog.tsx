@@ -19,7 +19,6 @@ import {
     fetchSerialOnhandByBranch,
     updatePhysicalInventoryDetail,
     fetchCylinderAssetBySerial,
-    updateCylinderAsset,
 } from "../providers/fetchProvider";
 import {
     computeAmount,
@@ -297,47 +296,40 @@ export function PhysicalInventorySerialDialog(props: Props) {
                 }
             }
 
-            // Not found in local branch on-hand? Check global cylinder_assets
+            // Not found in local branch on-hand? Check cylinder_assets globally
             if (serialProductId === null) {
                 const globalAsset = await fetchCylinderAssetBySerial(serialTag);
                 if (globalAsset) {
-                    // Mismatch Protection: If it exists but is for a DIFFERENT product
-                    if (globalAsset.product_id !== row?.product_id) {
-                        const message = `Serial ${serialTag} exists globally but belongs to product ID ${globalAsset.product_id}. This row is for "${row?.product_name || "a different product"}".`;
-                        toast.error(message);
+                    // Strict Branch Restriction: If serial belongs to a DIFFERENT branch, reject cross-branch entry
+                    if (globalAsset.current_branch_id !== null && globalAsset.current_branch_id !== undefined && globalAsset.current_branch_id !== branchId) {
+                        const message = `Serial ${serialTag} belongs to Branch ${globalAsset.current_branch_id} and cannot be added under Branch ${branchId}. Cross-branch serial tags are not permitted.`;
+                        toast.error(message, {
+                            description: `Serial: ${serialTag}`,
+                        });
                         setSerialInput("");
+                        setFlash("error");
+                        setTimeout(() => setFlash(null), 500);
                         focusInput();
                         return;
                     }
 
-                    // Reassign to current branch!
-                    // Status mirrors registration logic: EMPTY UOM → EMPTY, otherwise AVAILABLE
-                    const reassignStatus: import("../types").CylinderAssetRow["cylinder_status"] =
-                        (row?.unit_name ?? row?.unit_shortcut)?.toUpperCase() === "EMPTY"
-                            ? "EMPTY"
-                            : "AVAILABLE";
-                    try {
-                        await updateCylinderAsset(globalAsset.id, {
-                            current_branch_id: branchId,
-                            cylinder_status: reassignStatus,
+                    // Mismatch Protection: If it belongs to a DIFFERENT product
+                    if (globalAsset.product_id !== row?.product_id) {
+                        const message = `Serial ${serialTag} belongs to product ID ${globalAsset.product_id}. This row is for "${row?.product_name || "a different product"}".`;
+                        toast.error(message, {
+                            description: `Serial: ${serialTag}`,
                         });
-
-                        // Update local cache for this session
-                        setOnhandCache((prev) => {
-                            const next = new Map(prev);
-                            next.set(serialTag, globalAsset.product_id);
-                            localStorage.setItem(`serial_onhand_${branchId}`, JSON.stringify(Array.from(next.entries())));
-                            return next;
-                        });
-
-                        serialProductId = globalAsset.product_id;
-                        toast.info(`Serial ${serialTag} reassigned to this branch.`);
-                    } catch {
-                        toast.error("Failed to reassign serial to current branch.");
+                        setSerialInput("");
+                        setFlash("error");
+                        setTimeout(() => setFlash(null), 500);
+                        focusInput();
                         return;
                     }
+
+                    // Asset belongs to current branch and product
+                    serialProductId = globalAsset.product_id;
                 } else {
-                    // Not found globally either? Add to pending queue!
+                    // Not found in cylinder_assets? Add to pending queue for new asset registration under active branch
                     setPendingSerials((prev) => [...new Set([...prev, serialTag])]);
                     setSerialInput("");
                     setFlash("success");
@@ -347,7 +339,7 @@ export function PhysicalInventorySerialDialog(props: Props) {
                 }
             }
 
-            // If the Serial belongs to a DIFFERENT product (found in on-hand or reassigned), prohibit it
+            // If the Serial belongs to a DIFFERENT product (found in on-hand), prohibit it
             if (serialProductId !== null && serialProductId !== row?.product_id) {
                 const mismatchedProduct = products.find(p => p.product_id === serialProductId);
                 const mismatchedName = mismatchedProduct?.product_name || `Product ID ${serialProductId}`;
@@ -363,13 +355,25 @@ export function PhysicalInventorySerialDialog(props: Props) {
                 return;
             }
 
-            // Final safety check: if we got here but still don't have a cylinder_asset record
-            // (this handles cases where it was in v-serial-onhand but missing from cylinder_assets)
+            // Safety check for cylinder_asset record and branch ownership
             const cylinderAsset = await fetchCylinderAssetBySerial(serialTag);
             if (!cylinderAsset) {
                 setPendingSerials((prev) => [...new Set([...prev, serialTag])]);
                 setSerialInput("");
                 setFlash("success");
+                setTimeout(() => setFlash(null), 500);
+                focusInput();
+                return;
+            }
+
+            // Enforce branch check on safety lookup
+            if (cylinderAsset.current_branch_id !== null && cylinderAsset.current_branch_id !== undefined && cylinderAsset.current_branch_id !== branchId) {
+                const message = `Serial ${serialTag} belongs to Branch ${cylinderAsset.current_branch_id} and cannot be added under Branch ${branchId}.`;
+                toast.error(message, {
+                    description: `Serial: ${serialTag}`,
+                });
+                setSerialInput("");
+                setFlash("error");
                 setTimeout(() => setFlash(null), 500);
                 focusInput();
                 return;
@@ -422,8 +426,6 @@ export function PhysicalInventorySerialDialog(props: Props) {
             onhandCache,
             row?.product_id,
             row?.product_name,
-            row?.unit_name,
-            row?.unit_shortcut,
             products,
         ],
     );
@@ -566,10 +568,7 @@ export function PhysicalInventorySerialDialog(props: Props) {
                                 <span className="font-semibold text-muted-foreground mr-1">UOM:</span>
                                 <span className="font-medium text-foreground">{row?.unit_name ?? row?.unit_shortcut ?? "—"}</span>
                             </p>
-                            <p className="hidden sm:block">
-                                <span className="font-semibold text-muted-foreground mr-1">Product ID:</span>
-                                <span className="font-medium text-foreground">{row?.product_id ?? "—"}</span>
-                            </p>
+                            {/* Product ID removed from display as per user UI preference */}
                             <p>
                                 <span className="font-semibold text-muted-foreground mr-1">Count:</span>
                                 <span className="font-bold text-primary">{tags.length}</span>

@@ -944,11 +944,22 @@ export async function createCylinderAssetsBulk(
     );
 }
 
-export async function fetchCylinderAssetBySerial(serial: string): Promise<CylinderAssetRow | null> {
+// Fetches cylinder asset by serial number, optionally restricted to a specific branch_id.
+// Used for branch ownership verification in Physical Inventory Serial Tag Review and Scanners.
+export async function fetchCylinderAssetBySerial(
+    serial: string,
+    branchId?: number | null,
+): Promise<CylinderAssetRow | null> {
+    const filterObj: Record<string, unknown> = {
+        serial_number: { _eq: serial.trim() },
+    };
+
+    if (branchId !== undefined && branchId !== null) {
+        filterObj.current_branch_id = { _eq: branchId };
+    }
+
     const rows = await directusGetItems<CylinderAssetRow>(TABLES.cylinder_assets, {
-        filter: JSON.stringify({
-            serial_number: { _eq: serial.trim() },
-        }),
+        filter: JSON.stringify(filterObj),
         limit: "1",
     });
 
