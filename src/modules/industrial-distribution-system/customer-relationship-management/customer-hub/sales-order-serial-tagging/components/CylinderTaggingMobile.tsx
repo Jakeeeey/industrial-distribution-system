@@ -21,7 +21,6 @@ import {
   Info,
   ListTodo,
   RefreshCcw,
-  QrCode,
 } from "lucide-react";
 
 
