@@ -129,7 +129,8 @@ export function PhysicalInventoryAddProductDialog(props: Props) {
                 difference_cost: 0,
                 amount: 0,
                 offset_match: null,
-                date_encoded: new Date().toISOString()
+                // Asia/Manila (+08:00) timestamp for detail date_encoded
+                date_encoded: new Date().toLocaleString("sv-SE", { timeZone: "Asia/Manila" }).replace(" ", "T")
             }));
 
             await createPhysicalInventoryDetailsBulk(payloads);
