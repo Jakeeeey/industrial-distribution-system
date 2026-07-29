@@ -1,8 +1,9 @@
 import { SalesOrderTaggingDetails, MappedSerial, CustomerAsset, SalesOrderListItem } from "../types";
 
 export const fetchProvider = {
-  async listOrders(): Promise<SalesOrderListItem[]> {
-    const res = await fetch(`/api/ids/crm/customer-hub/sales-order-serial-tagging?action=list-orders`);
+  async listOrders(branchFilter?: string): Promise<SalesOrderListItem[]> {
+    const query = branchFilter && branchFilter !== "all" ? `&branchId=${encodeURIComponent(branchFilter)}` : "";
+    const res = await fetch(`/api/ids/crm/customer-hub/sales-order-serial-tagging?action=list-orders${query}`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || `Failed to fetch Sales Orders list (Status: ${res.status})`);

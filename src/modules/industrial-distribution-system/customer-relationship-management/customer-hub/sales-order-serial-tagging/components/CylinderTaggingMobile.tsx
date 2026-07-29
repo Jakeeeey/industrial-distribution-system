@@ -23,6 +23,7 @@ import {
   RefreshCcw,
 } from "lucide-react";
 
+
 interface LineItemSerialsListProps {
   productMappedSerials: MappedSerial[];
   taggedSerials: TaggedSerial[];
@@ -37,23 +38,23 @@ function LineItemSerialsList({
   onRemove,
 }: LineItemSerialsListProps) {
   const [filterQuery, setFilterQuery] = useState("");
-  
+
   // Construct the union of all serial numbers
   const allSerials = useMemo(() => {
     const set = new Set<string>();
-    productMappedSerials.forEach((ms) => set.add(ms.serial_number.toUpperCase()));
-    taggedSerials.forEach((t) => set.add(t.serial_number.toUpperCase()));
-    sessionScans.forEach((s) => set.add(s.serial_number.toUpperCase()));
+    productMappedSerials.forEach((ms) => set.add(ms.serial_number));
+    taggedSerials.forEach((t) => set.add(t.serial_number));
+    sessionScans.forEach((s) => set.add(s.serial_number));
     return Array.from(set);
   }, [productMappedSerials, taggedSerials, sessionScans]);
 
   // Map each serial to its status and other info
   const serialItems = useMemo(() => {
     const items = allSerials.map((serial) => {
-      const sessionScan = sessionScans.find((s) => s.serial_number.toUpperCase() === serial);
-      const dbTag = taggedSerials.find((t) => t.serial_number.toUpperCase() === serial);
-      const mapped = productMappedSerials.find((ms) => ms.serial_number.toUpperCase() === serial);
-      
+      const sessionScan = sessionScans.find((s) => s.serial_number === serial);
+      const dbTag = taggedSerials.find((t) => t.serial_number === serial);
+      const mapped = productMappedSerials.find((ms) => ms.serial_number === serial);
+
       let status = "not tagged";
       if (sessionScan) {
         status = "new";
@@ -164,17 +165,15 @@ function LineItemSerialsList({
                 <Badge
                   key={item.serial_number}
                   variant="outline"
-                  className={`font-mono text-[9px] border px-1.5 py-0.5 flex items-center shrink-0 ${
-                    isTagged 
-                      ? "bg-blue-500/5 text-blue-500 border-blue-500/25" 
-                      : "bg-amber-500/5 text-amber-500 border-amber-500/25"
-                  }`}
+                  className={`font-mono text-[9px] border px-1.5 py-0.5 flex items-center shrink-0 ${isTagged
+                    ? "bg-blue-500/5 text-blue-500 border-blue-500/25"
+                    : "bg-amber-500/5 text-amber-500 border-amber-500/25"
+                    }`}
                   // Dev-rule: If serial is not tagged, hide it like a password using * characters
-                  title={`${
-                    item.status === "not tagged"
-                      ? "*".repeat(item.serial_number.length)
-                      : item.serial_number
-                  } (${isTagged ? "Tagged" : "Not Tagged"})`}
+                  title={`${item.status === "not tagged"
+                    ? "*".repeat(item.serial_number.length)
+                    : item.serial_number
+                    } (${isTagged ? "Tagged" : "Not Tagged"})`}
                 >
                   <span>
                     {item.status === "not tagged"
@@ -246,7 +245,7 @@ export default function CylinderTaggingMobile({
     const value = e.target.value;
     const diff = value.length - scanInput.length;
     setScanInput(value);
-    
+
     if (autoEnter && diff > 2 && !isProcessingScan) {
       const serial = value.trim();
       if (serial) {
@@ -408,7 +407,7 @@ export default function CylinderTaggingMobile({
                       <span className="text-foreground font-bold">{item.served_qty} {item.unit}</span>
                     </div>
                     <Progress value={percent} className="h-2 mx-2" />
-                    
+
                     {/* Tagged list */}
                     {(() => {
                       const productMappedSerials = mappedSerials
@@ -472,11 +471,10 @@ export default function CylinderTaggingMobile({
                             <p className="text-[10px] text-muted-foreground line-clamp-1">{asset.product_name}</p>
                           </div>
                           <div className="text-right">
-                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                              highlightDays 
-                                ? "bg-amber-500/10 text-amber-500 border border-amber-500/20" 
-                                : "bg-secondary text-muted-foreground border"
-                            }`}>
+                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold ${highlightDays
+                              ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                              : "bg-secondary text-muted-foreground border"
+                              }`}>
                               <Clock className="w-2.5 h-2.5" />
                               {asset.days_at_site} days
                             </span>
@@ -526,9 +524,9 @@ export default function CylinderTaggingMobile({
                       type="text"
                       placeholder="Scan QR Code or manually enter here..."
                       value={scanInput}
-                      onChange={handleInputChange}  
+                      onChange={handleInputChange}
                       onPaste={handlePaste}
-                      className="font-mono  tracking-widest pl-10 h-12 text-[12px] border-2 border-primary/20 uppercase disabled:opacity-90 disabled:bg-emerald-500/5 disabled:border-emerald-500/30"
+                      className="font-mono  tracking-widest pl-10 h-12 text-[12px] border-2 border-primary/20  disabled:opacity-90 disabled:bg-emerald-500/5 disabled:border-emerald-500/30"
                       disabled={submitting || isProcessingScan}
                     />
                     <Scan className="absolute left-3 top-3.5 w-5 h-5 text-primary" />
