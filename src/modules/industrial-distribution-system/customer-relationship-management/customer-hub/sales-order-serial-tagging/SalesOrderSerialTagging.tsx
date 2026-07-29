@@ -112,7 +112,7 @@ export default function SalesOrderSerialTagging() {
       setLoadingOrders(true);
       setOrdersError(null);
       try {
-        const data = await fetchProvider.listOrders();
+        const data = await fetchProvider.listOrders(branchFilter);
         setOrders(data);
       } catch (err: unknown) {
         console.error(err);
@@ -124,7 +124,7 @@ export default function SalesOrderSerialTagging() {
     };
 
     loadOrdersList();
-  }, []);
+  }, [branchFilter]);
 
   const handleSelectOrder = (id: number) => {
     const idStr = String(id);
@@ -228,7 +228,7 @@ export default function SalesOrderSerialTagging() {
                 <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-muted-foreground" />
               </div>
 
-               {/* Compact Branch Selector Dropdown */}
+              {/* Compact Branch Selector Dropdown */}
               <Select key={availableBranches.length} value={branchFilter} onValueChange={setBranchFilter}>
                 <SelectTrigger className="h-8 w-15 p-0 shrink-0 flex items-center justify-center" title="Filter by Branch">
                   <Filter className="w-3.5 h-3.5 text-muted-foreground" />
@@ -274,11 +274,10 @@ export default function SalesOrderSerialTagging() {
                     <div
                       key={o.order_id}
                       onClick={() => handleSelectOrder(o.order_id)}
-                      className={`p-3 flex justify-between items-center transition-colors cursor-pointer border-l-4 ${
-                        isSelected
+                      className={`p-3 flex justify-between items-center transition-colors cursor-pointer border-l-4 ${isSelected
                           ? "bg-primary/10 border-l-primary"
                           : "border-l-transparent hover:bg-secondary/15 active:bg-secondary/30"
-                      }`}
+                        }`}
                     >
                       <div className="space-y-1 pr-2 min-w-0 flex-1">
                         <div className="flex items-center justify-between">
@@ -526,16 +525,14 @@ export default function SalesOrderSerialTagging() {
 
       <div className="flex flex-col md:flex-row gap-4 items-stretch flex-1 overflow-hidden">
         {/* Left Sidebar Pane */}
-        <div className={`w-full md:w-80 lg:w-90 shrink-0 flex flex-col h-full overflow-hidden ${
-          optimisticOrderId ? "hidden lg:flex" : "flex"
-        }`}>
+        <div className={`w-full md:w-80 lg:w-90 shrink-0 flex flex-col h-full overflow-hidden ${optimisticOrderId ? "hidden lg:flex" : "flex"
+          }`}>
           {renderOrdersList(true)}
         </div>
 
         {/* Right Workspace Pane */}
-        <div className={`flex-1 min-w-0 w-full h-full overflow-y-auto pr-1 ${
-          !optimisticOrderId ? "hidden lg:block" : "block"
-        }`}>
+        <div className={`flex-1 min-w-0 w-full h-full overflow-y-auto pr-1 ${!optimisticOrderId ? "hidden lg:block" : "block"
+          }`}>
           {!optimisticOrderId ? (
             <div className="flex flex-col items-center justify-center h-full border border-dashed rounded-2xl p-12 text-center bg-secondary/5">
               <div className="p-4 bg-primary/5 rounded-full mb-4 border border-primary/10">
