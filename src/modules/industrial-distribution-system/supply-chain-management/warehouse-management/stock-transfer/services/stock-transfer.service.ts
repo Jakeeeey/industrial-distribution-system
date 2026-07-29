@@ -100,7 +100,8 @@ export async function createTransfer(payload: CreateTransferPayload, userId?: nu
   const validated = CreateStockTransferSchema.parse(payload);
   
   const orderNo = helpers.generateOrderNo(validated.sourceBranch, validated.targetBranch);
-  const now = new Date().toISOString();
+  // Use Asia/Manila (+08:00) timestamp for date_requested and date_encoded database fields
+  const now = helpers.nowPH();
 
   // 2. Prepare Directus payloads
   const insertPayloads: StockTransferInsertPayload[] = validated.scannedItems
@@ -131,17 +132,7 @@ export async function createTransfer(payload: CreateTransferPayload, userId?: nu
   return { success: true, orderNo };
 }
 
-/**
- * Helper to return current PH Manila Time (UTC+8) as an ISO-like string
- * but without the 'Z' suffix to ensure correct local interpretation.
- */
-function nowPH(): string {
-  const date = new Date();
-  const phOffset = 8 * 60; // 8 hours in minutes
-  const localOffset = date.getTimezoneOffset(); // in minutes
-  const phTime = new Date(date.getTime() + (phOffset + localOffset) * 60000);
-  return phTime.toISOString().replace("Z", "");
-}
+  // Using helpers.nowPH() for Asia/Manila (+08:00) local timestamp string formatting
 
 /**
  * Updates status and handles optional RFID tracking logic.
@@ -155,8 +146,8 @@ export async function updateTransferStatus(payload: UpdateTransferPayload): Prom
   const existingItems = ids.length > 0 ? await repo.fetchStockTransfersByIds(ids) : [];
   const itemsMap = new Map(existingItems.map(item => [item.id, item]));
 
-  // 3. Normalize updates (handle both 'items' and 'ids' formats)
-  const phNow = nowPH();
+  // Normalize updates using Asia/Manila (+08:00) timestamp
+  const phNow = helpers.nowPH();
   const updates = (validated.items || (validated.ids || []).map(id => ({
     id,
     status: validated.status || "Unknown"
@@ -193,12 +184,13 @@ export async function updateTransferStatus(payload: UpdateTransferPayload): Prom
   // 4. Update main table statuses
   await repo.updateTransfersStatus(updates);
 
-  // 5. Record RFID tracking if provided
+  // 5. Record RFID tracking if provided with explicit Asia/Manila (+08:00) timestamp
   if (validated.rfids && validated.rfids.length > 0 && validated.scanType) {
     const trackingEntries = validated.rfids.map(r => ({
       stock_transfer_id: r.stock_transfer_id,
       rfid_tag: r.rfid_tag,
-      scan_type: validated.scanType!
+      scan_type: validated.scanType!,
+      created_at: phNow,
     }));
     await repo.insertRfidTracking(trackingEntries);
   }
@@ -222,8 +214,8 @@ export async function manualReceiveItems(ids: number[], status: string, userId?:
     received_quantity: item.allocated_quantity ?? item.ordered_quantity ?? 0
   }));
 
-  // Use bulk update — one request per unique payload shape
-  const now = new Date().toISOString();
+  // Use bulk update with Asia/Manila (+08:00) timestamp
+  const now = helpers.nowPH();
   await repo.updateTransfersStatus(updates.map(u => ({
     id: u.id,
     status: u.status,

@@ -297,7 +297,7 @@ export async function updateTransfer(id: number, data: Partial<StockTransferRow>
 /**
  * Records RFID scan events in the tracking table.
  */
-export async function insertRfidTracking(entries: { stock_transfer_id: number; rfid_tag: string; scan_type: string }[]): Promise<void> {
+export async function insertRfidTracking(entries: StockTransferRfidRow[]): Promise<void> {
   if (entries.length === 0) return;
   await createItems("items/stock_transfer_rfid", entries);
 }
