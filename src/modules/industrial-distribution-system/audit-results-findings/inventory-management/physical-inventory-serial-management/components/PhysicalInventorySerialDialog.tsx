@@ -19,7 +19,6 @@ import {
     fetchSerialOnhandByBranch,
     updatePhysicalInventoryDetail,
     fetchCylinderAssetBySerial,
-    updateCylinderAsset,
 } from "../providers/fetchProvider";
 import {
     computeAmount,
@@ -427,8 +426,6 @@ export function PhysicalInventorySerialDialog(props: Props) {
             onhandCache,
             row?.product_id,
             row?.product_name,
-            row?.unit_name,
-            row?.unit_shortcut,
             products,
         ],
     );
@@ -571,10 +568,7 @@ export function PhysicalInventorySerialDialog(props: Props) {
                                 <span className="font-semibold text-muted-foreground mr-1">UOM:</span>
                                 <span className="font-medium text-foreground">{row?.unit_name ?? row?.unit_shortcut ?? "—"}</span>
                             </p>
-                            <p className="hidden sm:block">
-                                <span className="font-semibold text-muted-foreground mr-1">Product ID:</span>
-                                <span className="font-medium text-foreground">{row?.product_id ?? "—"}</span>
-                            </p>
+                            {/* Product ID removed from display as per user UI preference */}
                             <p>
                                 <span className="font-semibold text-muted-foreground mr-1">Count:</span>
                                 <span className="font-bold text-primary">{tags.length}</span>
