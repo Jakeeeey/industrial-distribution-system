@@ -503,9 +503,10 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
 
     setIsValidatingSerial(true);
     try {
-      // DEV-CHANGE: Retrieve sales_order_id from salesInvoice if available to validate that it is loaded on the assigned truck
+      // DEV-CHANGE: Retrieve sales_order_id and invoice_id from salesInvoice if available to validate that it is loaded on the assigned truck
       const salesOrderId = salesInvoice?.sales_order_id;
-      const url = `/api/ids/scm/lpg-billing-management/wiwo-billing?type=validate-serial&serial=${encodeURIComponent(serial)}${salesOrderId ? `&salesOrderId=${salesOrderId}` : ""}`;
+      const salesInvoiceId = salesInvoice?.invoice_id;
+      const url = `/api/ids/scm/lpg-billing-management/wiwo-billing?type=validate-serial&serial=${encodeURIComponent(serial)}${salesOrderId ? `&salesOrderId=${salesOrderId}` : ""}${salesInvoiceId ? `&salesInvoiceId=${salesInvoiceId}` : ""}`;
       const res = await fetch(url);
       const data = await res.json();
 
@@ -566,9 +567,10 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
     });
 
     try {
-      // DEV-CHANGE: Retrieve sales_order_id from salesInvoice if available to validate that it is loaded on the assigned truck
+      // DEV-CHANGE: Retrieve sales_order_id and invoice_id from salesInvoice if available to validate that it is loaded on the assigned truck
       const salesOrderId = salesInvoice?.sales_order_id;
-      const url = `/api/ids/scm/lpg-billing-management/wiwo-billing?type=validate-serial&serial=${encodeURIComponent(s)}${salesOrderId ? `&salesOrderId=${salesOrderId}` : ""}`;
+      const salesInvoiceId = salesInvoice?.invoice_id;
+      const url = `/api/ids/scm/lpg-billing-management/wiwo-billing?type=validate-serial&serial=${encodeURIComponent(s)}${salesOrderId ? `&salesOrderId=${salesOrderId}` : ""}${salesInvoiceId ? `&salesInvoiceId=${salesInvoiceId}` : ""}`;
       const res = await fetch(url);
       const data = await res.json();
 
@@ -629,7 +631,8 @@ export function WiwoForm({ txId, onSuccess, onCancel, initialFlowType = "ROUTINE
     setIsValidatingRoutineDeploy(true);
     try {
       const salesOrderId = salesInvoice?.sales_order_id;
-      const url = `/api/ids/scm/lpg-billing-management/wiwo-billing?type=validate-serial&serial=${encodeURIComponent(serial)}${salesOrderId ? `&salesOrderId=${salesOrderId}` : ""}`;
+      const salesInvoiceId = salesInvoice?.invoice_id;
+      const url = `/api/ids/scm/lpg-billing-management/wiwo-billing?type=validate-serial&serial=${encodeURIComponent(serial)}${salesOrderId ? `&salesOrderId=${salesOrderId}` : ""}${salesInvoiceId ? `&salesInvoiceId=${salesInvoiceId}` : ""}`;
       const res = await fetch(url);
       const data = await res.json();
 
