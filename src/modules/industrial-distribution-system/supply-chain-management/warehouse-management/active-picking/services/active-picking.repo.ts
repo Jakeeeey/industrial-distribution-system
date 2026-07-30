@@ -284,7 +284,7 @@ export const ActivePickingRepo = {
         }
     },
 
-    async verifySerialOnhand(serialNumber: string, branchId: number, sessionToken: string | null = null): Promise<{ productId: number } | null> {
+    async verifySerialOnhand(serialNumber: string, branchId: number, sessionToken: string | null = null): Promise<{ productId: number; serialNumber: string } | null> {
         // Prefer the dedicated server-side Spring API token over the user session cookie.
         // The session cookie is a Directus JWT and will be rejected (401) by the Spring API.
         const token = process.env.VOS_ACCESS_TOKEN || process.env.vos_access_token || sessionToken || process.env.DIRECTUS_STATIC_TOKEN || DIRECTUS_TOKEN;
@@ -344,8 +344,10 @@ export const ActivePickingRepo = {
                     pId = onhand.product as number;
                 }
 
+                const dbSerial = (onhand.serialNumber || onhand.serial_number || "") as string;
+
                 if (pId !== undefined && pId !== null) {
-                    return { productId: Number(pId) };
+                    return { productId: Number(pId), serialNumber: dbSerial };
                 }
 
                 throw new Error("Unable to identify product for this serial.");
@@ -375,7 +377,7 @@ export const ActivePickingRepo = {
     // Changed Promise return type from any to Record<string, unknown> | null to avoid any errors
     async fetchCylinderAssetBySerial(serialNumber: string): Promise<Record<string, unknown> | null> {
         const encoded = encodeURIComponent(serialNumber.trim().toUpperCase());
-        const url = `${DIRECTUS_BASE}/items/cylinder_assets?filter[serial_number][_eq]=${encoded}&fields=product_id&limit=1`;
+        const url = `${DIRECTUS_BASE}/items/cylinder_assets?filter[serial_number][_eq]=${encoded}&fields=product_id,serial_number&limit=1`;
         const response = await fetch(url, { headers: getHeaders(), cache: "no-store" });
         if (!response.ok) return null;
         const data = await response.json();

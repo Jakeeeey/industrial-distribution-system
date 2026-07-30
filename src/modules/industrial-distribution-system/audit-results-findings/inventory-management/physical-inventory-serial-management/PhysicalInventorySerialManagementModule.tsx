@@ -333,7 +333,8 @@ export function PhysicalInventorySerialManagementModule(props: Props) {
                 if (prev.date_encoded && prev.encoder_id) return prev;
                 return {
                     ...prev,
-                    date_encoded: new Date().toISOString(),
+                    // Use Asia/Manila (+08:00) timestamp for header date_encoded
+                    date_encoded: new Date().toLocaleString("sv-SE", { timeZone: "Asia/Manila" }).replace(" ", "T"),
                     encoder_id: {
                         user_id: currentUser.id,
                         user_fname: currentUser.name,

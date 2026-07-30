@@ -59,6 +59,11 @@ export const ActivePickingService = {
             if (!asset) {
                 throw new Error("UNREGISTERED_SERIAL");
             }
+            // CASE-SENSITIVE VALIDATION: Ensure the input matches the exact letter casing stored in Directus database
+            const dbSerial = (asset.serial_number || "") as string;
+            if (dbSerial && dbSerial !== serialNumber.trim()) {
+                throw new Error("Serial number does not match the exact letter casing stored in the database.");
+            }
             productId = Number(asset.product_id);
 
             // OPTIMIZATION: Only fetch general inventory if the cylinder is NOT physically on hand.
@@ -67,6 +72,11 @@ export const ActivePickingService = {
             const stockInfo = inventory.find(inv => Number(inv.product_id) === productId);
             availableStock = stockInfo?.running_inventory_unit || 0;
         } else {
+            // CASE-SENSITIVE VALIDATION: Ensure the input matches the exact letter casing stored in Spring Boot database
+            const dbSerial = onhandInfo.serialNumber;
+            if (dbSerial && dbSerial !== serialNumber.trim()) {
+                throw new Error("Serial number does not match the exact letter casing stored in the database.");
+            }
             productId = Number(onhandInfo.productId);
         }
 

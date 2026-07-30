@@ -19,6 +19,54 @@ function getPhilippineTime() {
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL + '/items';
 const TOKEN = process.env.DIRECTUS_STATIC_TOKEN;
 
+/**
+ * DEV-CHANGE: Decodes JWT payload without verifying signature to extract user ID.
+ */
+function decodeJwtPayload(token: string): { id?: unknown; sub?: unknown; userId?: unknown; user_id?: unknown } | null {
+    try {
+        const parts = token.split(".");
+        if (parts.length !== 3) return null;
+        const base64Url = parts[1];
+        if (!base64Url) return null;
+
+        let base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+        while (base64.length % 4) {
+            base64 += "=";
+        }
+
+        const jsonPayload = decodeURIComponent(
+            atob(base64)
+                .split("")
+                .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+                .join("")
+        );
+        return JSON.parse(jsonPayload);
+    } catch (error) {
+        console.error("[clearance-serial] Failed to decode JWT payload:", error);
+        return null;
+    }
+}
+
+/**
+ * DEV-CHANGE: Extracts logged-in user ID from Request headers or cookies.
+ */
+function getUserIdFromToken(req: Request): number | null {
+    const authHeader = req.headers.get("authorization");
+    const cookieHeader = req.headers.get("cookie");
+    let token = authHeader?.replace("Bearer ", "");
+    if (!token && cookieHeader) {
+        const match = cookieHeader.match(/vos_access_token=([^;]+)/);
+        if (match) token = match[1];
+    }
+    if (!token) return null;
+    const payload = decodeJwtPayload(token);
+    if (!payload) return null;
+    const idValue = payload.id ?? payload.sub ?? payload.userId ?? payload.user_id;
+    if (idValue === undefined || idValue === null) return null;
+    const num = Number(idValue);
+    return isNaN(num) ? null : num;
+}
+
 async function fetcher(endpoint: string) {
     const response = await fetch(`${BASE_URL}${endpoint}`, {
         headers: {
@@ -35,6 +83,26 @@ async function fetcher(endpoint: string) {
     return response.json();
 }
 
+/**
+ * DEV-CHANGE: Fetches Post-Dispatch Plan IDs assigned to a specific driver ID.
+ * Checks both pdp.driver_id and post_dispatch_plan_staff (role = 'Driver').
+ */
+async function getDriverPdpIds(driverId: number): Promise<number[]> {
+    const pdpIds = new Set<number>();
+    try {
+        // Query post_dispatch_plan by driver_id
+        const directRes = await fetcher(`/post_dispatch_plan?filter[driver_id][_eq]=${driverId}&fields=id&limit=-1`);
+        (directRes.data || []).forEach((p: { id: number }) => pdpIds.add(Number(p.id)));
+
+        // Query post_dispatch_plan_staff by user_id & role = 'Driver'
+        const staffRes = await fetcher(`/post_dispatch_plan_staff?filter[user_id][_eq]=${driverId}&filter[role][_eq]=Driver&fields=post_dispatch_plan_id&limit=-1`);
+        (staffRes.data || []).forEach((s: { post_dispatch_plan_id: number }) => pdpIds.add(Number(s.post_dispatch_plan_id)));
+    } catch (err) {
+        console.warn('[clearance-serial] Error fetching driver Post-Dispatch Plan IDs:', err);
+    }
+    return Array.from(pdpIds);
+}
+
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const page = searchParams.get('page') || '1';
@@ -42,6 +110,7 @@ export async function GET(request: Request) {
     const search = searchParams.get('search') || '';
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
+    const driverIdParam = searchParams.get('driverId');
 
     try {
         // 1. Fetch branches that belong to division_id = 1
@@ -52,9 +121,43 @@ export async function GET(request: Request) {
             return NextResponse.json({ data: [], total: 0 });
         }
 
-        // 2. Fetch dispatches with status "For Clearance" AND belonging to those branches
+        // DEV-CHANGE: Resolve driver scoping for Clearance Serial based on PDP driver assignment
+        let targetDriverId: number | null = driverIdParam ? Number(driverIdParam) : null;
+
+        // If no explicit driverId param provided, check if logged-in user is a Driver (Department 8 or assigned in staff)
+        if (!targetDriverId) {
+            const userId = getUserIdFromToken(request);
+            if (userId) {
+                try {
+                    const userRes = await fetcher(`/user/${userId}?fields=id,department_id`);
+                    const userData = userRes.data || {};
+                    if (Number(userData.department_id) === 8) {
+                        targetDriverId = userId;
+                    } else {
+                        const staffCheck = await fetcher(`/post_dispatch_plan_staff?filter[user_id][_eq]=${userId}&filter[role][_eq]=Driver&limit=1&fields=id`);
+                        if (staffCheck.data && staffCheck.data.length > 0) {
+                            targetDriverId = userId;
+                        }
+                    }
+                } catch (userErr) {
+                    console.warn('[clearance-serial] Error verifying logged-in user driver status:', userErr);
+                }
+            }
+        }
+
+        // If driver scoping is active, fetch PDP IDs for targetDriverId
+        let driverFilterStr = "";
+        if (targetDriverId) {
+            const driverPdpIds = await getDriverPdpIds(targetDriverId);
+            if (driverPdpIds.length === 0) {
+                return NextResponse.json({ data: [], total: 0 });
+            }
+            driverFilterStr = `&filter[id][_in]=${driverPdpIds.join(',')}`;
+        }
+
+        // 2. Fetch dispatches with status "For Clearance" AND belonging to those branches (plus optional driver filter)
         const statusFilter = "For Clearance";
-        let plansQuery = `/post_dispatch_plan?filter[status][_eq]=${encodeURIComponent(statusFilter)}&filter[starting_point][_in]=${validBranchIds.join(',')}&page=${page}&limit=${limit}&meta=*`;
+        let plansQuery = `/post_dispatch_plan?filter[status][_eq]=${encodeURIComponent(statusFilter)}&filter[starting_point][_in]=${validBranchIds.join(',')}${driverFilterStr}&page=${page}&limit=${limit}&meta=*`;
 
         // If search is provided, we need to find matching vehicle IDs and member IDs
         if (search) {
