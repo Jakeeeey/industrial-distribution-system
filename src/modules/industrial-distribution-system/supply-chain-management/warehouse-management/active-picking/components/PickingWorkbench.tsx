@@ -99,7 +99,10 @@ export function PickingWorkbench() {
         const hasPendingItems = details.some(d => d.picked_quantity < d.ordered_quantity);
         if (!hasPendingItems) {
             toast.error("Order limit reached for all items. Cannot pick or register any more serial numbers.");
-            inputRef.current?.select();
+            setSerialInput("");
+            setTimeout(() => {
+                inputRef.current?.focus();
+            }, 50);
             return;
         }
 
@@ -109,10 +112,17 @@ export function PickingWorkbench() {
             setUnregisteredSerial(currentSerial);
             setIsRegisterOpen(true);
         } else if (result) {
+            // Success: clear input and focus for the next scan
             setSerialInput("");
-            inputRef.current?.focus();
+            setTimeout(() => {
+                inputRef.current?.focus();
+            }, 50);
         } else {
-            inputRef.current?.select();
+            // Failure (e.g. invalid casing or duplicate scan): clear the input and refocus
+            setSerialInput("");
+            setTimeout(() => {
+                inputRef.current?.focus();
+            }, 50);
         }
     };
 
@@ -182,15 +192,15 @@ export function PickingWorkbench() {
                     {/* Global Serial Input - Moved outside per revision */}
                     <form onSubmit={handleSerialSubmit} className="flex items-center gap-2 w-full max-w-md ml-4">
                         <div className="relative flex-1">
-                            <Input
+                             <Input
                                 ref={inputRef}
                                 placeholder="Enter serial number to pick..."
                                 value={serialInput}
                                 onChange={(e) => setSerialInput(e.target.value)}
-                                disabled={isProcessingSerial}
+                                readOnly={isProcessingSerial}
                                 className={cn(
                                     "h-10 text-sm font-mono tracking-widest px-3 border-2 focus-visible:ring-primary/20",
-                                    isProcessingSerial && "bg-muted animate-pulse border-primary/50"
+                                    isProcessingSerial && "bg-muted animate-pulse border-primary/50 cursor-not-allowed"
                                 )}
                             />
                             {isProcessingSerial && (
