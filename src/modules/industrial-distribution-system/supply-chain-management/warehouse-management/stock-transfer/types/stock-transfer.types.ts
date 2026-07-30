@@ -89,6 +89,8 @@ export interface StockTransferRfidRow {
   stock_transfer_id: number;
   rfid_tag: string;
   scan_type: "DISPATCH" | "RECEIVE";
+  /** Asia/Manila (+08:00) timestamp for when RFID tag was scanned */
+  created_at?: string;
 }
 
 // ─── Scanned / Manual Item (Client-Side) ────────────────────

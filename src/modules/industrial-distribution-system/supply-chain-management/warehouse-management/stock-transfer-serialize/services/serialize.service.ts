@@ -1,5 +1,6 @@
 import * as repo from "./serialize.repo";
 import { fetchProductById } from "../../stock-transfer/services/stock-transfer.repo";
+import { nowPH } from "../../stock-transfer/services/stock-transfer.helpers";
 import { UpdateSerializeTransferSchema } from "../types/serialize.schema";
 import type { SerialLookupResponse } from "../types/serialize.types";
 import type { UpdateSerializeTransferValues } from "../types/serialize.schema";
@@ -49,19 +50,22 @@ export async function updateTransferWithSerials(payload: UpdateSerializeTransfer
   // 1. Validate payload
   const validated = UpdateSerializeTransferSchema.parse(payload);
 
-  // 2. Prepare tracking entries if provided
+  // Get current Asia/Manila (+08:00) timestamp for stock_transfer_serial and stock_transfer table records
+  const phNow = nowPH();
+
+  // 2. Prepare tracking entries if provided, saving created_at in Philippines timezone (+08:00)
   if (validated.serials && validated.serials.length > 0 && validated.scanType) {
     const trackingEntries = validated.serials.map(s => ({
       stock_transfer_id: s.stock_transfer_id,
       serial_number: s.serial_number,
       scan_type: validated.scanType as "DISPATCH" | "RECEIVE",
       created_by: userId,
+      created_at: phNow,
     }));
     await repo.insertSerialTracking(trackingEntries);
   }
 
-  // 3. Prepare main table updates
-  const phNow = new Date().toISOString();
+  // 3. Prepare main table updates with Asia/Manila timestamp
   const transferUpdates = validated.items.map(item => ({
     id: item.id,
     status: validated.status,
@@ -75,6 +79,31 @@ export async function updateTransferWithSerials(payload: UpdateSerializeTransfer
 
   // 4. Execute updates
   await repo.bulkUpdateTransfers(transferUpdates);
+
+  // 5. Update cylinder_assets.current_branch_id to target branch upon Stock Transfer Receive
+  if (validated.scanType === "RECEIVE" || validated.status === "Received") {
+    try {
+      const transferIds = validated.items.map((item) => item.id);
+      const targetBranchId = await repo.fetchTransferTargetBranch(transferIds);
+
+      if (targetBranchId) {
+        let serialsToUpdate: string[] = [];
+        if (validated.serials && validated.serials.length > 0) {
+          serialsToUpdate = validated.serials.map((s) => s.serial_number);
+        } else {
+          // Fallback: fetch serials recorded for these transfer IDs
+          const recorded = await repo.fetchRecordedSerials(transferIds);
+          serialsToUpdate = recorded.map((r) => r.serial_number);
+        }
+
+        if (serialsToUpdate.length > 0) {
+          await repo.updateCylinderAssetsBranchForSerials(serialsToUpdate, targetBranchId);
+        }
+      }
+    } catch (err) {
+      console.error("[Serialize Service] Failed to update cylinder_assets current_branch_id on receive:", err);
+    }
+  }
 
   return { success: true };
 }

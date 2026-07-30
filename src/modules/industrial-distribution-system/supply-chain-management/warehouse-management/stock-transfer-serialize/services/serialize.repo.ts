@@ -131,6 +131,67 @@ export async function bulkUpdateTransfers(items: TransferUpdatePayload[]): Promi
 }
 
 /**
+ * Resolves the receiving target branch ID for a set of stock transfer IDs.
+ * Used to identify the destination branch during Stock Transfer Receive.
+ */
+export async function fetchTransferTargetBranch(transferIds: number[]): Promise<number | null> {
+  if (transferIds.length === 0) return null;
+
+  interface TransferTargetBranchRow {
+    target_branch?: number | { id?: number } | null;
+  }
+
+  const res = await fetchItems<TransferTargetBranchRow>("items/stock_transfer", {
+    "filter[id][_in]": transferIds.join(","),
+    "fields": "target_branch",
+    "limit": 1,
+  });
+
+  const row = res.data?.[0];
+  if (!row || !row.target_branch) return null;
+
+  if (typeof row.target_branch === "object") {
+    return row.target_branch.id ? Number(row.target_branch.id) : null;
+  }
+  return Number(row.target_branch) || null;
+}
+
+/**
+ * Bulk updates current_branch_id in cylinder_assets for transferred serial numbers upon Receive.
+ * Ensures cylinder_assets in Directus matches destination branch in Spring API ledger.
+ */
+export async function updateCylinderAssetsBranchForSerials(serials: string[], targetBranchId: number): Promise<void> {
+  if (serials.length === 0 || !targetBranchId) return;
+
+  const uniqueSerials = Array.from(new Set(serials.map(s => s.trim()))).filter(Boolean);
+  if (uniqueSerials.length === 0) return;
+
+  const upperSerials = uniqueSerials.map(s => s.toUpperCase());
+  const lowerSerials = uniqueSerials.map(s => s.toLowerCase());
+
+  interface CylinderAssetSimpleRow {
+    id: number;
+    serial_number?: string;
+  }
+
+  // Fetch matching cylinder assets by serial numbers (case-insensitive)
+  const res = await fetchItems<CylinderAssetSimpleRow>("items/cylinder_assets", {
+    "filter[_or][0][serial_number][_in]": upperSerials.join(","),
+    "filter[_or][1][serial_number][_in]": lowerSerials.join(","),
+    "fields": "id,serial_number",
+    "limit": -1,
+  });
+
+  const matchingAssets = res.data || [];
+  if (matchingAssets.length > 0) {
+    const assetIds = matchingAssets.map(a => a.id);
+    await bulkUpdateItems("items/cylinder_assets", assetIds, {
+      current_branch_id: targetBranchId,
+    });
+  }
+}
+
+/**
  * Fetches stock transfers grouped by order_no with pagination and search support.
  * This version paginates by unique order numbers to ensure the sidebar fills correctly.
  */
