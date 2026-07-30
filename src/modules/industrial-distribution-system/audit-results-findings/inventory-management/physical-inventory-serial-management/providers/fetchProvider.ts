@@ -908,11 +908,18 @@ export async function createPhysicalInventoryDetailSerial(input: {
     pi_detail_id: number;
     serial_number: string;
     created_by?: number | null;
+    created_at?: string | null;
 }): Promise<PhysicalInventoryDetailSerialRow> {
+    // Generate Asia/Manila (+08:00) timestamp for physical_inventory_details_serial created_at field
+    const phNow = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Manila" }).replace(" ", "T");
+    const payload = {
+        ...input,
+        created_at: input.created_at || phNow,
+    };
     return directusPostItem<
-        { pi_detail_id: number; serial_number: string; created_by?: number | null },
+        typeof payload,
         PhysicalInventoryDetailSerialRow
-    >(TABLES.physical_inventory_details_serial, input);
+    >(TABLES.physical_inventory_details_serial, payload);
 }
 
 export async function updateCylinderAsset(
