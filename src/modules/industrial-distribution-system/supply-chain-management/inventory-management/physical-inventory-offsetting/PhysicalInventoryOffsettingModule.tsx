@@ -37,6 +37,7 @@ import {
     ClipboardList,
     GitCompareArrows,
     Loader2,
+    PackageX,
     Plus,
     Printer,
     RefreshCcw,
@@ -44,6 +45,7 @@ import {
 
 import { OffsettingGroupsTable } from "./components/OffsettingGroupsTable";
 import { OffsettingSelectionTable } from "./components/OffsettingSelectionTable";
+import { MissingCylindersModal } from "./components/MissingCylindersModal";
 
 type Props = {
     phId: number;
@@ -90,6 +92,29 @@ export function PhysicalInventoryOffsettingModule({
 
     const [selectedShortIds, setSelectedShortIds] = React.useState<number[]>([]);
     const [selectedOverIds, setSelectedOverIds] = React.useState<number[]>([]);
+
+    // Comment: State & filters for Missing Cylinders modal displaying un-scanned serials & last movements
+    const [openMissingCylindersModal, setOpenMissingCylindersModal] = React.useState(false);
+    const [missingCylindersFilter, setMissingCylindersFilter] = React.useState<{
+        productId: number | null;
+        label: string | null;
+        uom: string | null;
+        expectedShortage: number | null;
+    }>({ productId: null, label: null, uom: null, expectedShortage: null });
+
+    const handleOpenMissingCylinders = React.useCallback((row?: OffsettingSelectableRow) => {
+        if (row) {
+            setMissingCylindersFilter({
+                productId: row.product_id,
+                label: row.product_label,
+                uom: row.unit_name,
+                expectedShortage: Math.abs(row.variance),
+            });
+        } else {
+            setMissingCylindersFilter({ productId: null, label: null, uom: null, expectedShortage: null });
+        }
+        setOpenMissingCylindersModal(true);
+    }, []);
 
     const consumedRowIds = React.useMemo(() => {
         return new Set(
@@ -404,6 +429,18 @@ export function PhysicalInventoryOffsettingModule({
                         <Button
                             variant="outline"
                             size="sm"
+                            className="cursor-pointer border-red-300 bg-red-50/50 text-red-700 hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300"
+                            onClick={() => handleOpenMissingCylinders()}
+                            disabled={isLoading || isCommitting}
+                            title="View Missing Cylinders & Last Movements"
+                        >
+                            <PackageX className="mr-2 h-3.5 w-3.5" />
+                            Missing Cylinders
+                        </Button>
+
+                        <Button
+                            variant="outline"
+                            size="sm"
                             className="cursor-pointer"
                             onClick={handlePrintReport}
                             disabled={isLoading || isCommitting}
@@ -485,6 +522,7 @@ export function PhysicalInventoryOffsettingModule({
                     rows={openShortRows}
                     selectedIds={selectedShortIds}
                     onToggleRow={handleToggleShortRow}
+                    onViewMissingCylinders={handleOpenMissingCylinders}
                     disabled={isCreatingGroup || isCommitting || !isPending}
                 />
 
@@ -615,6 +653,18 @@ export function PhysicalInventoryOffsettingModule({
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            {/* Comment: Missing Cylinders dialog displaying un-scanned serials and last serial movement trace */}
+            <MissingCylindersModal
+                open={openMissingCylindersModal}
+                onOpenChange={setOpenMissingCylindersModal}
+                phId={header?.id ?? null}
+                branchId={header?.branch_id ?? null}
+                initialProductId={missingCylindersFilter.productId}
+                initialProductLabel={missingCylindersFilter.label}
+                initialUom={missingCylindersFilter.uom}
+                expectedShortage={missingCylindersFilter.expectedShortage}
+            />
         </div>
     );
 }
