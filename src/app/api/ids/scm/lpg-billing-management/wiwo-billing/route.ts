@@ -90,11 +90,13 @@ export async function GET(request: NextRequest) {
 
     if (type === "validate-serial") {
       const serial = searchParams.get("serial");
-      // DEV-CHANGE: Retrieve optional salesOrderId from searchParams
+      // DEV-CHANGE: Retrieve optional salesOrderId and salesInvoiceId from searchParams
       const salesOrderIdParam = searchParams.get("salesOrderId");
+      const salesInvoiceIdParam = searchParams.get("salesInvoiceId");
       const salesOrderId = salesOrderIdParam ? Number(salesOrderIdParam) : undefined;
+      const salesInvoiceId = salesInvoiceIdParam ? Number(salesInvoiceIdParam) : undefined;
       if (!serial) return NextResponse.json({ error: "Serial number is required" }, { status: 400 });
-      const data = await validateSerialForOnboarding(serial, salesOrderId);
+      const data = await validateSerialForOnboarding(serial, salesOrderId, salesInvoiceId, userId ?? undefined);
       return NextResponse.json({ data });
     }
 
