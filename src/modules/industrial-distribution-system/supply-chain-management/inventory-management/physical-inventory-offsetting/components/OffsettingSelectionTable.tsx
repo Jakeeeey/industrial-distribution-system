@@ -16,7 +16,8 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
-import { Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { PackageX, Search } from "lucide-react";
 
 type Props = {
     title: string;
@@ -25,6 +26,8 @@ type Props = {
     selectedIds: number[];
     disabled?: boolean;
     onToggleRow: (rowId: number, checked: boolean) => void;
+    // Comment: Optional handler to open Missing Cylinders dialog with last serial movements
+    onViewMissingCylinders?: (row?: OffsettingSelectableRow) => void;
 };
 
 function fmtMoney(value: number): string {
@@ -47,6 +50,7 @@ export function OffsettingSelectionTable({
                                              selectedIds,
                                              disabled = false,
                                              onToggleRow,
+                                             onViewMissingCylinders,
                                          }: Props) {
     const [searchQuery, setSearchQuery] = React.useState("");
 
@@ -100,16 +104,33 @@ export function OffsettingSelectionTable({
                         </p>
                     </div>
 
-                    <Badge
-                        variant="outline"
-                        className={`h-5 rounded-full px-2 text-[10px] ${
-                            direction === "SHORT"
-                                ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300"
-                                : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300"
-                        }`}
-                    >
-                        {direction}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                        {/* Comment: Button to view missing cylinders and serial movement trace for SHORT shortage items */}
+                        {direction === "SHORT" && onViewMissingCylinders && (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-6 text-[11px] px-2 gap-1 border-red-300 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-900/40 cursor-pointer"
+                                onClick={() => onViewMissingCylinders()}
+                                title="View Missing Cylinders & Last Movements"
+                            >
+                                <PackageX className="h-3 w-3" />
+                                Missing Cylinders
+                            </Button>
+                        )}
+
+                        <Badge
+                            variant="outline"
+                            className={`h-5 rounded-full px-2 text-[10px] ${
+                                direction === "SHORT"
+                                    ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300"
+                                    : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300"
+                            }`}
+                        >
+                            {direction}
+                        </Badge>
+                    </div>
                 </div>
 
                 <div className="mt-3 relative">
@@ -174,13 +195,30 @@ export function OffsettingSelectionTable({
                                                 />
                                             </TableCell>
                                             <TableCell className="py-2 align-top">
-                                                <div className="min-w-0">
-                                                    <p className="max-w-[320px] truncate text-xs font-medium leading-4">
-                                                        {row.product_label}
-                                                    </p>
-                                                    <p className="text-[10px] leading-4 text-muted-foreground">
-                                                        Detail #{row.detail_id || row.product_id}
-                                                    </p>
+                                                <div className="min-w-0 flex items-center justify-between gap-2">
+                                                    <div>
+                                                        <p className="max-w-[260px] truncate text-xs font-medium leading-4">
+                                                            {row.product_label}
+                                                        </p>
+                                                        <p className="text-[10px] leading-4 text-muted-foreground">
+                                                            Detail #{row.detail_id || row.product_id}
+                                                        </p>
+                                                    </div>
+
+                                                    {/* Individual row shortcut to view missing cylinders */}
+                                                    {direction === "SHORT" && onViewMissingCylinders && (
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-6 text-[10px] px-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 cursor-pointer"
+                                                            onClick={() => onViewMissingCylinders(row)}
+                                                            title={`View missing serials for ${row.product_label}`}
+                                                        >
+                                                            <PackageX className="h-3 w-3 mr-1" />
+                                                            Missing
+                                                        </Button>
+                                                    )}
                                                 </div>
                                             </TableCell>
                                             <TableCell className="py-2 text-xs">
