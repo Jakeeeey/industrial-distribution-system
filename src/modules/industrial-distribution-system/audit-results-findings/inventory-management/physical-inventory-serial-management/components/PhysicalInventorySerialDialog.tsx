@@ -568,10 +568,12 @@ export function PhysicalInventorySerialDialog(props: Props) {
                                 <span className="font-semibold text-muted-foreground mr-1">UOM:</span>
                                 <span className="font-medium text-foreground">{row?.unit_name ?? row?.unit_shortcut ?? "—"}</span>
                             </p>
-                            {/* Product ID removed from display as per user UI preference */}
                             <p>
                                 <span className="font-semibold text-muted-foreground mr-1">Count:</span>
                                 <span className="font-bold text-primary">{tags.length}</span>
+                                {row?.system_count != null && (
+                                    <span className="text-muted-foreground ml-1">/ {row.system_count} system</span>
+                                )}
                             </p>
                         </div>
                     </div>
