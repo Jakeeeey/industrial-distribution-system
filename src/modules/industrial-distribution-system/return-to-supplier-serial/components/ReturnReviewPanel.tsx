@@ -100,11 +100,10 @@ export function ReturnReviewPanel({
     
     const sn = serial.trim();
 
-    // 1. Session Check (All items - Case Insensitive)
-    const normalizedSn = sn.toLowerCase();
+    // 1. Session Check (All items - Case Sensitive)
     const isDuplicateInSession = items.some(item => 
-      item.serials.some(s => s.trim().toLowerCase() === normalizedSn)
-    ) || unregisteredSerials.some(s => s.trim().toLowerCase() === normalizedSn);
+      item.serials.some(s => s.trim() === sn)
+    ) || unregisteredSerials.some(s => s === sn);
     
     if (isDuplicateInSession) {
       toast.error(`Serial Number "${sn}" is already added to this transaction.`);
