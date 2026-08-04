@@ -31,7 +31,6 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { RegisterCylinderModal } from "./RegisterCylinderModal";
 
 export function PickingWorkbench() {
     const {
@@ -53,8 +52,6 @@ export function PickingWorkbench() {
     const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({});
     const [showSaveConfirm, setShowSaveConfirm] = useState(false);
     const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
-    const [isRegisterOpen, setIsRegisterOpen] = useState(false);
-    const [unregisteredSerial, setUnregisteredSerial] = useState("");
     const inputRef = useRef<HTMLInputElement>(null);
 
     const activePicking = pickings.find(p => p.id === activePickingId);
@@ -106,24 +103,13 @@ export function PickingWorkbench() {
             return;
         }
 
-        const result = await processSerial(activePickingId, currentSerial, activePicking.branch_id || 0);
+        await processSerial(activePickingId, currentSerial, activePicking.branch_id || 0);
 
-        if (result === "UNREGISTERED_SERIAL") {
-            setUnregisteredSerial(currentSerial);
-            setIsRegisterOpen(true);
-        } else if (result) {
-            // Success: clear input and focus for the next scan
-            setSerialInput("");
-            setTimeout(() => {
-                inputRef.current?.focus();
-            }, 50);
-        } else {
-            // Failure (e.g. invalid casing or duplicate scan): clear the input and refocus
-            setSerialInput("");
-            setTimeout(() => {
-                inputRef.current?.focus();
-            }, 50);
-        }
+        // Success or failure: clear input and focus for the next scan
+        setSerialInput("");
+        setTimeout(() => {
+            inputRef.current?.focus();
+        }, 50);
     };
 
     const handleComplete = async () => {
@@ -413,23 +399,6 @@ export function PickingWorkbench() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
-
-            <RegisterCylinderModal
-                open={isRegisterOpen}
-                onOpenChange={setIsRegisterOpen}
-                serialNumber={unregisteredSerial}
-                branchId={activePicking?.branch_id || 0}
-                details={details}
-                onSuccess={async (prodId, serial) => {
-                    const success = await processSerial(activePickingId, serial, activePicking?.branch_id || 0);
-                    if (success === true) {
-                        setSerialInput("");
-                        inputRef.current?.focus();
-                        return true;
-                    }
-                    return false;
-                }}
-            />
         </div>
     );
 }

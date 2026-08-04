@@ -211,6 +211,16 @@ export const ActivePickingRepo = {
         return data.data.length > 0;
     },
 
+    async checkSerialExistsInConsolidation(serialNumber: string, consolidatorId: number): Promise<boolean> {
+        const url = `${DIRECTUS_BASE}/items/consolidator_serial_mappings?filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&filter[detail_id][consolidator_id][_eq]=${consolidatorId}&limit=1`;
+        const response = await fetch(url, { headers: getHeaders(), cache: "no-store" });
+        if (!response.ok) {
+            throw new Error("Failed to check serial in consolidation");
+        }
+        const data = await response.json();
+        return data.data.length > 0;
+    },
+
     async saveSerialMapping(detailId: number, serialNumber: string, userId: number | null, timestamp: string): Promise<ConsolidatorSerialMapping> {
         const url = `${DIRECTUS_BASE}/items/consolidator_serial_mappings`;
         const body = {
@@ -227,7 +237,9 @@ export const ActivePickingRepo = {
         });
 
         if (!response.ok) {
-            throw new Error("Failed to save serial mapping");
+            const errData = await response.json().catch(() => ({}));
+            const errMsg = errData.errors?.[0]?.message || errData.error?.message || "Failed to save serial mapping";
+            throw new Error(errMsg);
         }
 
         const data = await response.json();
@@ -377,7 +389,7 @@ export const ActivePickingRepo = {
     // Changed Promise return type from any to Record<string, unknown> | null to avoid any errors
     async fetchCylinderAssetBySerial(serialNumber: string): Promise<Record<string, unknown> | null> {
         const encoded = encodeURIComponent(serialNumber.trim().toUpperCase());
-        const url = `${DIRECTUS_BASE}/items/cylinder_assets?filter[serial_number][_eq]=${encoded}&fields=product_id,serial_number&limit=1`;
+        const url = `${DIRECTUS_BASE}/items/cylinder_assets?filter[serial_number][_eq]=${encoded}&fields=product_id,serial_number,cylinder_status&limit=1`;
         const response = await fetch(url, { headers: getHeaders(), cache: "no-store" });
         if (!response.ok) return null;
         const data = await response.json();
