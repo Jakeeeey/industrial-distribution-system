@@ -301,7 +301,8 @@ export const ActivePickingRepo = {
         // The session cookie is a Directus JWT and will be rejected (401) by the Spring API.
         const token = process.env.VOS_ACCESS_TOKEN || process.env.vos_access_token || sessionToken || process.env.DIRECTUS_STATIC_TOKEN || DIRECTUS_TOKEN;
         const baseUrl = process.env.SPRING_API_BASE_URL;
-        const inputSerial = serialNumber.trim().toUpperCase();
+        // [MODIFIED] Removed .toUpperCase() to preserve strict case-sensitive input in the database query.
+        const inputSerial = serialNumber.trim();
 
         if (!baseUrl) {
             throw new Error("NETWORK_FAILURE");
@@ -376,7 +377,8 @@ export const ActivePickingRepo = {
     },
 
     async checkCylinderAssetExists(serialNumber: string): Promise<boolean> {
-        const encoded = encodeURIComponent(serialNumber.trim().toUpperCase());
+        // [MODIFIED] Removed .toUpperCase() to preserve strict case-sensitive input in the query parameter.
+        const encoded = encodeURIComponent(serialNumber.trim());
         const url = `${DIRECTUS_BASE}/items/cylinder_assets?filter[serial_number][_eq]=${encoded}&limit=1`;
         const response = await fetch(url, { headers: getHeaders(), cache: "no-store" });
         if (!response.ok) {
@@ -388,7 +390,8 @@ export const ActivePickingRepo = {
 
     // Changed Promise return type from any to Record<string, unknown> | null to avoid any errors
     async fetchCylinderAssetBySerial(serialNumber: string): Promise<Record<string, unknown> | null> {
-        const encoded = encodeURIComponent(serialNumber.trim().toUpperCase());
+        // [MODIFIED] Removed .toUpperCase() to preserve strict case-sensitive input in the query parameter.
+        const encoded = encodeURIComponent(serialNumber.trim());
         const url = `${DIRECTUS_BASE}/items/cylinder_assets?filter[serial_number][_eq]=${encoded}&fields=product_id,serial_number,cylinder_status&limit=1`;
         const response = await fetch(url, { headers: getHeaders(), cache: "no-store" });
         if (!response.ok) return null;
