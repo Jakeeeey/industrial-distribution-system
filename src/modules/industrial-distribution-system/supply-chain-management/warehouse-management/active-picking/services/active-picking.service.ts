@@ -27,15 +27,15 @@ export const ActivePickingService = {
     },
 
     async processSerialPick(consolidatorId: number, serialNumber: string, userId: number | null, branchId: number, sessionToken: string | null = null): Promise<{ success: boolean; message: string; newQuantity: number; detailId: number; serialMapping?: ConsolidatorSerialMapping }> {
-        // Concurrently verify if serial is on hand, check mapping uniqueness, and fetch picking details
+        // Concurrently verify if serial is on hand, check mapping uniqueness within the consolidation, and fetch picking details
         const [onhandInfoResult, serialScanned, detailsResult] = await Promise.allSettled([
             ActivePickingRepo.verifySerialOnhand(serialNumber, branchId, sessionToken),
-            ActivePickingRepo.checkSerialExists(serialNumber),
+            ActivePickingRepo.checkSerialExistsInConsolidation(serialNumber, consolidatorId),
             ActivePickingRepo.fetchPickingDetails(consolidatorId)
         ]);
 
         if (serialScanned.status === "rejected" || (serialScanned.status === "fulfilled" && serialScanned.value)) {
-            throw new Error("This serial number has already been scanned.");
+            throw new Error("This serial number has already been scanned for this order.");
         }
 
         if (onhandInfoResult.status === "rejected") {
@@ -51,26 +51,26 @@ export const ActivePickingService = {
         }
 
         let productId: number;
-        let availableStock: number | null = null;
         const onhandInfo = onhandInfoResult.value;
 
         if (!onhandInfo) {
             const asset = await ActivePickingRepo.fetchCylinderAssetBySerial(serialNumber);
-            if (!asset) {
-                throw new Error("UNREGISTERED_SERIAL");
-            }
-            // CASE-SENSITIVE VALIDATION: Ensure the input matches the exact letter casing stored in Directus database
-            const dbSerial = (asset.serial_number || "") as string;
-            if (dbSerial && dbSerial !== serialNumber.trim()) {
-                throw new Error("Serial number does not match the exact letter casing stored in the database.");
-            }
-            productId = Number(asset.product_id);
+            if (asset) {
+                // Validate that status is AVAILABLE, FULL, or EMPTY
+                const status = (asset.cylinder_status || "").toString().toUpperCase();
+                if (status !== "AVAILABLE" && status !== "FULL" && status !== "EMPTY") {
+                    throw new Error(`Serial number is not available for picking. Current status: ${status || "UNKNOWN"}`);
+                }
 
-            // OPTIMIZATION: Only fetch general inventory if the cylinder is NOT physically on hand.
-            // If it is on hand, we safely assume available stock > 0 and skip this heavy query.
-            const inventory = await ActivePickingRepo.fetchInventoryForProducts([productId], branchId, sessionToken);
-            const stockInfo = inventory.find(inv => Number(inv.product_id) === productId);
-            availableStock = stockInfo?.running_inventory_unit || 0;
+                // CASE-SENSITIVE VALIDATION: Ensure the input matches the exact letter casing stored in Directus database
+                const dbSerial = (asset.serial_number || "") as string;
+                if (dbSerial && dbSerial !== serialNumber.trim()) {
+                    throw new Error("Serial number does not match the exact letter casing stored in the database.");
+                }
+                productId = Number(asset.product_id);
+            } else {
+                throw new Error("Serial number not found. Please verify the serial number and try again.");
+            }
         } else {
             // CASE-SENSITIVE VALIDATION: Ensure the input matches the exact letter casing stored in Spring Boot database
             const dbSerial = onhandInfo.serialNumber;
@@ -94,11 +94,6 @@ export const ActivePickingService = {
         // 1. Check if Picked >= Ordered
         if (detail.picked_quantity >= detail.ordered_quantity) {
             throw new Error("Order limit reached for this item.");
-        }
-
-        // 2. Check if Picked >= Available Stock (only validated if we fell back to fetching inventory)
-        if (availableStock !== null && detail.picked_quantity >= availableStock) {
-            throw new Error("Cannot pick more than the available physical stock.");
         }
 
         // ---------------------------
