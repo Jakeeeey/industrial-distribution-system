@@ -172,20 +172,7 @@ export async function POST(req: NextRequest) {
       return json({ error: "Unauthorized: Invalid or missing session" }, 401);
     }
 
-    // Support registering assets
-    if (body.action === "register-assets") {
-      const { createCylinderAsset } = await import("@/modules/industrial-distribution-system/return-to-supplier-serial/repositories/rts-repository");
-      const assets = Array.isArray(body.assets) ? body.assets : [];
-      const phNow = new Date(new Date().getTime() + (8 * 60 + new Date().getTimezoneOffset()) * 60000).toISOString();
-      for (const asset of assets) {
-        await createCylinderAsset({
-          ...asset,
-          created_by: Number(userId),
-          created_date: phNow,
-        });
-      }
-      return json({ success: true }, 201);
-    }
+    // [MODIFIED] Removed the 'register-assets' action check. Asset registration is no longer allowed in Return to Supplier.
 
     // Zod validation
     const parsed = createReturnSchema.safeParse(body);
