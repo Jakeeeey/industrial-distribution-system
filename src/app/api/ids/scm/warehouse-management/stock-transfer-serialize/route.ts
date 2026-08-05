@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import * as service from "@/modules/industrial-distribution-system/supply-chain-management/warehouse-management/stock-transfer-serialize/services/serialize.service";
-import { decodeJwtPayload } from "@/lib/auth-utils";
+import { extractUserIdFromToken } from "@/modules/industrial-distribution-system/supply-chain-management/warehouse-management/stock-transfer/services/stock-transfer.helpers";
 
 /**
  * API Route for Serialized Stock Transfer operations.
@@ -63,23 +63,10 @@ export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
 
-    // Extract User ID from JWT cookie
-    let userId: number | undefined;
+    // Extract User ID from JWT cookie with dev fallback
     const cookieStore = await cookies();
-    const token = cookieStore.get("vos_access_token")?.value;
-
-    if (token) {
-      try {
-        const decoded = decodeJwtPayload(token);
-        userId = decoded?.sub ? Number(decoded.sub) : (decoded?.id ? Number(decoded.id) : undefined);
-      } catch (e) {
-        console.warn("[Stock Transfer Serialize API] Failed to decode token:", e);
-      }
-    }
-
-    if (!userId && process.env.NEXT_PUBLIC_AUTH_DISABLED === "true") {
-      userId = 1;
-    }
+    const token = cookieStore.get("vos_access_token")?.value || cookieStore.get("springboot_token")?.value;
+    const userId = extractUserIdFromToken(token);
 
     const result = await service.updateTransferWithSerials(body, userId);
     return NextResponse.json(result);
