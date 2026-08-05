@@ -10,8 +10,11 @@ export const LAST_VISITED_PATH_COOKIE = "vos_last_visited_path";
 export const COOKIE_MAX_AGE_CAP = 60 * 60 * 24 * 7; // 7 days cap
 export const REFRESH_PATH = "/api/auth/refresh";
 
-// Developer Comment: Global secure cookie flag. Only enable Secure flag if explicitly configured (e.g., HTTPS deployment) to prevent HTTP production builds from dropping cookies.
-export const IS_SECURE_COOKIE = process.env.COOKIE_SECURE === "true";
+/**
+ * Global secure cookie flag based on environment.
+ */
+export const IS_SECURE_COOKIE = process.env.COOKIE_SECURE === "true" ||
+    (process.env.COOKIE_SECURE === undefined && process.env.NODE_ENV === "production");
 
 /**
  * Shared cookie options for consistency.
