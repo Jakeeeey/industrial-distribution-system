@@ -14,8 +14,9 @@ function directusHeaders() {
 
 export async function GET() {
     try {
+        // Restrict branches strictly to Industrial division (division_id = 1)
         const [branchesRes, usersRes] = await Promise.all([
-            fetch(`${DIRECTUS_BASE}/items/branches?limit=-1`, {
+            fetch(`${DIRECTUS_BASE}/items/branches?limit=-1&filter[division_id][_eq]=1`, {
                 cache: "no-store",
                 headers: directusHeaders(),
             }),
@@ -62,11 +63,12 @@ export async function POST(req: NextRequest) {
             postal_code,
             isMoving,
             isActive,
+            division_id,
         } = body;
 
         const date_added = new Date().toISOString().split("T")[0];
 
-        // First Save: Normal Branch
+        // First Save: Normal Branch — Always set division_id = 1 for Industrial division
         const branch1 = {
             branch_name,
             branch_code,
@@ -82,9 +84,10 @@ export async function POST(req: NextRequest) {
             isReturn: 0,
             isBadStock: 0,
             isActive: isActive ? 1 : 0,
+            division_id: division_id ? Number(division_id) : 1, // Enforce division_id = 1 (Industrial division)
         };
 
-        // Second Save: Bad Stock Branch
+        // Second Save: Bad Stock Branch — Always set division_id = 1 for Industrial division
         const branch2 = {
             branch_name: `${branch_name} - Bad Stock`,
             branch_code: `${branch_code}-BS`,
@@ -100,6 +103,7 @@ export async function POST(req: NextRequest) {
             isReturn: 1,
             isBadStock: 1,
             isActive: isActive ? 1 : 0,
+            division_id: division_id ? Number(division_id) : 1, // Enforce division_id = 1 (Industrial division)
         };
 
         // Execute saves in sequence (or parallel, but sequence is safer for partial failures)
