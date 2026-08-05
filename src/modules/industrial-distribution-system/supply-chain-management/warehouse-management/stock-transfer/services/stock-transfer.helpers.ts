@@ -2,6 +2,25 @@
 // No I/O — only pure functions that produce values.
 
 import type { BranchRow, OrderGroup, OrderGroupItem, StockTransferRow } from "../types/stock-transfer.types";
+import { decodeJwtPayload } from "@/lib/auth-utils";
+
+/**
+ * Utility to reliably extract user ID from JWT token payload for stock transfer API handlers.
+ * Checks sub, id, and userId properties on the decoded JWT payload, with dev mode fallback.
+ */
+export function extractUserIdFromToken(token?: string | null): number | undefined {
+  if (token) {
+    const decoded = decodeJwtPayload(token);
+    if (decoded?.sub && !isNaN(Number(decoded.sub))) return Number(decoded.sub);
+    if (decoded?.id && !isNaN(Number(decoded.id))) return Number(decoded.id);
+    if (decoded?.userId && !isNaN(Number(decoded.userId))) return Number(decoded.userId);
+  }
+  // Dev-mode fallback when auth is disabled
+  if (process.env.NEXT_PUBLIC_AUTH_DISABLED === "true") {
+    return 1;
+  }
+  return undefined;
+}
 
 /**
  * Returns current Asia/Manila (UTC+8) timestamp formatted as YYYY-MM-DDTHH:mm:ss.

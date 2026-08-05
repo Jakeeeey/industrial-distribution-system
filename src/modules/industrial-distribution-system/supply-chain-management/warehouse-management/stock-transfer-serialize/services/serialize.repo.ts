@@ -208,7 +208,8 @@ export async function fetchStockTransferGroups(params: {
   // is to get the set of order_nos for this 'page' of orders.
   const distinctQueryParams: Record<string, string | number | boolean | undefined> = {
     "filter[status][_in]": status,
-    // "filter[source_branch][division_id][_eq]": 1,
+    // Restrict transfer groups strictly to Industrial division branches (division_id = 1)
+    "filter[source_branch][division_id][_eq]": 1,
     "fields": "order_no,date_encoded",
     "sort": "-date_encoded",
     "limit": -1, // We'll handle the unique slicing in JS for simplicity with Directus

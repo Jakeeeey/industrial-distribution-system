@@ -157,7 +157,8 @@ export async function updateTransferStatus(payload: UpdateTransferPayload): Prom
     const uExtended = u as typeof u & { received_quantity?: number; picked_quantity?: number };
     return {
       ...u,
-      ...(u.status === "Received" ? { 
+      // Populate status-dependent audit fields and timestamps using Asia/Manila local time (nowPH)
+      ...(u.status === "Received" || u.status === "Receiving" ? { 
         date_received: phNow, 
         receiver_id: validated.userId || null,
         received_quantity: uExtended.received_quantity ?? existing?.allocated_quantity ?? existing?.ordered_quantity ?? 0
@@ -165,7 +166,7 @@ export async function updateTransferStatus(payload: UpdateTransferPayload): Prom
       ...(u.status === "For Picking" ? { 
         approved_by: validated.userId || null
       } : {}),
-      ...(u.status === "For Loading" ? { 
+      ...(u.status === "For Loading" || u.status === "Dispatched" ? { 
         dispatched_at: phNow, 
         dispatched_by: validated.userId || null,
         picked_quantity: uExtended.picked_quantity ?? existing?.allocated_quantity ?? existing?.ordered_quantity ?? 0
