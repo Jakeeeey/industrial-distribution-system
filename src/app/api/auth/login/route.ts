@@ -1,5 +1,6 @@
 // src/app/api/auth/login/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { IS_SECURE_COOKIE } from "@/lib/auth-utils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -151,12 +152,13 @@ export async function POST(req: NextRequest) {
         { headers: { "Cache-Control": "no-store" } },
     );
 
+    // Developer Comment: Use centralized IS_SECURE_COOKIE setting to prevent browsers from dropping cookies when running production builds on HTTP
     res.cookies.set({
         name: COOKIE_NAME,
         value: token,
         httpOnly: true,
         sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
+        secure: IS_SECURE_COOKIE,
         path: "/",
         maxAge: cookieMaxAgeFromJwt(token),
     });

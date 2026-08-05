@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import MainDashboardClient from "./_components/main-dashboard-client";
 
@@ -90,10 +91,16 @@ export default async function ERPMainDashboardPage() {
     const cookieStore = await cookies();
     const token = cookieStore.get(COOKIE_NAME)?.value;
 
-    if (!token) return null;
+    // Developer Comment: Redirect to /login if token is missing instead of returning null (which renders a blank screen)
+    if (!token) {
+        redirect("/login");
+    }
 
     const payload = decodeJwt(token);
-    if (!payload) return null;
+    // Developer Comment: Redirect to /login if payload is invalid instead of returning null (which renders a blank screen)
+    if (!payload) {
+        redirect("/login");
+    }
 
     const isAdmin = payload.role === "ADMIN";
     const allowedSubsystems = new Set(payload.subsystems || []);
