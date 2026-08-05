@@ -12,6 +12,7 @@ const SPRING_API_BASE_URL = process.env.SPRING_API_BASE_URL;
 
 /**
  * Fetches stock transfer rows from Directus with relational expansion.
+ * Restricts transfers strictly to source branches belonging to the Industrial division (division_id = 1).
  */
 export async function fetchStockTransfers(status?: string): Promise<StockTransferRow[]> {
   const params: Record<string, unknown> = {
@@ -34,6 +35,8 @@ export async function fetchStockTransfers(status?: string): Promise<StockTransfe
       "product_id.product_per_supplier.supplier_id.supplier_shortcut",
     ].join(","),
     limit: -1,
+    // Restrict transfers strictly to source branches belonging to the Industrial division (division_id = 1)
+    "filter[source_branch][division_id][_eq]": 1,
   };
 
   if (status) {
@@ -45,10 +48,12 @@ export async function fetchStockTransfers(status?: string): Promise<StockTransfe
 }
 
 /**
- * Fetches all active branches.
+ * Fetches active branches restricted to the Industrial division (division_id = 1).
  */
 export async function fetchBranches(): Promise<BranchRow[]> {
+  // Added filter[division_id][_eq] = 1 to restrict branch selection strictly to Industrial division
   const res = await fetchItems<BranchRow>("items/branches", {
+    "filter[division_id][_eq]": 1,
     limit: -1,
   });
   return res.data;
@@ -99,8 +104,10 @@ export async function fetchProducts(search?: string, limit: number = 100, offset
     ].join(","),
     limit,
     offset,
+    // Restrict products strictly to Industrial division (is_industrial = 1), serialized SKUs, and ONLY FULL or EMPTY UOMs
     "filter[product_category][is_industrial][_eq]": 1,
     "filter[is_serialized][_eq]": 1,
+    "filter[unit_of_measurement][unit_name][_in]": "FULL,EMPTY",
   };
 
   if (search) {
