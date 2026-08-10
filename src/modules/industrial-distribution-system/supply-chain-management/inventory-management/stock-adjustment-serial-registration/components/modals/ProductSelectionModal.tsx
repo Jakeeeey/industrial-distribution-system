@@ -31,15 +31,22 @@ export function ProductSelectionModal({
   const [cartItems, setCartItems] = useState<StockAdjustmentItem[]>(initialSelectedItems || []);
 
   const filteredProducts = useMemo(() => {
-    if (!catalogSearch.trim()) return products;
+    // AG-COMMENT: Filter products to ONLY include serialized products (is_serialized = 1/true, in serialProductIds, or unit order = 3), filtering out non-serialized inventory (is_serialized = 0)
+    const serializedProducts = products.filter((p) => {
+      const pid = Number(p.product_id || p.id);
+      const isProductSerial = p.is_serialized === true || serialProductIds.has(pid) || p.unit_of_measurement?.order === 3;
+      return Boolean(isProductSerial);
+    });
+
+    if (!catalogSearch.trim()) return serializedProducts;
     const t = catalogSearch.toLowerCase();
-    return products.filter(
+    return serializedProducts.filter(
       (p) =>
         p.product_name?.toLowerCase().includes(t) ||
         p.product_code?.toLowerCase().includes(t) ||
         p.barcode?.toLowerCase().includes(t)
     );
-  }, [products, catalogSearch]);
+  }, [products, catalogSearch, serialProductIds]);
 
   const addedProductIds = useMemo(() => {
     const ids = new Set<number>();

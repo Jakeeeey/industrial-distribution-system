@@ -91,24 +91,12 @@ export function ProductTable({
                   <TableCell>
                     <div className="flex flex-wrap gap-1.5 max-w-[400px]">
                       {groupItems.map(variant => {
-                        // Extract variant name by removing the base product name from the code
-                        // or just use the code if it's entirely different
+                        // AG-COMMENT: Display exact variant code or distinct UOM identifier (e.g. FULL, EMPTY, SWAP) to avoid ambiguous label truncation or duplicate-looking badges
                         let variantLabel = variant.product_code;
-                        
-                        // Try to clean up the label if it contains the base name
-                        const baseParts = groupName.split(' ')[0]; // e.g. "LPG" or "A"
-                        if (variantLabel.startsWith(baseParts)) {
-                            // Extract just the unique part. For "LPG 50KG SWAP" and base "LPG 50KG CTA...", 
-                            // we can try to just use the last word, or use the whole code if it's small.
-                            const codeWords = variant.product_code.split(' ');
-                            if (codeWords.length > 1) {
-                                variantLabel = codeWords[codeWords.length - 1]; // e.g. "SWAP"
-                            }
-                        }
-                        
-                        // Fallback if label is empty
-                        if (!variantLabel || variantLabel.trim() === '') {
-                           variantLabel = variant.product_code;
+                        if (variant.uom_ids && variant.uom_ids.trim() !== '') {
+                          variantLabel = `${variant.uom_ids} (${variant.product_code})`;
+                        } else if (!variant.parent_id && parentItem.is_serialized) {
+                          variantLabel = `FULL (${variant.product_code})`;
                         }
 
                         return (

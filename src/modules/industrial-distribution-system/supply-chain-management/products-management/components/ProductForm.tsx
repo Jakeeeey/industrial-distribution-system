@@ -115,18 +115,8 @@ export function ProductForm({
     },
   });
 
-  const watchedCategory = form.watch("product_category");
-  
-  React.useEffect(() => {
-    if (watchedCategory && !initialValues) {
-      const category = categories.find(c => c.category_id === watchedCategory);
-      if (category && category.is_industrial === 1) {
-        form.setValue("is_serialized", 0);
-      } else {
-        form.setValue("is_serialized", 1);
-      }
-    }
-  }, [watchedCategory, categories, form, initialValues]);
+  // AG-COMMENT: Unlock "Is Serialized Product" switch so users can freely toggle serialization ON/OFF for any category.
+  // We do NOT use an auto-override useEffect on watchedCategory changes to avoid locking or forcefully setting the field.
 
   const handleFormSubmit = async (values: ProductFormValues) => {
     try {
@@ -177,7 +167,20 @@ export function ProductForm({
 
       const uomId = Number(values.unit_of_measurement) || (units && units.length > 0 ? Number(units[0].unit_id) : 1);
 
-      onSubmit({ ...values, product_image: imageId, unit_of_measurement: uomId, is_serialized: values.is_serialized });
+      // AG-COMMENT: Include density_factor from initialValues if present to prevent accidental data corruption or overwrite
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const extraPayload: Record<string, any> = {};
+      if (initialValues && 'density_factor' in initialValues && initialValues.density_factor !== undefined) {
+        extraPayload.density_factor = initialValues.density_factor;
+      }
+
+      onSubmit({ 
+        ...values, 
+        ...extraPayload,
+        product_image: imageId, 
+        unit_of_measurement: uomId, 
+        is_serialized: values.is_serialized 
+      });
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to save product",
