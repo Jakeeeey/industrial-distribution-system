@@ -67,7 +67,14 @@ export function ProductSelectionModal({
   }
 
   const filteredProducts = useMemo(() => {
-    const activeProducts = products.filter((p) => {
+    // AG-COMMENT: Filter products to ONLY include serialized products (is_serialized = 1/true, in serialProductIds, or unit order = 3), removing non-serialized items (is_serialized = 0)
+    const serializedProducts = products.filter((p) => {
+      const pid = Number(p.product_id || p.id);
+      const isProductSerial = p.is_serialized === true || serialProductIds.has(pid) || p.unit_of_measurement?.order === 3;
+      return Boolean(isProductSerial);
+    });
+
+    const activeProducts = serializedProducts.filter((p) => {
       const uomName = (p.unit_name || "").toUpperCase();
       if (units.length > 0) {
         return allowedUnitNames.has(uomName);
@@ -83,7 +90,7 @@ export function ProductSelectionModal({
         p.product_code?.toLowerCase().includes(t) ||
         p.barcode?.toLowerCase().includes(t)
     );
-  }, [products, catalogSearch, units, allowedUnitNames]);
+  }, [products, catalogSearch, units, allowedUnitNames, serialProductIds]);
 
   const addedProductIds = useMemo(() => {
     const ids = new Set<number>();
