@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { ScanHistorySidebar } from '../shared/components/ScanHistorySidebar';
 import type { OrderGroupItem, ProductRow, UnitOfMeasurement, CurrentUser } from '../types/stock-transfer.types';
 import { StockTransferPicklistPreview } from '../shared/components/StockTransferPicklistPreview';
+import { DiscrepancyModal } from '../shared/components/DiscrepancyModal';
 
 // Shared components
 import { OrderSelectionModal } from '../shared/components/OrderSelectionModal';
@@ -61,6 +62,7 @@ export default function StockTransferDispatchView({ currentUser }: { currentUser
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [showPicklist, setShowPicklist] = useState(false);
+  const [showDiscrepancyModal, setShowDiscrepancyModal] = useState(false);
 
   // Reset page when group or page size changes
   React.useEffect(() => {
@@ -420,9 +422,14 @@ export default function StockTransferDispatchView({ currentUser }: { currentUser
                   <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 p-4 lg:p-0 print:hidden">
                     <div className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground text-center sm:text-left">
                       {!isAllScanned ? (
-                        <span className="text-amber-600/80 italic">Scanning in progress...</span>
+                        <span className="text-amber-600/90 font-semibold flex items-center gap-1.5 justify-center sm:justify-start">
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping" />
+                          Partial Scan ({metrics.pickedUnits}/{metrics.totalUnits}) — Discrepancy Flow Ready
+                        </span>
                       ) : (
-                        <span className="text-emerald-600">Verification Complete</span>
+                        <span className="text-emerald-600 font-semibold flex items-center gap-1.5 justify-center sm:justify-start">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> 100% Verification Complete
+                        </span>
                       )}
                     </div>
                     <div className="flex gap-2 w-full sm:w-auto">
@@ -442,14 +449,22 @@ export default function StockTransferDispatchView({ currentUser }: { currentUser
                         className={cn(
                           "w-full sm:w-auto font-bold text-xs shadow-none px-6 transition-all",
                           hasScannedAny
-                            ? "bg-emerald-600 hover:bg-emerald-700 text-white" 
+                            ? !isAllScanned
+                              ? "bg-amber-600 hover:bg-amber-700 text-white"
+                              : "bg-emerald-600 hover:bg-emerald-700 text-white"
                             : "bg-muted text-muted-foreground"
                         )}
                         disabled={processing || !hasScannedAny}
-                        onClick={() => dispatchOrder(selectedGroup.orderNo)}
+                        onClick={() => {
+                          if (!isAllScanned) {
+                            setShowDiscrepancyModal(true);
+                          } else {
+                            dispatchOrder(selectedGroup.orderNo);
+                          }
+                        }}
                       >
                         {processing && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
-                        Dispatch Order
+                        {!isAllScanned ? "Finalize Partial Dispatch" : "Dispatch Order"}
                       </Button>
                     </div>
                   </div>
@@ -484,6 +499,25 @@ export default function StockTransferDispatchView({ currentUser }: { currentUser
           sourceBranch={getBranchName(selectedGroup.sourceBranch)}
           targetBranch={getBranchName(selectedGroup.targetBranch)}
           requestedDate={new Date(selectedGroup.dateRequested).toLocaleString('en-PH')}
+        />
+      )}
+
+      {/* Discrepancy & Partial Dispatch Modal */}
+      {selectedGroup && (
+        <DiscrepancyModal
+          open={showDiscrepancyModal}
+          onClose={() => setShowDiscrepancyModal(false)}
+          orderNo={selectedGroup.orderNo}
+          items={selectedGroup.items}
+          processing={processing}
+          onConfirm={async (payload) => {
+            await dispatchOrder(selectedGroup.orderNo, {
+              globalReason: payload.globalReason,
+              globalRemarks: payload.globalRemarks,
+              itemReasons: payload.itemReasons,
+            });
+            setShowDiscrepancyModal(false);
+          }}
         />
       )}
     </div>
