@@ -60,15 +60,15 @@ export function RapidScanModal({ poId, open, onClose, lines, onAddSerial }: Rapi
             orderedQty: l.orderedQty,
             currentCount: l.savedSerials.length + l.draftSerials.length,
             allSerialNumbers: [
-                ...l.savedSerials.map((s) => s.serial_number.toUpperCase()),
-                ...l.draftSerials.map((s) => s.serial_number.toUpperCase()),
+                ...l.savedSerials.map((s) => s.serial_number),
+                ...l.draftSerials.map((s) => s.serial_number),
             ],
         })),
         [lines]
     );
 
     const handleScan = React.useCallback(async () => {
-        const sn = inputValue.trim().toUpperCase();
+        const sn = inputValue.trim();
         setInputValue("");
         if (!sn) return;
 
@@ -117,16 +117,8 @@ export function RapidScanModal({ poId, open, onClose, lines, onAddSerial }: Rapi
                 return;
             }
 
-            // Prefer a line that still needs serials
-            const target = matchedLines.find((l) => l.currentCount < l.orderedQty);
-            if (!target) {
-                store.addRapidScanLog(poId, {
-                    serial: sn, lineId: null, productName: assetProductName,
-                    branchName: "—", status: "error", message: "Exceeds ordered quantity"
-                });
-                toast.error(`Scanning exceeds ordered quantity for "${assetProductName}".`);
-                return;
-            }
+            // Prefer a line that still needs serials, fallback to first line if over-receiving
+            const target = matchedLines.find((l) => l.currentCount < l.orderedQty) || matchedLines[0];
 
             // Check for duplicates within this line
             if (target.allSerialNumbers.includes(sn)) {

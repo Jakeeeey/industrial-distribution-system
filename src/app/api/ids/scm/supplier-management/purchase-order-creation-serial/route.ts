@@ -325,13 +325,97 @@ async function getPODetail(base: string, poId: number) {
 async function tagSerials(
     base: string,
     poId: number,
-    entries: Array<{ lineId: number; productId: number; serial_number: string }>
+    entries: Array<{ lineId: number; productId: number; serial_number: string }>,
+    userToken: string
 ): Promise<{ serialsInserted: number; isTaggedNow: boolean }> {
-    // Build serial rows for batch insert
+    // 1. Fetch PO Lines to get branch_id and product_id for validation
+    const linesUrl =
+        `${base}/items/purchase_order_products` +
+        `?filter[purchase_order_id][_eq]=${poId}` +
+        `&limit=-1` +
+        `&fields=purchase_order_product_id,product_id,branch_id,ordered_quantity`;
+
+    const linesRes = await directusFetch(linesUrl);
+    const linesData = ((await linesRes.json().catch(() => ({}))).data ?? []) as Record<string, unknown>[];
+
+    const linesMap = new Map<number, { branch_id: number; product_id: number; ordered_quantity: number }>();
+    for (const l of linesData) {
+        const lineId = Number(l.purchase_order_product_id);
+        const rawBranch = l.branch_id;
+        const branchId = typeof rawBranch === 'object' && rawBranch !== null ? Number((rawBranch as Record<string, unknown>).id || (rawBranch as Record<string, unknown>).branch_id) : Number(rawBranch);
+        const rawProduct = l.product_id;
+        const productId = typeof rawProduct === 'object' && rawProduct !== null ? Number((rawProduct as Record<string, unknown>).id || (rawProduct as Record<string, unknown>).product_id) : Number(rawProduct);
+        if (lineId > 0) {
+            linesMap.set(lineId, { branch_id: branchId, product_id: productId, ordered_quantity: Number(l.ordered_quantity ?? 1) });
+        }
+    }
+
+    // 2. Fetch v_serial_onhand for validation
+    const uniqueSerials = Array.from(new Set(entries.map((e) => String(e.serial_number).trim())));
+    const onhandUrl = `${base}/items/v_serial_onhand?filter[serial_number][_in]=${encodeURIComponent(uniqueSerials.join(','))}&limit=-1`;
+    
+    const onhandRes = await fetch(onhandUrl, {
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${userToken}`
+        }
+    });
+    
+    if (!onhandRes.ok) {
+        throw new Error(`Failed to fetch v_serial_onhand for validation (${onhandRes.status})`);
+    }
+
+    const onhandJson = await onhandRes.json().catch(() => ({}));
+    const onhandData = (onhandJson?.data ?? []) as Record<string, unknown>[];
+    
+    const onhandMap = new Map<string, Record<string, unknown>>();
+    for (const r of onhandData) {
+        const sn = String(r.serial_number).trim();
+        if (sn) onhandMap.set(sn, r);
+    }
+
+    // 3. Validation Loop
+    const errors: string[] = [];
+    for (const e of entries) {
+        const sn = String(e.serial_number).trim();
+        const lineMeta = linesMap.get(e.lineId);
+        
+        if (!lineMeta) {
+            errors.push(`Line ID ${e.lineId} not found in PO for serial ${sn}.`);
+            continue;
+        }
+
+        const onhand = onhandMap.get(sn);
+        if (!onhand) {
+            errors.push(`New serial number ${sn} is not recognized in inventory.`);
+            continue;
+        }
+
+        const status = String(onhand.status || "");
+        if (status !== 'Empty') {
+            errors.push(`Serial number ${sn} is currently ${status}, not Empty.`);
+        }
+
+        const onhandBranch = Number(onhand.branch_id);
+        if (onhandBranch !== lineMeta.branch_id) {
+            errors.push(`Serial number ${sn} is located at a different branch.`);
+        }
+
+        const onhandProduct = Number(onhand.product_id);
+        if (onhandProduct !== lineMeta.product_id) {
+            errors.push(`Serial number ${sn} does not match the product type.`);
+        }
+    }
+
+    if (errors.length > 0) {
+        throw new Error("Validation Failed:\n" + errors.join("\n"));
+    }
+
+    // 4. Build serial rows for batch insert
     const serialRows = entries.map((e) => ({
         purchase_order_product_id: e.lineId,
         product_id: e.productId,
-        serial_number: String(e.serial_number).trim().toUpperCase(),
+        serial_number: String(e.serial_number).trim(),
     }));
 
     // Insert all serials in one request
@@ -351,20 +435,9 @@ async function tagSerials(
 
     const inserted = Array.isArray(insertJson?.data) ? insertJson.data.length : serialRows.length;
 
-    // Check if all lines are now fully serialized → patch is_tagged = 1
-    // Fetch current serial counts vs ordered qty for this PO
-    const linesUrl =
-        `${base}/items/purchase_order_products` +
-        `?filter[purchase_order_id][_eq]=${poId}` +
-        `&limit=-1` +
-        `&fields=purchase_order_product_id,ordered_quantity`;
-
-    const linesRes = await directusFetch(linesUrl);
-    const linesData = ((await linesRes.json().catch(() => ({}))).data ?? []) as Record<string, unknown>[];
-
-    let serialsData: Record<string, unknown>[] = [];
+    // 5. Check if all lines are now fully serialized → patch is_tagged = 1
     const lineIds = linesData.map((l) => Number(l.purchase_order_product_id)).filter(Boolean);
-
+    let serialsData: Record<string, unknown>[] = [];
     if (lineIds.length > 0) {
         const serialsUrl =
             `${base}/items/purchase_order_serial` +
@@ -379,7 +452,6 @@ async function tagSerials(
     // Count serials per line
     const snByLine = new Map<number, number>();
     for (const sr of serialsData) {
-        // Handle case where Directus might return an object
         const raw = sr.purchase_order_product_id;
         const lid = typeof raw === 'object' && raw !== null ? Number((raw as Record<string, unknown>).id || (raw as Record<string, unknown>).purchase_order_product_id) : Number(raw);
         if (Number.isFinite(lid) && lid > 0) {
@@ -387,7 +459,7 @@ async function tagSerials(
         }
     }
 
-    // Check completeness: every line's serial count >= ordered_quantity
+    // Check completeness
     const allComplete =
         linesData.length > 0 &&
         linesData.every((l) => {
@@ -398,7 +470,6 @@ async function tagSerials(
 
     let isTaggedNow = false;
     if (allComplete) {
-        // Patch purchase_order.is_tagged = 1
         const patchRes = await directusFetch(`${base}/items/purchase_order/${poId}`, {
             method: "PATCH",
             body: JSON.stringify({ is_tagged: true }),
@@ -443,6 +514,11 @@ export async function POST(req: NextRequest) {
     try {
         const base = getDirectusBase();
 
+        const userToken = req.cookies.get("vos_access_token")?.value || req.headers.get("Authorization")?.replace("Bearer ", "");
+        if (!userToken) {
+            return NextResponse.json({ error: "Missing authentication token. Cannot validate serials." }, { status: 401 });
+        }
+
         const rawBody = await req.json().catch(() => null);
         if (!rawBody) {
             return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
@@ -484,7 +560,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Insert serials and patch is_tagged
-        const result = await tagSerials(base, poId, entries);
+        const result = await tagSerials(base, poId, entries, userToken);
 
         // Return updated PO detail so client can refresh state
         const updatedDetail = await getPODetail(base, poId);
