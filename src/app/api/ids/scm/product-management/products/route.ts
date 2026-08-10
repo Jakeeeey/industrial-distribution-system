@@ -87,10 +87,57 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
+    // Validate that product_code is provided and non-empty
+    if (!body.product_code || typeof body.product_code !== "string" || !body.product_code.trim()) {
+      return NextResponse.json({ error: "Product code is required and cannot be empty." }, { status: 400 });
+    }
+
+    const trimmedCode = body.product_code.trim();
+
     // Check if we are creating a parent product (no parent_id and no uom_ids)
     const hasParentId = body.parent_id !== undefined && body.parent_id !== null && body.parent_id !== "" && body.parent_id !== 0;
     const hasUomIds = body.uom_ids !== undefined && body.uom_ids !== null && body.uom_ids !== "";
     const isParent = !hasParentId && !hasUomIds;
+
+    const isSerialized = body.is_serialized === 1 || body.is_serialized === "1" || body.is_serialized === true;
+
+    // Collect all candidate codes that would be created (parent code + auto-generated variant codes)
+    const candidateCodes: string[] = [trimmedCode];
+    if (isParent && isSerialized) {
+      const variants = ["EMPTY", "SWAP", "OUTRIGHT", "DEPOSIT", "REFILL"];
+      variants.forEach((variant) => {
+        candidateCodes.push(`${trimmedCode} ${variant}`.trim());
+      });
+    }
+
+    // Fetch existing product codes from Directus to enforce strict global uniqueness
+    const existingProductsRes = await fetch(
+      `${DIRECTUS_URL}/items/${COLLECTION}?limit=-1&fields=product_id,product_code`,
+      { headers: getHeaders(), cache: "no-store" }
+    );
+
+    if (existingProductsRes.ok) {
+      const existingJson = await existingProductsRes.json();
+      const existingProducts: { product_id: number; product_code: string }[] = existingJson.data ?? [];
+
+      // Build set of existing normalized upper-cased product codes
+      const existingCodesSet = new Set<string>();
+      for (const p of existingProducts) {
+        if (p.product_code) {
+          existingCodesSet.add(p.product_code.trim().toUpperCase());
+        }
+      }
+
+      // Reject if any candidate product code already exists globally
+      for (const code of candidateCodes) {
+        if (existingCodesSet.has(code.toUpperCase())) {
+          return NextResponse.json(
+            { error: `Product Code "${code}" already exists. Product Code must be strictly unique globally.` },
+            { status: 400 }
+          );
+        }
+      }
+    }
 
     // Hardcode Manila Time (UTC+8)
     const manilaTime = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19);
@@ -109,12 +156,11 @@ export async function POST(req: NextRequest) {
       if (u.unit_shortcut) unitShortcutMap.set(u.unit_shortcut.trim().toUpperCase(), u.unit_id);
     }
 
-    const isSerialized = body.is_serialized === 1 || body.is_serialized === "1" || body.is_serialized === true;
-
     const resolvedParentUomId = isSerialized ? (unitShortcutMap.get("FULL") ?? 16) : (body.unit_of_measurement || 16);
 
     const parentPayload = {
       ...body,
+      product_code: trimmedCode,
       unit_of_measurement: resolvedParentUomId,
       date_added: manilaTime,
       status: "Approved"
@@ -184,6 +230,33 @@ export async function PATCH(req: NextRequest) {
     if (!id) return NextResponse.json({ error: "Missing ID" }, { status: 400 });
 
     const body = await req.json();
+
+    // If updating product_code, enforce strict global uniqueness against other products
+    if (body.product_code && typeof body.product_code === "string" && body.product_code.trim()) {
+      const trimmedCode = body.product_code.trim().toUpperCase();
+
+      const existingProductsRes = await fetch(
+        `${DIRECTUS_URL}/items/${COLLECTION}?limit=-1&fields=product_id,product_code`,
+        { headers: getHeaders(), cache: "no-store" }
+      );
+
+      if (existingProductsRes.ok) {
+        const existingJson = await existingProductsRes.json();
+        const existingProducts: { product_id: number; product_code: string }[] = existingJson.data ?? [];
+
+        const duplicate = existingProducts.find(
+          (p) => String(p.product_id) !== String(id) && p.product_code && p.product_code.trim().toUpperCase() === trimmedCode
+        );
+
+        if (duplicate) {
+          return NextResponse.json(
+            { error: `Product Code "${body.product_code.trim()}" already exists on another product. Product Code must be strictly unique globally.` },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
     const response = await fetch(`${DIRECTUS_URL}/items/${COLLECTION}/${id}`, {
       method: "PATCH",
       headers: getHeaders(),

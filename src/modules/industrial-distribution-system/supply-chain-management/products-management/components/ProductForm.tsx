@@ -130,7 +130,12 @@ export function ProductForm({
 
   const handleFormSubmit = async (values: ProductFormValues) => {
     try {
-      // Client-side validations
+      // Client-side validations for required product fields
+      if (!values.product_code || !values.product_code.trim()) {
+        toast.error("Validation Error: Please enter a valid Product Code before saving.");
+        return;
+      }
+
       if (!values.product_category || Number(values.product_category) === 0) {
         toast.error("Validation Error: Please select a valid Product Category before saving.");
         return;
