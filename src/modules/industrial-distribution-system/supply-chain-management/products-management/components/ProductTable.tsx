@@ -44,13 +44,13 @@ export function ProductTable({
     return brand ? brand.brand_name : String(idOrObj);
   };
 
-  // Group products by product_name
+  // Group products by parent_id or product_id to ensure parent products and their variants are grouped strictly together
   const groupedProducts = products.reduce((acc, product) => {
-    const name = product.product_name || "Unknown";
-    if (!acc[name]) {
-      acc[name] = [];
+    const groupKey = product.parent_id ? String(product.parent_id) : String(product.product_id);
+    if (!acc[groupKey]) {
+      acc[groupKey] = [];
     }
-    acc[name].push(product);
+    acc[groupKey].push(product);
     return acc;
   }, {} as Record<string, Product[]>);
 
@@ -75,13 +75,14 @@ export function ProductTable({
               </TableCell>
             </TableRow>
           ) : (
-            Object.entries(groupedProducts).map(([groupName, groupItems]) => {
-              // Use the first item to get shared properties
-              const firstItem = groupItems[0];
+            Object.entries(groupedProducts).map(([groupKey, groupItems]) => {
+              // Find parent item if present, otherwise fall back to first item
+              const parentItem = groupItems.find((p) => !p.parent_id) || groupItems[0];
+              const groupName = parentItem.product_name || "Unknown";
 
               return (
                 <TableRow 
-                  key={groupName}
+                  key={groupKey}
                   className="bg-background hover:bg-muted/30 transition-colors group"
                 >
                   <TableCell className="font-medium">
@@ -137,10 +138,10 @@ export function ProductTable({
                       })}
                     </div>
                   </TableCell>
-                  <TableCell>{getCategoryName(firstItem.product_category)}</TableCell>
-                  <TableCell>{getBrandName(firstItem.product_brand)}</TableCell>
+                  <TableCell>{getCategoryName(parentItem.product_category)}</TableCell>
+                  <TableCell>{getBrandName(parentItem.product_brand)}</TableCell>
                   <TableCell>
-                    {firstItem.is_serialized ? (
+                    {parentItem.is_serialized ? (
                       <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800">YES</Badge>
                     ) : (
                       <Badge variant="outline" className="text-slate-500">NO</Badge>
@@ -148,9 +149,9 @@ export function ProductTable({
                   </TableCell>
                   <TableCell>
                     {/* If all items have the same status, show it, otherwise 'Mixed' */}
-                    {groupItems.every(p => p.isActive === firstItem.isActive) ? (
-                      <Badge variant={firstItem.isActive ? "default" : "secondary"}>
-                        {firstItem.isActive ? "Active" : "Inactive"}
+                    {groupItems.every(p => p.isActive === parentItem.isActive) ? (
+                      <Badge variant={parentItem.isActive ? "default" : "secondary"}>
+                        {parentItem.isActive ? "Active" : "Inactive"}
                       </Badge>
                     ) : (
                       <Badge variant="outline">Mixed</Badge>
