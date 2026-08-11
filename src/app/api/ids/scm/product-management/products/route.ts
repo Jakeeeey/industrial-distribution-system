@@ -83,7 +83,12 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// AG-COMMENT: Handles creation of new product records and auto-generating serialized variants with full audit trail (created_by, updated_by) & density_factor safeguards.
+// AG-COMMENT: Helper to obtain Philippine Time (Asia/Manila UTC+8) in ISO format (YYYY-MM-DDTHH:mm:ss)
+function getManilaTimeString(): string {
+  return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Manila" }).replace(" ", "T");
+}
+
+// AG-COMMENT: Handles creation of new product records and auto-generating serialized variants with full audit trail (created_by, updated_by, created_at, updated_at in PH time) & density_factor safeguards.
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -145,8 +150,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Hardcode Manila Time (UTC+8)
-    const manilaTime = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19);
+    // AG-COMMENT: Obtain Philippine Time (Asia/Manila UTC+8) timestamp
+    const manilaTime = getManilaTimeString();
 
     // AG-COMMENT: Resolve created_by and updated_by fields from request or fallback user ID
     const createdBy = body.created_by ? Number(body.created_by) : 1;
@@ -178,6 +183,9 @@ export async function POST(req: NextRequest) {
       product_code: trimmedCode,
       unit_of_measurement: resolvedParentUomId,
       date_added: manilaTime,
+      created_at: manilaTime,
+      updated_at: manilaTime,
+      last_updated: manilaTime,
       status: "Approved",
       created_by: createdBy,
       updated_by: updatedBy,
@@ -218,6 +226,9 @@ export async function POST(req: NextRequest) {
           isActive: 1,
           unit_of_measurement: resolvedUomId,
           date_added: manilaTime,
+          created_at: manilaTime,
+          updated_at: manilaTime,
+          last_updated: manilaTime,
           status: "Approved",
           created_by: createdBy,
           updated_by: updatedBy,
@@ -244,7 +255,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// AG-COMMENT: Handles updating product records, updating audit metadata (updated_by, updated_at), enforcing uniqueness, and propagating product code changes to child variants.
+// AG-COMMENT: Handles updating product records, updating audit metadata (updated_by, updated_at in PH time), enforcing uniqueness, and propagating product code changes to child variants.
 export async function PATCH(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -252,13 +263,14 @@ export async function PATCH(req: NextRequest) {
     if (!id) return NextResponse.json({ error: "Missing ID" }, { status: 400 });
 
     const body = await req.json();
-    const manilaTime = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19);
+    const manilaTime = getManilaTimeString();
 
-    // AG-COMMENT: Attach updated_by audit trail and timestamp
+    // AG-COMMENT: Attach updated_by audit trail and timestamp in Philippine Time (UTC+8)
     const updatePayload = {
       ...body,
       updated_by: body.updated_by ? Number(body.updated_by) : 1,
-      updated_at: manilaTime
+      updated_at: manilaTime,
+      last_updated: manilaTime
     };
 
     // AG-COMMENT: Clean up density_factor if undefined or null to preserve existing database column value
@@ -337,21 +349,43 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error }, { status: response.status });
     }
 
-    // AG-COMMENT: Propagate product_code updates to child variants if parent code was changed
-    if (body.product_code && childVariants.length > 0) {
-      const trimmedCode = body.product_code.trim();
+    // AG-COMMENT: Propagate parent updates (product_code, product_name, description, category, brand, status, isActive) to child variants
+    if (childVariants.length > 0) {
       for (const cv of childVariants) {
         const variantSuffix = cv.uom_ids || "";
-        const updatedChildCode = `${trimmedCode} ${variantSuffix}`.trim();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const childPayload: Record<string, any> = {
+          updated_by: updatePayload.updated_by,
+          updated_at: manilaTime,
+          last_updated: manilaTime
+        };
+
+        if (body.product_code && typeof body.product_code === "string") {
+          childPayload.product_code = `${body.product_code.trim()} ${variantSuffix}`.trim();
+        }
+        if (body.product_name) {
+          childPayload.product_name = body.product_name;
+        }
+        if (body.description) {
+          childPayload.description = `${body.description.trim()} ${variantSuffix}`.trim();
+        }
+        if (body.product_category !== undefined) {
+          childPayload.product_category = body.product_category;
+        }
+        if (body.product_brand !== undefined) {
+          childPayload.product_brand = body.product_brand;
+        }
+        if (body.status !== undefined) {
+          childPayload.status = body.status;
+        }
+        if (body.isActive !== undefined) {
+          childPayload.isActive = body.isActive;
+        }
 
         await fetch(`${DIRECTUS_URL}/items/${COLLECTION}/${cv.product_id}`, {
           method: "PATCH",
           headers: getHeaders(),
-          body: JSON.stringify({
-            product_code: updatedChildCode,
-            updated_by: updatePayload.updated_by,
-            updated_at: manilaTime
-          }),
+          body: JSON.stringify(childPayload),
         });
       }
     }
