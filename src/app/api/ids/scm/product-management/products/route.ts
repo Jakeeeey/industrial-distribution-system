@@ -93,6 +93,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Product code is required and cannot be empty." }, { status: 400 });
     }
 
+    // AG-COMMENT: Validate that description is provided and non-empty
+    if (!body.description || typeof body.description !== "string" || !body.description.trim()) {
+      return NextResponse.json({ error: "Description is required and cannot be empty." }, { status: 400 });
+    }
+
     const trimmedCode = body.product_code.trim();
 
     // Check if we are creating a parent product (no parent_id and no uom_ids)

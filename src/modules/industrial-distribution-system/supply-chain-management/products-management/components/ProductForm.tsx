@@ -136,6 +136,12 @@ export function ProductForm({
         return;
       }
 
+      // AG-COMMENT: Validate that description is provided and non-empty before saving
+      if (!values.description || !values.description.trim()) {
+        toast.error("Validation Error: Please enter a valid Description before saving.");
+        return;
+      }
+
       setIsUploading(true);
       let imageId = values.product_image || null;
 
@@ -405,7 +411,7 @@ export function ProductForm({
             name="description"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Full Technical Description</FormLabel>
+                <FormLabel>Full Technical Description <span className="text-red-500">*</span></FormLabel>
                 <FormControl>
                   <Textarea
                     placeholder="Detailed product specifications..."
