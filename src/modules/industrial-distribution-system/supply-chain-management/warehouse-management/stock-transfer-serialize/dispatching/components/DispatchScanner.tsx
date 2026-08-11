@@ -12,13 +12,21 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { OrderGroup, ProductRow } from '../../../stock-transfer/types/stock-transfer.types';
+import { DiscrepancyModal } from '../../../stock-transfer/shared/components/DiscrepancyModal';
 
 interface DispatchScannerProps {
   selectedGroup: OrderGroup | null;
   processing: boolean;
   handleSerialInput: (serial: string) => void;
   updateManualQty: (productId: number, delta: number) => void;
-  dispatchOrder: (orderNo: string) => void;
+  dispatchOrder: (
+    orderNo: string,
+    discrepancyOptions?: {
+      globalReason?: string;
+      globalRemarks?: string;
+      itemReasons?: Record<number, { reason: string; remarks?: string }>;
+    }
+  ) => void;
 }
 
 export function DispatchScanner({
@@ -29,6 +37,7 @@ export function DispatchScanner({
   dispatchOrder,
 }: DispatchScannerProps) {
   const [serialInput, setSerialInput] = useState('');
+  const [showDiscrepancyModal, setShowDiscrepancyModal] = useState(false);
 
   const onSerialSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -237,13 +246,21 @@ export function DispatchScanner({
           </div>
 
           <Button
-            onClick={() => dispatchOrder(selectedGroup.orderNo)}
+            onClick={() => {
+              if (metrics.scannedUnits < metrics.totalUnits) {
+                setShowDiscrepancyModal(true);
+              } else {
+                dispatchOrder(selectedGroup.orderNo);
+              }
+            }}
             disabled={processing || metrics.scannedUnits === 0}
             size="sm"
             className={cn(
               'gap-2 transition-all active:scale-95',
               metrics.scannedUnits > 0
-                ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                ? metrics.scannedUnits < metrics.totalUnits
+                  ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                  : 'bg-primary text-primary-foreground hover:bg-primary/90'
                 : 'bg-muted text-muted-foreground',
             )}
           >
@@ -251,11 +268,29 @@ export function DispatchScanner({
               ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
               : <Truck className="h-3.5 w-3.5" />
             }
-            Finalize Dispatch
+            {metrics.scannedUnits < metrics.totalUnits ? "Finalize Partial Dispatch" : "Finalize Dispatch"}
           </Button>
         </div>
       </div>
 
+      {/* Discrepancy & Partial Dispatch Modal */}
+      {selectedGroup && (
+        <DiscrepancyModal
+          open={showDiscrepancyModal}
+          onClose={() => setShowDiscrepancyModal(false)}
+          orderNo={selectedGroup.orderNo}
+          items={selectedGroup.items}
+          processing={processing}
+          onConfirm={async (payload) => {
+            await dispatchOrder(selectedGroup.orderNo, {
+              globalReason: payload.globalReason,
+              globalRemarks: payload.globalRemarks,
+              itemReasons: payload.itemReasons,
+            });
+            setShowDiscrepancyModal(false);
+          }}
+        />
+      )}
     </main>
   );
 }

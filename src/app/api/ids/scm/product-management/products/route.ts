@@ -83,17 +83,84 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// AG-COMMENT: Helper to obtain Philippine Time (Asia/Manila UTC+8) in ISO format (YYYY-MM-DDTHH:mm:ss)
+function getManilaTimeString(): string {
+  return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Manila" }).replace(" ", "T");
+}
+
+// AG-COMMENT: Handles creation of new product records and auto-generating serialized variants with full audit trail (created_by, updated_by, created_at, updated_at in PH time) & density_factor safeguards.
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+
+    // Validate that product_code is provided and non-empty
+    if (!body.product_code || typeof body.product_code !== "string" || !body.product_code.trim()) {
+      return NextResponse.json({ error: "Product code is required and cannot be empty." }, { status: 400 });
+    }
+
+    // AG-COMMENT: Validate that description is provided and non-empty
+    if (!body.description || typeof body.description !== "string" || !body.description.trim()) {
+      return NextResponse.json({ error: "Description is required and cannot be empty." }, { status: 400 });
+    }
+
+    const trimmedCode = body.product_code.trim();
 
     // Check if we are creating a parent product (no parent_id and no uom_ids)
     const hasParentId = body.parent_id !== undefined && body.parent_id !== null && body.parent_id !== "" && body.parent_id !== 0;
     const hasUomIds = body.uom_ids !== undefined && body.uom_ids !== null && body.uom_ids !== "";
     const isParent = !hasParentId && !hasUomIds;
 
-    // Hardcode Manila Time (UTC+8)
-    const manilaTime = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19);
+    const isSerialized = body.is_serialized === 1 || body.is_serialized === "1" || body.is_serialized === true;
+
+    // Collect all candidate codes that would be created (parent code + auto-generated variant codes)
+    const candidateCodes: string[] = [trimmedCode];
+    if (isParent && isSerialized) {
+      const variants = ["EMPTY", "SWAP", "OUTRIGHT", "DEPOSIT", "REFILL"];
+      variants.forEach((variant) => {
+        candidateCodes.push(`${trimmedCode} ${variant}`.trim());
+      });
+    }
+
+    // Fetch existing product codes from Directus to enforce strict global uniqueness
+    const existingProductsRes = await fetch(
+      `${DIRECTUS_URL}/items/${COLLECTION}?limit=-1&fields=product_id,product_code`,
+      { headers: getHeaders(), cache: "no-store" }
+    );
+
+    if (existingProductsRes.ok) {
+      const existingJson = await existingProductsRes.json();
+      const existingProducts: { product_id: number; product_code: string }[] = existingJson.data ?? [];
+
+      // Build set of existing normalized upper-cased product codes
+      const existingCodesSet = new Set<string>();
+      for (const p of existingProducts) {
+        if (p.product_code) {
+          existingCodesSet.add(p.product_code.trim().toUpperCase());
+        }
+      }
+
+      // Reject if any candidate product code already exists globally
+      for (const code of candidateCodes) {
+        if (existingCodesSet.has(code.toUpperCase())) {
+          return NextResponse.json(
+            { error: `Product Code "${code}" already exists. Product Code must be strictly unique globally.` },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
+    // AG-COMMENT: Obtain Philippine Time (Asia/Manila UTC+8) timestamp
+    const manilaTime = getManilaTimeString();
+
+    // AG-COMMENT: Resolve created_by and updated_by fields from request or fallback user ID
+    const createdBy = body.created_by ? Number(body.created_by) : 1;
+    const updatedBy = body.updated_by ? Number(body.updated_by) : createdBy;
+
+    // AG-COMMENT: Safeguard density_factor to default to 1.00000 if omitted, avoiding NULL or corruption
+    const densityFactor = (body.density_factor !== undefined && body.density_factor !== null && Number(body.density_factor) > 0)
+      ? Number(body.density_factor)
+      : 1.00000;
 
     // Fetch units table to resolve unit_id by matching unit_shortcut
     const unitsRes = await fetch(
@@ -109,15 +176,20 @@ export async function POST(req: NextRequest) {
       if (u.unit_shortcut) unitShortcutMap.set(u.unit_shortcut.trim().toUpperCase(), u.unit_id);
     }
 
-    const isSerialized = body.is_serialized === 1 || body.is_serialized === "1" || body.is_serialized === true;
-
     const resolvedParentUomId = isSerialized ? (unitShortcutMap.get("FULL") ?? 16) : (body.unit_of_measurement || 16);
 
     const parentPayload = {
       ...body,
+      product_code: trimmedCode,
       unit_of_measurement: resolvedParentUomId,
       date_added: manilaTime,
-      status: "Approved"
+      created_at: manilaTime,
+      updated_at: manilaTime,
+      last_updated: manilaTime,
+      status: "Approved",
+      created_by: createdBy,
+      updated_by: updatedBy,
+      density_factor: densityFactor
     };
 
     // Create the primary product first
@@ -154,7 +226,13 @@ export async function POST(req: NextRequest) {
           isActive: 1,
           unit_of_measurement: resolvedUomId,
           date_added: manilaTime,
-          status: "Approved"
+          created_at: manilaTime,
+          updated_at: manilaTime,
+          last_updated: manilaTime,
+          status: "Approved",
+          created_by: createdBy,
+          updated_by: updatedBy,
+          density_factor: densityFactor
         };
       });
 
@@ -177,6 +255,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// AG-COMMENT: Handles updating product records, updating audit metadata (updated_by, updated_at in PH time), enforcing uniqueness, and propagating product code changes to child variants.
 export async function PATCH(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -184,15 +263,131 @@ export async function PATCH(req: NextRequest) {
     if (!id) return NextResponse.json({ error: "Missing ID" }, { status: 400 });
 
     const body = await req.json();
+    const manilaTime = getManilaTimeString();
+
+    // AG-COMMENT: Attach updated_by audit trail and timestamp in Philippine Time (UTC+8)
+    const updatePayload = {
+      ...body,
+      updated_by: body.updated_by ? Number(body.updated_by) : 1,
+      updated_at: manilaTime,
+      last_updated: manilaTime
+    };
+
+    // AG-COMMENT: Clean up density_factor if undefined or null to preserve existing database column value
+    if (updatePayload.density_factor === undefined || updatePayload.density_factor === null) {
+      delete updatePayload.density_factor;
+    }
+
+    // Fetch existing child variants if this item is a parent product
+    const childrenFetchRes = await fetch(
+      `${DIRECTUS_URL}/items/${COLLECTION}?filter[parent_id][_eq]=${id}&fields=product_id,product_code,uom_ids`,
+      { headers: getHeaders(), cache: "no-store" }
+    );
+    const childVariants: { product_id: number; product_code: string; uom_ids?: string }[] = childrenFetchRes.ok
+      ? (await childrenFetchRes.json()).data ?? []
+      : [];
+
+    const excludedIdsSet = new Set<string>([String(id)]);
+    childVariants.forEach(cv => excludedIdsSet.add(String(cv.product_id)));
+
+    // If updating product_code, enforce strict global uniqueness against other products
+    if (body.product_code && typeof body.product_code === "string" && body.product_code.trim()) {
+      const trimmedCode = body.product_code.trim();
+
+      const existingProductsRes = await fetch(
+        `${DIRECTUS_URL}/items/${COLLECTION}?limit=-1&fields=product_id,product_code`,
+        { headers: getHeaders(), cache: "no-store" }
+      );
+
+      if (existingProductsRes.ok) {
+        const existingJson = await existingProductsRes.json();
+        const existingProducts: { product_id: number; product_code: string }[] = existingJson.data ?? [];
+
+        // Check parent code collision
+        const duplicate = existingProducts.find(
+          (p) => !excludedIdsSet.has(String(p.product_id)) && p.product_code && p.product_code.trim().toUpperCase() === trimmedCode.toUpperCase()
+        );
+
+        if (duplicate) {
+          return NextResponse.json(
+            { error: `Product Code "${trimmedCode}" already exists on another product. Product Code must be strictly unique globally.` },
+            { status: 400 }
+          );
+        }
+
+        // Check candidate variant codes collision if child variants exist
+        if (childVariants.length > 0) {
+          for (const cv of childVariants) {
+            const variantSuffix = cv.uom_ids || "VARIANT";
+            const candidateVariantCode = `${trimmedCode} ${variantSuffix}`.trim().toUpperCase();
+
+            const variantDup = existingProducts.find(
+              (p) => !excludedIdsSet.has(String(p.product_id)) && p.product_code && p.product_code.trim().toUpperCase() === candidateVariantCode
+            );
+
+            if (variantDup) {
+              return NextResponse.json(
+                { error: `Variant Product Code "${candidateVariantCode}" already exists on another product.` },
+                { status: 400 }
+              );
+            }
+          }
+        }
+      }
+
+      updatePayload.product_code = trimmedCode;
+    }
+
     const response = await fetch(`${DIRECTUS_URL}/items/${COLLECTION}/${id}`, {
       method: "PATCH",
       headers: getHeaders(),
-      body: JSON.stringify(body),
+      body: JSON.stringify(updatePayload),
     });
 
     if (!response.ok) {
       const error = await response.text();
       return NextResponse.json({ error }, { status: response.status });
+    }
+
+    // AG-COMMENT: Propagate parent updates (product_code, product_name, description, category, brand, status, isActive) to child variants
+    if (childVariants.length > 0) {
+      for (const cv of childVariants) {
+        const variantSuffix = cv.uom_ids || "";
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const childPayload: Record<string, any> = {
+          updated_by: updatePayload.updated_by,
+          updated_at: manilaTime,
+          last_updated: manilaTime
+        };
+
+        if (body.product_code && typeof body.product_code === "string") {
+          childPayload.product_code = `${body.product_code.trim()} ${variantSuffix}`.trim();
+        }
+        if (body.product_name) {
+          childPayload.product_name = body.product_name;
+        }
+        if (body.description) {
+          childPayload.description = `${body.description.trim()} ${variantSuffix}`.trim();
+        }
+        if (body.product_category !== undefined) {
+          childPayload.product_category = body.product_category;
+        }
+        if (body.product_brand !== undefined) {
+          childPayload.product_brand = body.product_brand;
+        }
+        if (body.status !== undefined) {
+          childPayload.status = body.status;
+        }
+        if (body.isActive !== undefined) {
+          childPayload.isActive = body.isActive;
+        }
+
+        await fetch(`${DIRECTUS_URL}/items/${COLLECTION}/${cv.product_id}`, {
+          method: "PATCH",
+          headers: getHeaders(),
+          body: JSON.stringify(childPayload),
+        });
+      }
     }
 
     const data = await response.json();

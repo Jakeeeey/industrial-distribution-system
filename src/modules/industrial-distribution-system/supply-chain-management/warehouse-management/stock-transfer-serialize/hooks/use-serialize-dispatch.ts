@@ -183,7 +183,14 @@ export function useSerializeDispatch() {
     }
   };
 
-  const dispatchOrder = async (orderNo: string) => {
+  const dispatchOrder = async (
+    orderNo: string,
+    discrepancyOptions?: {
+      globalReason?: string;
+      globalRemarks?: string;
+      itemReasons?: Record<number, { reason: string; remarks?: string }>;
+    }
+  ) => {
     const group = orderGroups.find((g) => g.orderNo === orderNo);
     if (!group) return;
 
@@ -201,11 +208,19 @@ export function useSerializeDispatch() {
       })).filter(p => p.stock_transfer_id > 0);
 
       // Quantities for ALL items (including non-serialized)
-      const itemsPayload = group.items.map(i => ({ 
-        id: i.id, 
-        status: 'For Loading',
-        picked_quantity: i.scannedQty
-      }));
+      const itemsPayload = group.items.map(i => {
+        const itemReasonObj = discrepancyOptions?.itemReasons?.[i.id];
+        const reason = itemReasonObj?.reason || discrepancyOptions?.globalReason;
+        const remarks = itemReasonObj?.remarks || discrepancyOptions?.globalRemarks;
+
+        return { 
+          id: i.id, 
+          status: 'For Loading',
+          picked_quantity: i.scannedQty,
+          ...(reason ? { discrepancy_reason: reason } : {}),
+          ...(remarks ? { discrepancy_remarks: remarks } : {})
+        };
+      });
 
       await serializeLifecycleService.submitStatusUpdate({
         items: itemsPayload,

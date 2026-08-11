@@ -73,6 +73,8 @@ export const UpdateItemSchema = z.object({
   picked_quantity: z.number().min(0).optional(),
   scanned_quantity: z.number().min(0).optional(),
   received_quantity: z.number().min(0).optional(),
+  discrepancy_reason: z.string().optional(),
+  discrepancy_remarks: z.string().optional(),
 });
 export type UpdateItemValue = z.infer<typeof UpdateItemSchema>;
 
@@ -97,6 +99,10 @@ export const UpdateStockTransferSchema = z.object({
   scanType: RfidScanTypeSchema.optional(),
   /** ID of the user performing the update. */
   userId: z.number().optional(),
+  /** Global discrepancy reason code. */
+  discrepancy_reason: z.string().optional(),
+  /** Global discrepancy remarks. */
+  discrepancy_remarks: z.string().optional(),
 }).superRefine((data, ctx) => {
   const hasItems = data.items && data.items.length > 0;
   const hasIds = data.ids && data.ids.length > 0;

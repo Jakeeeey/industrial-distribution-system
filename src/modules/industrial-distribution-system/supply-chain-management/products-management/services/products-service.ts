@@ -19,23 +19,46 @@ export const productsService = {
     return await res.json();
   },
 
+  // Helper function to extract user-friendly error message from response
+  async parseError(res: Response, fallbackMessage: string): Promise<string> {
+    try {
+      const errJson = await res.json();
+      return errJson.error || errJson.message || JSON.stringify(errJson);
+    } catch {
+      try {
+        const text = await res.text();
+        return text || fallbackMessage;
+      } catch {
+        return fallbackMessage;
+      }
+    }
+  },
+
+  // Create a new product (server will enforce global uniqueness for product codes)
   async createProduct(data: Partial<Product>) {
     const res = await fetch("/api/ids/scm/product-management/products", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) {
+      const errorMsg = await this.parseError(res, "Failed to create product");
+      throw new Error(errorMsg);
+    }
     return await res.json();
   },
 
+  // Update an existing product (server will enforce global uniqueness for product codes)
   async updateProduct(id: number, data: Partial<Product>) {
     const res = await fetch(`/api/ids/scm/product-management/products?id=${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) {
+      const errorMsg = await this.parseError(res, "Failed to update product");
+      throw new Error(errorMsg);
+    }
     return await res.json();
   },
 

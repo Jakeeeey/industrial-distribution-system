@@ -169,6 +169,7 @@ export const StockAdjustmentProductSchema = z.object({
     quantity: z.number().optional(),
     count: z.number().optional(),
   }).optional(),
+  is_serialized: z.boolean().optional(),
   index: z.number().optional(),
 });
 export type StockAdjustmentProduct = z.infer<typeof StockAdjustmentProductSchema>;

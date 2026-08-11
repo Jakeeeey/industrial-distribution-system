@@ -153,8 +153,13 @@ export async function updateTransferStatus(payload: UpdateTransferPayload): Prom
     status: validated.status || "Unknown"
   }))).map(u => {
     const existing = itemsMap.get(u.id);
-    // Cast to access optional quantity fields — items may come from modern or legacy format
-    const uExtended = u as typeof u & { received_quantity?: number; picked_quantity?: number };
+    // Cast to access optional quantity and discrepancy fields — items may come from modern or legacy format
+    const uExtended = u as typeof u & { 
+      received_quantity?: number; 
+      picked_quantity?: number; 
+      discrepancy_reason?: string; 
+      discrepancy_remarks?: string 
+    };
     return {
       ...u,
       // Populate status-dependent audit fields and timestamps using Asia/Manila local time (nowPH)
@@ -169,7 +174,11 @@ export async function updateTransferStatus(payload: UpdateTransferPayload): Prom
       ...(u.status === "For Loading" || u.status === "Dispatched" ? { 
         dispatched_at: phNow, 
         dispatched_by: validated.userId || null,
-        picked_quantity: uExtended.picked_quantity ?? existing?.allocated_quantity ?? existing?.ordered_quantity ?? 0
+        picked_quantity: uExtended.picked_quantity ?? existing?.allocated_quantity ?? existing?.ordered_quantity ?? 0,
+        ...(uExtended.discrepancy_reason || validated.discrepancy_reason ? {
+          discrepancy_reason: uExtended.discrepancy_reason || validated.discrepancy_reason,
+          discrepancy_remarks: uExtended.discrepancy_remarks || validated.discrepancy_remarks || null
+        } : {})
       } : {}),
       ...(u.status === "Rejected" ? {
         rejected_at: phNow,

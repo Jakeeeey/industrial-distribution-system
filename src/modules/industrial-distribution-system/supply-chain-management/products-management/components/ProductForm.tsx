@@ -115,22 +115,17 @@ export function ProductForm({
     },
   });
 
-  const watchedCategory = form.watch("product_category");
-  
-  React.useEffect(() => {
-    if (watchedCategory && !initialValues) {
-      const category = categories.find(c => c.category_id === watchedCategory);
-      if (category && category.is_industrial === 1) {
-        form.setValue("is_serialized", 0);
-      } else {
-        form.setValue("is_serialized", 1);
-      }
-    }
-  }, [watchedCategory, categories, form, initialValues]);
+  // AG-COMMENT: Unlock "Is Serialized Product" switch so users can freely toggle serialization ON/OFF for any category.
+  // We do NOT use an auto-override useEffect on watchedCategory changes to avoid locking or forcefully setting the field.
 
   const handleFormSubmit = async (values: ProductFormValues) => {
     try {
-      // Client-side validations
+      // Client-side validations for required product fields
+      if (!values.product_code || !values.product_code.trim()) {
+        toast.error("Validation Error: Please enter a valid Product Code before saving.");
+        return;
+      }
+
       if (!values.product_category || Number(values.product_category) === 0) {
         toast.error("Validation Error: Please select a valid Product Category before saving.");
         return;
@@ -138,6 +133,12 @@ export function ProductForm({
 
       if (!values.product_brand || Number(values.product_brand) === 0) {
         toast.error("Validation Error: Please select a valid Product Brand before saving.");
+        return;
+      }
+
+      // AG-COMMENT: Validate that description is provided and non-empty before saving
+      if (!values.description || !values.description.trim()) {
+        toast.error("Validation Error: Please enter a valid Description before saving.");
         return;
       }
 
@@ -172,7 +173,20 @@ export function ProductForm({
 
       const uomId = Number(values.unit_of_measurement) || (units && units.length > 0 ? Number(units[0].unit_id) : 1);
 
-      onSubmit({ ...values, product_image: imageId, unit_of_measurement: uomId, is_serialized: values.is_serialized });
+      // AG-COMMENT: Include density_factor from initialValues if present to prevent accidental data corruption or overwrite
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const extraPayload: Record<string, any> = {};
+      if (initialValues && 'density_factor' in initialValues && initialValues.density_factor !== undefined) {
+        extraPayload.density_factor = initialValues.density_factor;
+      }
+
+      onSubmit({ 
+        ...values, 
+        ...extraPayload,
+        product_image: imageId, 
+        unit_of_measurement: uomId, 
+        is_serialized: values.is_serialized 
+      });
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to save product",
@@ -397,7 +411,7 @@ export function ProductForm({
             name="description"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Full Technical Description</FormLabel>
+                <FormLabel>Full Technical Description <span className="text-red-500">*</span></FormLabel>
                 <FormControl>
                   <Textarea
                     placeholder="Detailed product specifications..."

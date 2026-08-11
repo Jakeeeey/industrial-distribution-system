@@ -1224,7 +1224,8 @@ export const stockAdjustmentService = {
    * Fetch approved products (SKUs) for the dropdown
    */
   async fetchProducts(params?: { search?: string }) {
-    let query = `fields=product_id,product_name,product_code,price_per_unit,cost_per_unit,barcode,description,unit_of_measurement.unit_name,unit_of_measurement.order,product_brand.brand_name&limit=100&sort=product_name`;
+    // AG-COMMENT: Include is_serialized in fields to properly filter non-serialized items in Stock Adjustment
+    let query = `fields=product_id,product_name,product_code,price_per_unit,cost_per_unit,barcode,description,is_serialized,unit_of_measurement.unit_name,unit_of_measurement.order,product_brand.brand_name&limit=100&sort=product_name`;
 
     const filters: Record<string, unknown> = {
       isActive: { _eq: 1 }
@@ -1263,7 +1264,8 @@ export const stockAdjustmentService = {
         id: p['product_id'],
         unit_name: uom?.['unit_name'] || p['unit_name'] || "pcs",
         unit_id: uom?.['unit_id'] || p['unit_id'] || null,
-        brand_name: brand?.['brand_name'] || p['brand_name'] || "N/A"
+        brand_name: brand?.['brand_name'] || p['brand_name'] || "N/A",
+        is_serialized: p['is_serialized'] === 1 || p['is_serialized'] === true || p['is_serialized'] === '1'
       };
     }) as unknown as StockAdjustmentProduct[];
   },
@@ -1329,7 +1331,8 @@ export const stockAdjustmentService = {
       });
     }
 
-    const query = `fields=product_id,product_name,product_code,price_per_unit,cost_per_unit,barcode,description,unit_of_measurement.unit_name,unit_of_measurement.order,product_brand.brand_name&limit=500&sort=product_name&filter=${JSON.stringify(filters)}`;
+    // AG-COMMENT: Include is_serialized in fields parameter for supplier products query
+    const query = `fields=product_id,product_name,product_code,price_per_unit,cost_per_unit,barcode,description,is_serialized,unit_of_measurement.unit_name,unit_of_measurement.order,product_brand.brand_name&limit=500&sort=product_name&filter=${JSON.stringify(filters)}`;
     const res = await directusFetch<{ data: unknown[] }>(`${DIRECTUS_URL}/items/products?${query}`);
     const products = res.data || [];
 
@@ -1354,6 +1357,7 @@ export const stockAdjustmentService = {
         unit_name: uom?.['unit_name'] || p['unit_name'] || "pcs",
         unit_id: uom?.['unit_id'] || p['unit_id'] || null,
         brand_name: brand?.['brand_name'] || p['brand_name'] || "N/A",
+        is_serialized: p['is_serialized'] === 1 || p['is_serialized'] === true || p['is_serialized'] === '1',
       };
     }) as unknown as StockAdjustmentProduct[];
   },
