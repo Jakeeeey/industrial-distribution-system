@@ -52,13 +52,26 @@ export async function GET(req: NextRequest) {
   }
 }
 
+function getManilaTimeString(): string {
+  return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Manila" }).replace(" ", "T");
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    const manilaTime = getManilaTimeString();
+    const payload = {
+      ...body,
+      created_at: manilaTime,
+      updated_at: manilaTime,
+      created_by: body.created_by ? Number(body.created_by) : 1,
+      updated_by: body.updated_by ? Number(body.updated_by) : 1,
+    };
+
     const response = await fetch(`${DIRECTUS_URL}/items/${COLLECTION}`, {
       method: "POST",
       headers: getHeaders(),
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
@@ -81,10 +94,17 @@ export async function PATCH(req: NextRequest) {
     if (!id) return NextResponse.json({ error: "Missing ID" }, { status: 400 });
 
     const body = await req.json();
+    const manilaTime = getManilaTimeString();
+    const payload = {
+      ...body,
+      updated_at: manilaTime,
+      updated_by: body.updated_by ? Number(body.updated_by) : 1,
+    };
+
     const response = await fetch(`${DIRECTUS_URL}/items/${COLLECTION}/${id}`, {
       method: "PATCH",
       headers: getHeaders(),
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
