@@ -3,6 +3,7 @@
 
 import * as React from "react";
 import { CylinderSummary } from "../types";
+import { parseMovementDate } from "../service";
 import {
     Table,
     TableBody,
@@ -74,10 +75,19 @@ export function CylinderListTable({ data, onViewTrace }: CylinderListTableProps)
     }, [data, searchQuery, directionFilter, movementTypeFilter]);
 
     // ─── Sort Logic ──────────────────────────────────────────────────────────
+    // Antigravity: Added exact date timestamp parsing when sorting by lastMovementDate
     const sortedData = React.useMemo(() => {
         if (!sortBy) return filteredData;
         
         return [...filteredData].sort((a, b) => {
+            if (sortBy === "lastMovementDate") {
+                const timeA = parseMovementDate(a.lastMovementDate);
+                const timeB = parseMovementDate(b.lastMovementDate);
+                if (timeA !== timeB) {
+                    return sortOrder === "asc" ? timeA - timeB : timeB - timeA;
+                }
+            }
+
             let valA = a[sortBy];
             let valB = b[sortBy];
 

@@ -116,7 +116,16 @@ export const groupMovementsBySerial = (movements: SerialMovement[]): CylinderSum
         });
     });
 
-    return summaries.sort((a, b) => a.serialNumber.localeCompare(b.serialNumber));
+    // Antigravity: Sort cylinder summaries by lastMovementDate DESC (newest transaction date at top) per user requirement
+    // Tie-breaker: Alphabetical by serial number when timestamps match
+    return summaries.sort((a, b) => {
+        const timeA = parseMovementDate(a.lastMovementDate);
+        const timeB = parseMovementDate(b.lastMovementDate);
+        if (timeA !== timeB) {
+            return timeB - timeA; // Descending order (newest transaction date at top)
+        }
+        return a.serialNumber.localeCompare(b.serialNumber);
+    });
 };
 
 /**
