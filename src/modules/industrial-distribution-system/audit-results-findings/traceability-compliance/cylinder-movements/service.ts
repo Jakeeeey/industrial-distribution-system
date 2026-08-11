@@ -14,20 +14,21 @@ export const parseMovementDate = (dateStr: string): number => {
 };
 
 /**
- * Sorts movement timeline records chronologically (Oldest to Newest).
- * Tie-breaker: ASC by inQty (which places OUT before IN if timestamps are identical).
+ * Sorts movement timeline records in descending order (Newest to Oldest - DESC).
+ * Tie-breaker: DESC by inQty (which places IN before OUT if timestamps are identical).
  * 
  * @param movements Raw movement list to sort.
  * @returns Sorted copy of the movements.
  */
 export const getTimelineSortOrder = (movements: SerialMovement[]): SerialMovement[] => {
+    // Antigravity: Updated sorting order to DESC (newest movement at top, oldest at bottom) per user requirement
     return [...movements].sort((a, b) => {
         const timeA = parseMovementDate(a.movementAt);
         const timeB = parseMovementDate(b.movementAt);
         if (timeA !== timeB) {
-            return timeA - timeB;
+            return timeB - timeA; // Descending (newest first)
         }
-        return a.inQty - b.inQty; // 0 (OUT) before 1 (IN)
+        return b.inQty - a.inQty; // Tie-breaker: 1 (IN) before 0 (OUT) when timestamps match
     });
 };
 
@@ -98,7 +99,7 @@ export const groupMovementsBySerial = (movements: SerialMovement[]): CylinderSum
             direction = "Review";
         }
 
-        // Store the timeline sorted chronologically (Oldest to Newest) inside the summary
+        // Antigravity: Store timeline sorted in DESC order (Newest at top, Oldest at bottom) inside the summary
         const chronologicalTimeline = getTimelineSortOrder(items);
 
         summaries.push({
