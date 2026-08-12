@@ -92,7 +92,7 @@ async function fetchBranchesMap(base: string, ids: number[]) {
     const map = new Map<number, string>();
     const uniq = Array.from(new Set(ids)).filter(Boolean);
     if (!uniq.length) return map;
-    
+
     // Fallback chain for branch collection names
     const candidates = ["branches", "company_branches", "branch_master", "warehouses"];
     for (const col of candidates) {
@@ -275,10 +275,10 @@ async function getPODetail(base: string, poId: number) {
     // 4. Fetch Mappings (Suppliers, Products, Branches)
     const supplierId = Number(headerJson?.supplier_name);
     const supplierMap = await fetchSuppliersMap(base, [supplierId]);
-    
+
     const productIds = lineRows.map(l => Number(l.product_id)).filter(Boolean);
     const productMap = await fetchProductsMap(base, productIds);
-    
+
     const branchIds = lineRows.map(l => Number(l.branch_id)).filter(Boolean);
     const branchMap = await fetchBranchesMap(base, branchIds);
 
@@ -287,7 +287,7 @@ async function getPODetail(base: string, poId: number) {
         const lineId = Number(l.purchase_order_product_id);
         const pid = Number(l.product_id);
         const bid = Number(l.branch_id);
-        
+
         const pInfo = productMap.get(pid);
         const bName = branchMap.get(bid);
 
@@ -350,28 +350,72 @@ async function tagSerials(
         }
     }
 
-    // 2. Fetch v_serial_onhand for validation
+    // 2. Fetch v_serial_onhand for validation (via Spring API)
     const uniqueSerials = Array.from(new Set(entries.map((e) => String(e.serial_number).trim())));
-    const onhandUrl = `${base}/items/v_serial_onhand?filter[serial_number][_in]=${encodeURIComponent(uniqueSerials.join(','))}&limit=-1`;
     
-    const onhandRes = await fetch(onhandUrl, {
-        headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${userToken}`
-        }
-    });
-    
-    if (!onhandRes.ok) {
-        throw new Error(`Failed to fetch v_serial_onhand for validation (${onhandRes.status})`);
+    const SPRING_API_BASE_URL = process.env.SPRING_API_BASE_URL;
+    if (!SPRING_API_BASE_URL) {
+        throw new Error("SPRING_API_BASE_URL is not defined in environment variables");
     }
 
-    const onhandJson = await onhandRes.json().catch(() => ({}));
-    const onhandData = (onhandJson?.data ?? []) as Record<string, unknown>[];
-    
     const onhandMap = new Map<string, Record<string, unknown>>();
-    for (const r of onhandData) {
-        const sn = String(r.serial_number).trim();
-        if (sn) onhandMap.set(sn, r);
+
+    await Promise.all(uniqueSerials.map(async (sn) => {
+        const url = `${SPRING_API_BASE_URL.replace(/\/$/, "")}/api/v-serial-onhand/all?serialNumber=${encodeURIComponent(sn.toUpperCase())}`;
+        
+        try {
+            const onhandRes = await fetch(url, {
+                method: "GET",
+                headers: {
+                    "Accept": "application/json",
+                    "Authorization": `Bearer ${userToken}`,
+                    "Cookie": `vos_access_token=${userToken}`
+                },
+                cache: "no-store",
+            });
+
+            if (onhandRes.ok) {
+                const data = await onhandRes.json().catch(() => []);
+                const rows = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
+                
+                // Determine expected branch and product from the PO lines for this serial
+                const entryForSn = entries.find(e => String(e.serial_number).trim().toUpperCase() === sn.toUpperCase());
+                const expectedBranchId = entryForSn ? linesMap.get(entryForSn.lineId)?.branch_id : undefined;
+                const expectedProductId = entryForSn ? linesMap.get(entryForSn.lineId)?.product_id : undefined;
+
+                // Find the PERFECT match, filtering by exact serial number AND expected branch/product (handles historical/duplicate rows from API)
+                const perfectMatch = rows.find((r: any) => {
+                    const matchSn = String(r.serialNumber || r.serial_number || "").trim().toUpperCase() === sn.toUpperCase();
+                    const rBranchId = Number(r.branchId ?? r.branch_id);
+                    const matchBranch = expectedBranchId !== undefined ? rBranchId === expectedBranchId : true;
+                    const rProductId = Number(r.productId ?? r.product_id);
+                    const matchProduct = expectedProductId !== undefined ? rProductId === expectedProductId : true;
+                    return matchSn && matchBranch && matchProduct;
+                });
+
+                if (perfectMatch) {
+                    onhandMap.set(sn, perfectMatch as Record<string, unknown>);
+                } else {
+                    // Fallback to any record matching the serial number (so the validation loop can throw a "different branch/product" error)
+                    const basicMatch = rows.find((r: any) => 
+                        String(r.serialNumber || r.serial_number || "").trim().toUpperCase() === sn.toUpperCase()
+                    );
+                    if (basicMatch) {
+                        onhandMap.set(sn, basicMatch as Record<string, unknown>);
+                    } else if (rows.length > 0) {
+                        onhandMap.set(sn, rows[0] as Record<string, unknown>);
+                    }
+                }
+            } else {
+                console.error(`[Spring API] Failed to fetch validation for serial ${sn} (${onhandRes.status})`);
+            }
+        } catch (error) {
+            console.error(`[Spring API] Error fetching validation for serial ${sn}:`, error);
+        }
+    }));
+
+    if (onhandMap.size === 0 && uniqueSerials.length > 0) {
+        throw new Error(`Failed to fetch validation data from Spring API. None of the serials were found.`);
     }
 
     // 3. Validation Loop
@@ -379,7 +423,7 @@ async function tagSerials(
     for (const e of entries) {
         const sn = String(e.serial_number).trim();
         const lineMeta = linesMap.get(e.lineId);
-        
+
         if (!lineMeta) {
             errors.push(`Line ID ${e.lineId} not found in PO for serial ${sn}.`);
             continue;
@@ -396,12 +440,12 @@ async function tagSerials(
             errors.push(`Serial number ${sn} is currently ${status}, not Empty.`);
         }
 
-        const onhandBranch = Number(onhand.branch_id);
+        const onhandBranch = Number(onhand.branch_id ?? onhand.branchId);
         if (onhandBranch !== lineMeta.branch_id) {
             errors.push(`Serial number ${sn} is located at a different branch.`);
         }
 
-        const onhandProduct = Number(onhand.product_id);
+        const onhandProduct = Number(onhand.product_id ?? onhand.productId);
         if (onhandProduct !== lineMeta.product_id) {
             errors.push(`Serial number ${sn} does not match the product type.`);
         }

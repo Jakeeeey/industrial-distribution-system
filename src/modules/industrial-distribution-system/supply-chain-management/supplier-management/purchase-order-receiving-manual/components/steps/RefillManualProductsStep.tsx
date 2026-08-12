@@ -44,7 +44,6 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
     const ITEMS_PER_PAGE = 10;
 
     // ✅ Over-receiving modal state
-    const [isOverReceivingModalOpen, setIsOverReceivingModalOpen] = React.useState(false);
 
     // ✅ Tagged Serials modal state (product row click)
     // Comments: Track client side row id to associate and display local scanned serials inside TaggedSerialsModal.
@@ -163,33 +162,67 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
 
     // ✅ Called by RefillRapidScanModal when a serial is accepted
     // Comments: Supports storing an optional isNew flag to identify newly registered cylinders.
-    const handleAddSerial = (porId: string, serial: string, isNew?: boolean) => {
-        setSerialsByPorId(prev => {
-            const existing = prev[porId] || [];
-            // Duplicate guard
-            if (existing.some(s => s.sn === serial)) return prev;
-            const next = [...existing, { sn: serial, tareWeight: "", expiryDate: "", isNew }];
-            setManualCounts(c => ({ ...c, [porId]: next.length }));
-            return { ...prev, [porId]: next };
-        });
+    const handleAddSerial = async (porId: string, serial: string, isNew?: boolean) => {
+        // Prevent duplicate local addition first
+        const isDuplicate = serialsByPorId[porId]?.some(s => s.sn === serial);
+        if (isDuplicate) return;
+
+        try {
+            const item = filteredItems.find(it => String(it.id) === porId);
+            const branchId = (selectedPO?.allocations || []).find(a => a.items?.some(i => String(i.id) === porId))?.branch?.id;
+            
+            const res = await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "presave_serial",
+                    poId: selectedPO?.id,
+                    productId: item?.productId,
+                    branchId,
+                    serial: { sn: serial, tareWeight: "" }
+                }),
+            });
+            if (!res.ok) throw new Error("Failed to pre-save serial");
+
+            setSerialsByPorId(prev => {
+                const existing = prev[porId] || [];
+                if (existing.some(s => s.sn === serial)) return prev;
+                const next = [...existing, { sn: serial, tareWeight: "", expiryDate: "", isNew }];
+                setManualCounts(c => ({ ...c, [porId]: next.length }));
+                return { ...prev, [porId]: next };
+            });
+        } catch (e) {
+            toast.error("Save Failed", { description: (e as Error).message });
+        }
     };
 
-    const handleRemoveSerial = (serial: string) => {
-        setSerialsByPorId(prev => {
-            const next = { ...prev };
-            Object.keys(next).forEach(porId => {
-                next[porId] = (next[porId] || []).filter(s => s.sn.toUpperCase() !== serial.toUpperCase());
+    const handleRemoveSerial = async (serial: string) => {
+        try {
+            const res = await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "delete_presaved_serial", serialNumber: serial }),
             });
-            // Update manual counts as well
-            setManualCounts(c => {
-                const nextCounts = { ...c };
+            if (!res.ok) throw new Error("Failed to delete serial");
+
+            setSerialsByPorId(prev => {
+                const next = { ...prev };
                 Object.keys(next).forEach(porId => {
-                    nextCounts[porId] = next[porId].length;
+                    next[porId] = (next[porId] || []).filter(s => s.sn !== serial);
                 });
-                return nextCounts;
+                // Update manual counts as well
+                setManualCounts(c => {
+                    const nextCounts = { ...c };
+                    Object.keys(next).forEach(porId => {
+                        nextCounts[porId] = next[porId].length;
+                    });
+                    return nextCounts;
+                });
+                return next;
             });
-            return next;
-        });
+        } catch (e) {
+            toast.error("Delete Failed", { description: (e as Error).message });
+        }
     };
 
     const handleContinueClick = () => {
@@ -197,11 +230,7 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
             toast.error("No items captured", { description: "Please scan cylinders before proceeding." });
             return;
         }
-        if (isOverReceiving) {
-            setIsOverReceivingModalOpen(true);
-        } else {
-            onContinue();
-        }
+        onContinue();
     };
 
     // Comments: Opens the verification modal, tracking both the database ID (activePorId) and client row ID (activeClientRowId)
@@ -408,23 +437,7 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
                 </Button>
             </div>
 
-            {/* ── Over-Receiving Confirmation ── */}
-            <AlertDialog open={isOverReceivingModalOpen} onOpenChange={setIsOverReceivingModalOpen}>
-                <AlertDialogContent className="rounded-2xl border-2">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2 text-red-600 font-black uppercase tracking-tight">
-                            <AlertTriangle className="w-5 h-5" /> Over-Receiving Detected
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-sm font-bold text-slate-600 uppercase tracking-wider leading-relaxed">
-                            Some products exceed the ordered quantity. This will create a discrepancy.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel className="rounded-xl font-black uppercase tracking-widest text-[10px] border-2">Adjust</AlertDialogCancel>
-                        <AlertDialogAction onClick={onContinue} className="bg-red-600 hover:bg-red-700 rounded-xl font-black uppercase tracking-widest text-[10px]">Proceed</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+
 
             {/* ── Tagged Serials Modal (read-only, from purchase_order_serial) ── */}
             {/* Comments: Pass the local scanned serials to TaggedSerialsModal for side-by-side reconciliation. */}

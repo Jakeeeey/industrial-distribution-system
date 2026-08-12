@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import {
     effectiveManualReceivedQty,
     formatTareWeightForCommit,
@@ -31,9 +32,12 @@ function directusHeaders(): Record<string, string> {
 }
 
 async function fetchJson<T = unknown>(url: string, init?: RequestInit): Promise<T> {
+    let authHeader = `Bearer ${getDirectusToken()}`;
+
+
     const res = await fetch(url, {
         ...init,
-        headers: { ...directusHeaders(), ...(init?.headers as Record<string, string> | undefined) },
+        headers: { "Content-Type": "application/json", Authorization: authHeader, ...(init?.headers as Record<string, string> | undefined) },
         cache: "no-store",
     });
     const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
@@ -306,10 +310,10 @@ async function fetchReceivingSerialsMap(base: string, porIds: number[]) {
         const items = await fetchJson<{ data: Array<Record<string, unknown>> }>(itemsUrl).catch(() => ({ data: [] }));
         for (const item of items?.data ?? []) {
             const porId = toNum(item.purchase_order_product_id);
-            const sn = toStr(item.serial_no).toUpperCase();
+            const sn = toStr(item.serial_no);
             if (!porId || !sn) continue;
             const list = map.get(porId) ?? [];
-            if (!list.some((x) => x.sn.toUpperCase() === sn)) {
+            if (!list.some((x) => x.sn === sn)) {
                 list.push({
                     sn,
                     tareWeight: toStr(item.tare_weight),
@@ -323,10 +327,10 @@ async function fetchReceivingSerialsMap(base: string, porIds: number[]) {
         const serials = await fetchJson<{ data: Array<Record<string, unknown>> }>(serialUrl).catch(() => ({ data: [] }));
         for (const item of serials?.data ?? []) {
             const porId = toNum(item.purchase_order_product_id);
-            const sn = toStr(item.serial_number).toUpperCase();
+            const sn = toStr(item.serial_number);
             if (!porId || !sn) continue;
             const list = map.get(porId) ?? [];
-            if (!list.some((x) => x.sn.toUpperCase() === sn)) {
+            if (!list.some((x) => x.sn === sn)) {
                 list.push({
                     sn,
                     tareWeight: toStr(item.tare_weight),
@@ -651,8 +655,64 @@ export async function POST(req: NextRequest) {
             });
         }
 
+        if (action === "presave_serial") {
+            const { poId, productId, branchId, serial } = body;
+            const { sn, tareWeight, expiryDate } = serial;
+            if (!poId || !productId || !branchId || !sn) return bad("Missing required fields for presave", 400);
+
+            const lines = await fetchPOProductsByPOId(base, toNum(poId));
+            const ml = lines.find(l => toNum(l.product_id) === toNum(productId) && toNum(l.branch_id) === toNum(branchId));
+            let uPrice = 0;
+            if (ml) uPrice = toNum(ml.unit_price);
+            else {
+                const pj2 = await fetchJson<{ data: ProductRow }>(`${base}/items/${PRODUCTS_COLLECTION}/${productId}?fields=cost_per_unit`).catch(()=>null);
+                uPrice = toNum(pj2?.data?.cost_per_unit || 0);
+            }
+
+            const ensured = await ensureOpenReceivingRow({
+                base, poId: toNum(poId), productId: toNum(productId), branchId: toNum(branchId),
+                unitPrice: uPrice, discountTypeId: null, discountPercent: 0
+            });
+
+            const payload: Record<string, unknown> = {
+                purchase_order_product_id: ensured.porId,
+                product_id: toNum(productId),
+                serial_number: String(sn).trim(),
+            };
+            if (tareWeight) payload.tare_weight = parseFloat(tareWeight);
+            if (expiryDate) payload.expiry_date = expiryDate;
+
+            // ✅ Fix 6: Audit fields support - directus API populates created/modified fields automatically from the vos_access_token.
+            try {
+                await fetchJson(`${base}/items/purchase_order_receiving_serial`, {
+                    method: "POST",
+                    body: JSON.stringify(payload)
+                });
+            } catch (e: unknown) {
+                if (!String((e as Error).message).includes("Duplicate")) throw e;
+            }
+            return ok({ success: true, porId: ensured.porId });
+        }
+
+        if (action === "delete_presaved_serial") {
+            const { serialNumber } = body;
+            if (!serialNumber) return bad("Missing serialNumber", 400);
+
+            const searchUrl = `${base}/items/purchase_order_receiving_serial?limit=1&filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&fields=receiving_item_id`;
+            const sj = await fetchJson<{ data: { receiving_item_id: number }[] }>(searchUrl).catch(()=>null);
+            const serialId = sj?.data?.[0]?.receiving_item_id;
+
+            if (serialId) {
+                await fetchJson(`${base}/items/purchase_order_receiving_serial/${serialId}`, {
+                    method: "DELETE"
+                }).catch(()=>{});
+            }
+            return ok({ success: true });
+        }
+
         if (action === "save_receipt") {
             const { poId, receiptNo, receiptDate, porCounts, porSerials, porMetaData, receiverId } = body;
+            const rollbackTracker: Array<{ execute: () => Promise<void>, undo: () => Promise<void> }> = [];
             const thePoId = toNum(poId);
             if (!thePoId) return bad("Missing PO ID");
 
@@ -789,20 +849,20 @@ export async function POST(req: NextRequest) {
                 if (m.batchNo) patch.batch_no = m.batchNo;
                 if (m.expiryDate) patch.expiry_date = m.expiryDate;
 
-                await fetchJson(`${base}/items/${POR_COLLECTION}/${targetPorId}`, { method: "PATCH", body: JSON.stringify(patch) });
+                rollbackTracker.push({
+                    execute: async () => { await fetchJson(`${base}/items/${POR_COLLECTION}/${targetPorId}`, { method: "PATCH", body: JSON.stringify(patch) }); },
+                    undo: async () => { await fetchJson(`${base}/items/${POR_COLLECTION}/${targetPorId}`, { method: "PATCH", body: JSON.stringify({ receipt_no: pr?.receipt_no, received_quantity: pr?.received_quantity, isPosted: pr?.isPosted }) }); }
+                });
 
-                // ✅ Fix 5: Idempotent serial insertion — purge existing serials for this POR + receipt combination before re-inserting - AG 2026-07-14
+                // ✅ Fix 5: Serials are already presaved into purchase_order_receiving_serial. We only insert into purchase_order_receiving_items.
                 const serials = Array.isArray(porSerials?.[targetPorId]) ? porSerials[targetPorId] : [];
                 if (serials.length > 0) {
-                    // Delete any prior serial entries for this POR ID so re-submission doesn't double-count
-                    await Promise.allSettled([
-                        fetchJson(`${base}/items/purchase_order_receiving_items?filter[purchase_order_product_id][_eq]=${targetPorId}`, {
-                            method: "DELETE"
-                        }).catch(() => {}),
-                        fetchJson(`${base}/items/purchase_order_receiving_serial?filter[purchase_order_product_id][_eq]=${targetPorId}`, {
-                            method: "DELETE"
-                        }).catch(() => {}),
-                    ]);
+                    rollbackTracker.push({
+                        execute: async () => {
+                            await fetchJson(`${base}/items/purchase_order_receiving_items?filter[purchase_order_product_id][_eq]=${targetPorId}`, { method: "DELETE" }).catch(() => {});
+                        },
+                        undo: async () => {} // best effort ignore
+                    });
 
                     const pObj = productsMap.get(pId);
                     const effectiveProductId = (pObj?.parent_id && toNum(pObj.parent_id) > 0) ? toNum(pObj.parent_id) : Number(pId);
@@ -824,28 +884,13 @@ export async function POST(req: NextRequest) {
                             }
                         }
 
-                        await fetchJson(`${base}/items/purchase_order_receiving_items`, {
-                            method: "POST",
-                            body: JSON.stringify(serialPayload)
-                        }).catch(e => {
-                            console.error(`Serial insertion failed for ${snValue}:`, e.message);
-                        });
-
-                        const recSerialPayload: Record<string, unknown> = {
-                            purchase_order_product_id: Number(targetPorId),
-                            product_id: effectiveProductId,
-                            serial_number: String(snValue).trim(),
-                        };
-                        if (typeof sObj === 'object') {
-                            const tareWeight = formatTareWeightForCommit(sObj.tareWeight);
-                            if (tareWeight !== null) recSerialPayload.tare_weight = tareWeight;
-                        }
-
-                        await fetchJson(`${base}/items/purchase_order_receiving_serial`, {
-                            method: "POST",
-                            body: JSON.stringify(recSerialPayload)
-                        }).catch(e => {
-                            console.error(`Failed to insert into purchase_order_receiving_serial for ${snValue}:`, e.message);
+                        rollbackTracker.push({
+                            execute: async () => {
+                                await fetchJson(`${base}/items/purchase_order_receiving_items`, { method: "POST", body: JSON.stringify(serialPayload) });
+                            },
+                            undo: async () => {
+                                await fetchJson(`${base}/items/purchase_order_receiving_items?filter[serial_no][_eq]=${encodeURIComponent(String(snValue).trim())}`, { method: "DELETE" }).catch(()=>{});
+                            }
                         });
                     }
                 }
@@ -901,7 +946,25 @@ export async function POST(req: NextRequest) {
             }
             patchPO.total_amount = Number(poNet.toFixed(2));
 
-            await fetchJson(`${base}/items/${PO_COLLECTION}/${thePoId}`, { method: "PATCH", body: JSON.stringify(patchPO) }).catch(() => {});
+            rollbackTracker.push({
+                execute: async () => { await fetchJson(`${base}/items/${PO_COLLECTION}/${thePoId}`, { method: "PATCH", body: JSON.stringify(patchPO) }); },
+                undo: async () => { await fetchJson(`${base}/items/${PO_COLLECTION}/${thePoId}`, { method: "PATCH", body: JSON.stringify({ inventory_status: po.inventory_status }) }); }
+            });
+            
+            // ✅ Execute Rollback Tracker
+            const successfulRollbacks: Array<() => Promise<void>> = [];
+            try {
+                for (const action of rollbackTracker) {
+                    await action.execute();
+                    successfulRollbacks.push(action.undo);
+                }
+            } catch (e) {
+                console.error("[ROLLBACK TRACKER] Execution failed, rolling back...", e);
+                for (let i = successfulRollbacks.length - 1; i >= 0; i--) {
+                    await successfulRollbacks[i]().catch(re => console.error("Rollback failed:", re));
+                }
+                return bad(`Failed to save receipt. Changes rolled back. Error: ${(e as Error).message}`, 500);
+            }
 
             // ✅ Sync the "received" flag in purchase_order_products for each line
             for (const ln of fLines) {
@@ -1124,7 +1187,7 @@ export async function POST(req: NextRequest) {
         // 3. Not found -> requiresRegistration: true
         // Comments: Updated check to query PO-wide for auto-allocation routing.
         if (action === "validate_scan_serial") {
-            const serialNumber = toStr(body.serialNumber).toUpperCase();
+            const serialNumber = toStr(body.serialNumber);
             const poId = toNum(body.poId);
             if (!serialNumber) return bad("Missing serialNumber", 400);
 

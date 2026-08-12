@@ -11,7 +11,7 @@ export function ReceivingProductsManualModule({ receiverId, receiverName }: { re
             <div className="h-full flex flex-col px-6 py-4 overflow-hidden">
                 <div className="mb-4 shrink-0">
                     <h1 className="text-2xl font-semibold tracking-tight">
-                        Receiving of Products Manual
+                        Receiving of Serial Products
                     </h1>
                     <p className="text-sm text-muted-foreground">
                         Scan and receive products from approved purchase orders

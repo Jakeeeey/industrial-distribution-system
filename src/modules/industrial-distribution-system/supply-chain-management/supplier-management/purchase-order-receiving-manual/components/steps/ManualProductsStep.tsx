@@ -36,11 +36,6 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
     const [receivingPage, setReceivingPage] = React.useState(1);
     const ITEMS_PER_PAGE = 10;
 
-    // ✅ Over-receiving modal (non-serialized path & serialized over-limit path) - AG 2026-07-14
-    const [isOverReceivingModalOpen, setIsOverReceivingModalOpen] = React.useState(false);
-    // Pending count the user tried to enter (non-serialized over-limit confirm flow)
-    const [pendingOverCount, setPendingOverCount] = React.useState<{ id: string; val: number } | null>(null);
-
     // ✅ Serial Modal state
     const [serialModalOpen, setSerialModalOpen] = React.useState(false);
     const [activePorId, setActivePorId] = React.useState<string | null>(null);
@@ -91,20 +86,6 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
         let validVal = isNaN(parsed) ? 0 : parsed;
         if (validVal < 0) validVal = 0;
 
-        // ✅ Fix 2: Check if new count would exceed ordered qty for non-serialized items - AG 2026-07-14
-        const item = filteredItems.find(it => String(it.id) === id);
-        if (item && !item.isSerialized && validVal > 0) {
-            const expectedQty = Number(item.expectedQty || 0);
-            const receivedAtStart = Number(item.receivedQty || 0);
-            const remainingBalance = expectedQty - receivedAtStart;
-            if (validVal > remainingBalance && validVal > 0) {
-                // Hold the value and prompt a confirmation dialog
-                setPendingOverCount({ id, val: validVal });
-                setIsOverReceivingModalOpen(true);
-                return; // Don't apply yet — wait for user confirmation
-            }
-        }
-
         setManualCounts(prev => ({ ...prev, [id]: validVal }));
     };
 
@@ -137,11 +118,7 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
             });
             return;
         }
-        if (isOverReceiving) {
-            setIsOverReceivingModalOpen(true);
-        } else {
-            onContinue();
-        }
+        onContinue();
     };
 
     const openSerialModal = (id: string, name: string) => {
@@ -166,6 +143,24 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
     // ✅ Validation Helper
     const isPendingValid = newSerial.trim() !== "" && newTare.trim() !== "" && newExpiry.trim() !== "";
     const isPartialEntry = newSerial.trim() !== "" || newTare.trim() !== ""; // If user started typing anything
+
+    const presaveSerialToDB = async (sn: string, tare: string) => {
+        const branchId = (selectedPO?.allocations || []).find(a => a.items?.some(i => String(i.id) === activePorId))?.branch?.id;
+        const res = await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                action: "presave_serial",
+                poId: selectedPO?.id,
+                productId: activeItem?.productId,
+                branchId,
+                serial: { sn, tareWeight: tare }
+            }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || "Failed to pre-save serial");
+        return json.data;
+    };
 
     // ✅ Fix 3: Serial Verification — NEW LOGIC (AG 2026-07-14)
     // - Serial NOT in cylinder_assets (requiresRegistration=true) → AUTO-ACCEPT (new asset, free to receive)
@@ -237,35 +232,56 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
 
             // ✅ AUTO-ACCEPT: Serial not in cylinder_assets (requiresRegistration=true) or matched via PO serial tag
             // New cylinders / PO-tagged serials can always be received without registration friction.
+            await presaveSerialToDB(val, newTare);
             setTempSerials(prev => [...prev, { sn: val, tareWeight: newTare, expiryDate: newExpiry }]);
             setNewSerial("");
             setNewTare("");
             setNewExpiry("");
             setTimeout(() => inputRef.current?.focus(), 10);
-        } catch {
-            toast.error("Verification Failed", { description: "Could not verify serial. Please check your connection." });
+        } catch (e) {
+            toast.error("Action Failed", { description: (e as Error).message || "Could not verify/presave serial." });
         } finally {
             setVerifyingSerial(false);
         }
     };
 
     // ✅ Confirm adding an over-limit serial (user acknowledged warning) - AG 2026-07-14
-    const confirmAddOverLimitSerial = () => {
+    const confirmAddOverLimitSerial = async () => {
         if (!pendingSerialEntry) return;
-        setTempSerials(prev => [...prev, { sn: pendingSerialEntry.sn, tareWeight: pendingSerialEntry.tare, expiryDate: pendingSerialEntry.expiry }]);
-        setPendingSerialEntry(null);
-        setIsSerialOverLimitOpen(false);
-        setNewSerial("");
-        setNewTare("");
-        setNewExpiry("");
-        setTimeout(() => inputRef.current?.focus(), 10);
+        setVerifyingSerial(true);
+        try {
+            await presaveSerialToDB(pendingSerialEntry.sn, pendingSerialEntry.tare);
+            setTempSerials(prev => [...prev, { sn: pendingSerialEntry.sn, tareWeight: pendingSerialEntry.tare, expiryDate: pendingSerialEntry.expiry }]);
+            setPendingSerialEntry(null);
+            setIsSerialOverLimitOpen(false);
+            setNewSerial("");
+            setNewTare("");
+            setNewExpiry("");
+            setTimeout(() => inputRef.current?.focus(), 10);
+        } catch (e) {
+            toast.error("Action Failed", { description: (e as Error).message || "Could not pre-save serial." });
+        } finally {
+            setVerifyingSerial(false);
+        }
     };
 
     // ✅ Removed: confirmRegisterCylinder and rejectUnregisteredSerial — no longer needed.
     // Unregistered serials are now auto-accepted. Registered serials are blocked. - AG 2026-07-14
 
-    const removeSerial = (index: number) => {
-        setTempSerials(tempSerials.filter((_, i) => i !== index));
+    const removeSerial = async (index: number) => {
+        const serialToRemove = tempSerials[index];
+        if (!serialToRemove) return;
+        try {
+            const res = await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "delete_presaved_serial", serialNumber: serialToRemove.sn }),
+            });
+            if (!res.ok) throw new Error("Failed to delete serial");
+            setTempSerials(tempSerials.filter((_, i) => i !== index));
+        } catch (e) {
+            toast.error("Delete Failed", { description: (e as Error).message });
+        }
     };
 
     const saveSerials = () => {
@@ -444,35 +460,7 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                 </Button>
             </div>
 
-            {/* ✅ Fix 2: Over-receiving warning for non-serialized items - AG 2026-07-14 */}
-            <AlertDialog open={isOverReceivingModalOpen} onOpenChange={(open) => {
-                if (!open) setPendingOverCount(null);
-                setIsOverReceivingModalOpen(open);
-            }}>
-                <AlertDialogContent className="rounded-2xl border-2">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2 text-red-600 font-black uppercase tracking-tight">
-                            <AlertTriangle className="w-5 h-5" /> Over-Receiving Warning
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-sm font-bold text-slate-600 uppercase tracking-wider leading-relaxed">
-                            The quantity you entered ({pendingOverCount?.val}) exceeds the remaining ordered balance.
-                            This will create an over-receiving discrepancy.
-                            Are you sure you want to proceed?
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel className="rounded-xl font-black uppercase tracking-widest text-[10px] border-2" onClick={() => setPendingOverCount(null)}>Adjust Quantity</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => {
-                            // ✅ Apply the pending over-count on explicit user confirmation - AG 2026-07-14
-                            if (pendingOverCount) {
-                                setManualCounts(prev => ({ ...prev, [pendingOverCount.id]: pendingOverCount.val }));
-                                setPendingOverCount(null);
-                            }
-                            setIsOverReceivingModalOpen(false);
-                        }} className="bg-red-600 hover:bg-red-700 rounded-xl font-black uppercase tracking-widest text-[10px]">Proceed Anyway</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+
 
             {/* ✅ Fix 2: Serial over-limit warning for serialized items - AG 2026-07-14 */}
             <AlertDialog open={isSerialOverLimitOpen} onOpenChange={(open) => {
@@ -492,7 +480,7 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel className="rounded-xl font-black uppercase tracking-widest text-[10px] border-2" onClick={() => setPendingSerialEntry(null)}>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={confirmAddOverLimitSerial} className="bg-amber-600 hover:bg-amber-700 rounded-xl font-black uppercase tracking-widest text-[10px]">Add Anyway</AlertDialogAction>
+                        <AlertDialogAction onClick={confirmAddOverLimitSerial} className="bg-amber-600 hover:bg-amber-700 rounded-xl font-black uppercase tracking-widest text-[10px]" disabled={verifyingSerial}>Add Serial</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
