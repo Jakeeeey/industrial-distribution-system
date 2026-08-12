@@ -162,67 +162,36 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
 
     // ✅ Called by RefillRapidScanModal when a serial is accepted
     // Comments: Supports storing an optional isNew flag to identify newly registered cylinders.
-    const handleAddSerial = async (porId: string, serial: string, isNew?: boolean) => {
+    const handleAddSerial = (porId: string, serial: string, isNew?: boolean) => {
         // Prevent duplicate local addition first
         const isDuplicate = serialsByPorId[porId]?.some(s => s.sn === serial);
         if (isDuplicate) return;
 
-        try {
-            const item = filteredItems.find(it => String(it.id) === porId);
-            const branchId = (selectedPO?.allocations || []).find(a => a.items?.some(i => String(i.id) === porId))?.branch?.id;
-            
-            const res = await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    action: "presave_serial",
-                    poId: selectedPO?.id,
-                    productId: item?.productId,
-                    branchId,
-                    serial: { sn: serial, tareWeight: "" }
-                }),
-            });
-            if (!res.ok) throw new Error("Failed to pre-save serial");
-
-            setSerialsByPorId(prev => {
-                const existing = prev[porId] || [];
-                if (existing.some(s => s.sn === serial)) return prev;
-                const next = [...existing, { sn: serial, tareWeight: "", expiryDate: "", isNew }];
-                setManualCounts(c => ({ ...c, [porId]: next.length }));
-                return { ...prev, [porId]: next };
-            });
-        } catch (e) {
-            toast.error("Save Failed", { description: (e as Error).message });
-        }
+        setSerialsByPorId(prev => {
+            const existing = prev[porId] || [];
+            if (existing.some(s => s.sn === serial)) return prev;
+            const next = [...existing, { sn: serial, tareWeight: "", expiryDate: "", isNew }];
+            setManualCounts(c => ({ ...c, [porId]: next.length }));
+            return { ...prev, [porId]: next };
+        });
     };
 
-    const handleRemoveSerial = async (serial: string) => {
-        try {
-            const res = await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "delete_presaved_serial", serialNumber: serial }),
+    const handleRemoveSerial = (serial: string) => {
+        setSerialsByPorId(prev => {
+            const next = { ...prev };
+            Object.keys(next).forEach(porId => {
+                next[porId] = (next[porId] || []).filter(s => s.sn !== serial);
             });
-            if (!res.ok) throw new Error("Failed to delete serial");
-
-            setSerialsByPorId(prev => {
-                const next = { ...prev };
+            // Update manual counts as well
+            setManualCounts(c => {
+                const nextCounts = { ...c };
                 Object.keys(next).forEach(porId => {
-                    next[porId] = (next[porId] || []).filter(s => s.sn !== serial);
+                    nextCounts[porId] = next[porId].length;
                 });
-                // Update manual counts as well
-                setManualCounts(c => {
-                    const nextCounts = { ...c };
-                    Object.keys(next).forEach(porId => {
-                        nextCounts[porId] = next[porId].length;
-                    });
-                    return nextCounts;
-                });
-                return next;
+                return nextCounts;
             });
-        } catch (e) {
-            toast.error("Delete Failed", { description: (e as Error).message });
-        }
+            return next;
+        });
     };
 
     const handleContinueClick = () => {

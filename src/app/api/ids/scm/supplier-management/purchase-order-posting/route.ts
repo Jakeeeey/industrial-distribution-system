@@ -186,6 +186,7 @@ interface PORRow {
     receipt_date: string;
     received_date: string;
     isPosted: number | string;
+    is_reverted?: number | string | null;
     discounted_amount: number | string;
     vat_amount: number | string;
     withholding_amount: number | string;
@@ -206,7 +207,7 @@ interface ReceivingItem {
 }
 
 const POR_SAFE_FIELDS =
-    "purchase_order_product_id,purchase_order_id,product_id,branch_id,received_quantity,receipt_no,receipt_date,received_date,isPosted,discounted_amount,vat_amount,withholding_amount,total_amount,unit_price,discount_type";
+    "purchase_order_product_id,purchase_order_id,product_id,branch_id,received_quantity,receipt_no,receipt_date,received_date,isPosted,discounted_amount,vat_amount,withholding_amount,total_amount,unit_price,discount_type,is_reverted";
 
 // =====================
 // FETCHERS
@@ -383,7 +384,7 @@ async function fetchPORByPOIds(base: string, poIds: number[]) {
             `&filter[purchase_order_id][_in]=${encodeURIComponent(ids.join(","))}` +
             `&fields=${encodeURIComponent(POR_SAFE_FIELDS)}`;
         const j = await fetchJson(url) as { data: PORRow[] };
-        rows.push(...(Array.isArray(j?.data) ? j.data : []));
+        rows.push(...(Array.isArray(j?.data) ? j.data : []).filter(r => toNum(r.is_reverted) !== 1));
     }
     return rows;
 }
@@ -1058,7 +1059,7 @@ export async function GET() {
             `&fields=${encodeURIComponent(POR_SAFE_FIELDS)}`;
 
         const candJ = await fetchJson(porCandidateUrl) as { data: PORRow[] };
-        const porCandidates = Array.isArray(candJ?.data) ? candJ.data : [];
+        const porCandidates = (Array.isArray(candJ?.data) ? candJ.data : []).filter(r => toNum(r.is_reverted) !== 1);
 
         const candidatePoIds = Array.from(
             new Set(porCandidates.map((r) => toNum(r?.purchase_order_id)).filter(Boolean))
@@ -1294,76 +1295,57 @@ export async function POST(req: NextRequest) {
             }
 
             const unpostedRows = porRows.filter(r => toNum(r.isPosted) === 0 && (toStr(r.receipt_no).trim() !== "" || toNum(r.received_quantity) > 0));
-            const itemsByBranch = new Map<number, PostingPOItem[]>();
+            const itemsByGroup = new Map<string, PostingPOItem[]>();
 
             // --- Live Sourcing vs Frozen ---
             const isPoFrozen = hasAnyPosted || invStatus === 14;
 
-            const allKeys = new Set<string>();
-            lines.forEach(ln => allKeys.add(`${toNum(ln.product_id)}-${toNum(ln.branch_id)}`));
-            porRows.forEach(r => {
-                if (toNum(r.received_quantity) > 0 || toStr(r.receipt_no)) {
-                    allKeys.add(`${toNum(r.product_id)}-${toNum(r.branch_id)}`);
-                }
-            });
-
-            for (const keyStr of allKeys) {
-                const [pid, bid] = keyStr.split("-").map(Number);
+            for (const r of porRows) {
+                const pid = toNum(r.product_id);
+                const bid = toNum(r.branch_id);
+                const receiptNo = toStr(r.receipt_no) || "Pending";
+                const porId = toNum(r.purchase_order_product_id);
                 if (!pid || !bid) continue;
 
+                const groupKey = `${bid}::${receiptNo}`;
                 const ln = lines.find(l => toNum(l.product_id) === pid && toNum(l.branch_id) === bid);
-                const expected = Math.max(0, toNum(ln?.ordered_quantity || 0));
-
-                const k = keyLine(poId, pid, bid);
-                const porIdsForLine = porIdsByKey.get(k) ?? [];
-
-                const rfids = porIdsForLine.flatMap((id) => rfidsByPorId.get(id) ?? []);
-                const taggedQty = rfids.length;
-                const receivedQty = porIdsForLine.reduce((sum, id) => sum + (recByPor.get(id) ?? 0), 0);
                 
-                // For extra items, we consider them received if a record exists with qty > 0
-                const isReceived = expected > 0 ? (receivedQty >= expected) : (receivedQty > 0);
-
+                const rfids = rfidsByPorId.get(porId) ?? [];
+                const receivedQty = effectiveReceivedQty(r);
+                const expected = Math.max(0, toNum(ln?.ordered_quantity || 0));
+                
                 const p = productsMap.get(pid);
                 if (!p) continue; // ✅ Skip non-serialized items
-                const primaryPorId = porIdsForLine[0] || (ln ? ln.purchase_order_product_id : `extra-${pid}-${bid}`);
 
-                let unitPrice = 0;
-                let lineGrossAmt = 0;
-                let lineDiscount = 0;
-                let lineNet = 0;
-
-                const linePorRows = porRows.filter(r => porIdsForLine.includes(toNum(r.purchase_order_product_id)));
-                const srcRow = linePorRows.find(r => toNum(r.unit_price) > 0) || linePorRows.find(r => toNum(r.isPosted) === 1) || linePorRows[0];
-                const discountContext = resolvePostingDiscountContext({
-                    savedDiscountType: srcRow?.discount_type,
-                    discountTypesMap,
-                    productSupplierDiscountType: productSupplierLinks.get(pid)?.discount_type as Record<string, unknown> | string | number | null | undefined,
-                    poDiscountType: poDType,
-                });
+                let unitPrice = toNum(r.unit_price) || toNum(ln?.unit_price) || toNum(p.cost_per_unit);
+                let lineGrossAmt = unitPrice * receivedQty;
+                let lineDiscount = toNum(r.discounted_amount);
+                let lineNet = toNum(r.total_amount);
                 
-                unitPrice = toNum(srcRow?.unit_price) || toNum(ln?.unit_price) || toNum(p?.cost_per_unit);
-                lineGrossAmt = linePorRows.reduce((sum, r) => sum + (toNum(r.unit_price) * effectiveReceivedQty(r)), 0);
-                lineDiscount = linePorRows.reduce((sum, r) => sum + toNum(r.discounted_amount), 0);
-                lineNet = linePorRows.reduce((sum, r) => sum + toNum(r.total_amount), 0);
-
                 if (receivedQty === 0 && expected > 0) {
                     lineGrossAmt = unitPrice * expected;
                     lineNet = lineGrossAmt;
                 }
 
+                const discountContext = resolvePostingDiscountContext({
+                    savedDiscountType: r.discount_type,
+                    discountTypesMap,
+                    productSupplierDiscountType: productSupplierLinks.get(pid)?.discount_type as Record<string, unknown> | string | number | null | undefined,
+                    poDiscountType: poDType,
+                });
+
                 const item: PostingPOItem = {
-                    id: String(primaryPorId),
-                    porId: String(primaryPorId),
+                    id: String(porId),
+                    porId: String(porId),
                     productId: String(pid),
-                    name: toStr(p?.product_name, `Product #${pid}`),
+                    name: toStr(p.product_name, `Product #${pid}`),
                     barcode: productDisplayCode(p, pid),
                     uom: "—",
                     expectedQty: expected,
-                    taggedQty,
+                    taggedQty: rfids.length,
                     receivedQty,
                     rfids,
-                    isReceived,
+                    isReceived: receivedQty > 0,
                     unitPrice,
                     grossAmount: lineGrossAmt,
                     discountAmount: lineDiscount,
@@ -1371,19 +1353,78 @@ export async function POST(req: NextRequest) {
                     discountTypeId: discountContext.discountTypeId,
                     discountLabel: discountContext.discountLabel,
                 };
-
-                const arr = itemsByBranch.get(bid) ?? [];
+                
+                const arr = itemsByGroup.get(groupKey) ?? [];
                 arr.push(item);
-                itemsByBranch.set(bid, arr);
+                itemsByGroup.set(groupKey, arr);
             }
 
-            const allocations = Array.from(itemsByBranch.entries()).map(([bid, items]) => ({
-                branch: {
-                    id: bid ? String(bid) : "unassigned",
-                    name: bid ? toStr(branchesMap.get(bid), `Branch ${bid}`) : "Unassigned",
-                },
-                items,
-            }));
+            for (const ln of lines) {
+                const pid = toNum(ln.product_id);
+                const bid = toNum(ln.branch_id);
+                if (!pid || !bid) continue;
+                
+                const k = keyLine(poId, pid, bid);
+                const porIdsForLine = porIdsByKey.get(k) ?? [];
+                if (porIdsForLine.length === 0) {
+                    const expected = Math.max(0, toNum(ln.ordered_quantity));
+                    if (expected <= 0) continue;
+                    
+                    const receiptNo = "Pending";
+                    const groupKey = `${bid}::${receiptNo}`;
+                    
+                    const p = productsMap.get(pid);
+                    if (!p) continue;
+                    
+                    const unitPrice = toNum(ln.unit_price) || toNum(p.cost_per_unit);
+                    const lineGrossAmt = unitPrice * expected;
+                    const lineNet = lineGrossAmt;
+                    
+                    const discountContext = resolvePostingDiscountContext({
+                        savedDiscountType: null,
+                        discountTypesMap,
+                        productSupplierDiscountType: productSupplierLinks.get(pid)?.discount_type as Record<string, unknown> | string | number | null | undefined,
+                        poDiscountType: poDType,
+                    });
+
+                    const item: PostingPOItem = {
+                        id: `extra-${pid}-${bid}`,
+                        porId: `extra-${pid}-${bid}`,
+                        productId: String(pid),
+                        name: toStr(p.product_name, `Product #${pid}`),
+                        barcode: productDisplayCode(p, pid),
+                        uom: "—",
+                        expectedQty: expected,
+                        taggedQty: 0,
+                        receivedQty: 0,
+                        rfids: [],
+                        isReceived: false,
+                        unitPrice,
+                        grossAmount: lineGrossAmt,
+                        discountAmount: 0,
+                        netAmount: lineNet,
+                        discountTypeId: discountContext.discountTypeId,
+                        discountLabel: discountContext.discountLabel,
+                    };
+                    
+                    const arr = itemsByGroup.get(groupKey) ?? [];
+                    arr.push(item);
+                    itemsByGroup.set(groupKey, arr);
+                }
+            }
+
+            const allocations = Array.from(itemsByGroup.entries()).map(([groupKey, items]) => {
+                const [bidStr, receiptNo] = groupKey.split("::");
+                const bid = Number(bidStr);
+                return {
+                    branch: {
+                        id: bid ? String(bid) : "unassigned",
+                        name: bid ? toStr(branchesMap.get(bid), `Branch ${bid}`) : "Unassigned",
+                    },
+                    receiptNo,
+                    items,
+                };
+            });
 
             const lr = latestReceiptInfo(porRows);
             const rs = buildReceiptSummary(porRows);
@@ -1420,7 +1461,7 @@ export async function POST(req: NextRequest) {
                 // Live unposted PO: build footer from exact items
                 const poIsInvoice = (toNum(po?.vat_amount) > 0) || (toNum(po?.withholding_tax_amount) > 0);
                 
-                for (const arr of itemsByBranch.values()) {
+                for (const arr of itemsByGroup.values()) {
                     for (const item of arr) {
                         if (item.receivedQty > 0) {
                             // The properties on `item` were calculated using receivedQty exactly when receivedQty > 0
@@ -1813,7 +1854,8 @@ export async function POST(req: NextRequest) {
                     // Instead of zeroing out properties, just mark it as REVERTED (isPosted = 2) 
                     // so it remains in history for audit visibility and correction.
                     await patchPOR(base, porId, {
-                        isPosted: 2,
+                        isPosted: 0,
+                        is_reverted: 1,
                     });
                 } else {
                     // Extra product: delete completely to prevent ghost records

@@ -53,6 +53,7 @@ export function ReceiptPreviewModal({
                 receivedQtyAtStart: it.receivedQtyAtStart,
                 receivedQtyNow: it.receivedQtyNow,
                 unitPrice: it.unitPrice || 0,
+                discountType: it.discountType || "",
                 discountAmount: it.discountAmount || 0,
                 batchNo: it.batchNo,
                 lotId: it.lotId,

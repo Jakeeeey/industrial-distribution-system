@@ -82,6 +82,7 @@ export type ReceivingPODetail = {
     isInvoice?: boolean;
     isRefill?: boolean;
     isTagged?: boolean;
+    draftSerials?: Record<string, { sn: string; tareWeight?: string; expiryDate?: string }[]>;
 };
 
 export type SavedItem = {
@@ -92,6 +93,7 @@ export type SavedItem = {
     receivedQtyAtStart: number;
     receivedQtyNow: number;
     unitPrice?: number;
+    discountType?: string;
     discountAmount?: number;
     batchNo?: string;
     lotId?: string;
@@ -142,6 +144,10 @@ type Ctx = {
     setReceiptType: (v: string) => void;
     receiptDate: string;
     setReceiptDate: (v: string) => void;
+
+    // ✅ NEW: editingRevertedReceiptNo
+    editingRevertedReceiptNo: string | null;
+    setEditingRevertedReceiptNo: React.Dispatch<React.SetStateAction<string | null>>;
 
     manualCounts: Record<string, number>;
     setManualCounts: React.Dispatch<React.SetStateAction<Record<string, number>>>;
@@ -212,6 +218,7 @@ type DraftState = {
     receiptDate: string;
     metaDataByPorId?: Record<string, { batchNo?: string; lotNo?: string; lotId?: string; expiryDate?: string }>;
     serialsByPorId?: Record<string, { sn: string; tareWeight?: string; expiryDate?: string; isNew?: boolean }[]>;
+    editingRevertedReceiptNo?: string | null;
     savedAt: number;
 };
 
@@ -246,6 +253,7 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
     const [receiptNo, setReceiptNo] = React.useState("");
     const [receiptType, setReceiptType] = React.useState("");
     const [receiptDate, setReceiptDate] = React.useState(todayYMD());
+    const [editingRevertedReceiptNo, setEditingRevertedReceiptNo] = React.useState<string | null>(null);
 
     const [manualCounts, setManualCounts] = React.useState<Record<string, number>>({});
 
@@ -339,6 +347,7 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
         setManualCounts({});
         setVerifiedProductIds([]);
         setSerialsByPorId({});
+        setEditingRevertedReceiptNo(null);
         if (opts?.clearStorage && opts?.poId) {
             clearDraft(opts.poId);
         }
@@ -359,8 +368,9 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
             metaDataByPorId,
             serialsByPorId,
             savedAt: Date.now(),
+            editingRevertedReceiptNo
         });
-    }, [selectedPO?.id, manualCounts, verifiedProductIds, receiptNo, receiptType, receiptDate, metaDataByPorId, serialsByPorId]);
+    }, [selectedPO?.id, manualCounts, verifiedProductIds, receiptNo, receiptType, receiptDate, metaDataByPorId, serialsByPorId, editingRevertedReceiptNo]);
 
     // ✅ SYNC SERIALS TO COUNTS
     React.useEffect(() => {
@@ -430,11 +440,27 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
                     setReceiptNo(draft.receiptNo || "");
                     setReceiptType(draft.receiptType || "");
                     setReceiptDate(draft.receiptDate || todayYMD());
+                    setEditingRevertedReceiptNo(draft.editingRevertedReceiptNo ?? null);
                     toast.info("Draft restored from previous session.");
                 } else {
                     setReceiptDate(todayYMD());
                     setReceiptNo("");
                     setReceiptType("");
+                    setEditingRevertedReceiptNo(null);
+
+                    if (detail && detail.draftSerials) {
+                        const newSerials: Record<string, any[]> = {};
+                        const newCounts: Record<string, number> = {};
+                        for (const [porId, sers] of Object.entries(detail.draftSerials)) {
+                            newSerials[porId] = sers;
+                            newCounts[porId] = sers.length;
+                        }
+                        setSerialsByPorId(newSerials);
+                        setManualCounts(newCounts);
+                    } else {
+                        setSerialsByPorId({});
+                        setManualCounts({});
+                    }
                 }
 
                 setPoBarcode(detail?.poNumber ?? "");
@@ -507,11 +533,13 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
                     setReceiptNo(draft.receiptNo || "");
                     setReceiptType(draft.receiptType || "");
                     setReceiptDate(draft.receiptDate || todayYMD());
+                    setEditingRevertedReceiptNo(draft.editingRevertedReceiptNo ?? null);
                     toast.info("Draft restored from previous session.");
                 } else {
                     setReceiptDate(todayYMD());
                     setReceiptNo("");
                     setReceiptType("");
+                    setEditingRevertedReceiptNo(null);
                 }
 
                 setPoBarcode(code);
@@ -724,6 +752,7 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
                     porCounts: counts,
                     porSerials: serialsByPorId,
                     porMetaData: porMetaData ?? {},
+                    editingRevertedReceiptNo
                 }),
             });
             const j = await asJson(r);
@@ -759,6 +788,7 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
                     receivedQtyAtStart: Number(it.receivedQty || 0),
                     receivedQtyNow: scannedNow,
                     unitPrice: Number(it.unitPrice) || 0,
+                    discountType: String(it.discountType || ""),
                     discountAmount: Number(it.discountAmount) || 0,
                     uom: String(it.uom || ""),
                     batchNo: porMetaData?.[it.id]?.batchNo || porMetaData?.[`${it.productId}-${it.branchId}`]?.batchNo || "",
@@ -796,7 +826,7 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
         } finally {
             setSavingReceipt(false);
         }
-    }, [selectedPO, receiptNo, receiptType, receiptDate, manualCounts, serialsByPorId, refreshList, resetSession, receiverId]);
+    }, [selectedPO, receiptNo, receiptType, receiptDate, manualCounts, serialsByPorId, refreshList, resetSession, receiverId, editingRevertedReceiptNo]);
 
     const value: Ctx = {
         list,
@@ -823,6 +853,9 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
         setReceiptType,
         receiptDate,
         setReceiptDate,
+
+        editingRevertedReceiptNo,
+        setEditingRevertedReceiptNo,
 
         manualCounts: manualCounts ?? {},
         setManualCounts,

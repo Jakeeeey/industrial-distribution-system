@@ -24,10 +24,15 @@ export function ProductsReceivingStatusCard() {
                                 No receiving lines found.
                             </div>
                         ) : (
-                            allocs.map((a) => (
-                                <div key={a.branch.id} className="rounded-lg border p-3">
+                            allocs.map((a, idx) => (
+                                <div key={`${a.branch.id}-${a.receiptNo}-${idx}`} className="rounded-lg border p-3">
                                     <div className="mb-2 flex items-center justify-between gap-2">
-                                        <div className="text-sm font-medium">{a.branch.name}</div>
+                                        <div className="text-sm font-medium">
+                                            {a.branch.name}
+                                            <span className="text-muted-foreground font-normal ml-2">
+                                                (Receipt: {a.receiptNo || "Pending"})
+                                            </span>
+                                        </div>
                                         <Badge variant="outline">{a.items.length} items</Badge>
                                     </div>
 
