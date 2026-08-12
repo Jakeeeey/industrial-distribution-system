@@ -151,6 +151,54 @@ async function findCustomerByTin(
   return json?.data || [];
 }
 
+/**
+ * Resolves price_type_id from Directus price_types table using price_type letter code if price_type_id is not explicitly provided.
+ */
+async function resolvePriceTypeId(
+  priceType: unknown,
+  priceTypeId: unknown,
+  token?: string,
+): Promise<number | null> {
+  if (priceTypeId !== undefined && priceTypeId !== null && priceTypeId !== "") {
+    const num = Number(priceTypeId);
+    if (!isNaN(num) && num > 0) return num;
+  }
+
+  if (!priceType || typeof priceType !== "string") return null;
+
+  const letterCode = priceType.split("-")[0].trim();
+  if (!letterCode) return null;
+
+  try {
+    const res = await fetchWithRetry(
+      `${DIRECTUS_URL}/items/price_types?limit=-1`,
+      {
+        cache: "no-store",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      },
+    );
+    if (!res.ok) return null;
+    const json = await res.json();
+    const items: Array<{ price_type_id?: number | string; price_type_name?: string }> = json?.data || [];
+
+    const match = items.find((item) => {
+      const name = item.price_type_name || "";
+      return (
+        name === priceType ||
+        name.split("-")[0].trim() === letterCode
+      );
+    });
+
+    if (match?.price_type_id) {
+      return Number(match.price_type_id);
+    }
+  } catch (e) {
+    console.error("[resolvePriceTypeId] Error resolving price_type_id:", e);
+  }
+
+  return null;
+}
+
 export async function GET(req: NextRequest) {
   const token = process.env.DIRECTUS_STATIC_TOKEN;
   const headers: Record<string, string> = token
@@ -405,6 +453,14 @@ export async function POST(req: NextRequest) {
     const isWalkIn = isWalkInClass || isHouseholdStore;
     const normalizedTin = normalizeTin(newCustomerData.customer_tin);
 
+    // Mandatory validation: Price Type is required for customer creation
+    if (!newCustomerData.price_type || String(newCustomerData.price_type).trim() === "") {
+      return NextResponse.json(
+        { error: "Price type is required" },
+        { status: 400 },
+      );
+    }
+
     if (
       !String(newCustomerData.province ?? "").trim() ||
       !String(newCustomerData.city ?? "").trim() ||
@@ -434,6 +490,18 @@ export async function POST(req: NextRequest) {
       newCustomerData.customer_tin = normalizeEmptyToNull(
         newCustomerData.customer_tin,
       );
+    }
+
+    // Resolve and assign price_type_id integer field for DB storage
+    if (newCustomerData.price_type !== undefined || newCustomerData.price_type_id !== undefined) {
+      const resolvedId = await resolvePriceTypeId(
+        newCustomerData.price_type,
+        newCustomerData.price_type_id,
+        token,
+      );
+      if (resolvedId !== null) {
+        newCustomerData.price_type_id = resolvedId;
+      }
     }
 
     // Fallback: If client did not provide date_entered, set to Philippine local time (UTC+8)
@@ -515,6 +583,18 @@ export async function PATCH(req: NextRequest) {
     if (updateData.location !== undefined) {
       const geoJson = parseGeometry(updateData.location);
       updateData.location = geoJson ? geoJson : null;
+    }
+
+    // Resolve and assign price_type_id integer field during update if price_type or price_type_id is provided
+    if (updateData.price_type !== undefined || updateData.price_type_id !== undefined) {
+      const resolvedId = await resolvePriceTypeId(
+        updateData.price_type,
+        updateData.price_type_id,
+        token,
+      );
+      if (resolvedId !== null) {
+        updateData.price_type_id = resolvedId;
+      }
     }
 
     const shouldValidate =

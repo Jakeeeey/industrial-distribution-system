@@ -400,7 +400,8 @@ const customerSchema = z.object({
   payment_term: z.coerce.number(),
   store_type: z.coerce.number().nullable(),
   classification: z.coerce.number().nullable(),
-  price_type: z.string(),
+  price_type: z.string().min(1, "Price Type is required"),
+  price_type_id: z.coerce.number().optional().nullable(),
   discount_type: z.coerce.number().nullable(),
   encoder_id: z.number(),
   isActive: z.coerce.number().default(1),
@@ -471,6 +472,7 @@ const getDefaultValues = (): CustomerFormValues => ({
   store_type: null,
   classification: null,
   price_type: "",
+  price_type_id: null,
   isActive: 1,
   isVAT: 0,
   isEWT: 0,
@@ -1013,6 +1015,7 @@ export function CustomerFormSheet({
           payment_term: customer.payment_term || 0,
           store_type: customer.store_type || null,
           price_type: initialPriceType || "",
+          price_type_id: customer.price_type_id || null,
           isActive: customer.isActive ?? 1,
           isVAT: customer.isVAT ?? 0,
           isEWT: customer.isEWT ?? 0,
@@ -1054,6 +1057,7 @@ export function CustomerFormSheet({
       "store_name",
       "store_signage",
       "store_type",
+      "price_type",
     ]);
 
     let hasManualErrors = false;
@@ -1065,6 +1069,16 @@ export function CustomerFormSheet({
         message: "Store Type is required.",
       });
       firstTab = firstTab || "basic";
+      hasManualErrors = true;
+    }
+
+    // Explicit validation check: Price Type is mandatory
+    if (!values.price_type || values.price_type.trim() === "") {
+      form.setError("price_type", {
+        type: "manual",
+        message: "Price Type is required.",
+      });
+      firstTab = firstTab || "billing";
       hasManualErrors = true;
     }
 
@@ -1141,6 +1155,20 @@ export function CustomerFormSheet({
     }
 
     try {
+      // Map selected price_type to its corresponding price_type_id from reference list
+      if (values.price_type) {
+        const letterCode = values.price_type.split("-")[0].trim();
+        const matchedPt = priceTypes.find(
+          (pt) =>
+            pt.price_type_name === values.price_type ||
+            pt.price_type_name?.split("-")[0].trim() === letterCode ||
+            String(pt.price_type_id) === String(values.price_type),
+        );
+        if (matchedPt) {
+          values.price_type_id = matchedPt.price_type_id;
+        }
+      }
+
       await onSubmit(values);
       onOpenChange(false);
     } catch {
@@ -1818,7 +1846,7 @@ export function CustomerFormSheet({
                       )}
                     />
 
-                    {/* PRICE TYPE */}
+                    {/* PRICE TYPE - Required Field */}
                     <FormField
                       control={form.control}
                       name="price_type"
@@ -1826,7 +1854,7 @@ export function CustomerFormSheet({
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel className="font-bold uppercase text-xs text-muted-foreground">
-                            Price Type
+                            Price Type *
                           </FormLabel>
                           <FormControl>
                             <SearchableSelect
