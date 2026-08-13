@@ -27,6 +27,8 @@ export interface Customer {
   payment_term?: number | null;
   store_type: number | null;
   price_type?: string | null;
+  /** Numeric ID corresponding to price_types reference table (stores integer price_type_id). */
+  price_type_id?: number | null;
   encoder_id: number;
   credit_type?: number | null;
   company_code?: number | null;
