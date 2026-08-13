@@ -141,7 +141,7 @@ export async function GET() {
             fetchJson<{ data: Record<string, unknown>[] }>(
                 `${base}/items/purchase_order_receiving` +
                 `?limit=-1` +
-                `&fields=purchase_order_product_id,purchase_order_id,received_quantity,isPosted,receipt_no` +
+                `&fields=purchase_order_product_id,purchase_order_id,received_quantity,isPosted,is_posted_amounts,receipt_no` +
                 `&filter[purchase_order_id][_in]=${encodeURIComponent(allPoIds.join(","))}`
             ),
             fetchJson<{ data: Record<string, unknown>[] }>(
@@ -162,12 +162,25 @@ export async function GET() {
         }
 
         const receivedByPo = new Map<number, number>();
-        const hasReceiptByPo = new Map<number, boolean>();
+        const receiptsCountByPo = new Map<number, number>();
+        const invPostedCountByPo = new Map<number, number>();
+        const amtPostedCountByPo = new Map<number, number>();
+        
         for (const r of porRows) {
             const poId = toNum(r.purchase_order_id);
-            receivedByPo.set(poId, (receivedByPo.get(poId) || 0) + toNum(r.received_quantity));
+            if (toNum(r.isPosted) === 1) {
+                receivedByPo.set(poId, (receivedByPo.get(poId) || 0) + toNum(r.received_quantity));
+            }
             if (r.receipt_no || toNum(r.received_quantity) > 0) {
                 hasReceiptByPo.set(poId, true);
+                receiptsCountByPo.set(poId, (receiptsCountByPo.get(poId) || 0) + 1);
+                
+                if (toNum(r.isPosted) === 1) {
+                    invPostedCountByPo.set(poId, (invPostedCountByPo.get(poId) || 0) + 1);
+                }
+                if (toNum(r.is_posted_amounts) === 1) {
+                    amtPostedCountByPo.set(poId, (amtPostedCountByPo.get(poId) || 0) + 1);
+                }
             }
         }
 
@@ -193,12 +206,31 @@ export async function GET() {
             const totalOrdered = orderedByPo.get(poId) || 0;
             const totalReceived = receivedByPo.get(poId) || 0;
             const isApproved = po.date_approved || po.approver_id;
+            const isHeaderPosted = toNum(po.is_posted) === 1;
 
             let effectiveStatus = dbStatus;
-            if (dbStatus !== 14 && dbStatus !== 7) {
+            
+            if (isHeaderPosted) {
+                effectiveStatus = 6; // Force Post / Fully Closed
+            } else if (dbStatus !== 14 && dbStatus !== 7) {
                 if (hasReceipt) {
+                    const receiptsCount = receiptsCountByPo.get(poId) || 0;
+                    const invPostedCount = invPostedCountByPo.get(poId) || 0;
+                    const amtPostedCount = amtPostedCountByPo.get(poId) || 0;
                     const fullyReceived = totalOrdered > 0 && totalReceived >= totalOrdered;
-                    effectiveStatus = fullyReceived ? 6 : 9;
+
+                    if (invPostedCount === 0) {
+                        // Rule 1: Has receipts but NONE are posted in inventory
+                        effectiveStatus = 13; // For Posting
+                    } else if (invPostedCount > 0) {
+                        // Rule 2 & 3
+                        const allPostedInBoth = invPostedCount === receiptsCount && amtPostedCount === receiptsCount;
+                        if (allPostedInBoth && fullyReceived) {
+                            effectiveStatus = 6; // Received
+                        } else {
+                            effectiveStatus = 9; // Partially Received
+                        }
+                    }
                 } else if (isApproved && (dbStatus === 1 || dbStatus === 0)) {
                     effectiveStatus = 3;
                 }
@@ -324,7 +356,7 @@ export async function POST(req: NextRequest) {
                 const popId = toNum(row.purchase_order_product_id);
 
                 const totalReceived = porRows
-                    .filter(r => toNum(r.product_id) === pid && toNum(r.branch_id) === bid)
+                    .filter(r => toNum(r.product_id) === pid && toNum(r.branch_id) === bid && toNum(r.isPosted) === 1)
                     .reduce((sum, r) => sum + toNum(r.received_quantity), 0);
 
                 const product = productsMap.get(pid);
@@ -366,11 +398,12 @@ export async function POST(req: NextRequest) {
                     receiptMap.set(rno, {
                         receiptNo: rno,
                         receiptDate: toStr(row.receipt_date || row.received_date),
-                        isPosted: toNum(row.isPosted) === 1,
+                        isPosted: true, // Will falsify if any row is not posted in inventory
+                        isPostedAmounts: true, // Will falsify if any row is not posted in amounts
                         items: [],
                     });
                 }
-                const receipt = receiptMap.get(rno) as ReceiptGroup;
+                const receipt = receiptMap.get(rno) as ReceiptGroup & { isPostedAmounts: boolean };
                 const pid = toNum(row.product_id);
                 const popId = toNum(row.purchase_order_product_id);
                 const product = productsMap.get(pid);
@@ -396,6 +429,7 @@ export async function POST(req: NextRequest) {
                 });
 
                 if (toNum(row.isPosted) !== 1) receipt.isPosted = false;
+                if (toNum(row.is_posted_amounts) !== 1) receipt.isPostedAmounts = false;
             }
 
             const receipts = Array.from(receiptMap.values())

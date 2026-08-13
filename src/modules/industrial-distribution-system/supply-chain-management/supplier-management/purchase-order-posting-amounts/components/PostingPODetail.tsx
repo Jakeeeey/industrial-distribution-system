@@ -33,7 +33,7 @@ function statusLabel(status: string) {
 }
 
 export function PostingPODetail() {
-    const { selectedPO, postError, successMsg, clearSuccess, postAllReceipts, posting } =
+    const { selectedPO, postError, successMsg, clearSuccess, postAllReceipts, forcePostReceipts, posting } =
         usePostingOfPo();
 
     if (!selectedPO) {
@@ -68,6 +68,8 @@ export function PostingPODetail() {
         status === "PARTIAL_POSTED"
     );
 
+    const showForcePost = !isClosed && selectedPO.pendingInventoryReceiptsCount === 0;
+
     // Info banner for partial-posted POs: clarify they can keep posting as more is received
     const isPartialPosted = status === "PARTIAL_POSTED";
 
@@ -87,6 +89,18 @@ export function PostingPODetail() {
                 </div>
 
                 <div className="shrink-0 flex items-center gap-2">
+                    {showForcePost && (
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            disabled={posting}
+                            onClick={() => forcePostReceipts(String(selectedPO.id))}
+                            className="font-black uppercase text-[10px] h-8 rounded-lg shadow-sm"
+                        >
+                            {posting ? "Posting..." : "Force Post"}
+                        </Button>
+                    )}
                     {showPostAll && (
                         <Button
                             type="button"

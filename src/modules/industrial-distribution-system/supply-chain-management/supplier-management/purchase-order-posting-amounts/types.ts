@@ -23,6 +23,7 @@ export type POListItem = {
     // posting-specific
     receiptsCount: number;
     unpostedReceiptsCount: number;
+    pendingInventoryReceiptsCount: number;
     postedInventory: number;
     unpostedInventory: number;
     postedAmount: number;
@@ -77,6 +78,7 @@ export type PurchaseOrder = {
     // posting-specific counts
     receiptsCount: number;
     unpostedReceiptsCount: number;
+    pendingInventoryReceiptsCount: number;
     postedInventory?: number;
     unpostedInventory?: number;
     postedAmount?: number;

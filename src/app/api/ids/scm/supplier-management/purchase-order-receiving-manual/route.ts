@@ -224,14 +224,11 @@ async function fetchApprovedNotReceivedPOs(base: string): Promise<POHeaderRow[]>
 
     if (validSupplierIds.length === 0) return [];
 
-    const statusFilters = manualReceivingListInventoryStatuses.map((status, index) => (
-        `filter[_or][${index}][inventory_status][_eq]=${status}`
-    ));
-
     const baseQs = [
         "limit=-1", "sort=-purchase_order_id",
         "fields=purchase_order_id,purchase_order_no,date,date_encoded,approver_id,date_approved,payment_status,inventory_status,date_received,supplier_name,total_amount,price_type,is_refill,is_tagged",
-        ...statusFilters
+        "filter[_or][0][is_posted][_neq]=1",
+        "filter[_or][1][is_posted][_null]=true"
     ].join("&");
 
     const allRows: POHeaderRow[] = [];

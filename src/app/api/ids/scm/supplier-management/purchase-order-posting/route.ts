@@ -1050,7 +1050,6 @@ export async function GET() {
         // AND whose PO contains at least one serialized product
         const porCandidateUrl =
             `${base}/items/${POR_COLLECTION}?limit=-1` +
-            `&filter[isPosted][_eq]=0` +
             `&filter[purchase_order_id][_in]=${encodeURIComponent(serializedPoIds.join(","))}` +
             `&filter[_or][0][receipt_no][_nnull]=true` +
             `&filter[_or][1][receipt_date][_nnull]=true` +
@@ -1122,19 +1121,17 @@ export async function GET() {
             // ✅ Check for new statuses (6=Received, 9=Partially Received) AND legacy (12, 13)
             const eligibleByStatus = invStatus === 6 || invStatus === 9 || invStatus === 12 || invStatus === 13;
             
-            // ✅ Also check if there are unposted POR rows with receipt activity
+            // ✅ Also check if there are ANY POR rows with receipt activity
             // This catches POs whose inventory_status was never updated but DO have received items
-            const hasUnpostedReceipts = porRows.some((r) => 
-                toNum(r?.isPosted) === 0 && (
-                    toStr(r?.receipt_no) || toStr(r?.receipt_date) || toStr(r?.received_date) || toNum(r?.received_quantity) > 0
-                )
+            const hasAnyReceipts = porRows.some((r) => 
+                toStr(r?.receipt_no) || toStr(r?.receipt_date) || toStr(r?.received_date) || toNum(r?.received_quantity) > 0
             );
             
-            // Show PO if it has the right status OR has unposted receipt activity
-            if (!eligibleByStatus && !hasUnpostedReceipts) continue;
+            // Show PO if it has the right status OR has any receipt activity
+            if (!eligibleByStatus && !hasAnyReceipts) continue;
             
             // If status is 12 (En Route) and nothing is tagged, skip
-            if (!taggingOk && !hasUnpostedReceipts && invStatus === 12) continue;
+            if (!taggingOk && !hasAnyReceipts && invStatus === 12) continue;
 
             const fully = isFullyReceived(poId, lines, porRows);
 

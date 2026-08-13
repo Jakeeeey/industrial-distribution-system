@@ -39,6 +39,7 @@ type Ctx = {
     postError: string;
     postReceipt: (poId: string, receiptNo: string) => Promise<void>;
     postAllReceipts: (poId: string) => Promise<void>;
+    forcePostReceipts: (poId: string) => Promise<void>;
     revertReceipt: (poId: string, receiptNo: string) => Promise<void>;
     reverting: boolean;
 
@@ -229,6 +230,48 @@ export function PostingOfPoProvider({ children }: { children: React.ReactNode })
         [openPO, refreshList, clearSuccess]
     );
 
+    const forcePostReceipts = React.useCallback(
+        async (poId: string) => {
+            setPosting(true);
+            setPostError("");
+            clearSuccess();
+
+            try {
+                const r = await fetch(API, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: "force_post", poId }),
+                });
+                await asJson(r);
+
+                toast.success("PO Force Posted successfully!", {
+                    description: "The PO has been finalized and closed.",
+                });
+
+                setSuccessMsg("PO Force Posted and closed.");
+
+                await refreshList();
+                await openPO(poId);
+            } catch (e: unknown) {
+                const err = e as Error;
+                const msg = String(err?.message ?? err);
+
+                if (msg.toLowerCase().includes("locked") || msg.toLowerCase().includes("fully posted")) {
+                    toast.info("This PO is already fully posted. Refreshing list...");
+                    setSelectedPO(null);
+                    await refreshList();
+                    return;
+                }
+
+                toast.error("Failed to force post PO", { description: msg });
+                setPostError(msg);
+            } finally {
+                setPosting(false);
+            }
+        },
+        [openPO, refreshList, clearSuccess]
+    );
+
     const revertReceipt = React.useCallback(
         async (poId: string, receiptNo: string) => {
             setReverting(true);
@@ -293,6 +336,7 @@ export function PostingOfPoProvider({ children }: { children: React.ReactNode })
         postError,
         postReceipt,
         postAllReceipts,
+        forcePostReceipts,
         revertReceipt,
         reverting,
 
