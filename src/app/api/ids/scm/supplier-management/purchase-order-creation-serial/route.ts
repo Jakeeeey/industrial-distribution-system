@@ -384,7 +384,7 @@ async function tagSerials(
                 const expectedProductId = entryForSn ? linesMap.get(entryForSn.lineId)?.product_id : undefined;
 
                 // Find the PERFECT match, filtering by exact serial number AND expected branch/product (handles historical/duplicate rows from API)
-                const perfectMatch = rows.find((r: any) => {
+                const perfectMatch = rows.find((r: { serialNumber?: string, serial_number?: string, branchId?: string | number, branch_id?: string | number, productId?: string | number, product_id?: string | number }) => {
                     const matchSn = String(r.serialNumber || r.serial_number || "").trim().toUpperCase() === sn.toUpperCase();
                     const rBranchId = Number(r.branchId ?? r.branch_id);
                     const matchBranch = expectedBranchId !== undefined ? rBranchId === expectedBranchId : true;
@@ -397,7 +397,7 @@ async function tagSerials(
                     onhandMap.set(sn, perfectMatch as Record<string, unknown>);
                 } else {
                     // Fallback to any record matching the serial number (so the validation loop can throw a "different branch/product" error)
-                    const basicMatch = rows.find((r: any) => 
+                    const basicMatch = rows.find((r: { serialNumber?: string, serial_number?: string }) => 
                         String(r.serialNumber || r.serial_number || "").trim().toUpperCase() === sn.toUpperCase()
                     );
                     if (basicMatch) {

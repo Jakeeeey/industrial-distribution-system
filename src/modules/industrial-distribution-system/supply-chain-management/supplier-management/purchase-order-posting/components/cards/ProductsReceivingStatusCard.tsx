@@ -9,9 +9,8 @@ import { usePostingOfPo } from "../../providers/PostingOfPoProvider";
 export function ProductsReceivingStatusCard() {
     const { selectedPO } = usePostingOfPo();
 
-    const allocs = Array.isArray(selectedPO?.allocations) ? selectedPO!.allocations : [];
-
     const consolidatedItems = React.useMemo(() => {
+        const allocs = Array.isArray(selectedPO?.allocations) ? selectedPO!.allocations : [];
         const itemsMap = new Map<string, {
             id: string;
             name: string;
@@ -51,7 +50,7 @@ export function ProductsReceivingStatusCard() {
                 receivedQty: it.receivedQty,
             };
         });
-    }, [allocs]);
+    }, [selectedPO]);
 
     return (
         <Card className="p-4 min-w-0">

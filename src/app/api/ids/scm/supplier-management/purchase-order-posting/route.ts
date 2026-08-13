@@ -1314,9 +1314,9 @@ export async function POST(req: NextRequest) {
                 const p = productsMap.get(pid);
                 if (!p) continue; // ✅ Skip non-serialized items
 
-                let unitPrice = toNum(r.unit_price) || toNum(ln?.unit_price) || toNum(p.cost_per_unit);
+                const unitPrice = toNum(r.unit_price) || toNum(ln?.unit_price) || toNum(p.cost_per_unit);
                 let lineGrossAmt = unitPrice * receivedQty;
-                let lineDiscount = toNum(r.discounted_amount);
+                const lineDiscount = toNum(r.discounted_amount);
                 let lineNet = toNum(r.total_amount);
                 
                 if (receivedQty === 0 && expected > 0) {

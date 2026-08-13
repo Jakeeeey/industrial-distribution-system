@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+
 import {
     effectiveManualReceivedQty,
     formatTareWeightForCommit,
     hasManualReceiptEvidence,
-    manualReceivingListInventoryStatuses,
     manualReceiptStatus,
 } from "./receivingManualLogic";
 
@@ -24,15 +23,10 @@ function getDirectusToken(): string {
     return token;
 }
 
-function directusHeaders(): Record<string, string> {
-    return {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${getDirectusToken()}`,
-    };
-}
+
 
 async function fetchJson<T = unknown>(url: string, init?: RequestInit): Promise<T> {
-    let authHeader = `Bearer ${getDirectusToken()}`;
+    const authHeader = `Bearer ${getDirectusToken()}`;
 
 
     const res = await fetch(url, {
@@ -513,7 +507,7 @@ export async function POST(req: NextRequest) {
 
         if (action === "fetch_receipt_types") {
             const typesUrl = `${base}/items/sales_invoice_type?limit=-1&fields=id,type,shortcut`;
-            const j = await fetchJson<{ data: any[] }>(typesUrl).catch(() => null);
+            const j = await fetchJson<{ data: Record<string, unknown>[] }>(typesUrl).catch(() => null);
             return ok(j?.data || []);
         }
 
@@ -621,7 +615,7 @@ export async function POST(req: NextRequest) {
             }).sort((a,b) => (b.receiptNo ?? "").localeCompare(a.receiptNo ?? ""));
 
             const draftSerials: Record<string, unknown[]> = {};
-            for (const [bid, items] of allocationsMap.entries()) {
+            for (const items of allocationsMap.values()) {
                 for (const item of (items as Record<string, unknown>[])) {
                     if (item.porId) {
                         const sers = receiptSerialsMap.get(toNum(item.porId));
@@ -938,15 +932,15 @@ export async function POST(req: NextRequest) {
                 // ✅ Optimal Diffing Strategy: Calculate exact Inserts, Updates, and Deletes using the unique serial_number to prevent ID burn and ensure minimal database churn.
                 const serials = Array.isArray(porSerials?.[targetPorId]) ? porSerials[targetPorId] : [];
                 
-                const incomingMap = new Map<string, any>();
+                const incomingMap = new Map<string, unknown>();
                 for (const sObj of serials) {
-                    const snValue = typeof sObj === 'object' ? sObj.sn : sObj;
+                    const snValue = typeof sObj === 'object' ? (sObj as Record<string, unknown>).sn : sObj;
                     if (snValue) incomingMap.set(String(snValue).trim(), sObj);
                 }
 
-                const existingRows: any[] = [];
+                const existingRows: Array<{ receiving_item_id: number; serial_number: string; purchase_order_receiving_id?: Record<string, unknown> | number | string }> = [];
                 // 1. Fetch serials already assigned to this targetPorId
-                const ext1 = await fetchJson<{ data: any[] }>(`${base}/items/purchase_order_receiving_serial?filter[purchase_order_receiving_id][_eq]=${targetPorId}&fields=receiving_item_id,serial_number,purchase_order_receiving_id.purchase_order_product_id,purchase_order_receiving_id.receipt_no`).catch(() => null);
+                const ext1 = await fetchJson<{ data: Array<{ receiving_item_id: number; serial_number: string; purchase_order_receiving_id?: Record<string, unknown> | number | string }> }>(`${base}/items/purchase_order_receiving_serial?filter[purchase_order_receiving_id][_eq]=${targetPorId}&fields=receiving_item_id,serial_number,purchase_order_receiving_id.purchase_order_product_id,purchase_order_receiving_id.receipt_no`).catch(() => null);
                 if (ext1?.data) existingRows.push(...ext1.data);
 
                 // 2. Fetch pre-saved serials by their exact serial numbers
@@ -956,7 +950,7 @@ export async function POST(req: NextRequest) {
                     for (let i = 0; i < incomingSnList.length; i += chunkSize) {
                         const chunk = incomingSnList.slice(i, i + chunkSize);
                         const inQuery = chunk.map(s => encodeURIComponent(s)).join(',');
-                        const ext2 = await fetchJson<{ data: any[] }>(`${base}/items/purchase_order_receiving_serial?filter[serial_number][_in]=${inQuery}&fields=receiving_item_id,serial_number,purchase_order_receiving_id.purchase_order_product_id,purchase_order_receiving_id.receipt_no`).catch(() => null);
+                        const ext2 = await fetchJson<{ data: Array<{ receiving_item_id: number; serial_number: string; purchase_order_receiving_id?: Record<string, unknown> | number | string }> }>(`${base}/items/purchase_order_receiving_serial?filter[serial_number][_in]=${inQuery}&fields=receiving_item_id,serial_number,purchase_order_receiving_id.purchase_order_product_id,purchase_order_receiving_id.receipt_no`).catch(() => null);
                         if (ext2?.data) {
                             for (const row of ext2.data) {
                                 if (!existingRows.some(r => r.receiving_item_id === row.receiving_item_id)) {
@@ -968,8 +962,8 @@ export async function POST(req: NextRequest) {
                 }
                 
                 const toDeleteIds: number[] = [];
-                const toPost: any[] = [];
-                const toPatch: { id: number, payload: any }[] = [];
+                const toPost: Record<string, unknown>[] = [];
+                const toPatch: { id: number, payload: Record<string, unknown> }[] = [];
 
                 // 2.5 Guard against stealing serials from other receipts
                 for (const row of existingRows) {
@@ -1006,13 +1000,14 @@ export async function POST(req: NextRequest) {
                         serial_number: snStr,
                     };
                     
-                    if (typeof sObj === 'object') {
-                        const tareWeight = formatTareWeightForCommit(sObj.tareWeight);
+                    if (typeof sObj === 'object' && sObj !== null) {
+                        const typedObj = sObj as { tareWeight?: unknown; expiryDate?: unknown };
+                        const tareWeight = formatTareWeightForCommit(typedObj.tareWeight);
                         if (tareWeight !== null) {
                             serialPayload.tare_weight = parseFloat(tareWeight);
                         }
-                        if (sObj.expiryDate) {
-                            serialPayload.expiry_date = sObj.expiryDate;
+                        if (typedObj.expiryDate) {
+                            serialPayload.expiry_date = typedObj.expiryDate;
                         }
                     }
 

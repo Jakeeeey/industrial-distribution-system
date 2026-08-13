@@ -11,16 +11,7 @@ import { useReceivingProductsManual, ReceivingPOItem, ReceiptSavedInfo } from ".
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ReceiptPreviewModal } from "../ReceiptPreviewModal";
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+
 
 const formatPHP = (val: number) =>
     new Intl.NumberFormat("en-PH", {

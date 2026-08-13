@@ -89,15 +89,7 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
         setManualCounts(prev => ({ ...prev, [id]: validVal }));
     };
 
-    const isOverReceiving = React.useMemo(() => {
-        return filteredItems.some(it => {
-            const id = String(it.id);
-            const expected = Number(it.expectedQty || 0);
-            const receivedAtStart = Number(it.receivedQty || 0);
-            const currentEntry = Number(manualCounts[id] || 0);
-            return (currentEntry + receivedAtStart) > expected && currentEntry > 0;
-        });
-    }, [filteredItems, manualCounts]);
+
 
     const incompleteSerialized = React.useMemo(() => {
         return filteredItems.filter(it => {

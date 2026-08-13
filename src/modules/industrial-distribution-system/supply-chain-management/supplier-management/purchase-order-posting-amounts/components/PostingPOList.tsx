@@ -6,9 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { RefreshCw, FileCheck2, ChevronRight, ChevronLeft, CircleDollarSign } from "lucide-react";
+import { RefreshCw, FileCheck2, ChevronRight, ChevronLeft } from "lucide-react";
 import { usePostingOfPo } from "../providers/PostingOfPoProvider";
-import { money } from "../utils/format";
 
 function statusBadge(status: string) {
     const s = String(status || "").toUpperCase();

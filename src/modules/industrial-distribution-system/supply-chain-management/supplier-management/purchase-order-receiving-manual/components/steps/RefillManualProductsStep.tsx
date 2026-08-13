@@ -13,17 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useReceivingProductsManual } from "../../providers/ReceivingProductsManualProvider";
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { AlertTriangle, Package, ChevronRight, ChevronLeft, Scan, Tag } from "lucide-react";
+import { Package, ChevronRight, ChevronLeft, Scan, Tag } from "lucide-react";
 import { TaggedSerialsModal } from "../TaggedSerialsModal";
 import { RefillRapidScanModal } from "../RefillRapidScanModal";
 
@@ -132,16 +122,7 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
         }, 0);
     }, [filteredItems, serialsByPorId]);
 
-    // ✅ Over-receiving check
-    const isOverReceiving = React.useMemo(() => {
-        return filteredItems.some(it => {
-            const id = String(it.id);
-            const expected = Number(it.expectedQty || 0);
-            const receivedAtStart = Number(it.receivedQty || 0);
-            const current = serialsByPorId[id]?.length || 0;
-            return (current + receivedAtStart) > expected && current > 0;
-        });
-    }, [filteredItems, serialsByPorId]);
+
 
     // ✅ Build product lines for the rapid scan modal
     const productLines = React.useMemo(() => {

@@ -1104,7 +1104,7 @@ export async function POST(req: NextRequest) {
                 if (!p) continue; // ✅ Skip non-serialized items
 
                 // Prioritize live Product Master cost over stale PO line price
-                let unitPrice = toNum(p.cost_per_unit) || toNum(r.unit_price) || toNum(ln?.unit_price) || 0;
+                const unitPrice = toNum(p.cost_per_unit) || toNum(r.unit_price) || toNum(ln?.unit_price) || 0;
                 
                 let itemDiscPct = 0;
                 let discountTypeId = "";
@@ -1134,8 +1134,8 @@ export async function POST(req: NextRequest) {
                     lineGrossAmt = unitPrice * expected;
                 }
                 
-                let lineDiscount = Number((lineGrossAmt * (itemDiscPct / 100)).toFixed(2));
-                let lineNet = Number((lineGrossAmt - lineDiscount).toFixed(2));
+                const lineDiscount = Number((lineGrossAmt * (itemDiscPct / 100)).toFixed(2));
+                const lineNet = Number((lineGrossAmt - lineDiscount).toFixed(2));
 
                 const item: PostingPOItem = {
                     id: String(porId),
@@ -1182,7 +1182,7 @@ export async function POST(req: NextRequest) {
                     const p = productsMap.get(pid);
                     if (!p) continue;
                     
-                    let unitPrice = toNum(p.cost_per_unit) || toNum(ln.unit_price) || 0;
+                    const unitPrice = toNum(p.cost_per_unit) || toNum(ln.unit_price) || 0;
                     
                     let itemDiscPct = 0;
                     let discountTypeId = "";
@@ -1206,9 +1206,9 @@ export async function POST(req: NextRequest) {
                         discountTypeId = poDType?.id ? String(poDType.id) : "";
                     }
 
-                    let lineGrossAmt = unitPrice * expected;
-                    let lineDiscount = Number((lineGrossAmt * (itemDiscPct / 100)).toFixed(2));
-                    let lineNet = Number((lineGrossAmt - lineDiscount).toFixed(2));
+                    const lineGrossAmt = unitPrice * expected;
+                    const lineDiscount = Number((lineGrossAmt * (itemDiscPct / 100)).toFixed(2));
+                    const lineNet = Number((lineGrossAmt - lineDiscount).toFixed(2));
 
                     const item: PostingPOItem = {
                         id: `extra-${pid}-${bid}`,
@@ -1556,7 +1556,6 @@ export async function POST(req: NextRequest) {
             const toPost = porRows
                 .filter((r) => (toNum(r.received_quantity) > 0 || toStr(r.receipt_no))); // ✅ Process all received items regardless of isPosted flag (since Inventory sets it to 1)
 
-            let sumGross = 0, sumDisc = 0, sumNet = 0, sumVat = 0, sumWht = 0;
             const poIsInvoice = (toNum(po?.vat_amount) > 0) || (toNum(po?.withholding_tax_amount) > 0);
 
             if (toPost.length > 0) {
@@ -1602,12 +1601,6 @@ export async function POST(req: NextRequest) {
                         rowVat = Number((lineNet - lineVatExcl).toFixed(2));
                         rowWht = Number((lineVatExcl * 0.01).toFixed(2));
                     }
-
-                    sumGross += lineGross;
-                    sumDisc += lineDisc;
-                    sumNet += lineNet;
-                    sumVat += rowVat;
-                    sumWht += rowWht;
 
                     await patchPOR(base, porId, { 
                         unit_price: uPrice,

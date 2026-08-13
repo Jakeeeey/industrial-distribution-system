@@ -11,6 +11,18 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+
+interface PODetailItem {
+    receivedQty?: number;
+    expectedQty?: number;
+    unitPrice?: number;
+    discountAmount?: number;
+    discountLabel?: string;
+    netAmount?: number;
+    barcode?: string;
+    name?: string;
+    productId?: string;
+}
 import { money } from "../../utils/format";
 
 import { usePostingOfPo } from "../../providers/PostingOfPoProvider";
@@ -56,13 +68,13 @@ export function PODetailsBreakdownCard() {
                         if (!acc[bId]) acc[bId] = { branch: alloc.branch, receipts: [] };
                         acc[bId].receipts.push({ receiptNo: alloc.receiptNo, items: alloc.items });
                         return acc;
-                    }, {} as Record<string, { branch: any, receipts: any[] }>)
+                    }, {} as Record<string, { branch: { id?: string; name?: string }, receipts: { receiptNo?: string; items: PODetailItem[] }[] }>)
                 ).map((group) => {
                     const branchName = group.branch?.name || "Unknown Branch";
                     const branchId = group.branch?.id || "unknown";
 
                     const branchTotal = group.receipts.reduce((sum, rec) => {
-                        return sum + rec.items.reduce((s, item: any) => {
+                        return sum + rec.items.reduce((s: number, item: PODetailItem) => {
                             const qty = item.receivedQty || item.expectedQty || 0;
                             return s + (item.unitPrice || 0) * qty;
                         }, 0);
@@ -99,7 +111,7 @@ export function PODetailsBreakdownCard() {
                                                         </TableRow>
                                                     </TableHeader>
                                                     <TableBody>
-                                                        {rec.items.map((it: any, index: number) => {
+                                                        {rec.items.map((it: PODetailItem, index: number) => {
                                                             const uprice = it.unitPrice || 0;
                                                             const qty = it.receivedQty || it.expectedQty || 0;
                                                             const gross = uprice * qty;

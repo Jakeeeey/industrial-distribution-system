@@ -449,7 +449,7 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
                     setEditingRevertedReceiptNo(null);
 
                     if (detail && detail.draftSerials) {
-                        const newSerials: Record<string, any[]> = {};
+                        const newSerials: Record<string, { sn: string; tareWeight?: string; expiryDate?: string; isNew?: boolean }[]> = {};
                         const newCounts: Record<string, number> = {};
                         for (const [porId, sers] of Object.entries(detail.draftSerials)) {
                             newSerials[porId] = sers;
