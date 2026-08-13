@@ -6,6 +6,8 @@ export function isTierName(v: string): v is ProductTierKey {
     return TIERS.includes(v as ProductTierKey);
 }
 
+// 🚀 Helper to map price type codes (A, B, C, D, E) to user-friendly UI display labels
+// Note: Database retains only the raw codes ("A", "B", "C", "D", "E"), while UI displays mapped labels.
 export function mapPriceTypeName(name: string | null | undefined): string {
     if (!name) return "";
     const clean = name.trim();
@@ -14,7 +16,7 @@ export function mapPriceTypeName(name: string | null | undefined): string {
         return "A - Dealer";
     }
     if (upper === "B" || upper === "PRICE B" || upper === "TIER B") {
-        return "B - Sub-Dealer";
+        return "B - Sub-dealer";
     }
     if (upper === "C" || upper === "PRICE C" || upper === "TIER C") {
         return "C - RTO";
