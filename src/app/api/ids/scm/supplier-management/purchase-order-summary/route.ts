@@ -55,6 +55,7 @@ interface ReceiptGroup {
     receiptNo: string;
     receiptDate: string;
     isPosted: boolean;
+    isPostedAmounts?: boolean;
     items: ReceiptItem[];
 }
 
@@ -162,6 +163,7 @@ export async function GET() {
         }
 
         const receivedByPo = new Map<number, number>();
+        const hasReceiptByPo = new Map<number, boolean>();
         const receiptsCountByPo = new Map<number, number>();
         const invPostedCountByPo = new Map<number, number>();
         const amtPostedCountByPo = new Map<number, number>();

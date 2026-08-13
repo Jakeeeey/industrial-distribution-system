@@ -732,6 +732,7 @@ type PostingListItem = {
     branchesCount: number;
     receiptsCount: number;
     unpostedReceiptsCount: number;
+    pendingInventoryReceiptsCount: number;
     postedInventory: number;
     unpostedInventory: number;
     postedAmount: number;
@@ -777,6 +778,7 @@ type PostingPODetail = {
     receipts: PostingReceipt[];
     receiptsCount: number;
     unpostedReceiptsCount: number;
+    pendingInventoryReceiptsCount: number;
     createdAt: string;
     postingReady: boolean;
     latestReceiptNo?: string;
@@ -1082,50 +1084,33 @@ export async function POST(req: NextRequest) {
                 recByPor.set(porId, effectiveReceivedQty(r));
             }
 
-            const itemsByBranch = new Map<number, PostingPOItem[]>();
+            const itemsByGroup = new Map<string, PostingPOItem[]>();
 
-            // --- Live Sourcing vs Frozen ---
-
-            const allKeys = new Set<string>();
-            lines.forEach(ln => allKeys.add(`${toNum(ln.product_id)}-${toNum(ln.branch_id)}`));
-            porRows.forEach(r => {
-                if (toNum(r.received_quantity) > 0 || toStr(r.receipt_no)) {
-                    allKeys.add(`${toNum(r.product_id)}-${toNum(r.branch_id)}`);
-                }
-            });
-
-            for (const keyStr of Array.from(allKeys)) {
-                const [pid, bid] = keyStr.split("-").map(Number);
+            for (const r of porRows) {
+                const pid = toNum(r.product_id);
+                const bid = toNum(r.branch_id);
+                const receiptNo = toStr(r.receipt_no) || "Pending";
+                const porId = toNum(r.purchase_order_product_id);
                 if (!pid || !bid) continue;
 
+                const groupKey = `${bid}::${receiptNo}`;
                 const ln = lines.find(l => toNum(l.product_id) === pid && toNum(l.branch_id) === bid);
-                const expected = Math.max(0, toNum(ln?.ordered_quantity || 0));
-
-                const k = keyLine(poId, pid, bid);
-                const porIdsForLine = porIdsByKey.get(k) ?? [];
-
-                const rfids = porIdsForLine.flatMap((id) => rfidsByPorId.get(id) ?? []);
-                const taggedQty = rfids.length;
-                const receivedQty = porIdsForLine.reduce((sum, id) => sum + (recByPor.get(id) ?? 0), 0);
                 
-                // For extra items, we consider them received if a record exists with qty > 0
-                const isReceived = expected > 0 ? (receivedQty >= expected) : (receivedQty > 0);
-
+                const rfids = rfidsByPorId.get(porId) ?? [];
+                const receivedQty = effectiveReceivedQty(r);
+                const expected = Math.max(0, toNum(ln?.ordered_quantity || 0));
+                
                 const p = productsMap.get(pid);
-                if (!p) continue; // ✅ Skip non-serialized items (Filtered by fetchProductsMap)
-                const primaryPorId = porIdsForLine[0] || (ln ? ln.purchase_order_product_id : `extra-${pid}-${bid}`);
+                if (!p) continue; // ✅ Skip non-serialized items
 
-                let unitPrice = 0;
-                let lineGrossAmt = 0;
-                let lineDiscount = 0;
-                let lineNet = 0;
+                // Prioritize live Product Master cost over stale PO line price
+                let unitPrice = toNum(p.cost_per_unit) || toNum(r.unit_price) || toNum(ln?.unit_price) || 0;
+                
+                let itemDiscPct = 0;
                 let discountTypeId = "";
                 let resolvedLabel = "—";
-
-                let itemDiscPct = 0;
+                
                 const psl = productSupplierLinks.get(pid);
-
-                // Priority 1: Product-Supplier Link
                 if (psl) {
                     const linkDt = psl.discount_type as Record<string, unknown> | null | undefined;
                     const linkName = toStr(linkDt?.discount_type || linkDt?.name);
@@ -1137,33 +1122,33 @@ export async function POST(req: NextRequest) {
                     }
                 }
 
-                // Priority 2: PO Header (Fallback)
                 if (itemDiscPct === 0 && poDiscountPercent > 0) {
                     itemDiscPct = poDiscountPercent;
                     resolvedLabel = poDiscountName ? poDiscountName : `${Number(poDiscountPercent.toFixed(2))}% PO Disc`;
                     discountTypeId = poDType?.id ? String(poDType.id) : "";
                 }
 
-                // Prioritize live Product Master cost over stale PO line price to reflect recent updates
-                unitPrice = toNum(p?.cost_per_unit) || toNum(ln?.unit_price) || 0;
+                let lineGrossAmt = unitPrice * receivedQty;
                 
-                // Recalculate everything from scratch using the resolved live unitPrice
-                lineGrossAmt = unitPrice * (receivedQty || (expected > 0 ? expected : 0));
-                lineDiscount = Number((lineGrossAmt * (itemDiscPct / 100)).toFixed(2));
-                lineNet = Number((lineGrossAmt - lineDiscount).toFixed(2));
+                if (receivedQty === 0 && expected > 0) {
+                    lineGrossAmt = unitPrice * expected;
+                }
+                
+                let lineDiscount = Number((lineGrossAmt * (itemDiscPct / 100)).toFixed(2));
+                let lineNet = Number((lineGrossAmt - lineDiscount).toFixed(2));
 
                 const item: PostingPOItem = {
-                    id: String(primaryPorId),
-                    porId: String(primaryPorId),
+                    id: String(porId),
+                    porId: String(porId),
                     productId: String(pid),
-                    name: toStr(p?.product_name, `Product #${pid}`),
+                    name: toStr(p.product_name, `Product #${pid}`),
                     barcode: productDisplayCode(p, pid),
                     uom: "—",
                     expectedQty: expected,
-                    taggedQty,
+                    taggedQty: rfids.length,
                     receivedQty,
                     rfids,
-                    isReceived,
+                    isReceived: receivedQty > 0,
                     unitPrice,
                     grossAmount: lineGrossAmt,
                     discountAmount: lineDiscount,
@@ -1171,25 +1156,98 @@ export async function POST(req: NextRequest) {
                     discountTypeId: discountTypeId || undefined,
                     discountLabel: resolvedLabel !== "—" ? resolvedLabel : undefined,
                 };
-
-                porIdsForLine.forEach(id => {
-                    porPriceMap.set(id, unitPrice);
-                    porDiscMap.set(id, itemDiscPct > 0 ? (unitPrice * (itemDiscPct / 100)) : 0);
-                });
-
-                const arr = itemsByBranch.get(bid) ?? [];
-                console.log(`[DEBUG open_po] pid=${pid} bid=${bid} unitPrice=${unitPrice} receivedQty=${receivedQty} expected=${expected} itemDiscPct=${itemDiscPct} lineGrossAmt=${lineGrossAmt} lineDiscount=${lineDiscount} lineNet=${lineNet}`);
+                
+                porPriceMap.set(porId, unitPrice);
+                porDiscMap.set(porId, itemDiscPct > 0 ? (unitPrice * (itemDiscPct / 100)) : 0);
+                
+                const arr = itemsByGroup.get(groupKey) ?? [];
                 arr.push(item);
-                itemsByBranch.set(bid, arr);
+                itemsByGroup.set(groupKey, arr);
             }
 
-            const allocations = Array.from(itemsByBranch.entries()).map(([bid, items]) => ({
-                branch: {
-                    id: bid ? String(bid) : "unassigned",
-                    name: bid ? toStr(branchesMap.get(bid), `Branch ${bid}`) : "Unassigned",
-                },
-                items,
-            }));
+            for (const ln of lines) {
+                const pid = toNum(ln.product_id);
+                const bid = toNum(ln.branch_id);
+                if (!pid || !bid) continue;
+                
+                const k = keyLine(poId, pid, bid);
+                const porIdsForLine = porIdsByKey.get(k) ?? [];
+                if (porIdsForLine.length === 0) {
+                    const expected = Math.max(0, toNum(ln.ordered_quantity));
+                    if (expected <= 0) continue;
+                    
+                    const receiptNo = "Pending";
+                    const groupKey = `${bid}::${receiptNo}`;
+                    
+                    const p = productsMap.get(pid);
+                    if (!p) continue;
+                    
+                    let unitPrice = toNum(p.cost_per_unit) || toNum(ln.unit_price) || 0;
+                    
+                    let itemDiscPct = 0;
+                    let discountTypeId = "";
+                    let resolvedLabel = "—";
+                    
+                    const psl = productSupplierLinks.get(pid);
+                    if (psl) {
+                        const linkDt = psl.discount_type as Record<string, unknown> | null | undefined;
+                        const linkName = toStr(linkDt?.discount_type || linkDt?.name);
+                        const linkId = toNum(linkDt?.id || linkDt);
+                        itemDiscPct = resolveDiscountPercent(linkDt);
+                        if (itemDiscPct > 0 || linkName) {
+                            discountTypeId = linkId ? String(linkId) : "";
+                            resolvedLabel = linkName || `${Number(itemDiscPct.toFixed(2))}% Disc`;
+                        }
+                    }
+
+                    if (itemDiscPct === 0 && poDiscountPercent > 0) {
+                        itemDiscPct = poDiscountPercent;
+                        resolvedLabel = poDiscountName ? poDiscountName : `${Number(poDiscountPercent.toFixed(2))}% PO Disc`;
+                        discountTypeId = poDType?.id ? String(poDType.id) : "";
+                    }
+
+                    let lineGrossAmt = unitPrice * expected;
+                    let lineDiscount = Number((lineGrossAmt * (itemDiscPct / 100)).toFixed(2));
+                    let lineNet = Number((lineGrossAmt - lineDiscount).toFixed(2));
+
+                    const item: PostingPOItem = {
+                        id: `extra-${pid}-${bid}`,
+                        porId: `extra-${pid}-${bid}`,
+                        productId: String(pid),
+                        name: toStr(p.product_name, `Product #${pid}`),
+                        barcode: productDisplayCode(p, pid),
+                        uom: "—",
+                        expectedQty: expected,
+                        taggedQty: 0,
+                        receivedQty: 0,
+                        rfids: [],
+                        isReceived: false,
+                        unitPrice,
+                        grossAmount: lineGrossAmt,
+                        discountAmount: lineDiscount,
+                        netAmount: lineNet,
+                        discountTypeId: discountTypeId || undefined,
+                        discountLabel: resolvedLabel !== "—" ? resolvedLabel : undefined,
+                    };
+                    
+                    const arr = itemsByGroup.get(groupKey) ?? [];
+                    arr.push(item);
+                    itemsByGroup.set(groupKey, arr);
+                }
+            }
+
+            const allocations = Array.from(itemsByGroup.entries()).map(([groupKey, items]) => {
+                const [bidStr, receiptNo] = groupKey.split("::");
+                const bid = Number(bidStr);
+                return {
+                    branch: {
+                        id: bid ? String(bid) : "unassigned",
+                        name: bid ? toStr(branchesMap.get(bid), `Branch ${bid}`) : "Unassigned",
+                    },
+                    receiptNo,
+                    items,
+                };
+            });
 
             const lr = latestReceiptInfo(porRows);
             const rs = buildReceiptSummary(porRows, porPriceMap, porDiscMap);
@@ -1208,7 +1266,7 @@ export async function POST(req: NextRequest) {
             // ALWAYS calculate footer dynamically from exact items to reflect price changes and correct formulas
             const poIsInvoice = (toNum(po?.vat_amount) > 0) || (toNum(po?.withholding_tax_amount) > 0);
             
-            for (const arr of Array.from(itemsByBranch.values())) {
+            for (const arr of Array.from(itemsByGroup.values())) {
                 for (const item of arr) {
                     if (item.receivedQty > 0) {
                         detailGross += item.grossAmount;
@@ -1408,7 +1466,7 @@ export async function POST(req: NextRequest) {
                     withholding_amount: rowWht,
                     is_posted_amounts: 1,
                 });
-                r.is_posted_amounts = 1; // update locally for checks
+                row.rowObj.is_posted_amounts = 1; // update locally for checks
             }
 
             // Re-check if everything is fully received and amounts-posted
@@ -1443,6 +1501,8 @@ export async function POST(req: NextRequest) {
             }
 
             await patchPO(base, poId, poUpdate);
+
+            return ok({
                 ok: true,
                 postedAt: nowISO(),
                 receiptNo,
@@ -1609,7 +1669,15 @@ export async function POST(req: NextRequest) {
             });
         }
 
-        if (action === "force_post") {
+        return ok({
+            ok: true,
+            postedAt: nowISO(),
+            postedCount: 0,
+            message: "No unposted amounts to process.",
+        });
+    }
+
+    if (action === "force_post") {
             const poId = toNum(body?.poId);
             if (!poId) return bad("Missing poId.", 400);
 

@@ -52,6 +52,7 @@ export type POItem = {
 
 export type POBranchAllocation = {
     branch: Branch;
+    receiptNo?: string;
     items: POItem[];
 };
 
