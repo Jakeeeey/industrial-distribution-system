@@ -322,7 +322,7 @@ export function BankAccountManager({
             </div>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="sm:max-w-175 rounded-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
+                <DialogContent className="sm:max-w-[700px] rounded-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
                     <DialogHeader>
                         <DialogTitle>{selectedAccount ? "Edit Bank Account" : "Add Bank Account"}</DialogTitle>
                         <DialogDescription>
@@ -363,7 +363,7 @@ export function BankAccountManager({
                                                 </FormControl>
                                             </PopoverTrigger>
                                             <PopoverContent 
-                                                className="w-(--radix-popover-trigger-width) p-0 shadow-2xl rounded-xl border-border/50 bg-background/95 backdrop-blur-md z-100" 
+                                                className="w-[var(--radix-popover-trigger-width)] p-0 shadow-2xl rounded-xl border-border/50 bg-background/95 backdrop-blur-md z-[100]" 
                                                 align="start"
                                                 onWheel={(e) => e.stopPropagation()}
                                                 onWheelCapture={(e) => e.stopPropagation()}
@@ -372,7 +372,7 @@ export function BankAccountManager({
                                                     <Command className="bg-transparent" onWheel={(e) => e.stopPropagation()}>
                                                         <CommandInput placeholder="Search bank..." className="h-11 border-none focus:ring-0" />
                                                         <CommandList 
-                                                            className="max-h-75 overflow-y-auto custom-scrollbar p-1"
+                                                            className="max-h-[300px] overflow-y-auto custom-scrollbar p-1"
                                                             onWheel={(e) => e.stopPropagation()}
                                                             onWheelCapture={(e) => e.stopPropagation()}
                                                         >
@@ -453,7 +453,7 @@ export function BankAccountManager({
                             <FormField control={form.control} name="notes" render={({ field }) => (
                                 <FormItem>
                                     <FormLabel className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">Notes (Optional)</FormLabel>
-                                    <FormControl><Textarea placeholder="Additional instructions..." className="resize-none min-h-25 bg-muted/30 border-border/50 rounded-xl p-4 text-sm" {...field} value={field.value ?? ""} /></FormControl>
+                                    <FormControl><Textarea placeholder="Additional instructions..." className="resize-none min-h-[100px] bg-muted/30 border-border/50 rounded-xl p-4 text-sm" {...field} value={field.value ?? ""} /></FormControl>
                                     <FormMessage />
                                 </FormItem>
                             )} />
