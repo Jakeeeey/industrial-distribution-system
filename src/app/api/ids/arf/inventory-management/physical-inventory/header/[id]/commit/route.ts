@@ -119,6 +119,43 @@ async function directusPatch<T>(path: string, payload: unknown): Promise<T> {
     return json.data;
 }
 
+async function directusPost<T>(path: string, payload: unknown): Promise<T> {
+    if (!DIRECTUS_URL) {
+        throw new Error("NEXT_PUBLIC_API_BASE_URL is not configured.");
+    }
+
+    const response = await fetch(`${DIRECTUS_URL}${path}`, {
+        method: "POST",
+        headers: directusHeaders(),
+        cache: "no-store",
+        body: JSON.stringify(payload),
+    });
+
+    const text = await response.text().catch(() => "");
+    if (!response.ok) {
+        throw new Error(text || `Directus POST failed with ${response.status}.`);
+    }
+
+    const json = JSON.parse(text) as { data: T };
+    return json.data;
+}
+
+async function directusDelete(path: string, ids: number[]): Promise<void> {
+    if (!DIRECTUS_URL || !ids.length) return;
+
+    const response = await fetch(`${DIRECTUS_URL}${path}`, {
+        method: "DELETE",
+        headers: directusHeaders(),
+        cache: "no-store",
+        body: JSON.stringify(ids),
+    });
+
+    if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(text || `Directus DELETE failed with ${response.status}.`);
+    }
+}
+
 function sumHeaderTotalAmount(details: PhysicalInventoryDetailRow[]): number {
     return details.reduce((acc, row) => acc + (Number(row.amount) || 0), 0);
 }
@@ -192,6 +229,59 @@ export async function POST(_req: NextRequest, context: RouteContext) {
                 { error: "Cannot commit a Physical Inventory without detail rows." },
                 { status: 400 },
             );
+        }
+
+        // AG-COMMENT: Promote any scanned draft serials from cylinder_assets_draft to cylinder_assets master table
+        const detailIds = details.map((d) => d.id);
+        if (detailIds.length > 0) {
+            const serialRows = await directusGetMany<{ serial_number: string }>(
+                `/items/physical_inventory_details_serial?filter=${encodeURIComponent(
+                    JSON.stringify({ pi_detail_id: { _in: detailIds } }),
+                )}&fields=serial_number&limit=-1`,
+            );
+
+            const uniqueSerials = Array.from(
+                new Set(serialRows.map((s) => (s.serial_number || "").trim()).filter(Boolean)),
+            );
+
+            if (uniqueSerials.length > 0) {
+                const draftCylinders = await directusGetMany<Record<string, unknown>>(
+                    `/items/cylinder_assets_draft?filter=${encodeURIComponent(
+                        JSON.stringify({ serial_number: { _in: uniqueSerials } }),
+                    )}&limit=-1`,
+                );
+
+                if (draftCylinders.length > 0) {
+                    const phNow = new Date(Date.now() + 8 * 60 * 60 * 1000)
+                        .toISOString()
+                        .replace("Z", "+08:00");
+                    const postingDate = phNow.split("T")[0];
+
+                    const cylindersToInsert = draftCylinders.map((draft) => {
+                        const copy: Record<string, unknown> = {};
+                        for (const key in draft) {
+                            if (key !== "id") {
+                                copy[key] = draft[key];
+                            }
+                        }
+                        return {
+                            ...copy,
+                            remarks: `Physical Inventory ${header.ph_no || headerId}`,
+                            acquisition_date: draft.acquisition_date || postingDate,
+                            created_date: draft.created_date || phNow,
+                            modified_date: phNow,
+                            is_deleted: 0,
+                        };
+                    });
+
+                    // Insert into cylinder_assets master table
+                    await directusPost("/items/cylinder_assets", cylindersToInsert);
+
+                    // Delete promoted items from cylinder_assets_draft
+                    const draftIdsToDelete = draftCylinders.map((d) => Number(d.id));
+                    await directusDelete("/items/cylinder_assets_draft", draftIdsToDelete);
+                }
+            }
         }
 
         const total_amount = sumHeaderTotalAmount(details);
