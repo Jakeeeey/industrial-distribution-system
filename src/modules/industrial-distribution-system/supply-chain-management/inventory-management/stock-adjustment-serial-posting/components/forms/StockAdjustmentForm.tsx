@@ -5,28 +5,23 @@ import { useRouter } from "next/navigation";
 import { useForm, useFieldArray, useWatch, Control, UseFormSetValue, useFormState, FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
-  Plus,
-  Trash2,
-  Save,
   AlertCircle,
   Tag,
   ArrowLeft,
   Package,
   Send,
+  Save,
   Search,
-  Minus,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
   Paperclip,
-  ScanLine,
   ClipboardList
 } from "lucide-react";
 import { AttachmentUpload } from "../AttachmentUpload";
 import { Badge } from "@/components/ui/badge";
 import { SerialInputModal } from "../modals/SerialInputModal";
-import { ProductSelectionModal } from "../modals/ProductSelectionModal";
 import {
   StockAdjustmentFormSchema,
   StockAdjustmentFormValues,
@@ -36,6 +31,7 @@ import {
 } from "../../types/stock-adjustment-serial.schema";
 import { useStockAdjustmentSerialForm } from "../../hooks/useStockAdjustmentSerialForm";
 import { isPostedStatus } from "../../utils/status-utils";
+import { formatTimestampAsIs } from "../../utils/date-utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -72,23 +68,17 @@ interface StockAdjustmentFormProps {
 }
 
 // ——————————————————————————————————————————————————————————————————————————————
-// Memoised item row (renders only when *its own* data changes)
+// AG-COMMENT: Read-only item row for posting module - line item modifications and deletions removed
 interface ItemRowProps {
   index: number;
   control: Control<StockAdjustmentFormValues>;
-  onRemove: (index: number) => void;
-  setValue: UseFormSetValue<StockAdjustmentFormValues>;
   onOpenSerialInput: (index: number) => void;
-  isReadOnly?: boolean;
 }
 
 const StockAdjustmentItemRow = React.memo(function StockAdjustmentItemRow({
   index,
   control,
-  onRemove,
-  setValue,
   onOpenSerialInput,
-  isReadOnly = false,
 }: ItemRowProps) {
   const product_name = useWatch({ control, name: `items.${index}.product_name` });
   const unitName = useWatch({ control, name: `items.${index}.unit_name` });
@@ -101,11 +91,6 @@ const StockAdjustmentItemRow = React.memo(function StockAdjustmentItemRow({
 
   const serialNumbers = useWatch({ control, name: `items.${index}.serial_numbers` });
   const isSerialMissing = (isSerialized || unitOrder === 3) && (!serialNumbers || serialNumbers.length === 0);
-
-  const { errors } = useFormState({ control });
-  const rowError = Array.isArray(errors.items)
-    ? (errors.items[index] as FieldErrors<StockAdjustmentItem>)
-    : undefined;
 
   const totalCost = Number(quantity || 0) * Number(costPerUnit || 0);
 
@@ -140,87 +125,33 @@ const StockAdjustmentItemRow = React.memo(function StockAdjustmentItemRow({
         </div>
       </td>
       <td className="p-3 w-40">
-        {isReadOnly ? (
-          <span className="text-xs font-bold px-3 py-1 bg-muted rounded-md border border-border/50">{quantity}</span>
-        ) : isSerialized || unitOrder === 3 ? (
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <span className={`text-xs font-bold px-3 py-1 rounded-md border min-w-10 text-center select-none ${isSerialMissing
-                  ? "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400"
-                  : "bg-muted/50 border-border/50"
-                }`}>{isSerialMissing ? 0 : quantity}</span>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => onOpenSerialInput(index)}
-                className={`h-8 font-bold gap-1 px-2 transition-all duration-200 shadow-sm rounded-lg text-[10px] ${isSerialMissing
-                    ? "border-red-200 dark:border-red-800/50 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 hover:bg-red-100 hover:border-red-300 dark:hover:bg-red-900/40"
-                    : "border-blue-200 dark:border-blue-800/50 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40 hover:border-blue-300 dark:hover:border-blue-700"
-                  }`}
-              >
-                <Tag className={`h-3 w-3 ${isSerialMissing ? "text-red-500 animate-pulse" : "text-blue-500"}`} />
-                SERIALS
-              </Button>
-            </div>
-            {isSerialMissing && (
-              <span className="text-[9px] text-red-500 font-black animate-pulse leading-none mt-1 uppercase tracking-wider pl-1 block">
-                Serial Required
-              </span>
-            )}
+        {isSerialized || unitOrder === 3 ? (
+          <div className="flex items-center gap-2">
+            <span className={`text-xs font-bold px-3 py-1 rounded-md border min-w-10 text-center select-none ${isSerialMissing
+                ? "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400"
+                : "bg-muted/50 border-border/50"
+              }`}>{isSerialMissing ? 0 : quantity}</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenSerialInput(index)}
+              className="h-8 font-bold gap-1 px-2.5 transition-all duration-200 shadow-sm rounded-lg text-[10px] border-blue-200 dark:border-blue-800/50 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40 hover:border-blue-300 dark:hover:border-blue-700"
+            >
+              <Tag className="h-3 w-3 text-blue-500" />
+              VIEW SERIALS
+            </Button>
           </div>
         ) : (
-          <div className="flex items-center gap-0 w-min bg-background border border-border rounded-md overflow-hidden">
-            <button
-              type="button"
-              className="w-7 h-7 flex items-center justify-center hover:bg-muted text-muted-foreground disabled:opacity-50 transition-colors"
-              onClick={() => setValue(`items.${index}.quantity`, Math.max(1, Number(quantity || 0) - 1), { shouldValidate: true })}
-              disabled={Number(quantity || 0) <= 1}
-            >
-              <Minus className="h-3 w-3" />
-            </button>
-            <input
-              type="number"
-              value={quantity === 0 ? "" : quantity}
-              onChange={(e) => {
-                let val = parseInt(e.target.value, 10);
-                if (isNaN(val) || val < 1) val = 1;
-                setValue(`items.${index}.quantity`, val, { shouldValidate: true });
-              }}
-              className="w-12 h-7 text-center text-xs font-bold border-x border-border focus:outline-none focus:ring-0 bg-transparent p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              min={1}
-            />
-            <button
-              type="button"
-              className="w-7 h-7 flex items-center justify-center hover:bg-muted text-muted-foreground transition-colors"
-              onClick={() => setValue(`items.${index}.quantity`, Number(quantity || 0) + 1, { shouldValidate: true })}
-            >
-              <Plus className="h-3 w-3" />
-            </button>
-          </div>
-        )}
-        {rowError?.quantity && (
-          <p className="text-[10px] text-red-500 font-bold mt-1">{rowError.quantity.message}</p>
+          <span className="text-xs font-bold px-3 py-1 bg-muted/50 rounded-md border border-border/50 min-w-10 text-center select-none inline-block">
+            {quantity}
+          </span>
         )}
       </td>
       <td className="p-3">
         <span className="text-xs font-bold text-primary dark:text-primary/70">
           ₱{Number(totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </span>
-      </td>
-      <td className="p-3 text-center w-16">
-        {!isReadOnly && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={() => onRemove(index)}
-            className="h-7 w-7 rounded-full text-red-400/50 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all mx-auto"
-            title="Remove item"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        )}
       </td>
     </tr>
   );
@@ -658,7 +589,7 @@ export function StockAdjustmentForm({
     } else if (typeof pendingExitAction === "string") {
       router.push(pendingExitAction);
     } else {
-      router.push("/ids/scm/inventory-management/stock-adjustment-serial-summary");
+      router.push("/industrial-distribution-system/scm/stock-adjustment/stock-adjustment-summary");
     }
     setPendingExitAction(null);
   }, [pendingExitAction, router]);
@@ -999,7 +930,7 @@ export function StockAdjustmentForm({
           } else if (typeof pendingExitAction === "string") {
             router.push(pendingExitAction);
           } else {
-            router.push("/ids/scm/inventory-management/stock-adjustment-serial-summary");
+            router.push("/industrial-distribution-system/scm/stock-adjustment/stock-adjustment-summary");
           }
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : "Failed to save adjustment";
@@ -1126,7 +1057,7 @@ export function StockAdjustmentForm({
           ) : (
             <Button
               variant="outline"
-              onClick={() => handleCancelOrExit("/ids/scm/inventory-management/stock-adjustment-serial-summary")}
+              onClick={() => handleCancelOrExit("/industrial-distribution-system/scm/stock-adjustment/stock-adjustment-summary")}
               className="gap-2 h-10 border-border bg-card shadow-sm font-bold text-muted-foreground hover:bg-muted rounded-lg transition-all"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -1162,7 +1093,7 @@ export function StockAdjustmentForm({
             <div className="flex items-center gap-2 bg-blue-50/50 dark:bg-blue-900/10 px-3 py-1.5 rounded-lg border border-blue-100 dark:border-blue-800/30">
               <span className="text-[10px] uppercase font-black text-blue-400">Posted At:</span>
               <span className="text-xs font-bold text-blue-700 dark:text-blue-300">
-                {form.getValues().postedAt ? format(new Date(form.getValues().postedAt as string), "MMMM d, yyyy, hh:mm a") : "-"}
+                {form.getValues().postedAt ? formatTimestampAsIs(form.getValues().postedAt as string, "MMMM d, yyyy, hh:mm a") : "-"}
               </span>
             </div>
             <div className="flex items-center gap-2 bg-blue-50/50 dark:bg-blue-900/10 px-3 py-1.5 rounded-lg border border-blue-100 dark:border-blue-800/30">
@@ -1490,133 +1421,9 @@ export function StockAdjustmentForm({
                   className="pl-9 h-9 text-xs border-input font-semibold"
                 />
               </div>
-              {!isReadOnly && (
-                <Button
-                  type="button"
-                  onClick={() => setIsModalOpen(true)}
-                  disabled={!watchedSupplierIdForSelect}
-                  className="font-bold h-9 px-4 rounded-full shadow-sm flex items-center gap-2 text-xs transition-all border-primary/20 text-primary bg-primary/10 hover:bg-primary/20 dark:bg-primary/20 dark:border-primary/40 shrink-0"
-                  variant="outline"
-                >
-                  <Plus className="h-4 w-4" />
-                  ADD MORE PRODUCTS
-                </Button>
-              )}
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            {/* Global Serial Scanner Control Panel */}
-            {!isReadOnly && Number(watchedBranchId) > 0 && Number(watchedSupplierId) > 0 && watchedType === "OUT" && (
-              <div className="border-b border-border bg-muted/10 p-6 flex flex-col gap-4">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="relative flex items-center justify-center h-10 w-10 rounded-full bg-primary/10 border border-primary/20">
-                      <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping opacity-75" style={{ animationDuration: '3s' }} />
-                      <Tag className="h-5 w-5 text-primary animate-pulse" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-                        Global Serial Scanner
-                        <span className="flex h-2 w-2 relative">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                        </span>
-                      </h3>
-                      <p className="text-[11px] text-muted-foreground font-medium">
-                        Focus anywhere on the page and scan serial numbers to adjust quantities instantly.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="text-[11px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/40 px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm shrink-0">
-                    <ScanLine className="h-3.5 w-3.5" />
-                    Smart Serial Routing Active
-                  </div>
-                </div>
-
-                {/* Scan Input & Logs */}
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-stretch mt-1">
-                  {/* Manual input / capture field with auto-uppercase conversion */}
-                  <div className="md:col-span-4 relative flex items-center">
-                    <input
-                      ref={globalScanInputRef}
-                      type="text"
-                      placeholder="Scan Serial number..."
-                      value={globalScanInputVal}
-                      onChange={(e) => setGlobalScanInputVal(e.target.value.toUpperCase())}
-                      onInput={(e: React.FormEvent<HTMLInputElement>) => {
-                        // Development Note: Auto-convert typed or scanned characters to uppercase in real-time
-                        const target = e.currentTarget;
-                        target.value = target.value.toUpperCase();
-                      }}
-                      onKeyDown={async (e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          const val = globalScanInputVal;
-                          setGlobalScanInputVal("");
-                          await handleGlobalScan(val);
-                        }
-                      }}
-                      className="w-full h-10 pl-9 pr-24 text-xs font-semibold border border-primary/40 focus:border-primary rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm transition-all uppercase font-mono tracking-wider"
-                      disabled={isGlobalScanValidating}
-                    />
-                    <ScanLine className="absolute left-3 h-4 w-4 text-muted-foreground/60" />
-                    {isGlobalScanValidating ? (
-                      <span className="absolute right-3 text-[10px] font-bold text-primary animate-pulse flex items-center gap-1">
-                        <span className="h-3 w-3 animate-spin">⌾</span>
-                        Validating...
-                      </span>
-                    ) : (
-                      <span className="absolute right-3 text-[9px] font-bold bg-muted text-muted-foreground px-2 py-1 rounded border uppercase tracking-wider">
-                        Auto Focus
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Scan History Logs */}
-                  <div className="md:col-span-8 border border-border/80 rounded-xl bg-background p-3 flex flex-col justify-center min-h-[50px]">
-                    <div className="text-[9px] font-black text-muted-foreground/50 uppercase tracking-[0.15em] mb-1.5 pl-1 flex items-center justify-between">
-                      <span>Live Scan Log</span>
-                      {scanLog.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => setScanLog([])}
-                          className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-red-600 hover:text-white bg-red-50 hover:bg-red-500 border border-red-200 hover:border-red-500 rounded-md transition-all cursor-pointer shadow-sm ml-auto"
-                        >
-                          Clear log
-                        </button>
-                      )}
-                    </div>
-                    {scanLog.length === 0 ? (
-                      <span className="text-[11px] text-muted-foreground italic pl-1">
-                        No serial numbers scanned yet. Position cursor/scanner and scan.
-                      </span>
-                    ) : (
-                      <div className="flex flex-col gap-1.5">
-                        {scanLog.slice(0, 3).map((log, idx) => (
-                          <div key={idx} className="flex items-center justify-between text-xs font-semibold px-2 py-1 rounded bg-muted/30">
-                            <div className="flex items-center gap-2 truncate">
-                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${log.status === 'success' ? 'bg-green-500' : 'bg-red-500 animate-pulse'
-                                }`} />
-                              <span className="font-mono text-[10px] text-muted-foreground/80 tracking-wider">
-                                {log.serial}
-                              </span>
-                              <span className="text-foreground truncate text-[11px] font-bold">
-                                {log.message}
-                              </span>
-                            </div>
-                            <span className="text-[9px] text-muted-foreground/50 shrink-0 pl-2">
-                              {log.timestamp.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
             {isFormLoading || (isProductsLoading && fields.length === 0) ? (
               <div className="p-6 space-y-6">
                 {[1, 2, 3].map((i) => (
@@ -1636,12 +1443,10 @@ export function StockAdjustmentForm({
                   </div>
                 </div>
                 <h3 className="text-lg font-bold text-foreground mb-1">
-                  {watchedSupplierIdForSelect ? "Empty Cart" : "Supplier required"}
+                  No Products Attached
                 </h3>
                 <p className="text-muted-foreground font-semibold max-w-xs mx-auto text-xs">
-                  {watchedSupplierIdForSelect
-                    ? "Click \"ADD MORE PRODUCTS\" to browse and add items."
-                    : "Select a supplier first to browse and add products."}
+                  This stock adjustment draft has no product items.
                 </p>
                 {form.formState.errors.items && form.formState.errors.items.message && (
                   <p className="text-sm text-red-500 font-bold mt-4 animate-in fade-in">
@@ -1659,15 +1464,14 @@ export function StockAdjustmentForm({
                       <th className="p-3">Product Name</th>
                       <th className="p-3">Price</th>
                       <th className="p-3">UOM</th>
-                      <th className="p-3 w-40 text-center">Qty</th>
+                      <th className="p-3 w-40">Qty</th>
                       <th className="p-3">Net Total</th>
-                      <th className="p-3 text-center w-16">Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {paginatedFields.length === 0 && tableSearch ? (
                       <tr>
-                        <td colSpan={8} className="p-8 text-center text-sm text-muted-foreground">
+                        <td colSpan={7} className="p-8 text-center text-sm text-muted-foreground">
                           No products found matching &quot;{tableSearch}&quot;.
                         </td>
                       </tr>
@@ -1677,80 +1481,79 @@ export function StockAdjustmentForm({
                           key={field.id}
                           index={index}
                           control={form.control}
-                          onRemove={(idx) => setDeletingIndex(idx)}
-                          setValue={form.setValue}
                           onOpenSerialInput={handleOpenSerialInput}
-                          isReadOnly={isReadOnly}
                         />
                       ))
                     )}
                   </tbody>
                 </table>
-                <div className="p-4 bg-muted/10 border-t border-border/50 text-xs font-semibold text-muted-foreground flex justify-between items-center">
-                  <span>{filteredFields.length} total rows</span>
-                  <div className="flex items-center gap-6">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs">Rows per page</span>
-                      <select
-                        className="h-8 border border-border rounded-md bg-card px-2 text-xs focus:outline-none font-bold"
-                        value={rowsPerPage}
-                        onChange={(e) => {
-                          setRowsPerPage(Number(e.target.value));
-                          setCurrentPage(1);
-                        }}
-                      >
-                        <option value={5}>5</option>
-                        <option value={10}>10</option>
-                        <option value={20}>20</option>
-                        <option value={50}>50</option>
-                        <option value={100}>100</option>
-                      </select>
-                    </div>
-                    <span className="text-xs font-bold text-foreground">Page {currentPage} of {totalPages}</span>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground bg-card"
-                        disabled={currentPage === 1}
-                        onClick={() => setCurrentPage(1)}
-                      >
-                        <ChevronsLeft className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground bg-card"
-                        disabled={currentPage === 1}
-                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground bg-card"
-                        disabled={currentPage === totalPages}
-                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground bg-card"
-                        disabled={currentPage === totalPages}
-                        onClick={() => setCurrentPage(totalPages)}
-                      >
-                        <ChevronsRight className="h-4 w-4" />
-                      </Button>
+                {totalPages > 5 && (
+                  <div className="p-4 bg-muted/10 border-t border-border/50 text-xs font-semibold text-muted-foreground flex justify-between items-center">
+                    <span>{filteredFields.length} total rows</span>
+                    <div className="flex items-center gap-6">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs">Rows per page</span>
+                        <select
+                          className="h-8 border border-border rounded-md bg-card px-2 text-xs focus:outline-none font-bold"
+                          value={rowsPerPage}
+                          onChange={(e) => {
+                            setRowsPerPage(Number(e.target.value));
+                            setCurrentPage(1);
+                          }}
+                        >
+                          <option value={5}>5</option>
+                          <option value={10}>10</option>
+                          <option value={20}>20</option>
+                          <option value={50}>50</option>
+                          <option value={100}>100</option>
+                        </select>
+                      </div>
+                      <span className="text-xs font-bold text-foreground">Page {currentPage} of {totalPages}</span>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground bg-card"
+                          disabled={currentPage === 1}
+                          onClick={() => setCurrentPage(1)}
+                        >
+                          <ChevronsLeft className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground bg-card"
+                          disabled={currentPage === 1}
+                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground bg-card"
+                          disabled={currentPage === totalPages}
+                          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground bg-card"
+                          disabled={currentPage === totalPages}
+                          onClick={() => setCurrentPage(totalPages)}
+                        >
+                          <ChevronsRight className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
 
@@ -1774,8 +1577,7 @@ export function StockAdjustmentForm({
           <CardContent className="p-6">
             <AttachmentUpload
               value={form.watch("stock_adjustment_attachment") || []}
-              onChange={(atts) => form.setValue("stock_adjustment_attachment", atts, { shouldValidate: true })}
-              disabled={isReadOnly}
+              disabled={true}
             />
           </CardContent>
         </Card>
@@ -1795,7 +1597,7 @@ export function StockAdjustmentForm({
             <Button
               type="button"
               variant="outline"
-              onClick={() => handleCancelOrExit("/ids/scm/inventory-management/stock-adjustment-serial-summary")}
+              onClick={() => handleCancelOrExit("/industrial-distribution-system/scm/stock-adjustment/stock-adjustment-summary")}
               className="h-10 px-8 font-bold border-border text-muted-foreground hover:bg-card rounded-lg transition-colors text-xs"
             >
               Cancel
@@ -1813,18 +1615,6 @@ export function StockAdjustmentForm({
                 <Save className="h-4 w-4" />
               )}
               {id ? "Update Adjustment" : "Save Adjustment"}
-            </Button>
-          )}
-
-          {id && !isPosted && mode === "posting" && (
-            <Button
-              type="button"
-              onClick={() => setShowDeleteConfirmation(true)}
-              disabled={loading}
-              className="h-10 px-8 font-bold bg-red-600 hover:bg-red-700 text-white gap-2 shadow-sm rounded-lg animate-in fade-in zoom-in-95 duration-200 transition-all duration-300 hover:scale-[1.02] text-xs"
-            >
-              <Trash2 className="h-4 w-4" />
-              Delete Adjustment
             </Button>
           )}
 
@@ -1863,34 +1653,7 @@ export function StockAdjustmentForm({
           open={showSerialInput}
           onOpenChange={setShowSerialInput}
           productName={scannerContext.productName}
-          onSave={handleSerialSave}
-          type={form.getValues("type")}
           initialSerials={form.getValues(`items.${scannerContext.index}.serial_numbers`) || []}
-          branchId={Number(form.getValues("branch_id"))}
-          productId={Number(form.getValues(`items.${scannerContext.index}.product_id`))}
-          validateSerial={validateSerialAvailability}
-          unitName={form.getValues(`items.${scannerContext.index}.unit_name`) || undefined}
-          excludeSerials={form.getValues("items")
-            ?.filter((_, idx) => idx !== scannerContext.index)
-            ?.flatMap((item) => item.serial_numbers || []) || []}
-        />
-      )}
-
-      {isModalOpen && (
-        <ProductSelectionModal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          supplierName={
-            suppliers.find((s: SelectionSupplier) => String(s.id) === String(watchedSupplierIdForSelect))?.supplier_name || ""
-          }
-          branchName={
-            branches?.find((b: SelectionBranch) => String(b.id) === String(watchedBranchIdForSelect))?.branch_name || ""
-          }
-          products={products}
-          isLoading={isProductsLoading}
-          serialProductIds={serialProductIds}
-          initialSelectedItems={form.getValues("items")}
-          onConfirm={handleConfirmModalItems}
         />
       )}
 
@@ -1926,38 +1689,6 @@ export function StockAdjustmentForm({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Delete Confirmation AlertDialog Popup */}
-      <AlertDialog open={showDeleteConfirmation} onOpenChange={setShowDeleteConfirmation}>
-        <AlertDialogContent className="max-w-md bg-card p-6 rounded-xl shadow-2xl border-none">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-lg font-bold text-foreground flex items-center gap-2">
-              <Trash2 className="h-5 w-5 text-red-600" />
-              Confirm Delete Adjustment
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-muted-foreground py-4 text-xs font-semibold">
-              Are you sure you want to delete this stock adjustment transaction? This action will permanently remove it from the system.
-              <br /><br />
-              This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="flex items-center gap-3 mt-4">
-            <Button
-              variant="outline"
-              onClick={() => setShowDeleteConfirmation(false)}
-              className="flex-1 h-11 font-bold text-muted-foreground border-border hover:bg-muted rounded-lg text-xs"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={confirmDelete}
-              className="flex-1 h-11 font-bold bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-100 rounded-lg text-xs"
-            >
-              Confirm and Delete
-            </Button>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
-
       {/* Unsaved Changes Confirmation Dialog */}
       <AlertDialog open={showUnsavedChangesModal} onOpenChange={setShowUnsavedChangesModal}>
         <AlertDialogContent className="max-w-md bg-card p-6 rounded-xl shadow-2xl border-none">
@@ -1967,24 +1698,16 @@ export function StockAdjustmentForm({
               Unsaved Changes
             </AlertDialogTitle>
             <AlertDialogDescription className="text-muted-foreground py-4 text-xs font-semibold">
-              You have unsaved changes in this stock adjustment draft. What would you like to do before leaving?
+              Are you sure you want to exit without posting?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="flex flex-col gap-2 mt-4">
-            <Button
-              onClick={handleSaveAndExit}
-              disabled={loading}
-              className="w-full h-11 font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-md rounded-lg text-xs"
-            >
-              {loading ? <span className="animate-spin mr-2">⌾</span> : null}
-              Save and Exit
-            </Button>
             <Button
               variant="outline"
               onClick={confirmDiscardAndExit}
               className="w-full h-11 font-bold bg-red-50 hover:bg-red-100 dark:bg-red-950/20 dark:hover:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-200/50 dark:border-red-800/30 rounded-lg text-xs"
             >
-              Discard Changes and Exit
+              Exit
             </Button>
             <Button
               variant="ghost"
@@ -1994,51 +1717,7 @@ export function StockAdjustmentForm({
               }}
               className="w-full h-11 font-bold text-muted-foreground hover:bg-muted rounded-lg text-xs"
             >
-              Keep Editing
-            </Button>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Item Delete Confirmation */}
-      <AlertDialog
-        open={deletingIndex !== null}
-        onOpenChange={(open) => !open && setDeletingIndex(null)}
-      >
-        <AlertDialogContent className="max-w-md bg-card p-6 rounded-xl shadow-2xl border-none">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-lg font-bold text-foreground flex items-center gap-2">
-              <Trash2 className="h-5 w-5 text-red-600" />
-              Remove Item
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-muted-foreground py-4 text-xs font-semibold">
-              Are you sure you want to remove this item from the adjustment list?
-              {deletingIndex !== null && form.getValues(`items.${deletingIndex}.db_id`) && (
-                <span className="block mt-2 font-bold text-red-500/80">
-                  Note: This is an existing record. Removing it will delete it from this adjustment once you save.
-                </span>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="flex items-center gap-3 mt-4">
-            <Button
-              variant="outline"
-              onClick={() => setDeletingIndex(null)}
-              className="flex-1 h-11 font-bold text-muted-foreground border-border hover:bg-muted rounded-lg text-xs"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={() => {
-                if (deletingIndex !== null) {
-                  remove(deletingIndex);
-                  setDeletingIndex(null);
-                  toast.success("Item removed from list");
-                }
-              }}
-              className="flex-1 h-11 font-bold bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-100 rounded-lg text-xs"
-            >
-              Confirm and Remove
+              Stay on Page
             </Button>
           </div>
         </AlertDialogContent>

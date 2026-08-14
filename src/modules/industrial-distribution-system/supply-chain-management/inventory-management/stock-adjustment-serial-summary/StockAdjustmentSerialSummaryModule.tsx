@@ -54,12 +54,12 @@ function StockAdjustmentSummaryInner() {
           >
             <RotateCcw className="h-3.5 w-3.5" /> Reload Data
           </Button>
-          <Button
-            onClick={() => router.push("/ids/scm/inventory-management/stock-adjustment-serial-registration")}
+          {/* <Button
+            onClick={() => router.push("/industrial-distribution-system/scm/stock-adjustment/stock-adjustment-serial-registration")}
             className="h-10 gap-2 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm font-semibold rounded-full px-6 transition-all duration-300 hover:scale-[1.02] text-xs shrink-0"
           >
             <Plus className="h-4 w-4" /> New Registration
-          </Button>
+          </Button> */}
         </div>
       </div>
 

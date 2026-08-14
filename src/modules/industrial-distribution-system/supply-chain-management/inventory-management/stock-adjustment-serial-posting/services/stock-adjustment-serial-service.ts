@@ -85,7 +85,7 @@ export const stockAdjustmentService = {
    * Fetch all stock adjustment headers with optional filtering
    */
   async fetchAllHeaders(params?: { search?: string; branchId?: number; type?: string; status?: string }) {
-    let query = `fields=*,branch_id.branch_name,branch_id.id,supplier_id.id,supplier_id.supplier_name,created_by.user_fname,created_by.user_lname,created_by.user_id,posted_by.user_fname,posted_by.user_lname,items.id,stock_adjustment.id&sort=-created_at`;
+    let query = `fields=*,branch_id.branch_name,branch_id.id,created_by.user_fname,created_by.user_lname,created_by.user_id,posted_by.user_fname,posted_by.user_lname,items.id,stock_adjustment.id&sort=-created_at`;
 
     const filters: Record<string, unknown> = {
       is_delete: { _neq: true },
@@ -233,7 +233,7 @@ export const stockAdjustmentService = {
    */
   async fetchById(id: number): Promise<StockAdjustmentDetail> {
     const headerRes = await directusFetch<{ data: StockAdjustmentHeader }>(
-      `${DIRECTUS_URL}/items/stock_adjustment_header/${id}?fields=*,branch_id.id,branch_id.branch_name,supplier_id.id,supplier_id.supplier_name,created_by.user_fname,created_by.user_lname,posted_by.user_fname,posted_by.user_lname`
+      `${DIRECTUS_URL}/items/stock_adjustment_header/${id}?fields=*,branch_id.id,branch_id.branch_name,created_by.user_fname,created_by.user_lname,posted_by.user_fname,posted_by.user_lname`
     );
     const header = headerRes.data;
 
@@ -780,7 +780,6 @@ export const stockAdjustmentService = {
       body: JSON.stringify({
         doc_no: header.doc_no,
         branch_id: header.branch_id,
-        supplier_id: header.supplier_id,
         type: header.type,
         remarks: finalRemarks,
         amount: header.amount || items.reduce((acc: number, item: StockAdjustmentItem) => acc + (item.quantity * (item.cost_per_unit || 0)), 0),
@@ -831,6 +830,55 @@ export const stockAdjustmentService = {
         method: "POST",
         body: JSON.stringify(serialPayload),
       });
+
+      // AG-COMMENT: Sync cylinder_assets_draft with adjustment remarks, branch, and audit fields
+      const cleanedHeaderRemarks = String(header.remarks || "").replace(/\s*\[SUPPLIER_ID:\s*(\d+)\]/g, "").trim();
+      const serialMap = new Map<string, { productId: number; branchId: number; remarks: string }>();
+      items.forEach((item) => {
+        const pId = Number(typeof item.product_id === "object" && item.product_id !== null ? (item.product_id as { product_id?: number; id?: number }).product_id || (item.product_id as { id?: number }).id : item.product_id);
+        const bId = Number(item.branch_id || header.branch_id);
+        const itemRemarks = String(item.remarks || "").trim();
+        const remarksToUse = itemRemarks || cleanedHeaderRemarks || "Registered via Stock Adjustment";
+        if (Array.isArray(item.serial_numbers)) {
+          item.serial_numbers.forEach((s) => {
+            if (s) {
+              serialMap.set(String(s).trim().toUpperCase(), {
+                productId: pId,
+                branchId: bId,
+                remarks: remarksToUse,
+              });
+            }
+          });
+        }
+      });
+
+      const serialList = Array.from(serialMap.keys());
+      if (serialList.length > 0) {
+        try {
+          const draftRes = await directusFetch<{ data: Array<{ id: number; serial_number: string }> }>(
+            `${DIRECTUS_URL}/items/cylinder_assets_draft?filter={"serial_number":{"_in":${JSON.stringify(serialList)}}}&fields=id,serial_number&limit=-1`
+          );
+          const draftRows = draftRes.data || [];
+          if (draftRows.length > 0) {
+            const draftPatches = draftRows.map((draft) => {
+              const meta = serialMap.get(String(draft.serial_number || "").toUpperCase());
+              return directusFetch(`${DIRECTUS_URL}/items/cylinder_assets_draft/${draft.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  product_id: meta?.productId,
+                  current_branch_id: meta?.branchId,
+                  remarks: meta?.remarks,
+                  modified_by: payload.userId || undefined,
+                  modified_date: phNow,
+                }),
+              });
+            });
+            await Promise.all(draftPatches);
+          }
+        } catch (err) {
+          console.error("Failed to sync cylinder_assets_draft on create in posting service:", err);
+        }
+      }
     }
 
     // Save attachments
@@ -858,6 +906,7 @@ export const stockAdjustmentService = {
   async update(id: number, payload: { header: Record<string, unknown>; items: StockAdjustmentItem[]; userId?: number }) {
     let finalRemarks = String(payload.header.remarks || "").trim();
     finalRemarks = finalRemarks.replace(/\s*\[SUPPLIER_ID:\s*(\d+)\]/g, "").trim();
+    const rawCleanedRemarks = finalRemarks;
     if (payload.header.supplier_id) {
       finalRemarks = `${finalRemarks}\n[SUPPLIER_ID: ${payload.header.supplier_id}]`.trim();
     }
@@ -867,7 +916,6 @@ export const stockAdjustmentService = {
       type: payload.header.type,
       branch_id: Number(payload.header.branch_id),
       remarks: finalRemarks,
-      supplier_id: payload.header.supplier_id ? Number(payload.header.supplier_id) : null,
       amount: Number(payload.header.amount),
     };
 
@@ -923,6 +971,8 @@ export const stockAdjustmentService = {
       });
     }
 
+    const phNow = nowPH();
+
     const itemsPayload = payload.items.map((item: StockAdjustmentItem) => ({
       doc_no: payload.header.doc_no,
       stock_adjustment_id: id,
@@ -932,7 +982,8 @@ export const stockAdjustmentService = {
       quantity: Number(item.quantity),
       remarks: item.remarks,
       unit_id: item.unit_id ? Number(item.unit_id) : null,
-      created_by: payload.userId
+      created_by: payload.userId,
+      created_at: phNow,
     }));
 
     const itemsRes = await directusFetch<{ data: Array<{ id: number }> | { id: number } }>(`${DIRECTUS_URL}/items/stock_adjustment`, {
@@ -941,7 +992,7 @@ export const stockAdjustmentService = {
     });
     const createdItems = Array.isArray(itemsRes.data) ? itemsRes.data : [itemsRes.data];
 
-    const serialPayload: { serial_number: string; stock_adjustment_id: number; created_by?: number }[] = [];
+    const serialPayload: { serial_number: string; stock_adjustment_id: number; created_by?: number; created_at?: string }[] = [];
     payload.items.forEach((item: StockAdjustmentItem, index: number) => {
       if (item.serial_numbers && Array.isArray(item.serial_numbers) && createdItems[index]) {
         const itemId = createdItems[index].id;
@@ -949,7 +1000,8 @@ export const stockAdjustmentService = {
           serialPayload.push({
             serial_number: serial,
             stock_adjustment_id: itemId,
-            created_by: payload.userId
+            created_by: payload.userId,
+            created_at: phNow,
           });
         });
       }
@@ -960,6 +1012,87 @@ export const stockAdjustmentService = {
         method: "POST",
         body: JSON.stringify(serialPayload),
       });
+
+      // AG-COMMENT: Sync cylinder_assets_draft and cylinder_assets with updated adjustment remarks, branch, product, and modified audit trail
+      const serialMap = new Map<string, { productId: number; branchId: number; remarks: string }>();
+      payload.items.forEach((item) => {
+        const pId = Number(typeof item.product_id === "object" && item.product_id !== null ? (item.product_id as { product_id?: number; id?: number }).product_id || (item.product_id as { id?: number }).id : item.product_id);
+        const bId = Number(item.branch_id || payload.header.branch_id);
+        const itemRemarks = String(item.remarks || "").trim();
+        const remarksToUse = itemRemarks || rawCleanedRemarks || `Stock Adjustment ${docNo}`;
+        if (Array.isArray(item.serial_numbers)) {
+          item.serial_numbers.forEach((s) => {
+            if (s) {
+              serialMap.set(String(s).trim().toUpperCase(), {
+                productId: pId,
+                branchId: bId,
+                remarks: remarksToUse,
+              });
+            }
+          });
+        }
+      });
+
+      const serialList = Array.from(serialMap.keys());
+      if (serialList.length > 0) {
+        try {
+          const [draftRes, existingRes] = await Promise.all([
+            directusFetch<{ data: Array<{ id: number; serial_number: string }> }>(
+              `${DIRECTUS_URL}/items/cylinder_assets_draft?filter={"serial_number":{"_in":${JSON.stringify(serialList)}}}&fields=id,serial_number&limit=-1`
+            ),
+            directusFetch<{ data: Array<{ id: number; serial_number: string }> }>(
+              `${DIRECTUS_URL}/items/cylinder_assets?filter={"serial_number":{"_in":${JSON.stringify(serialList)}}}&fields=id,serial_number&limit=-1`
+            )
+          ]);
+
+          const draftRows = draftRes.data || [];
+          const existingRows = existingRes.data || [];
+
+          const patchPromises: Promise<unknown>[] = [];
+
+          draftRows.forEach((draft) => {
+            const meta = serialMap.get(String(draft.serial_number || "").toUpperCase());
+            if (meta) {
+              patchPromises.push(
+                directusFetch(`${DIRECTUS_URL}/items/cylinder_assets_draft/${draft.id}`, {
+                  method: "PATCH",
+                  body: JSON.stringify({
+                    product_id: meta.productId,
+                    current_branch_id: meta.branchId,
+                    remarks: meta.remarks,
+                    modified_by: payload.userId || undefined,
+                    modified_date: phNow,
+                  }),
+                })
+              );
+            }
+          });
+
+          existingRows.forEach((existing) => {
+            const meta = serialMap.get(String(existing.serial_number || "").toUpperCase());
+            if (meta) {
+              patchPromises.push(
+                directusFetch(`${DIRECTUS_URL}/items/cylinder_assets/${existing.id}`, {
+                  method: "PATCH",
+                  body: JSON.stringify({
+                    product_id: meta.productId,
+                    current_branch_id: meta.branchId,
+                    remarks: meta.remarks,
+                    modified_by: payload.userId || undefined,
+                    modified_date: phNow,
+                  }),
+                })
+              );
+            }
+          });
+
+          if (patchPromises.length > 0) {
+            await Promise.all(patchPromises);
+          }
+        } catch (err) {
+          console.error("Failed to sync cylinder assets during adjustment update in posting service:", err);
+        }
+      }
     }
 
     // Save new attachments
@@ -982,16 +1115,35 @@ export const stockAdjustmentService = {
   },
 
   /**
-   * Post (finalize) a Stock Adjustment (promoting cylinder drafts to assets)
+   * Post (finalize) a Stock Adjustment (promoting cylinder drafts to assets & synchronizing existing cylinder assets)
    */
   async postStockAdjustment(id: number, userId?: number) {
+    const phNow = nowPH();
     try {
-      const headerRes = await directusFetch<{ data: { doc_no: string } }>(
-        `${DIRECTUS_URL}/items/stock_adjustment_header/${id}?fields=doc_no`
+      const headerRes = await directusFetch<{
+        data: {
+          doc_no: string;
+          branch_id?: number | { id: number };
+          remarks?: string;
+        };
+      }>(
+        `${DIRECTUS_URL}/items/stock_adjustment_header/${id}?fields=doc_no,branch_id,remarks`
       );
       const docNo = headerRes.data?.doc_no;
+      const rawBranchId = headerRes.data?.branch_id;
+      const branchId = typeof rawBranchId === "object" && rawBranchId !== null
+        ? Number(rawBranchId.id)
+        : Number(rawBranchId || 0);
+
+      let supplierId = 0;
+      if (headerRes.data?.remarks) {
+        const match = headerRes.data.remarks.match(/\[SUPPLIER_ID:\s*(\d+)\]/i);
+        if (match) supplierId = Number(match[1]);
+      }
 
       if (docNo) {
+        const cleanedHeaderRemarks = String(headerRes.data?.remarks || "").replace(/\s*\[SUPPLIER_ID:\s*(\d+)\]/g, "").trim();
+
         const itemsRes = await directusFetch<{
           data: Array<{
             id: number;
@@ -1000,12 +1152,16 @@ export const stockAdjustmentService = {
               unit_of_measurement?: { unit_name?: string } | null;
             };
             unit_id?: { unit_name?: string } | null;
+            branch_id?: number | { id: number };
+            remarks?: string;
           }>;
         }>(
-          `${DIRECTUS_URL}/items/stock_adjustment?filter={"doc_no":{"_eq":"${docNo}"}}&fields=id,product_id.product_id,product_id.unit_of_measurement.unit_name,unit_id.unit_name&limit=-1`
+          `${DIRECTUS_URL}/items/stock_adjustment?filter={"doc_no":{"_eq":"${docNo}"}}&fields=id,product_id.product_id,product_id.unit_of_measurement.unit_name,unit_id.unit_name,branch_id,remarks&limit=-1`
         );
         
         const productUomMap = new Map<number, string>();
+        const itemMap = new Map<number, { productId: number; branchId: number; uom: string; remarks: string }>();
+
         const itemIds = (itemsRes.data || []).map((item) => {
           const isProductObject = typeof item.product_id === "object" && item.product_id !== null;
           const pId = isProductObject
@@ -1018,6 +1174,18 @@ export const stockAdjustmentService = {
           if (pId && uom) {
             productUomMap.set(pId, uom);
           }
+
+          const rawItemBranch = item.branch_id;
+          const itemBranchId = typeof rawItemBranch === "object" && rawItemBranch !== null
+            ? Number(rawItemBranch.id)
+            : Number(rawItemBranch || branchId);
+
+          itemMap.set(item.id, {
+            productId: pId,
+            branchId: itemBranchId,
+            uom,
+            remarks: String(item.remarks || "").trim()
+          });
           return item.id;
         });
 
@@ -1030,26 +1198,48 @@ export const stockAdjustmentService = {
           const emptyUnit = unitsList.find(u => u.unit_name.toUpperCase() === "EMPTY" || u.unit_shortcut.toUpperCase() === "EMPTY");
           const emptyName = emptyUnit ? emptyUnit.unit_name.toUpperCase() : "EMPTY";
 
-          const serialRes = await directusFetch<{ data: { serial_number: string }[] }>(
-            `${DIRECTUS_URL}/items/stock_adjustment_serial?filter={"stock_adjustment_id":{"_in":${JSON.stringify(itemIds)}}}&fields=serial_number&limit=-1`
+          const serialRes = await directusFetch<{ data: { id: number; serial_number: string; stock_adjustment_id: number }[] }>(
+            `${DIRECTUS_URL}/items/stock_adjustment_serial?filter={"stock_adjustment_id":{"_in":${JSON.stringify(itemIds)}}}&fields=id,serial_number,stock_adjustment_id&limit=-1`
           );
-          const serials = (serialRes.data || []).map((s) => s.serial_number);
+          const serialRows = serialRes.data || [];
+          const serials = serialRows.map((s) => s.serial_number);
+
+          // Map serials to their respective line-item metadata
+          const serialToItemMap = new Map<string, { productId: number; branchId: number; supplierId: number; uom: string; remarks: string }>();
+          serialRows.forEach((row) => {
+            const snUpper = String(row.serial_number || "").toUpperCase();
+            const meta = itemMap.get(row.stock_adjustment_id);
+            if (meta) {
+              serialToItemMap.set(snUpper, {
+                productId: meta.productId,
+                branchId: meta.branchId,
+                supplierId: supplierId,
+                uom: meta.uom,
+                remarks: meta.remarks,
+              });
+            }
+          });
 
           if (serials.length > 0) {
-            const draftRes = await directusFetch<{ data: DraftCylinder[] }>(
-              `${DIRECTUS_URL}/items/cylinder_assets_draft?filter={"serial_number":{"_in":${JSON.stringify(serials)}}}&limit=-1`
-            );
-            const draftCylinders = draftRes.data || [];
+            const [draftRes, existingRes] = await Promise.all([
+              directusFetch<{ data: DraftCylinder[] }>(
+                `${DIRECTUS_URL}/items/cylinder_assets_draft?filter={"serial_number":{"_in":${JSON.stringify(serials)}}}&limit=-1`
+              ),
+              directusFetch<{ data: Array<{ id: number; serial_number: string; product_id: number; tare_weight?: number | string | null; expiration_date?: string | null; cylinder_status?: string; current_branch_id?: number; current_supplier_id?: number; remarks?: string | null }> }>(
+                `${DIRECTUS_URL}/items/cylinder_assets?filter={"serial_number":{"_in":${JSON.stringify(serials)}}}&fields=id,serial_number,product_id,tare_weight,expiration_date,cylinder_status,current_branch_id,current_supplier_id,remarks&limit=-1`
+              )
+            ]);
 
+            const draftCylinders = draftRes.data || [];
+            const existingCylinders = existingRes.data || [];
+
+            // 1. Promote draft cylinders into cylinder_assets with full audit and relation fields
             if (draftCylinders.length > 0) {
               const cylindersToInsert = draftCylinders.map((c) => {
-                const pId = Number(c.product_id);
-                const uom = productUomMap.get(pId);
-                // Status mapping mirrors BulkRegisterModal logic:
-                //   EMPTY UOM → "EMPTY"  (cylinder is empty)
-                //   All others (incl. FULL UOM) → "AVAILABLE"
-                //   ("FULL" UOM means it's full and ready to sell, so the asset
-                //    status should be AVAILABLE, not FULL)
+                const cleanS = String(c.serial_number || "").toUpperCase();
+                const itemMeta = serialToItemMap.get(cleanS);
+                const pId = itemMeta?.productId || Number(c.product_id);
+                const uom = itemMeta?.uom || productUomMap.get(pId);
                 let finalStatus = (c.cylinder_status as string) || "AVAILABLE";
                 if (uom) {
                   if (uom === emptyName) {
@@ -1059,11 +1249,7 @@ export const stockAdjustmentService = {
                   }
                 }
 
-                // Copy all properties except `id` and `acquisition_date`.
-                // `acquisition_date` is required NOT NULL in cylinder_assets but the draft
-                // table doesn't have it — always inject the posting date explicitly.
-                // Asia/Manila (+08:00) timestamp for posting and acquisition_date
-                const phNow = nowPH();
+                // Use Asia/Manila date for cylinder acquisition date
                 const postingDate = phNow.split("T")[0];
                 const copy: Record<string, unknown> = {};
                 for (const key in c) {
@@ -1072,13 +1258,25 @@ export const stockAdjustmentService = {
                   }
                 }
 
+                // AG-COMMENT: Adjustment form remarks (line item or header) take precedence over draft placeholder remarks
+                const userAdjRemarks = itemMeta?.remarks || cleanedHeaderRemarks;
+                const targetRemarks = userAdjRemarks || (c.remarks && c.remarks !== "Registered via Stock Adjustment" ? c.remarks : `Stock Adjustment ${docNo}`);
+
                 const record = {
                   ...copy,
+                  product_id: pId,
                   cylinder_status: finalStatus,
-                  acquisition_date: postingDate,
+                  current_branch_id: itemMeta?.branchId || c.current_branch_id || branchId || null,
+                  current_supplier_id: itemMeta?.supplierId || supplierId || null,
+                  acquisition_date: c.acquisition_date || postingDate,
+                  remarks: targetRemarks,
+                  created_by: c.created_by || userId || null,
+                  created_date: c.created_date || phNow,
+                  modified_by: userId || null,
+                  modified_date: phNow,
+                  is_deleted: 0,
                 };
 
-                console.log("[Promote] cylinder record to insert:", JSON.stringify(record));
                 return record;
               });
 
@@ -1093,16 +1291,54 @@ export const stockAdjustmentService = {
                 body: JSON.stringify(draftIdsToDelete),
               });
             }
+
+            // 2. Synchronize existing cylinder_assets (update product_id, supplier_id, branch_id, remarks, modified audit fields)
+            if (existingCylinders.length > 0) {
+              const patchPromises = existingCylinders.map((c) => {
+                const cleanS = String(c.serial_number || "").toUpperCase();
+                const itemMeta = serialToItemMap.get(cleanS);
+                if (!itemMeta) return Promise.resolve();
+
+                const pId = itemMeta.productId;
+                const uom = itemMeta.uom || productUomMap.get(pId);
+                let finalStatus = (c.cylinder_status as string) || "AVAILABLE";
+                if (uom) {
+                  if (uom === emptyName) {
+                    finalStatus = "EMPTY";
+                  } else {
+                    finalStatus = "AVAILABLE";
+                  }
+                }
+
+                // AG-COMMENT: Adjustment form remarks (line item or header) take precedence over existing placeholder remarks
+                const userAdjRemarks = itemMeta.remarks || cleanedHeaderRemarks;
+                const targetRemarks = userAdjRemarks || (c.remarks && c.remarks !== "Registered via Stock Adjustment" ? c.remarks : `Stock Adjustment ${docNo}`);
+
+                return directusFetch(`${DIRECTUS_URL}/items/cylinder_assets/${c.id}`, {
+                  method: "PATCH",
+                  body: JSON.stringify({
+                    product_id: pId,
+                    cylinder_status: finalStatus,
+                    current_branch_id: itemMeta.branchId || branchId || c.current_branch_id || null,
+                    current_supplier_id: itemMeta.supplierId || supplierId || c.current_supplier_id || null,
+                    remarks: targetRemarks,
+                    modified_by: userId || null,
+                    modified_date: phNow,
+                  }),
+                });
+              });
+
+              await Promise.all(patchPromises);
+            }
           }
         }
       }
     } catch (err) {
-      console.error("Failed to promote draft cylinder assets during posting:", err);
+      console.error("Failed to promote and synchronize cylinder assets during posting:", err);
       throw err;
     }
 
     // Save postedAt in Asia/Manila (+08:00) local time
-    const phNow = nowPH();
     const res = await directusFetch<{ data: unknown }>(`${DIRECTUS_URL}/items/stock_adjustment_header/${id}`, {
       method: "PATCH",
       body: JSON.stringify({

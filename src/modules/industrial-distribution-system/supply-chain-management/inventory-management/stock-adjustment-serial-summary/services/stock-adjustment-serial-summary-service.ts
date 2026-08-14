@@ -1,4 +1,5 @@
 import { format } from "date-fns";
+import { formatTimestampAsIs } from "../utils/date-utils";
 import {
   SummaryFilters,
   SummaryKPIs,
@@ -100,8 +101,8 @@ export const stockAdjustmentSerialSummaryService = {
 
     data.forEach((item) => {
       if (!item.created_at) return;
-      const dateKey = format(new Date(item.created_at), "yyyy-MM-dd");
-      const label = format(new Date(item.created_at), "MMM dd");
+      const dateKey = formatTimestampAsIs(item.created_at, "yyyy-MM-dd");
+      const label = formatTimestampAsIs(item.created_at, "MMM dd");
       const existing = trendMap.get(dateKey) || { dateStr: label, inValue: 0, outValue: 0, count: 0 };
 
       if (item.type === "IN") {

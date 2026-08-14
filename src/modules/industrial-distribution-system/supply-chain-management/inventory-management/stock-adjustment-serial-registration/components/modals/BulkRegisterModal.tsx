@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, CheckCircle2 } from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 
 interface BulkRegisterModalProps {
@@ -50,6 +50,8 @@ export function BulkRegisterModal({
 }: BulkRegisterModalProps) {
   const [data, setData] = useState<RegisterData[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // AG-COMMENT: Track validation errors per row for required expiration date and tare weight
+  const [rowErrors, setRowErrors] = useState<Record<number, { expiration?: boolean; tare?: boolean }>>({});
 
   // Bulk fields
   const [bulkCondition, setBulkCondition] = useState("GOOD");
@@ -66,6 +68,7 @@ export function BulkRegisterModal({
           tare: "",
         }))
       );
+      setRowErrors({});
     }
   }, [open, serials]);
 
@@ -78,6 +81,34 @@ export function BulkRegisterModal({
         ...(type === "tare" && { tare: bulkTare }),
       }))
     );
+
+    // AG-COMMENT: Clear corresponding row error flags when bulk values are applied
+    if (type === "expiration" && bulkExpiration.trim()) {
+      setRowErrors((prev) => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach((key) => {
+          const numKey = Number(key);
+          if (updated[numKey]) {
+            updated[numKey] = { ...updated[numKey], expiration: false };
+          }
+        });
+        return updated;
+      });
+    }
+
+    if (type === "tare" && bulkTare.trim() && !isNaN(Number(bulkTare)) && Number(bulkTare) > 0) {
+      setRowErrors((prev) => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach((key) => {
+          const numKey = Number(key);
+          if (updated[numKey]) {
+            updated[numKey] = { ...updated[numKey], tare: false };
+          }
+        });
+        return updated;
+      });
+    }
+
     toast.success(`Applied bulk ${type} to all rows`);
   };
 
@@ -95,6 +126,34 @@ export function BulkRegisterModal({
       return;
     }
 
+    // AG-COMMENT: Strictly validate that every serial has expiration date and tare weight (> 0)
+    const newErrors: Record<number, { expiration?: boolean; tare?: boolean }> = {};
+    let hasValidationErrors = false;
+
+    data.forEach((item, idx) => {
+      const expMissing = !item.expiration || !item.expiration.trim();
+      const tareNum = Number(item.tare);
+      const tareMissing = !item.tare || !item.tare.trim() || isNaN(tareNum) || tareNum <= 0;
+
+      if (expMissing || tareMissing) {
+        newErrors[idx] = {
+          expiration: expMissing,
+          tare: tareMissing,
+        };
+        hasValidationErrors = true;
+      }
+    });
+
+    if (hasValidationErrors) {
+      setRowErrors(newErrors);
+      toast.error("Validation Required", {
+        description: "All serial numbers must have an expiration date and a tare weight (> 0 KG) before registering.",
+        duration: 5000,
+      });
+      return;
+    }
+
+    setRowErrors({});
     setIsSubmitting(true);
     try {
       const isEmptyUom = unitName?.trim().toUpperCase() === "EMPTY";
@@ -106,8 +165,9 @@ export function BulkRegisterModal({
         cylinder_status: draftStatus,
         cylinder_condition: item.condition,
         current_branch_id: parsedBranchId,
-        expiration_date: item.expiration || null,
-        tare_weight: item.tare || "0.00",
+        expiration_date: item.expiration.trim(),
+        tare_weight: parseFloat(item.tare).toFixed(2),
+        remarks: "Registered via Stock Adjustment",
       }));
 
       const res = await fetch("/api/ids/scm/inventory-management/stock-adjustment-serial-registration/register-assets", {
@@ -141,7 +201,7 @@ export function BulkRegisterModal({
              <div>
                 <DialogTitle className="text-xl font-bold">Bulk Register Cylinders</DialogTitle>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Apply specific fields to all <span className="font-bold text-primary">{serials.length}</span> serials.
+                  Apply required expiration date and tare weight to all <span className="font-bold text-primary">{serials.length}</span> serials.
                 </p>
              </div>
           </div>
@@ -170,7 +230,10 @@ export function BulkRegisterModal({
 
             <div className="flex-1 space-y-2">
               <div className="flex items-center justify-between">
-                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Bulk Expiration</Label>
+                {/* AG-COMMENT: Mark Bulk Expiration as required with red asterisk */}
+                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                  Bulk Expiration <span className="text-red-500">*</span>
+                </Label>
                 <button onClick={() => applyBulk("expiration")} className="text-[10px] font-bold text-primary hover:underline">Apply to All</button>
               </div>
               <Input
@@ -183,11 +246,15 @@ export function BulkRegisterModal({
 
             <div className="flex-1 space-y-2">
               <div className="flex items-center justify-between">
-                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Bulk Tare (KG)</Label>
+                {/* AG-COMMENT: Mark Bulk Tare as required with red asterisk */}
+                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                  Bulk Tare (KG) <span className="text-red-500">*</span>
+                </Label>
                 <button onClick={() => applyBulk("tare")} className="text-[10px] font-bold text-primary hover:underline">Apply to All</button>
               </div>
               <Input 
-                type="number" 
+                type="number"
+                step="0.01"
                 value={bulkTare} 
                 onChange={(e) => setBulkTare(e.target.value)}
                 placeholder="0.00"
@@ -200,63 +267,97 @@ export function BulkRegisterModal({
           <div className="flex items-center gap-4 px-6 py-2 bg-slate-100 dark:bg-slate-800/50 rounded-lg text-[10px] font-black uppercase tracking-widest text-muted-foreground border border-border/50">
              <div className="w-[25%]">Serial Number</div>
              <div className="w-[25%]">Cylinder Condition</div>
-             <div className="w-[25%]">Expiration Date</div>
-             <div className="w-[25%]">Tare Weight (KG)</div>
+             <div className="w-[25%]">
+               Expiration Date <span className="text-red-500">*</span>
+             </div>
+             <div className="w-[25%]">
+               Tare Weight (KG) <span className="text-red-500">*</span>
+             </div>
           </div>
 
           {/* Table Body */}
           <ScrollArea className="h-[400px] pr-4">
              <div className="space-y-3">
-                {data.map((item, idx) => (
-                  <div key={idx} className="flex items-center gap-4 px-6 py-3 border border-border/50 rounded-xl hover:bg-muted/30 transition-colors bg-white dark:bg-slate-900/40">
-                     <div className="w-[25%]">
-                        <span className="font-mono text-sm font-bold truncate text-primary block">{item.serial}</span>
-                     </div>
-                     
-                     <div className="w-[25%]">
-                        <Select 
-                          value={item.condition} 
-                          onValueChange={(val) => setData(prev => prev.map((d, i) => i === idx ? { ...d, condition: val } : d))}
-                        >
-                          <SelectTrigger className="h-9">
-                            <SelectValue />
-                          </SelectTrigger>
-                           <SelectContent>
-                             <SelectItem value="GOOD">GOOD</SelectItem>
-                             <SelectItem value="FOR_REPAIR">FOR REPAIR</SelectItem>
-                             <SelectItem value="DAMAGED">DAMAGED</SelectItem>
-                             <SelectItem value="SCRAP">SCRAP</SelectItem>
-                           </SelectContent>
-                        </Select>
-                     </div>
+                {data.map((item, idx) => {
+                  const rowErr = rowErrors[idx];
+                  return (
+                    <div key={idx} className={`flex items-center gap-4 px-6 py-3 border rounded-xl hover:bg-muted/30 transition-colors bg-white dark:bg-slate-900/40 ${
+                      rowErr?.expiration || rowErr?.tare ? "border-red-400 dark:border-red-800/60 bg-red-50/10" : "border-border/50"
+                    }`}>
+                       <div className="w-[25%]">
+                          <span className="font-mono text-sm font-bold truncate text-primary block">{item.serial}</span>
+                       </div>
+                       
+                       <div className="w-[25%]">
+                          <Select 
+                            value={item.condition} 
+                            onValueChange={(val) => setData(prev => prev.map((d, i) => i === idx ? { ...d, condition: val } : d))}
+                          >
+                            <SelectTrigger className="h-9">
+                              <SelectValue />
+                            </SelectTrigger>
+                             <SelectContent>
+                               <SelectItem value="GOOD">GOOD</SelectItem>
+                               <SelectItem value="FOR_REPAIR">FOR REPAIR</SelectItem>
+                               <SelectItem value="DAMAGED">DAMAGED</SelectItem>
+                               <SelectItem value="SCRAP">SCRAP</SelectItem>
+                             </SelectContent>
+                          </Select>
+                       </div>
 
-                     <div className="w-[25%]">
-                        <Input
-                          type="date"
-                          value={item.expiration}
-                          onChange={(e) => setData(prev => prev.map((d, i) => i === idx ? { ...d, expiration: e.target.value } : d))}
-                          className="h-9 bg-background"
-                        />
-                     </div>
+                       <div className="w-[25%]">
+                          <Input
+                            type="date"
+                            value={item.expiration}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setData(prev => prev.map((d, i) => i === idx ? { ...d, expiration: val } : d));
+                              if (rowErrors[idx]?.expiration && val.trim()) {
+                                setRowErrors(prev => ({
+                                  ...prev,
+                                  [idx]: { ...prev[idx], expiration: false }
+                                }));
+                              }
+                            }}
+                            className={`h-9 bg-background ${rowErr?.expiration ? "border-red-500 ring-1 ring-red-500 bg-red-50/30 dark:bg-red-950/20" : ""}`}
+                          />
+                          {rowErr?.expiration && (
+                            <span className="text-[9px] text-red-500 font-bold mt-0.5 block">Expiration is required</span>
+                          )}
+                       </div>
 
-                     <div className="w-[25%]">
-                        <Input 
-                          type="number" 
-                          value={item.tare} 
-                          onChange={(e) => setData(prev => prev.map((d, i) => i === idx ? { ...d, tare: e.target.value } : d))}
-                          placeholder="0.00"
-                          className="h-9"
-                        />
-                     </div>
-                  </div>
-                ))}
+                       <div className="w-[25%]">
+                          <Input 
+                            type="number" 
+                            step="0.01"
+                            value={item.tare} 
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setData(prev => prev.map((d, i) => i === idx ? { ...d, tare: val } : d));
+                              if (rowErrors[idx]?.tare && val.trim() && !isNaN(Number(val)) && Number(val) > 0) {
+                                setRowErrors(prev => ({
+                                  ...prev,
+                                  [idx]: { ...prev[idx], tare: false }
+                                }));
+                              }
+                            }}
+                            placeholder="0.00"
+                            className={`h-9 bg-background ${rowErr?.tare ? "border-red-500 ring-1 ring-red-500 bg-red-50/30 dark:bg-red-950/20" : ""}`}
+                          />
+                          {rowErr?.tare && (
+                            <span className="text-[9px] text-red-500 font-bold mt-0.5 block">Tare is required (&gt; 0)</span>
+                          )}
+                       </div>
+                    </div>
+                  );
+                })}
              </div>
           </ScrollArea>
         </div>
 
         <DialogFooter className="p-6 bg-slate-50 dark:bg-slate-900/50 border-t flex items-center justify-between">
            <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={isSubmitting} className="text-red-600 hover:text-red-700 hover:bg-red-50 font-bold">
-              Clear All
+              Cancel
            </Button>
            <div className="flex gap-3">
               <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting} className="font-bold">

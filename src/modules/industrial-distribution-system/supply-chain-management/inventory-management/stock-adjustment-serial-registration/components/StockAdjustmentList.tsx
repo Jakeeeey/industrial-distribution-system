@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { 
@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
+import { formatTimestampAsIs } from "../utils/date-utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -305,7 +306,7 @@ export function StockAdjustmentList({
                           <div className="flex flex-col">
                             <span className="text-[10px] uppercase font-bold text-muted-foreground/60 mb-0.5">Created At</span>
                             <span className="font-medium text-foreground/80">
-                              {item.created_at ? format(new Date(item.created_at), "MMM d, yyyy, hh:mm a") : "-"}
+                              {formatTimestampAsIs(item.created_at)}
                             </span>
                           </div>
                           
@@ -315,7 +316,7 @@ export function StockAdjustmentList({
                               <div className="flex flex-col">
                                 <span className="text-[10px] uppercase font-bold text-primary">Posted At</span>
                                 <span className="font-bold text-primary/80">
-                                  {item.postedAt ? format(new Date(item.postedAt), "MMM d, yyyy, hh:mm a") : "-"}
+                                  {formatTimestampAsIs(item.postedAt)}
                                 </span>
                               </div>
                               <div className="flex flex-col">

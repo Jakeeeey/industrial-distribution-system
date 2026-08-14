@@ -39,6 +39,7 @@ import {
   TableRow
 } from "@/components/ui/table";
 import { format } from "date-fns";
+import { formatTimestampAsIs } from "../utils/date-utils";
 import { isPostedStatus } from "../utils/status-utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -115,7 +116,7 @@ export function StockAdjustmentDetailView({ id, onBack, mode = "creation" }: Sto
     doc.text("Date Created:", 20, 36);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(15, 23, 42);
-    doc.text(data.created_at ? format(new Date(data.created_at), "yyyy-MM-dd h:mm a") : "-", 50, 36);
+    doc.text(formatTimestampAsIs(data.created_at, "yyyy-MM-dd h:mm a"), 50, 36);
 
     // Right Column
     doc.setTextColor(100, 116, 139);
@@ -349,7 +350,7 @@ export function StockAdjustmentDetailView({ id, onBack, mode = "creation" }: Sto
                   <p className="text-white/60 text-[10px] uppercase font-bold tracking-widest">Date Created</p>
                   <div className="flex items-center gap-2 font-bold text-lg">
                     <Calendar className="h-4 w-4 text-white/80" />
-                    {data.created_at ? format(new Date(data.created_at), "MMM d, yyyy") : "-"}
+                    {formatTimestampAsIs(data.created_at, "MMM d, yyyy")}
                   </div>
                 </div>
 
@@ -407,7 +408,7 @@ export function StockAdjustmentDetailView({ id, onBack, mode = "creation" }: Sto
                         <p className="text-[10px] uppercase font-bold text-primary/70">Posted At</p>
                       </div>
                       <p className="font-bold text-primary/95">
-                        {data.postedAt ? format(new Date(data.postedAt), "MMM d, yyyy, hh:mm a") : "-"}
+                        {formatTimestampAsIs(data.postedAt)}
                       </p>
                     </div>
                     <div className="bg-primary/5 dark:bg-blue-900/10 p-4 rounded-xl border border-primary/20 dark:border-blue-800/20 flex flex-col gap-1 animate-in fade-in slide-in-from-left-2 duration-300">

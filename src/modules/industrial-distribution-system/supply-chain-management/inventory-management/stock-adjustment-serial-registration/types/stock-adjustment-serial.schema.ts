@@ -157,11 +157,23 @@ export const StockAdjustmentProductSchema = z.object({
   cost_per_unit: z.number().optional(),
   price_per_unit: z.number().optional(),
   brand_name: z.string().optional(),
+  category_name: z.string().optional(),
   barcode: z.string().optional(),
   description: z.string().optional(),
   unit_of_measurement: z.object({
     order: z.number(),
     unit_id: z.number().optional(),
+    unit_name: z.string().optional(),
+  }).optional(),
+  product_brand: z.object({
+    brand_id: z.number().optional(),
+    brand_name: z.string().optional(),
+    is_industrial: z.union([z.number(), z.boolean(), z.string()]).optional(),
+  }).optional(),
+  product_category: z.object({
+    category_id: z.number().optional(),
+    category_name: z.string().optional(),
+    is_industrial: z.union([z.number(), z.boolean(), z.string()]).optional(),
   }).optional(),
   unit_id: z.number().optional(),
   current_stock: z.number().optional(),
@@ -169,7 +181,8 @@ export const StockAdjustmentProductSchema = z.object({
     quantity: z.number().optional(),
     count: z.number().optional(),
   }).optional(),
-  is_serialized: z.boolean().optional(),
+  is_serialized: z.union([z.boolean(), z.number(), z.string()]).optional(),
+  is_industrial: z.union([z.boolean(), z.number(), z.string()]).optional(),
   index: z.number().optional(),
 });
 export type StockAdjustmentProduct = z.infer<typeof StockAdjustmentProductSchema>;
