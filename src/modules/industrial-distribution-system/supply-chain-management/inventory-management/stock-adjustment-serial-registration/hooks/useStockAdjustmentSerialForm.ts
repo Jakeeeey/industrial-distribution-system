@@ -174,7 +174,7 @@ export function useStockAdjustmentSerialForm() {
     branchId?: number,
     productId?: number,
     type?: "IN" | "OUT"
-  ): Promise<{ exists: boolean; location?: string; productId?: number; isBlocked?: boolean; errorMsg?: string }> => {
+  ): Promise<{ exists: boolean; location?: string; productId?: number; productName?: string; isBlocked?: boolean; errorMsg?: string }> => {
     try {
       const params = new URLSearchParams();
       params.set("serial", serial);
@@ -191,6 +191,7 @@ export function useStockAdjustmentSerialForm() {
         exists: !!result.exists,
         location: result.location,
         productId: result.productId,
+        productName: result.productName,
         isBlocked: !!result.isBlocked,
         errorMsg: result.errorMsg
       };

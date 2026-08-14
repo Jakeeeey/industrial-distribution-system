@@ -82,8 +82,29 @@ export async function fetchDispatchedRfids(transferIds: number[]): Promise<Stock
 
 /**
  * Fetches products for the transfer request view, including relational fields.
+ * Shows all products where product_category.is_industrial = 1 OR product_brand.is_industrial = 1.
  */
 export async function fetchProducts(search?: string, limit: number = 100, offset: number = 0): Promise<ProductRow[]> {
+  // AG-COMMENT: Show all products where category is_industrial = 1 or brand is_industrial = 1 (matching stock adjustment logic)
+  const andFilters: Record<string, unknown>[] = [
+    {
+      _or: [
+        { product_category: { is_industrial: { _eq: 1 } } },
+        { product_brand: { is_industrial: { _eq: 1 } } },
+      ],
+    },
+  ];
+
+  if (search) {
+    andFilters.push({
+      _or: [
+        { product_name: { _icontains: search } },
+        { product_code: { _icontains: search } },
+        { barcode: { _icontains: search } },
+      ],
+    });
+  }
+
   const params: Record<string, unknown> = {
     fields: [
       "product_id",
@@ -93,31 +114,57 @@ export async function fetchProducts(search?: string, limit: number = 100, offset
       "product_code",
       "cost_per_unit",
       "price_per_unit",
+      "is_serialized",
       "unit_of_measurement.unit_id",
       "unit_of_measurement.unit_name",
       "unit_of_measurement_count",
       "product_brand.brand_id",
       "product_brand.brand_name",
+      "product_brand.is_industrial",
       "product_category.category_id",
       "product_category.category_name",
+      "product_category.is_industrial",
       "product_per_supplier.supplier_id.supplier_shortcut",
     ].join(","),
     limit,
     offset,
-    // Restrict products strictly to Industrial division (is_industrial = 1), serialized SKUs, and ONLY FULL or EMPTY UOMs
-    "filter[product_category][is_industrial][_eq]": 1,
-    "filter[is_serialized][_eq]": 1,
-    "filter[unit_of_measurement][unit_name][_in]": "FULL,EMPTY",
+    sort: "product_name",
+    filter: JSON.stringify({ _and: andFilters }),
   };
 
-  if (search) {
-    params["filter[_and][0][_or][0][product_name][_icontains]"] = search;
-    params["filter[_and][0][_or][1][product_code][_icontains]"] = search;
-    params["filter[_and][0][_or][2][barcode][_icontains]"] = search;
-  }
-
   const res = await fetchItems<ProductRow>("items/products", params);
-  return res.data;
+  const rawProducts = res.data || [];
+
+  // AG-COMMENT: Post-filter to guarantee only is_industrial products are returned and map is_industrial flag
+  return rawProducts
+    .filter((p) => {
+      const category = typeof p.product_category === "object" && p.product_category !== null
+        ? (p.product_category as { is_industrial?: number | boolean | string })
+        : undefined;
+      const brand = typeof p.product_brand === "object" && p.product_brand !== null
+        ? (p.product_brand as { is_industrial?: number | boolean | string })
+        : undefined;
+
+      const isCatInd = category?.is_industrial === 1 || category?.is_industrial === true || String(category?.is_industrial) === "1";
+      const isBrandInd = brand?.is_industrial === 1 || brand?.is_industrial === true || String(brand?.is_industrial) === "1";
+      return isCatInd || isBrandInd;
+    })
+    .map((p) => {
+      const category = typeof p.product_category === "object" && p.product_category !== null
+        ? (p.product_category as { is_industrial?: number | boolean | string })
+        : undefined;
+      const brand = typeof p.product_brand === "object" && p.product_brand !== null
+        ? (p.product_brand as { is_industrial?: number | boolean | string })
+        : undefined;
+
+      const isCatInd = category?.is_industrial === 1 || category?.is_industrial === true || String(category?.is_industrial) === "1";
+      const isBrandInd = brand?.is_industrial === 1 || brand?.is_industrial === true || String(brand?.is_industrial) === "1";
+
+      return {
+        ...p,
+        is_industrial: isCatInd || isBrandInd,
+      };
+    });
 }
 
 type SupplierRecord = { product_id: number; supplier_id: { supplier_shortcut: string } };
@@ -159,8 +206,6 @@ export async function fetchProductSuppliers(productIds: number[]): Promise<Recor
   return supplierMap;
 }
 
-
-
 /**
  * Fetches a single product by its ID with full details.
  */
@@ -174,13 +219,16 @@ export async function fetchProductById(id: number): Promise<ProductRow | null> {
       "product_code",
       "cost_per_unit",
       "price_per_unit",
+      "is_serialized",
       "unit_of_measurement.unit_id",
       "unit_of_measurement.unit_name",
       "unit_of_measurement_count",
       "product_brand.brand_id",
       "product_brand.brand_name",
+      "product_brand.is_industrial",
       "product_category.category_id",
       "product_category.category_name",
+      "product_category.is_industrial",
       "product_per_supplier.supplier_id.supplier_shortcut",
     ].join(","),
     limit: 1,

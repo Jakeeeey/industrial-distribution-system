@@ -21,12 +21,14 @@ export interface UnitOfMeasurement {
 export interface ProductBrand {
   brand_id: number;
   brand_name: string;
+  is_industrial?: number | boolean | string | null;
 }
 
 /** Resolved category object from Directus relational expansion. */
 export interface ProductCategory {
   category_id: number;
   category_name: string;
+  is_industrial?: number | boolean | string | null;
 }
 
 /** Resolved supplier shortcut from Directus nested junction expansion. */
@@ -54,6 +56,7 @@ export interface ProductRow {
   product_category?: ProductCategory | number;
   product_per_supplier?: ProductPerSupplier[];
   is_serialized?: number;
+  is_industrial?: boolean | number;
 }
 
 // ─── Stock Transfer Row Shapes ──────────────────────────────

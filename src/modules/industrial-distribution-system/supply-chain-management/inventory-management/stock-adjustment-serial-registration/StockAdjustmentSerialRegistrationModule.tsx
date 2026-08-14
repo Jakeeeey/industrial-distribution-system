@@ -16,7 +16,7 @@ export default function StockAdjustmentSerialRegistrationModule({ mode = "creati
         id={null}
         onCancel={undefined} // Hides cancel/back-to-list buttons, shows "Clear Form" instead
         onSuccess={() => {
-          router.push("/ids/scm/inventory-management/stock-adjustment-serial-summary");
+          router.push("/industrial-distribution-system/scm/stock-adjustment/stock-adjustment-summary");
         }}
         mode={mode}
       />
