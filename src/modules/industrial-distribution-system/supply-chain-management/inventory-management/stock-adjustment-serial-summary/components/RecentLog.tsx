@@ -5,7 +5,7 @@ import { useStockAdjustmentSerialSummary } from "../hooks/useStockAdjustmentSeri
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { format } from "date-fns";
+import { formatTimestampAsIs } from "../utils/date-utils";
 import {
   ArrowUpCircle,
   ArrowDownCircle,
@@ -126,7 +126,7 @@ export function RecentLog() {
                           <div className="flex flex-col">
                             <span className="text-[10px] uppercase font-bold text-muted-foreground/60 mb-0.5">Created At</span>
                             <span className="font-medium text-foreground/80">
-                              {item.created_at ? format(new Date(item.created_at), "MMM d, yyyy, hh:mm a") : "-"}
+                              {formatTimestampAsIs(item.created_at)}
                             </span>
                           </div>
                           
@@ -136,7 +136,7 @@ export function RecentLog() {
                               <div className="flex flex-col">
                                 <span className="text-[10px] uppercase font-bold text-primary">Posted At</span>
                                 <span className="font-bold text-primary/80">
-                                  {item.postedAt ? format(new Date(item.postedAt), "MMM d, yyyy, hh:mm a") : "-"}
+                                  {formatTimestampAsIs(item.postedAt)}
                                 </span>
                               </div>
                               <div className="flex flex-col">
@@ -177,7 +177,7 @@ export function RecentLog() {
                           <Button 
                             variant="ghost" 
                             size="icon" 
-                            onClick={() => router.push(`/ids/scm/inventory-management/stock-adjustment-serial-posting?id=${item.id}`)} 
+                            onClick={() => router.push(`/industrial-distribution-system/scm/stock-adjustment/stock-adjustment-posting?id=${item.id}`)} 
                             className="text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg h-9 w-9"
                             title="Edit Draft"
                           >
