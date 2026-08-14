@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { AlertTriangle, Plus, Trash2, QrCode, Package, ChevronRight, ChevronLeft } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { CylinderRegistrationModal } from "../CylinderRegistrationModal";
 
 export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => void; onBack: () => void }) {
     const {
@@ -30,6 +31,7 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
         verifiedProductIds,
         serialsByPorId,
         setSerialsByPorId,
+        receiverId
     } = useReceivingProductsManual();
 
     // ✅ Pagination state
@@ -46,14 +48,16 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
     const [newExpiry, setNewExpiry] = React.useState("");
     const inputRef = React.useRef<HTMLInputElement>(null);
 
-    // ✅ Fix 3: Serial Verification state - AG 2026-07-14
+    // ✅ Serial Verification state
     const [verifyingSerial, setVerifyingSerial] = React.useState(false);
-    // Holds the serial that was BLOCKED because it is already in cylinder_assets master - AG 2026-07-14
     const [blockedAssetSerial, setBlockedAssetSerial] = React.useState<{ sn: string; assetId: unknown; status: unknown; condition: unknown } | null>(null);
     const [isBlockedSerialOpen, setIsBlockedSerialOpen] = React.useState(false);
     const [isSerialOverLimitOpen, setIsSerialOverLimitOpen] = React.useState(false);
     const [pendingSerialEntry, setPendingSerialEntry] = React.useState<{ sn: string; tare: string; expiry: string } | null>(null);
     const [isCancelConfirmOpen, setIsCancelConfirmOpen] = React.useState(false);
+    
+    // ✅ Registration Modal state
+    const [pendingRegistration, setPendingRegistration] = React.useState<{ serial: string; productId?: string | number; productName?: string; branchId?: string | number } | null>(null);
 
     // ✅ Auto-focus input when modal opens
     React.useEffect(() => {
@@ -161,7 +165,9 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
     // ✅ Fix 3: Serial Verification — NEW LOGIC (AG 2026-07-14)
     // - Serial NOT in cylinder_assets (requiresRegistration=true) → AUTO-ACCEPT (new asset, free to receive)
     // - Serial IS in cylinder_assets (source="asset") → BLOCK with popup (already registered, cannot duplicate)
-    const addSerial = async () => {
+    const addSerial = async (skipLimitCheckOrEvent?: boolean | any) => {
+        const skipLimitCheck = typeof skipLimitCheckOrEvent === "boolean" ? skipLimitCheckOrEvent : false;
+        
         if (!isPendingValid) {
             toast.error("Incomplete Registration", {
                 description: "Please fulfill all fields: Serial, Tare, and Expiry.",
@@ -192,41 +198,42 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
         }
 
         // 3. Check if over the ordered balance — warn instead of hard block - AG 2026-07-14
-        if (tempSerials.length >= orderedLimit) {
+        if (!skipLimitCheck && tempSerials.length >= orderedLimit) {
             setPendingSerialEntry({ sn: val, tare: newTare, expiry: newExpiry });
             setIsSerialOverLimitOpen(true);
             return;
         }
-
-        // 4. Verify against Cylinder Asset master DB - AG 2026-07-14
+        // 4. Verify against Cylinder Asset master DB
         setVerifyingSerial(true);
         try {
             const res = await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    action: "validate_scan_serial",
+                    action: "validate_serial",
                     serialNumber: val,
-                    poId: selectedPO?.id,
+                    poType: "NORMAL",
                 }),
             });
             const j = await res.json();
             const result = j?.data;
 
-            if (result?.source === "asset") {
-                // ❌ BLOCKED: Serial is already registered in cylinder_assets master — cannot receive a duplicate - AG 2026-07-14
-                setBlockedAssetSerial({
-                    sn: val,
-                    assetId: result.asset?.id,
-                    status: result.asset?.cylinder_status,
-                    condition: result.asset?.cylinder_condition,
-                });
-                setIsBlockedSerialOpen(true);
-                return; // Do NOT add to tempSerials
+            if (result?.status === "REJECTED") {
+                toast.error("Serial Rejected", { description: result.message });
+                return;
             }
 
-            // ✅ AUTO-ACCEPT: Serial not in cylinder_assets (requiresRegistration=true) or matched via PO serial tag
-            // New cylinders / PO-tagged serials can always be received without registration friction.
+            if (result?.status === "REQUIRES_REGISTRATION") {
+                setPendingRegistration({
+                    serial: val,
+                    productId: activeItem?.productId,
+                    productName: activeItem?.name,
+                    branchId: activeItem?.branchId
+                });
+                return; // Wait for modal to handle registration
+            }
+
+            // ACCEPTED
             setTempSerials(prev => [...prev, { sn: val, tareWeight: newTare, expiryDate: newExpiry }]);
             setNewSerial("");
             setNewTare("");
@@ -239,19 +246,39 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
         }
     };
 
-    // ✅ Confirm adding an over-limit serial (user acknowledged warning) - AG 2026-07-14
-    const confirmAddOverLimitSerial = async () => {
-        if (!pendingSerialEntry) return;
-        setTempSerials(prev => [...prev, { sn: pendingSerialEntry.sn, tareWeight: pendingSerialEntry.tare, expiryDate: pendingSerialEntry.expiry }]);
-        setPendingSerialEntry(null);
-        setIsSerialOverLimitOpen(false);
+    const handleRegistrationSuccess = (sn: string) => {
+        setTempSerials(prev => [...prev, { sn, tareWeight: newTare, expiryDate: newExpiry }]);
         setNewSerial("");
         setNewTare("");
         setNewExpiry("");
         setTimeout(() => inputRef.current?.focus(), 10);
     };
 
+    // ✅ Confirm adding an over-limit serial (user acknowledged warning) - AG 2026-07-14
+    const confirmAddOverLimitSerial = async () => {
+        if (!pendingSerialEntry) return;
+        setIsSerialOverLimitOpen(false);
+        // We restore the pending entry values into the inputs temporarily so addSerial reads them
+        setNewSerial(pendingSerialEntry.sn);
+        setNewTare(pendingSerialEntry.tare);
+        setNewExpiry(pendingSerialEntry.expiry);
+        
+        // Use a slight delay to allow state update before validation
+        setTimeout(() => {
+            addSerial(true);
+            setPendingSerialEntry(null);
+        }, 0);
+    };
+
     const removeSerial = (index: number) => {
+        const serialToRemove = tempSerials[index];
+        if (serialToRemove) {
+            fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "deregister_serial", serialNumber: serialToRemove.sn })
+            }).catch(() => null);
+        }
         setTempSerials(tempSerials.filter((_, i) => i !== index));
     };
 
@@ -761,6 +788,14 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                                                         headers: { "Content-Type": "application/json" },
                                                         body: JSON.stringify({ action: "delete_presaved_serials", serialNumbers: toDelete }),
                                                     });
+                                                    // Also deregister from draft to prevent ghost records
+                                                    toDelete.forEach(sn => {
+                                                        fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                                                            method: "POST",
+                                                            headers: { "Content-Type": "application/json" },
+                                                            body: JSON.stringify({ action: "deregister_serial", serialNumber: sn })
+                                                        }).catch(() => null);
+                                                    });
                                                 } catch (e) {
                                                     console.error("Failed to bulk clear serials", e);
                                                 }
@@ -845,6 +880,19 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                     </div>
                 </DialogContent>
             </Dialog>
+
+            {pendingRegistration && (
+                <CylinderRegistrationModal
+                    open={!!pendingRegistration}
+                    onClose={() => setPendingRegistration(null)}
+                    onSuccess={handleRegistrationSuccess}
+                    serialNumber={pendingRegistration.serial}
+                    productId={pendingRegistration.productId || ""}
+                    productName={pendingRegistration.productName || ""}
+                    currentBranchId={pendingRegistration.branchId}
+                    userId={receiverId}
+                />
+            )}
         </div>
     );
 }

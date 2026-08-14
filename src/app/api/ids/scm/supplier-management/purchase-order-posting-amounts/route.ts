@@ -613,7 +613,17 @@ function buildReceiptSummary(porRows: PORRow[], priceMap?: Map<number, number>, 
         }
     }
 
-    const pendingInventoryReceiptsCount = receipts.filter((r) => toNum(r.isPosted) === 0).length;
+    let loosePendingCount = 0;
+    for (const r of porRows ?? []) {
+        const rn = toStr(r?.receipt_no);
+        if (!rn) {
+            if (toNum(r.isPosted) === 0 && toNum(r.received_quantity) > 0) {
+                loosePendingCount = 1;
+            }
+        }
+    }
+
+    const pendingInventoryReceiptsCount = receipts.filter((r) => toNum(r.isPosted) === 0).length + loosePendingCount;
 
     return { receipts, receiptsCount, unpostedReceiptsCount, pendingInventoryReceiptsCount, postedQty, unpostedQty, postedAmt, unpostedAmt };
 }
@@ -1012,7 +1022,7 @@ export async function POST(req: NextRequest) {
 
             const poUrl =
                 `${base}/items/${PO_COLLECTION}/${encodeURIComponent(String(poId))}` +
-                `?fields=purchase_order_id,purchase_order_no,date,date_encoded,supplier_name,total_amount,date_received,inventory_status,gross_amount,discounted_amount,vat_amount,withholding_tax_amount,discount_type.*,discount_type.line_per_discount_type.line_id.*,price_type,is_posted`;
+                `?fields=purchase_order_id,purchase_order_no,date,date_encoded,supplier_name,total_amount,date_received,inventory_status,gross_amount,discounted_amount,vat_amount,withholding_tax_amount,discount_type.*,discount_type.line_per_discount_type.line_id.*,price_type,is_posted,receiving_type`;
 
             const pj = await fetchJson(poUrl) as { data: Record<string, unknown> };
             const po = pj?.data ?? null;
@@ -1264,7 +1274,7 @@ export async function POST(req: NextRequest) {
             let detailTotal = 0;
 
             // ALWAYS calculate footer dynamically from exact items to reflect price changes and correct formulas
-            const poIsInvoice = (toNum(po?.vat_amount) > 0) || (toNum(po?.withholding_tax_amount) > 0);
+            const poIsInvoice = Number(po?.receiving_type) === 2 || (toNum(po?.vat_amount) > 0) || (toNum(po?.withholding_tax_amount) > 0);
             
             for (const arr of Array.from(itemsByGroup.values())) {
                 for (const item of arr) {
@@ -1399,7 +1409,7 @@ export async function POST(req: NextRequest) {
             }
 
             // --- Persist Live Exact Values for Post ---
-            const poUrl = `${base}/items/${PO_COLLECTION}/${poId}?fields=supplier_name,discount_type.*,discount_type.line_per_discount_type.line_id.*,vat_amount,withholding_tax_amount,is_posted,inventory_status`;
+            const poUrl = `${base}/items/${PO_COLLECTION}/${poId}?fields=supplier_name,discount_type.*,discount_type.line_per_discount_type.line_id.*,vat_amount,withholding_tax_amount,is_posted,inventory_status,receiving_type`;
             const pj = await fetchJson(poUrl) as { data: Record<string, unknown> };
             const po = pj?.data;
 
@@ -1409,7 +1419,7 @@ export async function POST(req: NextRequest) {
             }
 
             const sid = toNum(po?.supplier_name);
-            const poIsInvoice = (toNum(po?.vat_amount) > 0) || (toNum(po?.withholding_tax_amount) > 0);
+            const poIsInvoice = Number(po?.receiving_type) === 2 || (toNum(po?.vat_amount) > 0) || (toNum(po?.withholding_tax_amount) > 0);
 
             // PO Global Discount
             const poDType = po?.discount_type as Record<string, unknown> | null | undefined;

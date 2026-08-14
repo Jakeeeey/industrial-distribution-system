@@ -159,6 +159,9 @@ type Ctx = {
     saveReceipt: (porMetaData?: Record<string, { lotNo: string; batchNo?: string; expiryDate: string }>) => Promise<void>;
     savingReceipt: boolean;
     saveError: string;
+    
+    // NEW: User Context
+    receiverId?: number;
 
     // ✅ NEW: Verification/Checklist
     verifiedProductIds: string[];
@@ -433,10 +436,23 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
                 ) : false;
 
                 if (hasDraftData && draft) {
-                    setManualCounts(draft.manualCounts || {});
+                    const validKeys = new Set(
+                        (detail?.allocations || []).flatMap(a => 
+                            (a.items || []).flatMap(i => [i.porId, i.id]).filter(Boolean)
+                        )
+                    );
+                    const filterDraftObj = (obj: any) => {
+                        const newObj: any = {};
+                        for (const [k, v] of Object.entries(obj || {})) {
+                            if (validKeys.has(k)) newObj[k] = v;
+                        }
+                        return newObj;
+                    };
+
+                    setManualCounts(filterDraftObj(draft.manualCounts));
                     setVerifiedProductIds(draft.verifiedProductIds || []);
-                    setMetaDataByPorId(draft.metaDataByPorId || {});
-                    setSerialsByPorId(draft.serialsByPorId || {});
+                    setMetaDataByPorId(filterDraftObj(draft.metaDataByPorId));
+                    setSerialsByPorId(filterDraftObj(draft.serialsByPorId));
                     setReceiptNo(draft.receiptNo || "");
                     setReceiptType(draft.receiptType || "");
                     setReceiptDate(draft.receiptDate || todayYMD());
@@ -829,6 +845,7 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
     }, [selectedPO, receiptNo, receiptType, receiptDate, manualCounts, serialsByPorId, refreshList, resetSession, receiverId, editingRevertedReceiptNo]);
 
     const value: Ctx = {
+        receiverId,
         list,
         poList: list,
 

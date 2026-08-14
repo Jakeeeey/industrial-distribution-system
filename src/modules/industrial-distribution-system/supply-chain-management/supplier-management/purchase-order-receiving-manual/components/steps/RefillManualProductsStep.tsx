@@ -135,6 +135,7 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
                 productId: Number(it.productId),
                 productName: it.name,
                 branchName: it.branchName ?? "Unassigned",
+                branchId: it.branchId,
                 expectedQty: expected,
                 scannedCount: serialsByPorId[id]?.length || 0,
             };

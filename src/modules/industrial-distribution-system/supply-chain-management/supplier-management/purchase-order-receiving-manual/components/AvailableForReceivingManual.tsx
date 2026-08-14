@@ -393,7 +393,7 @@ export function AvailableForReceivingManual() {
 
 function receivingTabFor(po: { status?: string; inventoryStatus?: number; isRefill?: boolean }): ReceivingListTab {
     const status = String(po.status || "").toUpperCase();
-    if (status === "CLOSED" || status === "RECEIVED" || Number(po.inventoryStatus) === 6) {
+    if (Number(po.inventoryStatus) === 6) {
         return "received";
     }
     return po.isRefill ? "refill" : "normal";
