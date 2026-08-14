@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useForm, useFieldArray, useWatch, Control, UseFormSetValue, useFormState, FieldErrors } from "react-hook-form";
+import { useForm, useFieldArray, useWatch, Control } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   AlertCircle,
@@ -46,7 +46,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Combobox,
@@ -316,17 +315,14 @@ export function StockAdjustmentForm({
     fetchBranchSerialData,
     fetchBranchInventory,
     serialProductIds,
-    inventoryMap,
     fetchNextDocNo,
     postAdjustment,
     validateSerialAvailability,
-    deleteAdjustment,
   } = useStockAdjustmentSerialForm();
 
   const [loading, setLoading] = useState(false);
   const [showSerialInput, setShowSerialInput] = useState(false);
   const [showPostConfirmation, setShowPostConfirmation] = useState(false);
-  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [scannerContext, setScannerContext] = useState<{ index: number; productName: string } | null>(null);
   const [isScannerPreparing, setIsScannerPreparing] = useState(false);
   const [branchInputValue, setBranchInputValue] = useState("");
@@ -336,17 +332,13 @@ export function StockAdjustmentForm({
   const [docInputValue, setDocInputValue] = useState("");
   const [docSearch, setDocSearch] = useState("");
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [tableSearch, setTableSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
   const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
   const [pendingExitAction, setPendingExitAction] = useState<string | (() => void) | null>(null);
   const initialValuesRef = useRef<string>("");
 
-  const [scanLog, setScanLog] = useState<Array<{ serial: string; status: 'success' | 'error' | 'validating'; message: string; timestamp: Date }>>([]);
-  const [globalScanInputVal, setGlobalScanInputVal] = useState("");
   const [isGlobalScanValidating, setIsGlobalScanValidating] = useState(false);
   const globalScanInputRef = useRef<HTMLInputElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -366,7 +358,7 @@ export function StockAdjustmentForm({
     },
   });
 
-  const { fields, remove } = useFieldArray({
+  const { fields } = useFieldArray({
     control: form.control,
     name: "items",
   });
@@ -844,21 +836,6 @@ export function StockAdjustmentForm({
     )();
   };
 
-  const confirmDelete = async () => {
-    setShowDeleteConfirmation(false);
-    if (!id) return;
-    setLoading(true);
-    try {
-      await deleteAdjustment(id);
-      toast.success("Adjustment Deleted Successfully");
-      onSuccess();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to delete adjustment");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const onInvalid = () => {
     toast.error("Please fill in all required fields correctly.");
   };
@@ -898,89 +875,6 @@ export function StockAdjustmentForm({
     },
     [id, createAdjustment, updateAdjustment, onSuccess, form]
   );
-
-  const handleSaveAndExit = useCallback(async () => {
-    setShowUnsavedChangesModal(false);
-    await form.handleSubmit(
-      async (values: StockAdjustmentFormValues) => {
-        const missingSerialItem = values.items.find(
-          (item: StockAdjustmentItem) => (item.is_serialized || item.unit_order === 3) && (!item.serial_numbers || item.serial_numbers.length === 0)
-        );
-
-        if (missingSerialItem) {
-          toast.error("Serial Number Required", {
-            description: `Product "${missingSerialItem.product_name || "Unknown"}" is serialized. Please add serial numbers before saving.`,
-            duration: 5000,
-          });
-          return;
-        }
-
-        setLoading(true);
-        try {
-          if (id) {
-            await updateAdjustment(id, values);
-            toast.success("Adjustment Saved Successfully");
-          } else {
-            await createAdjustment(values);
-            toast.success("Adjustment Created Successfully");
-          }
-
-          if (typeof pendingExitAction === "function") {
-            pendingExitAction();
-          } else if (typeof pendingExitAction === "string") {
-            router.push(pendingExitAction);
-          } else {
-            router.push("/industrial-distribution-system/scm/stock-adjustment/stock-adjustment-summary");
-          }
-        } catch (error: unknown) {
-          const message = error instanceof Error ? error.message : "Failed to save adjustment";
-          toast.error(message);
-        } finally {
-          setLoading(false);
-          setPendingExitAction(null);
-        }
-      },
-      onInvalid
-    )();
-  }, [id, createAdjustment, updateAdjustment, router, form, pendingExitAction]);
-
-  const handleConfirmModalItems = useCallback(
-    (newItems: StockAdjustmentItem[]) => {
-      const branchId = form.getValues("branch_id");
-      const currentType = form.getValues("type");
-
-      const mapped = newItems.map((item: StockAdjustmentItem) => ({
-        ...item,
-        branch_id: branchId,
-        type: currentType
-      }));
-
-      form.setValue("items", mapped, { shouldValidate: true });
-
-      mapped.forEach((item, idx) => {
-        const pid = Number(item.product_id);
-        const cachedStock = inventoryMap.get(pid) ?? 0;
-        if (cachedStock === 0) {
-          fetchInventory(pid, branchId).then((stock: number) => {
-            form.setValue(`items.${idx}.current_stock`, stock);
-          }).catch(console.error);
-        } else {
-          form.setValue(`items.${idx}.current_stock`, cachedStock);
-        }
-      });
-    },
-    [form, fetchInventory, inventoryMap]
-  );
-
-  const handleSerialSave = useCallback((serials: string[]) => {
-    if (scannerContext) {
-      const { index } = scannerContext;
-      form.setValue(`items.${index}.serial_numbers`, serials);
-      form.setValue(`items.${index}.quantity`, serials.length, { shouldValidate: true });
-      form.setValue(`items.${index}.serial_count`, serials.length);
-      setScannerContext(null);
-    }
-  }, [scannerContext, form]);
 
   const handleOpenSerialInput = useCallback((index: number) => {
     const productName = form.getValues(`items.${index}.product_name`) ?? "Product";

@@ -5,7 +5,6 @@ import { useStockAdjustmentSerialSummary } from "../hooks/useStockAdjustmentSeri
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { format } from "date-fns";
 import { formatTimestampAsIs } from "../utils/date-utils";
 import {
   ArrowUpCircle,

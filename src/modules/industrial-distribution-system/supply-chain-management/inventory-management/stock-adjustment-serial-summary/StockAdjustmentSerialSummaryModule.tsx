@@ -8,14 +8,12 @@ import { RecentLog } from "./components/RecentLog";
 import { ModuleSkeleton } from "@/components/shared/ModuleSkeleton";
 import ErrorPage from "@/components/shared/ErrorPage";
 import { Button } from "@/components/ui/button";
-import { BarChart3, RotateCcw, Plus } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { BarChart3, RotateCcw } from "lucide-react";
 
 // Removed OverviewCharts and ProductSupplierCharts imports per user request to simplify summary views.
 
 function StockAdjustmentSummaryInner() {
   const { isLoading, error, refresh, rawData } = useStockAdjustmentSerialSummaryContext();
-  const router = useRouter();
 
   if (isLoading && rawData.length === 0) {
     return <ModuleSkeleton hasTabs={false} rowCount={6} />;

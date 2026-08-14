@@ -276,7 +276,7 @@ export const stockAdjustmentService = {
       .map((i) => (typeof i.product_id === 'object' && i.product_id !== null ? Number(i.product_id.product_id || i.product_id.id) : Number(i.product_id)))
       .filter((id) => !isNaN(id) && id > 0);
 
-    let productMap = new Map<number, { product_name: string; product_code?: string; barcode?: string; brand_name?: string; unit_name?: string; unit_order?: number }>();
+    const productMap = new Map<number, { product_name: string; product_code?: string; barcode?: string; brand_name?: string; unit_name?: string; unit_order?: number }>();
     if (missingProdIds.length > 0) {
       try {
         const prodRes = await directusFetch<{

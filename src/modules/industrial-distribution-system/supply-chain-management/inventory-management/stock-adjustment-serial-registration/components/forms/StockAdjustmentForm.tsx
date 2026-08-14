@@ -52,7 +52,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Combobox,
@@ -368,29 +367,6 @@ function SerialBanner({ control }: { control: Control<StockAdjustmentFormValues>
       </div>
     </div>
   );
-}
-
-function playTone(
-  audioContext: AudioContext,
-  frequency: number,
-  durationMs: number,
-  startAt: number,
-): void {
-  const oscillator = audioContext.createOscillator();
-  const gainNode = audioContext.createGain();
-
-  oscillator.type = "sine";
-  oscillator.frequency.setValueAtTime(frequency, startAt);
-
-  gainNode.gain.setValueAtTime(0.0001, startAt);
-  gainNode.gain.exponentialRampToValueAtTime(0.08, startAt + 0.01);
-  gainNode.gain.exponentialRampToValueAtTime(0.0001, startAt + durationMs / 1000);
-
-  oscillator.connect(gainNode);
-  gainNode.connect(audioContext.destination);
-
-  oscillator.start(startAt);
-  oscillator.stop(startAt + durationMs / 1000);
 }
 
 // ——————————————————————————————————————————————————————————————————————————————
@@ -757,7 +733,7 @@ export function StockAdjustmentForm({
   };
 
   // AG-COMMENT: Enhanced onInvalid callback to show specific error toast feedback when required inputs are not filled
-  const onInvalid = (errors: FieldErrors<StockAdjustmentFormValues>) => {
+  const onInvalid = useCallback((errors: FieldErrors<StockAdjustmentFormValues>) => {
     if (errors.branch_id) {
       toast.error("Branch is required", { description: "Please select a branch before saving." });
       return;
@@ -779,7 +755,7 @@ export function StockAdjustmentForm({
       return;
     }
     toast.error("Please fill in all required fields highlighted in red.");
-  };
+  }, [fields.length]);
 
   const onSubmit = useCallback(
     async (values: StockAdjustmentFormValues) => {
@@ -860,7 +836,7 @@ export function StockAdjustmentForm({
       },
       onInvalid
     )();
-  }, [id, createAdjustment, updateAdjustment, router, form, pendingExitAction]);
+  }, [id, createAdjustment, updateAdjustment, router, form, pendingExitAction, onInvalid]);
 
   const handleConfirmModalItems = useCallback(
     (newItems: StockAdjustmentItem[]) => {
