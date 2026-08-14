@@ -339,6 +339,8 @@ export function StockAdjustmentForm({
   const [pendingExitAction, setPendingExitAction] = useState<string | (() => void) | null>(null);
   const initialValuesRef = useRef<string>("");
 
+  const [, setScanLog] = useState<Array<{ serial: string; status: 'success' | 'error' | 'validating'; message: string; timestamp: Date }>>([]);
+  const [, setGlobalScanInputVal] = useState("");
   const [isGlobalScanValidating, setIsGlobalScanValidating] = useState(false);
   const globalScanInputRef = useRef<HTMLInputElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
