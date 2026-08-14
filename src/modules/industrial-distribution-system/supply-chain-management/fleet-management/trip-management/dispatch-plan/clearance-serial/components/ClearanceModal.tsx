@@ -134,6 +134,8 @@ const ClearanceModal: React.FC<ClearanceModalProps> = ({ isOpen, onClose, onSucc
                     missingQtys: statusChanged ? {} : inv.missingQtys,
                     scannedQtys: statusChanged ? {} : inv.scannedQtys,
                     scannedSerials: statusChanged ? {} : inv.scannedSerials,
+                    scannedMissingQtys: statusChanged ? {} : inv.scannedMissingQtys,
+                    scannedMissingSerials: statusChanged ? {} : inv.scannedMissingSerials,
                     remarks: statusChanged ? '' : inv.remarks
                 };
             }
@@ -195,9 +197,27 @@ const ClearanceModal: React.FC<ClearanceModalProps> = ({ isOpen, onClose, onSucc
         });
     };
 
-    const handleConfirmProductReconciliation = (id: number, status: string, remarks: string, missingQtys: Record<string | number, number>, scannedQtys: Record<string | number, number>, scannedSerials: Record<string | number, string[]>) => {
+    const handleConfirmProductReconciliation = (
+        id: number,
+        status: string,
+        remarks: string,
+        missingQtys: Record<string | number, number>,
+        scannedQtys: Record<string | number, number>,
+        scannedSerials: Record<string | number, string[]>,
+        scannedMissingQtys?: Record<string | number, number>,
+        scannedMissingSerials?: Record<string | number, string[]>
+    ) => {
         setInvoices(prev => prev.map(inv =>
-            inv.id === id ? { ...inv, status: status as ReconciliationRow['status'], remarks, missingQtys, scannedQtys, scannedSerials } : inv
+            inv.id === id ? {
+                ...inv,
+                status: status as ReconciliationRow['status'],
+                remarks,
+                missingQtys,
+                scannedQtys,
+                scannedSerials,
+                scannedMissingQtys,
+                scannedMissingSerials
+            } : inv
         ));
         // Auto-select row after reconciliation if not already selected
         setSelectedIds(prev => {
@@ -366,11 +386,14 @@ const ClearanceModal: React.FC<ClearanceModalProps> = ({ isOpen, onClose, onSucc
                                                                     </div>
                                                                 </SelectItem>
                                                             )}
-                                                            <SelectItem value="Unfulfilled" className="rounded-lg mb-1 focus:bg-rose-500/10 focus:text-rose-500 font-bold hover:bg-rose-500/10 data-[state=checked]:bg-rose-600 data-[state=checked]:text-white transition-colors">
-                                                                <div className="flex items-center gap-2">
-                                                                    <PackageX className="w-4 h-4" /> Unfulfilled
-                                                                </div>
-                                                            </SelectItem>
+                                                            {/* DEV-RULE: If sales invoice is_visit is 1, do not show 'Unfulfilled' status option */}
+                                                            {Number(inv.is_visit) !== 1 && (
+                                                                <SelectItem value="Unfulfilled" className="rounded-lg mb-1 focus:bg-rose-500/10 focus:text-rose-500 font-bold hover:bg-rose-500/10 data-[state=checked]:bg-rose-600 data-[state=checked]:text-white transition-colors">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <PackageX className="w-4 h-4" /> Unfulfilled
+                                                                    </div>
+                                                                </SelectItem>
+                                                            )}
                                                             {inv.is_visit !== 0 && (
                                                                 <>
                                                                     <SelectItem value="Fulfilled with Concerns" className="rounded-lg mb-1 focus:bg-amber-500/10 focus:text-amber-500 font-bold hover:bg-amber-500/10 data-[state=checked]:bg-amber-500 data-[state=checked]:text-white transition-colors">
