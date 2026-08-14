@@ -131,36 +131,76 @@ const ScanningModal: React.FC<ScanningModalProps> = ({
         if (tags.length === 0) return;
 
         for (const tag of tags) {
+            // DEV-RULE: Output detailed scan diagnostic reasoning directly to the debug console
+            console.groupCollapsed(`%c🔍 [Serial Scan] "${tag}"`, 'color: #2563eb; font-weight: bold;');
+            console.log('[Dispatch Serials on Truck]:', serialNumbers.map(s => `${s.serial} (${s.cylinder_status || 'AVAILABLE'})`));
+            console.log('[Target Invoice Items]:', items.map(i => ({ id: i.id, product_id: i.product_id, name: i.product_name, qty: i.qty, scanned: scannedQtysRef.current[i.id] || 0 })));
+
+            // 1. Global duplicate validation
             if (globalScannedSerials.includes(tag)) {
+                console.log(`[Serial Scan REJECTED] Serial "${tag}" has already been scanned in another invoice on this dispatch!`);
+                console.groupEnd();
                 if (tags.length < 5) toast.warning(`Serial ${tag} has already been scanned in another invoice in this dispatch!`);
                 playSound('error');
                 continue;
             }
 
+            // 2. Active session duplicate validation
             if (scannedTagsRef.current.has(tag)) {
+                console.log(`[Serial Scan WARNING] Serial "${tag}" was already scanned in this active session.`);
+                console.groupEnd();
                 if (tags.length < 5) toast.warning(`Serial ${tag} already scanned!`);
                 playSound('error');
                 continue;
             }
 
+            // 3. Dispatch serial mapping check
             const mapping = serialNumbers.find(t => t.serial?.toUpperCase() === tag);
             
             if (!mapping) {
-                toast.error(`Invalid Serial Number: ${tag.substring(0, 8)}...`);
+                console.log(`[Serial Scan REJECTED] Serial "${tag}" not found in this dispatch plan's assigned cylinder assets. Total loaded on truck: ${serialNumbers.length}`);
+                console.groupEnd();
+                toast.error(`Invalid Serial Number: ${tag} (Not on this dispatch)`);
                 playSound('error');
                 continue;
             }
 
+            // 3b. Check if cylinder is already WITH_CUSTOMER (Delivered)
+            if (mapping.cylinder_status === 'WITH_CUSTOMER') {
+                console.log(`[Serial Scan REJECTED] Serial "${tag}" is already marked as WITH_CUSTOMER (Delivered) on this dispatch. Only AVAILABLE missing cylinders can be scanned here.`, { mapping });
+                console.groupEnd();
+                toast.warning(`Serial ${tag} was already delivered to customer (WITH_CUSTOMER).`);
+                playSound('error');
+                continue;
+            }
+
+            // 4. Line item matching check
             const item = items.find(i => Number(i.product_id) === Number(mapping.product_id));
 
-            if (!item || item.is_serialized !== 1) {
-                toast.error(`Product for Serial ${tag.substring(0, 8)}... is not a serialized item.`);
+            if (!item) {
+                console.log(`[Serial Scan REJECTED] Serial "${tag}" belongs to Product ID #${mapping.product_id}, which is not in this invoice's items to reconcile.`, {
+                    mappingProductId: mapping.product_id,
+                    availableInvoiceProductIds: items.map(i => i.product_id)
+                });
+                console.groupEnd();
+                toast.error(`Serial ${tag} belongs to a different product.`);
                 playSound('error');
                 continue;
             }
 
+            if (Number(item.is_serialized) !== 1) {
+                console.log(`[Serial Scan REJECTED] Product "${item.product_name}" is not marked as serialized.`, { is_serialized: item.is_serialized });
+                console.groupEnd();
+                toast.error(`Product for Serial ${tag} is not a serialized item.`);
+                playSound('error');
+                continue;
+            }
+
+            // 5. Quantity limit check
             const currentQty = scannedQtysRef.current[item.id] || 0;
             if (currentQty >= item.qty) {
+                console.log(`[Serial Scan WARNING] Product "${item.product_name}" target quantity already met (${currentQty}/${item.qty}).`);
+                console.groupEnd();
                 if (tags.length < 5) toast.warning(`Product ${item.product_name} is already fully scanned.`);
                 playSound('error');
                 // Track so we don't warn again rapidly
@@ -169,31 +209,33 @@ const ScanningModal: React.FC<ScanningModalProps> = ({
                 continue;
             }
 
-            // Check if the serial is currently on hand in inventory and validate product ID
+            // 6. Check if the serial is currently on hand in inventory and validate product ID
             try {
                 const res = await fetch(`/api/ids/scm/fleet-management/trip-management/dispatch-plan/clearance-serial/validate-onhand?serial=${encodeURIComponent(tag)}`);
                 if (res.ok) {
                     const data = await res.json();
-                    console.log("Validation debug info for " + tag + ":", data);
                     
                     if (data.assetProductId && Number(data.assetProductId) !== Number(item.product_id)) {
+                        console.log(`[Serial Scan REJECTED] Database product mismatch for serial "${tag}". Asset product ID: ${data.assetProductId}, Item product ID: ${item.product_id}`);
+                        console.groupEnd();
                         toast.error(`Cannot add serial "${tag}": Product mismatch in database.`);
                         playSound('error');
                         continue;
                     }
 
                     if (data.isOnHand) {
+                        console.log(`[Serial Scan REJECTED] Serial "${tag}" is currently on hand in inventory.`);
+                        console.groupEnd();
                         toast.error(`Cannot add serial "${tag}": Serial is currently on hand in inventory`);
                         playSound('error');
                         continue;
                     }
-                } else {
-                    console.error("Validation failed with status: ", res.status);
                 }
             } catch (err) {
-                console.error("Failed to validate serial against onhand inventory", err);
+                console.log("Failed to validate serial against onhand inventory", err);
             }
 
+            // 7. Successful Acceptance
             const newQty = currentQty + 1;
             scannedTagsRef.current.add(tag);
             setScannedTags(new Set(scannedTagsRef.current));
@@ -206,6 +248,9 @@ const ScanningModal: React.FC<ScanningModalProps> = ({
             scannedSerialsRef.current = { ...scannedSerialsRef.current, [item.id]: [...previousTags, tag] };
 
             setLastScanned(item);
+
+            console.log(`%c[Serial Scan ACCEPTED] Serial "${tag}" accepted for "${item.product_name}" (Count: ${newQty}/${item.qty}). Status: ${mapping.cylinder_status || 'AVAILABLE'}`, 'color: #10b981; font-weight: bold;');
+            console.groupEnd();
             
             if (tags.length < 5) toast.success(`Scanned: ${item.product_name}`);
             playSound('success');

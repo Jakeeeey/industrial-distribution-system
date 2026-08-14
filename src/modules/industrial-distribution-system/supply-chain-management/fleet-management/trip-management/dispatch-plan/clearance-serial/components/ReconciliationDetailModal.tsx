@@ -53,7 +53,16 @@ interface ReconciliationDetailModalProps {
     isOpen: boolean;
     onClose: () => void;
     reconciliation: ReconciliationRow | null;
-    onSave: (invoiceId: number, status: string, remarks: string, missingQtys: Record<string | number, number>, scannedQtys: Record<string | number, number>, scannedSerials: Record<string | number, string[]>) => void;
+    onSave: (
+        invoiceId: number,
+        status: string,
+        remarks: string,
+        missingQtys: Record<string | number, number>,
+        scannedQtys: Record<string | number, number>,
+        scannedSerials: Record<string | number, string[]>,
+        scannedMissingQtys?: Record<string | number, number>,
+        scannedMissingSerials?: Record<string | number, string[]>
+    ) => void;
     serialNumbers?: SerialMapping[];
     globalScannedSerials?: string[];
 }
@@ -72,6 +81,9 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
     const [remarks, setRemarks] = useState('');
     const [scannedQtys, setScannedQtys] = useState<Record<string | number, number>>({});
     const [scannedSerials, setScannedSerials] = useState<Record<string | number, string[]>>({});
+    // DEV-RULE: Support tracking and scanning missing cylinders
+    const [scannedMissingQtys, setScannedMissingQtys] = useState<Record<string | number, number>>({});
+    const [scannedMissingSerials, setScannedMissingSerials] = useState<Record<string | number, string[]>>({});
     const [isScanningOpen, setIsScanningOpen] = useState(false);
     const [isCylinderModalOpen, setIsCylinderModalOpen] = useState(false);
     const [isConfirmMissingOpen, setIsConfirmMissingOpen] = useState(false);
@@ -99,18 +111,62 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                 .then(([data, returns]) => {
                     setDetail(data);
                     setExistingReturns(returns);
-                    setMissingQtys(reconciliation.missingQtys || {});
-                    setScannedQtys(reconciliation.scannedQtys || {});
-                    setScannedSerials(reconciliation.scannedSerials || {});
+
+                    // DEV-RULE: Check all serials on this dispatch against cylinder assets:
+                    // If WITH_CUSTOMER -> scanned already (scannedQtys)
+                    // If AVAILABLE (not WITH_CUSTOMER) -> missing (missingQtys), to be scanned into scannedMissingQtys
+                    const calculatedScanned: Record<string | number, number> = {};
+                    const calculatedSerials: Record<string | number, string[]> = {};
+                    const calculatedMissing: Record<string | number, number> = {};
+                    const calculatedMissingQtys: Record<string | number, number> = {};
+                    const calculatedMissingSerials: Record<string | number, string[]> = {};
+
+                    data.lines.forEach(line => {
+                        const lineSerials = serialNumbers.filter(s => Number(s.product_id) === Number(line.product_id));
+                        const withCustomerSerials = lineSerials.filter(s => s.cylinder_status === 'WITH_CUSTOMER').map(s => s.serial);
+
+                        // Scanned Qty (WITH_CUSTOMER)
+                        if (reconciliation.scannedQtys && reconciliation.scannedQtys[line.id] !== undefined) {
+                            calculatedScanned[line.id] = reconciliation.scannedQtys[line.id];
+                            calculatedSerials[line.id] = reconciliation.scannedSerials?.[line.id] || [];
+                        } else {
+                            if (line.is_serialized === 1) {
+                                calculatedScanned[line.id] = Math.min(line.qty, withCustomerSerials.length);
+                                calculatedSerials[line.id] = withCustomerSerials.slice(0, line.qty);
+                            } else {
+                                calculatedScanned[line.id] = reconciliation.status === 'Fulfilled' ? line.qty : 0;
+                                calculatedSerials[line.id] = [];
+                            }
+                        }
+
+                        // Missing Qty (AVAILABLE / not yet delivered)
+                        if (reconciliation.missingQtys && reconciliation.missingQtys[line.id] !== undefined) {
+                            calculatedMissing[line.id] = reconciliation.missingQtys[line.id];
+                        } else {
+                            calculatedMissing[line.id] = Math.max(0, line.qty - (calculatedScanned[line.id] || 0));
+                        }
+
+                        // Scanned Missing Qty
+                        if (reconciliation.scannedMissingQtys && reconciliation.scannedMissingQtys[line.id] !== undefined) {
+                            calculatedMissingQtys[line.id] = reconciliation.scannedMissingQtys[line.id];
+                            calculatedMissingSerials[line.id] = reconciliation.scannedMissingSerials?.[line.id] || [];
+                        } else {
+                            calculatedMissingQtys[line.id] = 0;
+                            calculatedMissingSerials[line.id] = [];
+                        }
+                    });
+
+                    setScannedQtys(calculatedScanned);
+                    setScannedSerials(calculatedSerials);
+                    setMissingQtys(calculatedMissing);
+                    setScannedMissingQtys(calculatedMissingQtys);
+                    setScannedMissingSerials(calculatedMissingSerials);
                     setRemarks(reconciliation.remarks || '');
 
                     // Initialize selected lines if they exist in the previous data
                     const initialSelected = new Set<string | number>();
-                    const currentScanned = reconciliation.scannedQtys || {};
-                    const currentMissing = reconciliation.missingQtys || {};
-
                     data.lines.forEach(line => {
-                        if (currentScanned[line.id] !== undefined || currentMissing[line.id] !== undefined) {
+                        if (calculatedScanned[line.id] !== undefined || calculatedMissing[line.id] !== undefined) {
                             initialSelected.add(line.id);
                         }
                     });
@@ -123,12 +179,15 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
             setRemarks('');
             setMissingQtys({});
             setScannedQtys({});
+            setScannedSerials({});
+            setScannedMissingQtys({});
+            setScannedMissingSerials({});
             setSelectedLineIds(new Set());
             setReturnMode('create');
             setExistingReturns([]);
             setSelectedReturnNo('');
         }
-    }, [isOpen, reconciliation]);
+    }, [isOpen, reconciliation, serialNumbers]);
 
     useEffect(() => {
         if (selectedReturnNo && returnMode === 'link') {
@@ -153,12 +212,16 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
         const finalMissingQtys: Record<string | number, number> = {};
         const finalScannedQtys: Record<string | number, number> = {};
         const finalScannedSerials: Record<string | number, string[]> = {};
+        const finalScannedMissingQtys: Record<string | number, number> = {};
+        const finalScannedMissingSerials: Record<string | number, string[]> = {};
 
         if (reconciliation.status === 'Fulfilled with Concerns') {
             selectedLineIds.forEach(id => {
                 if (missingQtys[id] !== undefined) finalMissingQtys[id] = missingQtys[id];
                 if (scannedQtys[id] !== undefined) finalScannedQtys[id] = scannedQtys[id];
                 if (scannedSerials[id] !== undefined) finalScannedSerials[id] = scannedSerials[id];
+                if (scannedMissingQtys[id] !== undefined) finalScannedMissingQtys[id] = scannedMissingQtys[id];
+                if (scannedMissingSerials[id] !== undefined) finalScannedMissingSerials[id] = scannedMissingSerials[id];
             });
         } else {
             // Include all for other unfulfilled statuses (like Unfulfilled)
@@ -166,10 +229,21 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                 if (missingQtys[line.id] !== undefined) finalMissingQtys[line.id] = missingQtys[line.id];
                 if (scannedQtys[line.id] !== undefined) finalScannedQtys[line.id] = scannedQtys[line.id];
                 if (scannedSerials[line.id] !== undefined) finalScannedSerials[line.id] = scannedSerials[line.id];
+                if (scannedMissingQtys[line.id] !== undefined) finalScannedMissingQtys[line.id] = scannedMissingQtys[line.id];
+                if (scannedMissingSerials[line.id] !== undefined) finalScannedMissingSerials[line.id] = scannedMissingSerials[line.id];
             });
         }
 
-        onSave(reconciliation.id, reconciliation.status, remarks, finalMissingQtys, finalScannedQtys, finalScannedSerials);
+        onSave(
+            reconciliation.id,
+            reconciliation.status,
+            remarks,
+            finalMissingQtys,
+            finalScannedQtys,
+            finalScannedSerials,
+            finalScannedMissingQtys,
+            finalScannedMissingSerials
+        );
         onClose();
         setIsConfirmMissingOpen(false);
     };
@@ -186,23 +260,10 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
         proceedSave();
     };
 
-    const handleScanningConfirm = (scanned: Record<string | number, number>, returnedSerials: Record<string | number, string[]> = {}) => {
-        setScannedQtys(scanned);
-        setScannedSerials(returnedSerials);
-
-        // Auto-calculate missing quantities based on the scan/input
-        const newQtys: Record<string | number, number> = {};
-        detail?.lines.forEach(line => {
-            // Only calculate for selected if status is Concerns, otherwise calculate for all
-            if (reconciliation?.status !== 'Fulfilled with Concerns' || selectedLineIds.has(line.id)) {
-                const scanCount = scanned[line.id] || 0;
-                const diff = Math.max(0, line.qty - scanCount);
-                if (diff > 0 || (reconciliation?.status !== 'Fulfilled' && scanCount > 0)) {
-                    newQtys[line.id] = diff;
-                }
-            }
-        });
-        setMissingQtys(newQtys);
+    // DEV-RULE: Scanning handler for missing cylinders
+    const handleScanningConfirm = (scannedMissing: Record<string | number, number>, returnedMissingSerials: Record<string | number, string[]> = {}) => {
+        setScannedMissingQtys(scannedMissing);
+        setScannedMissingSerials(returnedMissingSerials);
     };
 
     const toggleLineSelection = (lineId: string | number) => {
@@ -545,7 +606,8 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                                     <TableHead className="text-xs font-bold text-muted-foreground text-center">Qty</TableHead>
                                     {reconciliation.status !== 'Fulfilled' ? (
                                         <>
-                                            <TableHead className="text-xs font-bold text-muted-foreground text-center">Scanned Qty</TableHead>
+                                            <TableHead className="text-xs font-bold text-muted-foreground text-center">Delivered Qty</TableHead>
+                                            <TableHead className="text-xs font-bold text-muted-foreground text-center">With Concerned</TableHead>
                                             <TableHead className="text-xs font-bold text-muted-foreground text-center">Missing</TableHead>
                                             <TableHead className="text-xs font-bold text-muted-foreground text-right">Missing Amount</TableHead>
                                         </>
@@ -556,57 +618,69 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {detail.lines.map((line) => (
-                                    <TableRow
-                                        key={line.id}
-                                        className={`hover:bg-muted/30 transition-colors border-border ${reconciliation.status === 'Fulfilled with Concerns' && !selectedLineIds.has(line.id)
-                                            ? 'opacity-40 grayscale-[0.5]'
-                                            : ''
-                                            }`}
-                                    >
-                                        {reconciliation.status === 'Fulfilled with Concerns' && (
-                                            <TableCell className="text-center">
-                                                <Checkbox
-                                                    checked={selectedLineIds.has(line.id)}
-                                                    onCheckedChange={() => toggleLineSelection(line.id)}
-                                                />
-                                            </TableCell>
-                                        )}
-                                        <TableCell>
-                                            <div className="space-y-0.5">
-                                                <p className="text-sm font-bold text-foreground">{line.product_name}</p>
-                                                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground font-bold uppercase border border-border">{line.unit}</span>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell className="text-sm font-bold text-foreground text-center tabular-nums">{line.qty}</TableCell>
-                                        {reconciliation.status !== 'Fulfilled' ? (
-                                            <>
-                                                <TableCell className="text-center w-24">
-                                                    <div className="h-9 w-16 flex items-center justify-center font-bold rounded-lg border bg-muted/50 border-border tabular-nums">
-                                                        {(reconciliation.status !== 'Fulfilled with Concerns' || selectedLineIds.has(line.id)) ? (scannedQtys[line.id] || 0) : "-"}
-                                                    </div>
+                                {detail.lines.map((line) => {
+                                    const delivered = scannedQtys[line.id] || 0;
+                                    const withConcerned = scannedMissingQtys[line.id] || 0;
+                                    const remainingMissing = Math.max(0, line.qty - delivered - withConcerned);
+                                    const isConcernedRowActive = reconciliation.status !== 'Fulfilled with Concerns' || selectedLineIds.has(line.id);
+
+                                    return (
+                                        <TableRow
+                                            key={line.id}
+                                            className={`hover:bg-muted/30 transition-colors border-border ${reconciliation.status === 'Fulfilled with Concerns' && !selectedLineIds.has(line.id)
+                                                ? 'opacity-40 grayscale-[0.5]'
+                                                : ''
+                                                }`}
+                                        >
+                                            {reconciliation.status === 'Fulfilled with Concerns' && (
+                                                <TableCell className="text-center">
+                                                    <Checkbox
+                                                        checked={selectedLineIds.has(line.id)}
+                                                        onCheckedChange={() => toggleLineSelection(line.id)}
+                                                    />
                                                 </TableCell>
-                                                <TableCell className="text-center w-24">
-                                                    <div className="h-9 w-16 flex items-center justify-center font-bold rounded-lg border bg-muted/50 border-border tabular-nums">
-                                                        {(reconciliation.status !== 'Fulfilled with Concerns' || selectedLineIds.has(line.id)) ? (missingQtys[line.id] || 0) : "-"}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="text-right text-sm font-bold text-rose-500 tabular-nums">
-                                                    ₱{(reconciliation.status !== 'Fulfilled with Concerns' || selectedLineIds.has(line.id)) ? (((line.net_total || 0) / (line.qty || 1)) * (missingQtys[line.id] || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
-                                                </TableCell>
-                                            </>
-                                        ) : (
-                                            <TableCell className="text-center w-24">
-                                                <div className="h-9 w-16 flex items-center mx-auto justify-center font-bold rounded-lg border bg-primary/5 text-primary border-primary/20 tabular-nums">
-                                                    {scannedQtys[line.id] || 0}
+                                            )}
+                                            <TableCell>
+                                                <div className="space-y-0.5">
+                                                    <p className="text-sm font-bold text-foreground">{line.product_name}</p>
+                                                    <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground font-bold uppercase border border-border">{line.unit}</span>
                                                 </div>
                                             </TableCell>
-                                        )}
-                                        <TableCell className="text-right text-sm font-bold text-foreground pr-6 tabular-nums">
-                                            ₱{Number(line.net_total).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
+                                            <TableCell className="text-sm font-bold text-foreground text-center tabular-nums">{line.qty}</TableCell>
+                                            {reconciliation.status !== 'Fulfilled' ? (
+                                                <>
+                                                    <TableCell className="text-center w-24">
+                                                        <div className="h-9 w-16 flex items-center justify-center font-bold rounded-lg border bg-muted/50 border-border tabular-nums">
+                                                            {isConcernedRowActive ? delivered : "-"}
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-center w-24">
+                                                        <div className="h-9 w-16 flex items-center justify-center font-bold rounded-lg border bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 tabular-nums">
+                                                            {isConcernedRowActive ? withConcerned : "-"}
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-center w-24">
+                                                        <div className="h-9 w-16 flex items-center justify-center font-bold rounded-lg border bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20 tabular-nums">
+                                                            {isConcernedRowActive ? remainingMissing : "-"}
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-right text-sm font-bold text-rose-500 tabular-nums">
+                                                        ₱{isConcernedRowActive ? (((line.net_total || 0) / (line.qty || 1)) * remainingMissing).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
+                                                    </TableCell>
+                                                </>
+                                            ) : (
+                                                <TableCell className="text-center w-24">
+                                                    <div className="h-9 w-16 flex items-center mx-auto justify-center font-bold rounded-lg border bg-primary/5 text-primary border-primary/20 tabular-nums">
+                                                        {delivered}
+                                                    </div>
+                                                </TableCell>
+                                            )}
+                                            <TableCell className="text-right text-sm font-bold text-foreground pr-6 tabular-nums">
+                                                ₱{Number(line.net_total).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })}
                             </TableBody>
                         </Table>
                     </div>
@@ -680,9 +754,17 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                     isOpen={isScanningOpen}
                     onClose={() => setIsScanningOpen(false)}
                     onConfirm={handleScanningConfirm}
-                    items={reconciliation.status === 'Fulfilled with Concerns' ? detail.lines.filter(l => selectedLineIds.has(l.id)) : detail.lines}
-                    initialScanned={scannedQtys}
-                    initialScannedSerials={scannedSerials}
+                    items={
+                        (reconciliation.status === 'Fulfilled with Concerns' 
+                            ? detail.lines.filter(l => selectedLineIds.has(l.id)) 
+                            : detail.lines
+                        ).map(l => ({
+                            ...l,
+                            qty: missingQtys[l.id] ?? Math.max(0, l.qty - (scannedQtys[l.id] || 0))
+                        }))
+                    }
+                    initialScanned={scannedMissingQtys}
+                    initialScannedSerials={scannedMissingSerials}
                     serialNumbers={serialNumbers}
                     globalScannedSerials={globalScannedSerials}
                 />

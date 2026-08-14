@@ -107,6 +107,34 @@ export async function GET(request: NextRequest) {
             } | number | null;
         }
 
+        // 6. DEV-RULE: Check cylinder_status in cylinder_assets for all serial numbers on this dispatch
+        const uniqueSerials = Array.from(new Set(
+            (mappings as SerialItem[])
+                .map((m) => (m.serial_number || '').trim())
+                .filter(Boolean)
+        ));
+        const assetStatusMap = new Map<string, string>();
+
+        if (uniqueSerials.length > 0) {
+            try {
+                // Batch query cylinder_assets in chunks to avoid query length limits
+                const chunkSize = 50;
+                for (let i = 0; i < uniqueSerials.length; i += chunkSize) {
+                    const chunk = uniqueSerials.slice(i, i + chunkSize);
+                    const encodedChunk = chunk.map((s) => encodeURIComponent(s)).join(',');
+                    const assetRes = await fetcher(`/cylinder_assets?filter[serial_number][_in]=${encodedChunk}&fields=serial_number,cylinder_status&limit=-1`);
+                    const assets = assetRes.data || [];
+                    assets.forEach((a: { serial_number?: string; cylinder_status?: string }) => {
+                        if (a.serial_number) {
+                            assetStatusMap.set(a.serial_number.toUpperCase().trim(), a.cylinder_status || 'AVAILABLE');
+                        }
+                    });
+                }
+            } catch (aErr) {
+                console.warn('[clearance-serial/serial-numbers] Error fetching cylinder_assets statuses:', aErr);
+            }
+        }
+
         const result = (mappings as SerialItem[])
             .map((item) => {
                 let prodId: number | null = null;
@@ -121,11 +149,15 @@ export async function GET(request: NextRequest) {
                     }
                 }
 
+                const trimmedSerial = (item.serial_number || '').trim();
+                const cylinderStatus = assetStatusMap.get(trimmedSerial.toUpperCase()) || 'AVAILABLE';
+
                 return {
                     id: item.id,
                     product_id: prodId,
                     dispatch_id: pdpId,
-                    serial: (item.serial_number || '').trim()
+                    serial: trimmedSerial,
+                    cylinder_status: cylinderStatus
                 };
             })
             .filter((m) => m.product_id !== null && m.serial.length > 0);
