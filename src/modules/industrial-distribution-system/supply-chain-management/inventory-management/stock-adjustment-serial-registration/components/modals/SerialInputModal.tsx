@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
-import { Trash2, ScanLine, Tag, Wifi, Loader2, Plus, AlertCircle } from "lucide-react";
+import { Trash2, ScanLine, Tag, Wifi, Loader2, Plus, AlertCircle, PackageSearch } from "lucide-react";
 import { toast } from "sonner";
 import { BulkRegisterModal } from "./BulkRegisterModal";
 
@@ -30,7 +30,7 @@ interface SerialInputModalProps {
     branchId?: number,
     productId?: number,
     type?: "IN" | "OUT"
-  ) => Promise<{ exists: boolean; location?: string; isBlocked?: boolean; errorMsg?: string }>;
+  ) => Promise<{ exists: boolean; location?: string; productId?: number; productName?: string; isBlocked?: boolean; errorMsg?: string }>;
   excludeSerials?: string[];
   unitName?: string;
 }
@@ -49,6 +49,8 @@ export function SerialInputModal({
   unitName,
 }: SerialInputModalProps) {
   const [serials, setSerials] = useState<string[]>(initialSerials);
+  // AG-COMMENT: unregisteredSerials is only used for Stock IN (new cylinders to register).
+  // Stock OUT must never offer registration — only pick from existing on-hand inventory.
   const [unregisteredSerials, setUnregisteredSerials] = useState<string[]>([]);
   const [showBulkRegister, setShowBulkRegister] = useState(false);
   const [prevOpen, setPrevOpen] = useState(open);
@@ -75,16 +77,22 @@ export function SerialInputModal({
   }, [open, isValidating]);
 
   const handleAddSerial = async (serial: string) => {
-    const rawSerial = serial.trim().toUpperCase();
+    // AG-COMMENT: Serial input is case-sensitive as typed/scanned
+    const rawSerial = serial.trim();
     if (!rawSerial) return;
+
+    // AG-COMMENT: Immediately clear input so the input field is blank for subsequent scans/typing
+    setCurrentInput("");
 
     if (serials.includes(rawSerial)) {
       toast.error("Serial number already added to this product");
+      inputRef.current?.focus();
       return;
     }
 
     if (excludeSerials.includes(rawSerial)) {
       toast.error("Serial number already used in another product in this adjustment");
+      inputRef.current?.focus();
       return;
     }
 
@@ -93,7 +101,7 @@ export function SerialInputModal({
       setIsValidating(true);
       try {
         const res = await validateSerial(rawSerial, branchId, productId, type);
-        
+
         if (res.isBlocked) {
           toast.error("Validation Failed", {
             description: res.errorMsg || `Serial "${rawSerial}" is invalid for this adjustment.`,
@@ -106,24 +114,32 @@ export function SerialInputModal({
           setSerials((prev) => Array.from(new Set([...prev, rawSerial])));
           toast.success(`Serial "${rawSerial}" added successfully.`);
         } else {
-          setUnregisteredSerials((prev) => Array.from(new Set([...prev, rawSerial])));
-          toast.info(`Serial "${rawSerial}" requires registration`, {
-            description: type === "OUT" 
-              ? "Serial is not currently on-hand. Please register it before adding to the adjustment."
-              : "Serial does not exist. Please register it before adding to the adjustment.",
-          });
+          // AG-COMMENT: Stock OUT — serial is not on-hand, block immediately.
+          // Stock OUT removes existing inventory, so we must never offer registration
+          // for unknown serials. Registration only makes sense for Stock IN.
+          if (type === "OUT") {
+            toast.error("Serial Not Found On-Hand", {
+              description: `Serial "${rawSerial}" is not currently on-hand in this branch. Only select serials that are physically available in inventory.`,
+              duration: 5000,
+            });
+          } else {
+            // AG-COMMENT: Stock IN — serial does not exist, queue for registration (correct behaviour)
+            setUnregisteredSerials((prev) => Array.from(new Set([...prev, rawSerial])));
+            toast.info(`Serial "${rawSerial}" requires registration`, {
+              description: "Serial does not exist. Please register it before adding to the adjustment.",
+            });
+          }
         }
       } catch (err) {
         console.error("Serial Validation failed:", err);
       } finally {
         setIsValidating(false);
+        setTimeout(() => inputRef.current?.focus(), 50);
       }
     } else {
       setSerials((prev) => [...prev, rawSerial]);
+      inputRef.current?.focus();
     }
-
-    setCurrentInput("");
-    inputRef.current?.focus();
   };
 
   const initialSerialsSet = React.useMemo(() => new Set(initialSerials), [initialSerials]);
@@ -160,6 +176,12 @@ export function SerialInputModal({
     onOpenChange(false);
   };
 
+  // AG-COMMENT: Modal title and description adapt based on adjustment type
+  const modalTitle = type === "OUT" ? "Pick Serial Numbers" : "Serial Number Input";
+  const modalDescription = type === "OUT"
+    ? "Select existing on-hand serials for:"
+    : "Adding serials for:";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[95vw] sm:max-w-[850px] border-none shadow-2xl overflow-hidden p-0 bg-card max-h-[95vh] sm:h-[600px] flex flex-col">
@@ -167,14 +189,18 @@ export function SerialInputModal({
           <DialogHeader>
             <div className="flex items-center gap-3 mb-2">
               <div className="bg-white/20 dark:bg-black/20 p-2 rounded-lg backdrop-blur-md">
-                <ScanLine className="h-6 w-6 text-white" />
+                {/* AG-COMMENT: Icon adapts — PackageSearch for OUT (picking), ScanLine for IN (registration) */}
+                {type === "OUT"
+                  ? <PackageSearch className="h-6 w-6 text-white" />
+                  : <ScanLine className="h-6 w-6 text-white" />
+                }
               </div>
               <DialogTitle className="text-xl font-bold tracking-tight text-white/95">
-                Serial Number Input
+                {modalTitle}
               </DialogTitle>
             </div>
             <p className="text-white/80 text-sm font-medium">
-              Adding serials for: <span className="text-white font-bold underline decoration-white/30 underline-offset-4">{productName}</span>
+              {modalDescription} <span className="text-white font-bold underline decoration-white/30 underline-offset-4">{productName}</span>
             </p>
           </DialogHeader>
         </div>
@@ -185,22 +211,18 @@ export function SerialInputModal({
             <div className="space-y-4">
               <div className="flex flex-col gap-2">
                 <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
-                  Input Serial Number
+                  {/* AG-COMMENT: Label adapts for OUT (picking) vs IN (input/registration) */}
+                  {type === "OUT" ? "Pick Serial Number" : "Input Serial Number"}
                 </label>
                 <div className="flex gap-2">
-                  {/* Serial number input with auto-uppercase conversion for typed and scanned characters */}
+                  {/* AG-COMMENT: Serial number input is case-sensitive (no forced uppercase) */}
                   <Input
                     ref={inputRef}
-                    placeholder="Type or scan serial number..."
+                    placeholder={type === "OUT" ? "Scan or type on-hand serial..." : "Type or scan serial number..."}
                     value={currentInput}
-                    onChange={(e) => setCurrentInput(e.target.value.toUpperCase())}
-                    onInput={(e: React.FormEvent<HTMLInputElement>) => {
-                      // Development Note: Auto-convert typed or scanned characters to uppercase in real-time
-                      const target = e.currentTarget;
-                      target.value = target.value.toUpperCase();
-                    }}
+                    onChange={(e) => setCurrentInput(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    className="flex-1 h-11 border-primary/20 focus:border-primary focus:ring-primary/20 rounded-xl uppercase font-mono tracking-wider"
+                    className="flex-1 h-11 border-primary/20 focus:border-primary focus:ring-primary/20 rounded-xl font-mono tracking-wider"
                     disabled={isValidating}
                   />
                   <Button 
@@ -209,12 +231,12 @@ export function SerialInputModal({
                     className="h-11 px-4 bg-primary hover:bg-primary/90 text-white rounded-xl shadow-lg shadow-primary/10 transition-all gap-2"
                   >
                     {isValidating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                    Add
+                    {type === "OUT" ? "Pick" : "Add"}
                   </Button>
                 </div>
                 <div className="flex items-center justify-between mt-1">
                   <p className="text-[10px] text-muted-foreground/60 italic">
-                    Tip: Press Enter after typing to add the serial number.
+                    Tip: Press Enter after typing to {type === "OUT" ? "pick" : "add"} the serial number.
                   </p>
                 </div>
               </div>
@@ -226,11 +248,18 @@ export function SerialInputModal({
                       Ready for Manual Input
                     </span>
                  </div>
+                 {/* AG-COMMENT: Stock OUT shows a reminder that only on-hand serials are valid */}
+                 {type === "OUT" && (
+                   <p className="text-[10px] text-muted-foreground/60 text-center">
+                     Only serials currently on-hand at this branch can be picked
+                   </p>
+                 )}
               </div>
             </div>
 
-            {/* Unregistered Serials Section */}
-            {unregisteredSerials.length > 0 && (
+            {/* AG-COMMENT: Unregistered Serials Section is ONLY shown for Stock IN.
+                Stock OUT never queues unregistered serials — it blocks them immediately. */}
+            {type === "IN" && unregisteredSerials.length > 0 && (
               <div className="bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800/30 rounded-2xl p-4 space-y-3 shrink-0">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -354,19 +383,23 @@ export function SerialInputModal({
         </DialogFooter>
       </DialogContent>
 
-      <BulkRegisterModal 
-        open={showBulkRegister}
-        onOpenChange={setShowBulkRegister}
-        serials={unregisteredSerials}
-        productId={productId || 0}
-        branchId={branchId || 0}
-        unitName={unitName}
-        onSuccess={() => {
-          setSerials(prev => Array.from(new Set([...prev, ...unregisteredSerials])));
-          setUnregisteredSerials([]);
-          toast.success("All cylinders registered and added to list");
-        }}
-      />
+      {/* AG-COMMENT: BulkRegisterModal is only rendered for Stock IN type.
+          Stock OUT does not register new serials — it only picks existing on-hand ones. */}
+      {type === "IN" && (
+        <BulkRegisterModal 
+          open={showBulkRegister}
+          onOpenChange={setShowBulkRegister}
+          serials={unregisteredSerials}
+          productId={productId || 0}
+          branchId={branchId || 0}
+          unitName={unitName}
+          onSuccess={() => {
+            setSerials(prev => Array.from(new Set([...prev, ...unregisteredSerials])));
+            setUnregisteredSerials([]);
+            toast.success("All cylinders registered and added to list");
+          }}
+        />
+      )}
     </Dialog>
   );
 }

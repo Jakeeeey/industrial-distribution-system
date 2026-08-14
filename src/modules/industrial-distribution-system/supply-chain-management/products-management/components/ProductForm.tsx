@@ -13,7 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { SearchableSelect } from "@/components/ui/searchable-select";
+// AG-COMMENT: Import module-scoped SearchableSelect from local components folder instead of global UI component
+import { SearchableSelect } from "./SearchableSelect";
 import { Info, Package, Upload, X } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
@@ -120,25 +121,44 @@ export function ProductForm({
 
   const handleFormSubmit = async (values: ProductFormValues) => {
     try {
-      // Client-side validations for required product fields
+      // AG-COMMENT: Clear existing form error states before running field validation checks
+      form.clearErrors();
+      let hasError = false;
+
+      // AG-COMMENT: Client-side validations for required product fields with visual error highlights
       if (!values.product_code || !values.product_code.trim()) {
-        toast.error("Validation Error: Please enter a valid Product Code before saving.");
-        return;
+        form.setError("product_code", { type: "manual", message: "Please enter a valid Product Code before saving." });
+        hasError = true;
+      }
+
+      if (!values.product_name || !values.product_name.trim()) {
+        form.setError("product_name", { type: "manual", message: "Please enter a valid Product Name before saving." });
+        hasError = true;
       }
 
       if (!values.product_category || Number(values.product_category) === 0) {
-        toast.error("Validation Error: Please select a valid Product Category before saving.");
-        return;
+        form.setError("product_category", { type: "manual", message: "Please select a valid Product Category before saving." });
+        hasError = true;
       }
 
       if (!values.product_brand || Number(values.product_brand) === 0) {
-        toast.error("Validation Error: Please select a valid Product Brand before saving.");
-        return;
+        form.setError("product_brand", { type: "manual", message: "Please select a valid Product Brand before saving." });
+        hasError = true;
+      }
+
+      if (values.is_serialized === 0 && (!values.unit_of_measurement || Number(values.unit_of_measurement) === 0)) {
+        form.setError("unit_of_measurement", { type: "manual", message: "Please select a valid Unit of Measurement before saving." });
+        hasError = true;
       }
 
       // AG-COMMENT: Validate that description is provided and non-empty before saving
       if (!values.description || !values.description.trim()) {
-        toast.error("Validation Error: Please enter a valid Description before saving.");
+        form.setError("description", { type: "manual", message: "Please enter a valid Description before saving." });
+        hasError = true;
+      }
+
+      if (hasError) {
+        toast.error("Validation Error: Please fill in all required fields marked with *.");
         return;
       }
 
@@ -221,6 +241,10 @@ export function ProductForm({
                       placeholder="PROD-001"
                       {...field}
                       value={field.value ?? ""}
+                      onChange={(e) => {
+                        field.onChange(e);
+                        if (e.target.value?.trim()) form.clearErrors("product_code");
+                      }}
                       className="bg-slate-50/50 dark:bg-slate-900/50"
                       disabled={readOnly}
                     />
@@ -240,6 +264,10 @@ export function ProductForm({
                       placeholder="Enter product name"
                       {...field}
                       value={field.value ?? ""}
+                      onChange={(e) => {
+                        field.onChange(e);
+                        if (e.target.value?.trim()) form.clearErrors("product_name");
+                      }}
                       className="bg-slate-50/50 dark:bg-slate-900/50"
                       disabled={readOnly}
                     />
@@ -263,7 +291,11 @@ export function ProductForm({
                         label: cat.category_name,
                       }))}
                       value={field.value?.toString()}
-                      onValueChange={(v) => field.onChange(parseInt(v))}
+                      onValueChange={(v) => {
+                        const val = parseInt(v);
+                        field.onChange(val);
+                        if (val > 0) form.clearErrors("product_category");
+                      }}
                       placeholder="Select category"
                       className="bg-slate-50/50 dark:bg-slate-900/50"
                       disabled={readOnly}
@@ -286,7 +318,11 @@ export function ProductForm({
                         label: brand.brand_name,
                       }))}
                       value={field.value?.toString()}
-                      onValueChange={(v) => field.onChange(parseInt(v))}
+                      onValueChange={(v) => {
+                        const val = parseInt(v);
+                        field.onChange(val);
+                        if (val > 0) form.clearErrors("product_brand");
+                      }}
                       placeholder="Select brand"
                       className="bg-slate-50/50 dark:bg-slate-900/50"
                       disabled={readOnly}
@@ -366,7 +402,11 @@ export function ProductForm({
                           label: `${u.unit_name} (${u.unit_shortcut})`,
                         }))}
                         value={field.value?.toString()}
-                        onValueChange={(v) => field.onChange(parseInt(v))}
+                        onValueChange={(v) => {
+                          const val = parseInt(v);
+                          field.onChange(val);
+                          if (val > 0) form.clearErrors("unit_of_measurement");
+                        }}
                         placeholder="Select UOM"
                         className="bg-slate-50/50 dark:bg-slate-900/50"
                         disabled={readOnly}
@@ -417,6 +457,10 @@ export function ProductForm({
                     placeholder="Detailed product specifications..."
                     {...field}
                     value={field.value ?? ""}
+                    onChange={(e) => {
+                      field.onChange(e);
+                      if (e.target.value?.trim()) form.clearErrors("description");
+                    }}
                     className="min-h-[100px] bg-slate-50/50 dark:bg-slate-900/50 resize-none"
                     disabled={readOnly}
                   />

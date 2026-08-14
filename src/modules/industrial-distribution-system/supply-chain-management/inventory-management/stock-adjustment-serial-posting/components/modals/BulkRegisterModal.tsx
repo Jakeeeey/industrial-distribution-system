@@ -113,8 +113,9 @@ export function BulkRegisterModal({
         cylinder_status: draftStatus,
         cylinder_condition: item.condition,
         current_branch_id: parsedBranchId,
-        expiration_date: item.expiration || null,
-        tare_weight: item.tare || "0.00",
+        expiration_date: item.expiration.trim(),
+        tare_weight: parseFloat(item.tare).toFixed(2),
+        remarks: "Registered via Stock Adjustment",
       }));
 
       const res = await fetch("/api/ids/scm/inventory-management/stock-adjustment-serial-posting/register-assets", {

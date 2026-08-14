@@ -56,16 +56,55 @@ function getManilaTimeString(): string {
   return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Manila" }).replace(" ", "T");
 }
 
+// AG-COMMENT: Helper to extract authenticated user ID from JWT cookies or Authorization header
+function extractUserIdFromRequest(req: NextRequest, explicitUserId?: number | string | null): number {
+  if (explicitUserId !== undefined && explicitUserId !== null && !isNaN(Number(explicitUserId)) && Number(explicitUserId) > 0) {
+    return Number(explicitUserId);
+  }
+
+  try {
+    const token = req.cookies.get("vos_access_token")?.value ||
+                  req.cookies.get("springboot_token")?.value ||
+                  req.cookies.get("token")?.value ||
+                  (req.headers.get("authorization")?.startsWith("Bearer ")
+                    ? req.headers.get("authorization")?.substring(7)
+                    : req.headers.get("authorization"));
+
+    if (token) {
+      const parts = token.split(".");
+      if (parts.length >= 2) {
+        const payloadPart = parts[1];
+        const pad = "=".repeat((4 - (payloadPart.length % 4)) % 4);
+        const b64 = (payloadPart + pad).replace(/-/g, "+").replace(/_/g, "/");
+        const jsonStr = Buffer.from(b64, "base64").toString("utf8");
+        const payload = JSON.parse(jsonStr);
+
+        const rawId = payload.user_id ?? payload.userId ?? payload.id ?? payload.sub;
+        if (rawId !== undefined && rawId !== null) {
+          const num = Number(rawId);
+          if (!isNaN(num) && num > 0) return num;
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[Categories API] Error decoding JWT token for user ID:", err);
+  }
+
+  return 1;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const manilaTime = getManilaTimeString();
+    const userId = extractUserIdFromRequest(req, body.created_by || body.updated_by);
+
     const payload = {
       ...body,
       created_at: manilaTime,
       updated_at: manilaTime,
-      created_by: body.created_by ? Number(body.created_by) : 1,
-      updated_by: body.updated_by ? Number(body.updated_by) : 1,
+      created_by: userId,
+      updated_by: userId,
     };
 
     const response = await fetch(`${DIRECTUS_URL}/items/${COLLECTION}`, {
@@ -95,10 +134,12 @@ export async function PATCH(req: NextRequest) {
 
     const body = await req.json();
     const manilaTime = getManilaTimeString();
+    const userId = extractUserIdFromRequest(req, body.updated_by);
+
     const payload = {
       ...body,
       updated_at: manilaTime,
-      updated_by: body.updated_by ? Number(body.updated_by) : 1,
+      updated_by: userId,
     };
 
     const response = await fetch(`${DIRECTUS_URL}/items/${COLLECTION}/${id}`, {

@@ -88,6 +88,43 @@ function getManilaTimeString(): string {
   return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Manila" }).replace(" ", "T");
 }
 
+// AG-COMMENT: Helper to extract authenticated user ID from JWT cookies or Authorization header
+function extractUserIdFromRequest(req: NextRequest, explicitUserId?: number | string | null): number {
+  if (explicitUserId !== undefined && explicitUserId !== null && !isNaN(Number(explicitUserId)) && Number(explicitUserId) > 0) {
+    return Number(explicitUserId);
+  }
+
+  try {
+    const token = req.cookies.get("vos_access_token")?.value ||
+                  req.cookies.get("springboot_token")?.value ||
+                  req.cookies.get("token")?.value ||
+                  (req.headers.get("authorization")?.startsWith("Bearer ")
+                    ? req.headers.get("authorization")?.substring(7)
+                    : req.headers.get("authorization"));
+
+    if (token) {
+      const parts = token.split(".");
+      if (parts.length >= 2) {
+        const payloadPart = parts[1];
+        const pad = "=".repeat((4 - (payloadPart.length % 4)) % 4);
+        const b64 = (payloadPart + pad).replace(/-/g, "+").replace(/_/g, "/");
+        const jsonStr = Buffer.from(b64, "base64").toString("utf8");
+        const payload = JSON.parse(jsonStr);
+
+        const rawId = payload.user_id ?? payload.userId ?? payload.id ?? payload.sub;
+        if (rawId !== undefined && rawId !== null) {
+          const num = Number(rawId);
+          if (!isNaN(num) && num > 0) return num;
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[Products API] Error decoding JWT token for user ID:", err);
+  }
+
+  return 1;
+}
+
 // AG-COMMENT: Handles creation of new product records and auto-generating serialized variants with full audit trail (created_by, updated_by, created_at, updated_at in PH time) & density_factor safeguards.
 export async function POST(req: NextRequest) {
   try {
@@ -153,14 +190,15 @@ export async function POST(req: NextRequest) {
     // AG-COMMENT: Obtain Philippine Time (Asia/Manila UTC+8) timestamp
     const manilaTime = getManilaTimeString();
 
-    // AG-COMMENT: Resolve created_by and updated_by fields from request or fallback user ID
-    const createdBy = body.created_by ? Number(body.created_by) : 1;
-    const updatedBy = body.updated_by ? Number(body.updated_by) : createdBy;
+    // AG-COMMENT: Dynamically resolve created_by and updated_by fields from body or authenticated user JWT token
+    const userId = extractUserIdFromRequest(req, body.created_by || body.updated_by);
+    const createdBy = userId;
+    const updatedBy = userId;
 
-    // AG-COMMENT: Safeguard density_factor to default to 1.00000 if omitted, avoiding NULL or corruption
+    // AG-COMMENT: Default density_factor to null if omitted
     const densityFactor = (body.density_factor !== undefined && body.density_factor !== null && Number(body.density_factor) > 0)
       ? Number(body.density_factor)
-      : 1.00000;
+      : null;
 
     // Fetch units table to resolve unit_id by matching unit_shortcut
     const unitsRes = await fetch(
@@ -265,10 +303,13 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json();
     const manilaTime = getManilaTimeString();
 
+    // AG-COMMENT: Dynamically resolve updated_by field from request body, JWT token cookie/header, or fallback 1
+    const updatedBy = extractUserIdFromRequest(req, body.updated_by);
+
     // AG-COMMENT: Attach updated_by audit trail and timestamp in Philippine Time (UTC+8)
     const updatePayload = {
       ...body,
-      updated_by: body.updated_by ? Number(body.updated_by) : 1,
+      updated_by: updatedBy,
       updated_at: manilaTime,
       last_updated: manilaTime
     };

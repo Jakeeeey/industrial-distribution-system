@@ -20,11 +20,13 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Paperclip,
-  ScanLine
-} from "lucide-react";
+} from "lucide-react"; // AG-COMMENT: ScanLine removed — no longer needed after global scanner removal
 import { AttachmentUpload } from "../AttachmentUpload";
 import { Badge } from "@/components/ui/badge";
 import { SerialInputModal } from "../modals/SerialInputModal";
+// AG-COMMENT: SerialPickerModal is used for Stock OUT to select from existing on-hand serials.
+// SerialInputModal is used for Stock IN to scan/register new serials.
+import { SerialPickerModal } from "../modals/SerialPickerModal";
 import { ProductSelectionModal } from "../modals/ProductSelectionModal";
 import {
   StockAdjustmentFormSchema,
@@ -35,6 +37,7 @@ import {
 } from "../../types/stock-adjustment-serial.schema";
 import { useStockAdjustmentSerialForm } from "../../hooks/useStockAdjustmentSerialForm";
 import { isPostedStatus } from "../../utils/status-utils";
+import { formatTimestampAsIs } from "../../utils/date-utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,7 +52,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Combobox,
@@ -59,6 +61,22 @@ import {
   ComboboxItem,
   ComboboxEmpty,
 } from "@/components/ui/combobox";
+
+// AG-COMMENT: Helper to extract numeric ID from number, string, or object ({ id, product_id, branch_id })
+function parseNumericId(val: unknown): number {
+  if (!val) return 0;
+  if (typeof val === "number") return isNaN(val) ? 0 : val;
+  if (typeof val === "string") {
+    const n = parseInt(val, 10);
+    return isNaN(n) ? 0 : n;
+  }
+  if (typeof val === "object" && val !== null) {
+    const obj = val as Record<string, unknown>;
+    const raw = obj.product_id ?? obj.branch_id ?? obj.id ?? 0;
+    return parseNumericId(raw);
+  }
+  return 0;
+}
 
 // ——————————————————————————————————————————————————————————————————————————————
 interface StockAdjustmentFormProps {
@@ -74,6 +92,7 @@ interface StockAdjustmentFormProps {
 // Memoised item row (renders only when *its own* data changes)
 interface ItemRowProps {
   index: number;
+  fieldItem?: StockAdjustmentItem;
   control: Control<StockAdjustmentFormValues>;
   onRemove: (index: number) => void;
   setValue: UseFormSetValue<StockAdjustmentFormValues>;
@@ -83,22 +102,33 @@ interface ItemRowProps {
 
 const StockAdjustmentItemRow = React.memo(function StockAdjustmentItemRow({
   index,
+  fieldItem,
   control,
   onRemove,
   setValue,
   onOpenSerialInput,
   isReadOnly = false,
 }: ItemRowProps) {
-  const product_name = useWatch({ control, name: `items.${index}.product_name` });
-  const unitName = useWatch({ control, name: `items.${index}.unit_name` });
-  const quantity = useWatch({ control, name: `items.${index}.quantity` });
-  const costPerUnit = useWatch({ control, name: `items.${index}.cost_per_unit` });
-  const isSerialized = useWatch({ control, name: `items.${index}.is_serialized` });
-  const brandName = useWatch({ control, name: `items.${index}.brand_name` });
-  const barcode = useWatch({ control, name: `items.${index}.barcode` });
-  const unitOrder = useWatch({ control, name: `items.${index}.unit_order` });
+  const watchedProductName = useWatch({ control, name: `items.${index}.product_name` });
+  const watchedUnitName = useWatch({ control, name: `items.${index}.unit_name` });
+  const watchedQuantity = useWatch({ control, name: `items.${index}.quantity` });
+  const watchedCostPerUnit = useWatch({ control, name: `items.${index}.cost_per_unit` });
+  const watchedIsSerialized = useWatch({ control, name: `items.${index}.is_serialized` });
+  const watchedBrandName = useWatch({ control, name: `items.${index}.brand_name` });
+  const watchedBarcode = useWatch({ control, name: `items.${index}.barcode` });
+  const watchedUnitOrder = useWatch({ control, name: `items.${index}.unit_order` });
+  const watchedSerialNumbers = useWatch({ control, name: `items.${index}.serial_numbers` });
 
-  const serialNumbers = useWatch({ control, name: `items.${index}.serial_numbers` });
+  // AG-COMMENT: Prioritize watched form values with robust fallback to fieldItem properties
+  const product_name = watchedProductName || fieldItem?.product_name || "—";
+  const unitName = watchedUnitName || fieldItem?.unit_name || "-";
+  const quantity = watchedQuantity !== undefined ? watchedQuantity : (fieldItem?.quantity || 0);
+  const costPerUnit = watchedCostPerUnit !== undefined ? watchedCostPerUnit : (fieldItem?.cost_per_unit || 0);
+  const isSerialized = watchedIsSerialized !== undefined ? watchedIsSerialized : fieldItem?.is_serialized;
+  const brandName = watchedBrandName || fieldItem?.brand_name || "—";
+  const barcode = watchedBarcode || fieldItem?.barcode || "N/A";
+  const unitOrder = watchedUnitOrder !== undefined ? watchedUnitOrder : (fieldItem?.unit_order || 1);
+  const serialNumbers = watchedSerialNumbers || fieldItem?.serial_numbers || [];
   const isSerialMissing = (isSerialized || unitOrder === 3) && (!serialNumbers || serialNumbers.length === 0);
 
   const { errors } = useFormState({ control });
@@ -116,8 +146,8 @@ const StockAdjustmentItemRow = React.memo(function StockAdjustmentItemRow({
       </td>
       <td className="p-3 min-w-[250px]">
         <div className="flex flex-col">
-          <span className="text-xs font-bold text-foreground leading-tight">{product_name || "—"}</span>
-          <span className="text-[10px] text-muted-foreground font-mono mt-0.5">{barcode || "N/A"}</span>
+          <span className="text-xs font-bold text-foreground leading-tight">{product_name}</span>
+          <span className="text-[10px] text-muted-foreground font-mono mt-0.5">{barcode !== "N/A" ? barcode : ""}</span>
         </div>
       </td>
       <td className="p-3">
@@ -130,10 +160,11 @@ const StockAdjustmentItemRow = React.memo(function StockAdjustmentItemRow({
           <span className="text-[10px] font-bold text-primary bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded uppercase shrink-0">
             {unitName || "-"}
           </span>
+          {/* AG-COMMENT: Show SERIAL badge if product is serialized */}
           {isSerialized && (
             <span className="text-[10px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded uppercase shrink-0 flex items-center gap-1">
               <Tag className="h-2.5 w-2.5 fill-amber-500" />
-              SERIALIZED
+              SERIAL
             </span>
           )}
         </div>
@@ -169,7 +200,9 @@ const StockAdjustmentItemRow = React.memo(function StockAdjustmentItemRow({
             )}
           </div>
         ) : (
-          <div className="flex items-center gap-0 w-min bg-background border border-border rounded-md overflow-hidden">
+          <div className={`flex items-center gap-0 w-min bg-background border rounded-md overflow-hidden ${
+            Number(quantity || 0) <= 0 || rowError?.quantity ? "border-red-500 ring-1 ring-red-500 bg-red-50/30 dark:bg-red-950/20" : "border-border"
+          }`}>
             <button
               type="button"
               className="w-7 h-7 flex items-center justify-center hover:bg-muted text-muted-foreground disabled:opacity-50 transition-colors"
@@ -336,29 +369,6 @@ function SerialBanner({ control }: { control: Control<StockAdjustmentFormValues>
   );
 }
 
-function playTone(
-  audioContext: AudioContext,
-  frequency: number,
-  durationMs: number,
-  startAt: number,
-): void {
-  const oscillator = audioContext.createOscillator();
-  const gainNode = audioContext.createGain();
-
-  oscillator.type = "sine";
-  oscillator.frequency.setValueAtTime(frequency, startAt);
-
-  gainNode.gain.setValueAtTime(0.0001, startAt);
-  gainNode.gain.exponentialRampToValueAtTime(0.08, startAt + 0.01);
-  gainNode.gain.exponentialRampToValueAtTime(0.0001, startAt + durationMs / 1000);
-
-  oscillator.connect(gainNode);
-  gainNode.connect(audioContext.destination);
-
-  oscillator.start(startAt);
-  oscillator.stop(startAt + durationMs / 1000);
-}
-
 // ——————————————————————————————————————————————————————————————————————————————
 export function StockAdjustmentForm({
   id,
@@ -395,7 +405,14 @@ export function StockAdjustmentForm({
   const [showSerialInput, setShowSerialInput] = useState(false);
   const [showPostConfirmation, setShowPostConfirmation] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
-  const [scannerContext, setScannerContext] = useState<{ index: number; productName: string } | null>(null);
+  const [scannerContext, setScannerContext] = useState<{
+    index: number;
+    productName: string;
+    productId: number;
+    branchId?: number;
+    unitName?: string;
+    initialSerials?: string[];
+  } | null>(null);
   const [isScannerPreparing, setIsScannerPreparing] = useState(false);
   const [branchInputValue, setBranchInputValue] = useState("");
   const [supplierInputValue, setSupplierInputValue] = useState("");
@@ -411,11 +428,6 @@ export function StockAdjustmentForm({
   const [pendingExitAction, setPendingExitAction] = useState<string | (() => void) | null>(null);
   const initialValuesRef = useRef<string>("");
 
-  const [scanLog, setScanLog] = useState<Array<{ serial: string; status: 'success' | 'error' | 'validating'; message: string; timestamp: Date }>>([]);
-  const [globalScanInputVal, setGlobalScanInputVal] = useState("");
-  const [isGlobalScanValidating, setIsGlobalScanValidating] = useState(false);
-  const globalScanInputRef = useRef<HTMLInputElement>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
 
   const form = useForm<StockAdjustmentFormValues>({
     resolver: zodResolver(StockAdjustmentFormSchema),
@@ -431,7 +443,7 @@ export function StockAdjustmentForm({
     },
   });
 
-  const { fields, remove } = useFieldArray({
+  const { fields, remove, replace } = useFieldArray({
     control: form.control,
     name: "items",
   });
@@ -491,39 +503,42 @@ export function StockAdjustmentForm({
             postedAt: data.postedAt || undefined,
             posted_by: data.posted_by || undefined,
             stock_adjustment_attachment: data.stock_adjustment_attachment || [],
-            items: data.items.map((item: StockAdjustmentItem) => ({
-              ...item,
-              quantity: Number(item.quantity || 0),
-              product_id: Number(
-                (item.product_id as { id?: number; product_id?: number })?.id ||
-                (item.product_id as { id?: number; product_id?: number })?.product_id ||
-                item.product_id
-              ),
-              product_name:
-                (item.product_id as { product_name?: string })?.product_name ||
-                item.product_name ||
-                "Unknown Product",
-              product_code:
-                (item.product_id as { product_code?: string })?.product_code ||
-                item.product_code ||
-                "",
-              cost_per_unit: Number(
-                (item.product_id as { cost_per_unit?: number; price_per_unit?: number })?.cost_per_unit ||
-                (item.product_id as { cost_per_unit?: number; price_per_unit?: number })?.price_per_unit ||
-                item.cost_per_unit ||
-                0
-              ),
-              current_stock: Number(item.current_stock || 0),
-              unit_name:
-                item.unit_name ||
-                (item.product_id as { unit_name?: string })?.unit_name ||
-                "pcs",
-              unit_order: (item.product_id as { unit_of_measurement?: { order: number } })?.unit_of_measurement?.order || 1,
-              serial_numbers: item.serial_numbers || [],
-              serial_count: item.serial_count || 0,
-              db_id: Number(item.id || 0),
-              is_serialized: (item.serial_numbers && item.serial_numbers.length > 0) || serialProductIds.has(Number((item.product_id as { id?: number; product_id?: number })?.product_id || (item.product_id as { id?: number; product_id?: number })?.id || item.product_id)),
-            })),
+            items: data.items.map((item: StockAdjustmentItem) => {
+              const prodObj = typeof item.product_id === "object" && item.product_id !== null ? (item.product_id as Record<string, unknown>) : null;
+              const pId = Number(prodObj?.product_id || prodObj?.id || item.product_id || 0);
+              const pName = item.product_name || (prodObj?.product_name as string) || "Unknown Product";
+              const pCode = item.product_code || (prodObj?.product_code as string) || "";
+              const pCost = Number(item.cost_per_unit || prodObj?.cost_per_unit || prodObj?.price_per_unit || 0);
+              const pUnit = item.unit_name || (prodObj?.unit_name as string) || ((prodObj?.unit_of_measurement as Record<string, unknown>)?.unit_name as string) || "pcs";
+              const pUnitOrder = item.unit_order || ((prodObj?.unit_of_measurement as Record<string, unknown>)?.order as number) || 1;
+              const pBrand = item.brand_name || ((prodObj?.product_brand as Record<string, unknown>)?.brand_name as string) || (prodObj?.brand_name as string) || "—";
+              const pBarcode = item.barcode || (prodObj?.barcode as string) || "N/A";
+              const pSerial = Boolean(
+                (item.serial_numbers && item.serial_numbers.length > 0) ||
+                serialProductIds.has(pId) ||
+                prodObj?.is_serialized === 1 ||
+                prodObj?.is_serialized === true ||
+                item.is_serialized
+              );
+
+              return {
+                ...item,
+                product_id: pId,
+                product_name: pName,
+                product_code: pCode,
+                brand_name: pBrand,
+                barcode: pBarcode,
+                cost_per_unit: pCost,
+                unit_name: pUnit,
+                unit_order: pUnitOrder,
+                current_stock: Number(item.current_stock || 0),
+                serial_numbers: item.serial_numbers || [],
+                serial_count: item.serial_count || (item.serial_numbers ? item.serial_numbers.length : 0),
+                db_id: Number(item.id || 0),
+                is_serialized: pSerial,
+                quantity: Number(item.quantity || (item.serial_numbers ? item.serial_numbers.length : 0) || 0),
+              };
+            }),
           };
 
           form.reset(resetObj);
@@ -653,243 +668,14 @@ export function StockAdjustmentForm({
     } else if (typeof pendingExitAction === "string") {
       router.push(pendingExitAction);
     } else {
-      router.push("/ids/scm/inventory-management/stock-adjustment-serial-summary");
+      router.push("/industrial-distribution-system/scm/stock-adjustment/stock-adjustment-summary");
     }
     setPendingExitAction(null);
   }, [pendingExitAction, router]);
 
-  const ensureAudioContext = useCallback(async (): Promise<AudioContext | null> => {
-    if (typeof window === "undefined") return null;
-    const AudioContextCtor =
-      window.AudioContext ||
-      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  // AG-COMMENT: Global scanner removed — Stock OUT serial picking is handled exclusively
+  // via SerialPickerModal which shows available serials from v_serial_onhand (status='Full').
 
-    if (!AudioContextCtor) return null;
-    if (!audioContextRef.current) {
-      audioContextRef.current = new AudioContextCtor();
-    }
-    if (audioContextRef.current.state === "suspended") {
-      try {
-        await audioContextRef.current.resume();
-      } catch {
-        return null;
-      }
-    }
-    return audioContextRef.current;
-  }, []);
-
-  const playSuccessBeep = useCallback(async () => {
-    const context = await ensureAudioContext();
-    if (!context) return;
-    const startAt = context.currentTime;
-    playTone(context, 880, 90, startAt);
-    playTone(context, 1180, 120, startAt + 0.11);
-  }, [ensureAudioContext]);
-
-  const playErrorBeep = useCallback(async () => {
-    const context = await ensureAudioContext();
-    if (!context) return;
-    const startAt = context.currentTime;
-    playTone(context, 320, 140, startAt);
-    playTone(context, 240, 180, startAt + 0.16);
-  }, [ensureAudioContext]);
-
-  const handleGlobalScan = useCallback(async (serial: string) => {
-    if (watchedType !== "OUT") return;
-
-    const rawSerial = serial.trim().toUpperCase();
-    if (!rawSerial) return;
-
-    const currentItems = form.getValues("items") || [];
-
-    const isAlreadyScanned = currentItems.some((item) =>
-      item.serial_numbers?.includes(rawSerial)
-    );
-
-    if (isAlreadyScanned) {
-      toast.warning("Duplicate Scan", {
-        description: `Serial number ${rawSerial} has already been scanned.`,
-      });
-      playErrorBeep();
-      setScanLog((prev) => [
-        {
-          serial: rawSerial,
-          status: "error",
-          message: "Duplicate scan. Serial already added.",
-          timestamp: new Date(),
-        },
-        ...prev.slice(0, 4),
-      ]);
-      return;
-    }
-
-    setIsGlobalScanValidating(true);
-    try {
-      const res = await validateSerialAvailability(
-        rawSerial,
-        Number(watchedBranchId),
-        undefined,
-        watchedType
-      );
-
-      if (res.isBlocked) {
-        const errMsg = res.errorMsg || "Serial scan is blocked.";
-        toast.error("Scan Blocked", { description: errMsg });
-        playErrorBeep();
-        setScanLog((prev) => [
-          {
-            serial: rawSerial,
-            status: "error",
-            message: errMsg,
-            timestamp: new Date(),
-          },
-          ...prev.slice(0, 4),
-        ]);
-        return;
-      }
-
-      if (!res.exists || !res.productId) {
-        const errMsg = watchedType === "OUT"
-          ? "Serial number is not currently on-hand at the selected branch."
-          : "Serial is not registered. Please select a product and add/register it via the serial modal.";
-        toast.error("Scan Blocked", { description: errMsg });
-        playErrorBeep();
-        setScanLog((prev) => [
-          {
-            serial: rawSerial,
-            status: "error",
-            message: errMsg,
-            timestamp: new Date(),
-          },
-          ...prev.slice(0, 4),
-        ]);
-        return;
-      }
-
-      const productId = Number(res.productId);
-
-      // Check if product belongs to the selected supplier
-      const matchedProduct = products.find((p) => Number(p.id || p.product_id) === productId);
-      if (!matchedProduct) {
-        const errMsg = "Product associated with serial does not belong to the selected supplier.";
-        toast.error("Scan Blocked", { description: errMsg });
-        playErrorBeep();
-        setScanLog((prev) => [
-          {
-            serial: rawSerial,
-            status: "error",
-            message: errMsg,
-            timestamp: new Date(),
-          },
-          ...prev.slice(0, 4),
-        ]);
-        return;
-      }
-
-      const existingIndex = currentItems.findIndex(
-        (item) => Number(item.product_id) === productId
-      );
-
-      if (existingIndex > -1) {
-        const item = currentItems[existingIndex];
-        const updatedSerials = [...(item.serial_numbers || []), rawSerial];
-        form.setValue(`items.${existingIndex}.serial_numbers`, updatedSerials);
-        form.setValue(`items.${existingIndex}.quantity`, updatedSerials.length, { shouldValidate: true });
-        form.setValue(`items.${existingIndex}.serial_count`, updatedSerials.length);
-      } else {
-        const newItem: StockAdjustmentItem = {
-          product_id: productId,
-          product_name: matchedProduct.product_name || "Unknown Product",
-          product_code: matchedProduct.product_code || "",
-          cost_per_unit: matchedProduct.cost_per_unit || matchedProduct.price_per_unit || 0,
-          brand_name: matchedProduct.brand_name || "N/A",
-          barcode: matchedProduct.barcode || "",
-          unit_name: matchedProduct.unit_name || "pcs",
-          unit_order: matchedProduct.unit_of_measurement?.order || 3,
-          is_serialized: true,
-          quantity: 1,
-          serial_numbers: [rawSerial],
-          serial_count: 1,
-          current_stock: 0,
-          remarks: "",
-          branch_id: Number(watchedBranchId),
-          type: "OUT",
-        };
-
-        const newItems = [...currentItems, newItem];
-        form.setValue("items", newItems, { shouldValidate: true });
-
-        const idx = newItems.length - 1;
-        fetchInventory(productId, Number(watchedBranchId))
-          .then((stock) => {
-            form.setValue(`items.${idx}.current_stock`, stock);
-          })
-          .catch(console.error);
-      }
-
-      playSuccessBeep();
-      toast.success(`Scanned: ${matchedProduct.product_name}`);
-      setScanLog((prev) => [
-        {
-          serial: rawSerial,
-          status: "success",
-          message: `Scanned & added: ${matchedProduct.product_name}`,
-          timestamp: new Date(),
-        },
-        ...prev.slice(0, 4),
-      ]);
-    } catch (err) {
-      console.error("Global scan error:", err);
-      toast.error("An error occurred during scanning");
-      playErrorBeep();
-    } finally {
-      setIsGlobalScanValidating(false);
-    }
-  }, [watchedType, watchedBranchId, form, validateSerialAvailability, fetchInventory, products, playSuccessBeep, playErrorBeep]);
-
-  // Global Keyboard Listener for Scanner
-  useEffect(() => {
-    if (isReadOnly || !watchedBranchId || !watchedSupplierId || watchedType !== "OUT") return;
-
-    const handleGlobalKeyDown = async (e: KeyboardEvent) => {
-      if (isGlobalScanValidating) return;
-
-      const activeTag = (document.activeElement?.tagName || "").toLowerCase();
-      if (
-        (activeTag === "input" && document.activeElement !== globalScanInputRef.current) ||
-        activeTag === "textarea" ||
-        activeTag === "select"
-      ) {
-        return;
-      }
-
-      if (e.key === "Enter") {
-        e.preventDefault();
-        const val = globalScanInputRef.current ? globalScanInputRef.current.value : "";
-        if (globalScanInputRef.current) {
-          globalScanInputRef.current.value = "";
-        }
-        setGlobalScanInputVal("");
-        if (val) {
-          await handleGlobalScan(val);
-        }
-        return;
-      }
-
-      if (e.key.length === 1) {
-        if (document.activeElement !== globalScanInputRef.current) {
-          globalScanInputRef.current?.focus();
-          setGlobalScanInputVal((prev) => prev + e.key);
-          e.preventDefault();
-        }
-      }
-    };
-
-    window.addEventListener("keydown", handleGlobalKeyDown, { capture: true });
-    return () => {
-      window.removeEventListener("keydown", handleGlobalKeyDown, { capture: true });
-    };
-  }, [isReadOnly, watchedBranchId, watchedSupplierId, watchedType, isGlobalScanValidating, handleGlobalScan]);
 
   const handlePost = async () => {
     if (!id) return;
@@ -946,9 +732,30 @@ export function StockAdjustmentForm({
     }
   };
 
-  const onInvalid = () => {
-    toast.error("Please fill in all required fields correctly.");
-  };
+  // AG-COMMENT: Enhanced onInvalid callback to show specific error toast feedback when required inputs are not filled
+  const onInvalid = useCallback((errors: FieldErrors<StockAdjustmentFormValues>) => {
+    if (errors.branch_id) {
+      toast.error("Branch is required", { description: "Please select a branch before saving." });
+      return;
+    }
+    if (errors.supplier_id) {
+      toast.error("Supplier is required", { description: "Please select a supplier before saving." });
+      return;
+    }
+    if (errors.type) {
+      toast.error("Adjustment Type is required", { description: "Please select Stock In or Stock Out." });
+      return;
+    }
+    if (errors.items) {
+      if (fields.length === 0) {
+        toast.error("Products Required", { description: "Please add at least one product item to save the adjustment." });
+        return;
+      }
+      toast.error("Item Validation Failed", { description: "Please ensure all product quantities are greater than 0 and all serialized items have required serial numbers." });
+      return;
+    }
+    toast.error("Please fill in all required fields highlighted in red.");
+  }, [fields.length]);
 
   const onSubmit = useCallback(
     async (values: StockAdjustmentFormValues) => {
@@ -1017,7 +824,7 @@ export function StockAdjustmentForm({
           } else if (typeof pendingExitAction === "string") {
             router.push(pendingExitAction);
           } else {
-            router.push("/ids/scm/inventory-management/stock-adjustment-serial-summary");
+            router.push("/industrial-distribution-system/scm/stock-adjustment/stock-adjustment-summary");
           }
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : "Failed to save adjustment";
@@ -1029,7 +836,7 @@ export function StockAdjustmentForm({
       },
       onInvalid
     )();
-  }, [id, createAdjustment, updateAdjustment, router, form, pendingExitAction]);
+  }, [id, createAdjustment, updateAdjustment, router, form, pendingExitAction, onInvalid]);
 
   const handleConfirmModalItems = useCallback(
     (newItems: StockAdjustmentItem[]) => {
@@ -1042,6 +849,8 @@ export function StockAdjustmentForm({
         type: currentType
       }));
 
+      // AG-COMMENT: Synchronize useFieldArray and react-hook-form state
+      replace(mapped);
       form.setValue("items", mapped, { shouldValidate: true });
 
       mapped.forEach((item, idx) => {
@@ -1056,7 +865,7 @@ export function StockAdjustmentForm({
         }
       });
     },
-    [form, fetchInventory, inventoryMap]
+    [form, fetchInventory, inventoryMap, replace]
   );
 
   const handleSerialSave = useCallback((serials: string[]) => {
@@ -1070,8 +879,15 @@ export function StockAdjustmentForm({
   }, [scannerContext, form]);
 
   const handleOpenSerialInput = useCallback((index: number) => {
-    const productName = form.getValues(`items.${index}.product_name`) ?? "Product";
-    setScannerContext({ index, productName });
+    const item = form.getValues(`items.${index}`);
+    const productName = item?.product_name ?? "Product";
+    const productId = parseNumericId(item?.product_id);
+    const unitName = item?.unit_name || undefined;
+    const initialSerials = item?.serial_numbers || [];
+    const itemBranchId = parseNumericId(item?.branch_id) || parseNumericId(watchedBranchId) || parseNumericId(form.getValues("branch_id"));
+
+    // AG-COMMENT: Store productId, unitName, branchId, and initialSerials directly in scannerContext
+    setScannerContext({ index, productName, productId, branchId: itemBranchId, unitName, initialSerials });
 
     setIsScannerPreparing(true);
     toast.info(`Opening Serial Input`, {
@@ -1083,7 +899,7 @@ export function StockAdjustmentForm({
       setIsScannerPreparing(false);
       setShowSerialInput(true);
     }, 600);
-  }, [form]);
+  }, [form, watchedBranchId]);
 
 
 
@@ -1144,7 +960,7 @@ export function StockAdjustmentForm({
           ) : (
             <Button
               variant="outline"
-              onClick={() => handleCancelOrExit("/ids/scm/inventory-management/stock-adjustment-serial-summary")}
+              onClick={() => handleCancelOrExit("/industrial-distribution-system/scm/stock-adjustment/stock-adjustment-summary")}
               className="gap-2 h-10 border-border bg-card shadow-sm font-bold text-muted-foreground hover:bg-muted rounded-lg transition-all"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -1180,7 +996,7 @@ export function StockAdjustmentForm({
             <div className="flex items-center gap-2 bg-blue-50/50 dark:bg-blue-900/10 px-3 py-1.5 rounded-lg border border-blue-100 dark:border-blue-800/30">
               <span className="text-[10px] uppercase font-black text-blue-400">Posted At:</span>
               <span className="text-xs font-bold text-blue-700 dark:text-blue-300">
-                {form.getValues().postedAt ? format(new Date(form.getValues().postedAt as string), "MMMM d, yyyy, hh:mm a") : "-"}
+                {form.getValues().postedAt ? formatTimestampAsIs(form.getValues().postedAt as string, "MMMM d, yyyy, hh:mm a") : "-"}
               </span>
             </div>
             <div className="flex items-center gap-2 bg-blue-50/50 dark:bg-blue-900/10 px-3 py-1.5 rounded-lg border border-blue-100 dark:border-blue-800/30">
@@ -1265,7 +1081,8 @@ export function StockAdjustmentForm({
                 )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="branch" className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                {/* AG-COMMENT: Highlight branch label and input in red if validation fails */}
+                <Label htmlFor="branch" className={`text-xs font-bold uppercase tracking-wider ${form.formState.errors.branch_id ? "text-red-500" : "text-muted-foreground"}`}>
                   Branch <span className="text-red-500">*</span>
                 </Label>
                 <Combobox
@@ -1295,7 +1112,7 @@ export function StockAdjustmentForm({
                   <ComboboxInput
                     placeholder="Select Branch"
                     disabled={isReadOnly || !!id || fields.length > 0}
-                    className={form.formState.errors.branch_id ? "border-red-500 bg-red-50 dark:bg-red-900/10 text-xs" : "text-xs"}
+                    className={form.formState.errors.branch_id ? "border-red-500 ring-1 ring-red-500 bg-red-50/50 dark:bg-red-900/20 text-xs font-bold" : "text-xs"}
                     showTrigger={!id && fields.length === 0}
                     showClear={!id && !isReadOnly && fields.length === 0}
                   />
@@ -1324,14 +1141,16 @@ export function StockAdjustmentForm({
                   </ComboboxContent>
                 </Combobox>
                 {form.formState.errors.branch_id && (
-                  <p className="text-xs text-red-500 font-medium mt-1">
-                    {String(form.formState.errors.branch_id.message)}
+                  <p className="text-xs text-red-500 font-semibold mt-1 flex items-center gap-1">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    {String(form.formState.errors.branch_id.message || "Branch is required.")}
                   </p>
                 )}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="supplier" className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                {/* AG-COMMENT: Highlight supplier label and input in red if validation fails */}
+                <Label htmlFor="supplier" className={`text-xs font-bold uppercase tracking-wider ${form.formState.errors.supplier_id ? "text-red-500" : "text-muted-foreground"}`}>
                   Supplier <span className="text-red-500">*</span>
                 </Label>
                 <Combobox
@@ -1361,7 +1180,7 @@ export function StockAdjustmentForm({
                   <ComboboxInput
                     placeholder={isSuppliersLoading ? "Loading suppliers..." : "Select Supplier"}
                     disabled={isReadOnly || !!id || fields.length > 0}
-                    className={form.formState.errors.supplier_id ? "border-red-500 bg-red-50 dark:bg-red-900/10 text-xs" : "text-xs"}
+                    className={form.formState.errors.supplier_id ? "border-red-500 ring-1 ring-red-500 bg-red-50/50 dark:bg-red-900/20 text-xs font-bold" : "text-xs"}
                     showTrigger={!id && fields.length === 0}
                     showClear={!id && !isReadOnly && fields.length === 0}
                   />
@@ -1391,21 +1210,23 @@ export function StockAdjustmentForm({
                   </ComboboxContent>
                 </Combobox>
                 {form.formState.errors.supplier_id && (
-                  <p className="text-xs text-red-500 font-medium mt-1">
-                    {String(form.formState.errors.supplier_id.message)}
+                  <p className="text-xs text-red-500 font-semibold mt-1 flex items-center gap-1">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    {String(form.formState.errors.supplier_id.message || "Supplier is required.")}
                   </p>
                 )}
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+              {/* AG-COMMENT: Highlight adjustment type in red if validation fails */}
+              <Label className={`text-xs font-bold uppercase tracking-wider ${form.formState.errors.type ? "text-red-500" : "text-muted-foreground"}`}>
                 Adjustment Type <span className="text-red-500">*</span>
               </Label>
               <RadioGroup
                 value={watchedType}
-                onValueChange={(v) => form.setValue("type", v as "IN" | "OUT")}
-                className="flex gap-4 pt-1"
+                onValueChange={(v) => form.setValue("type", v as "IN" | "OUT", { shouldValidate: true })}
+                className={`flex gap-4 pt-1 ${form.formState.errors.type ? "border border-red-500 ring-1 ring-red-500 p-2.5 rounded-lg bg-red-50/20 dark:bg-red-950/20" : ""}`}
                 disabled={isReadOnly || !!id || fields.length > 0}
               >
                 <div className="flex items-center space-x-2">
@@ -1430,8 +1251,9 @@ export function StockAdjustmentForm({
                 </div>
               </RadioGroup>
               {form.formState.errors.type && (
-                <p className="text-xs text-red-500 font-medium mt-1">
-                  {String(form.formState.errors.type.message)}
+                <p className="text-xs text-red-500 font-semibold mt-1 flex items-center gap-1">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  {String(form.formState.errors.type.message || "Adjustment type is required.")}
                 </p>
               )}
             </div>
@@ -1452,7 +1274,19 @@ export function StockAdjustmentForm({
         </Card>
 
         {/* Product Items Table Workspace */}
-        <Card className="border-border shadow-sm bg-card border border-border/40">
+        {/* AG-COMMENT: Highlight Product Items card with red border when items validation fails */}
+        <Card className={`border shadow-sm bg-card transition-all ${
+          form.formState.errors.items ? "border-red-500 ring-1 ring-red-500/50" : "border-border/40"
+        }`}>
+          {form.formState.errors.items && fields.length === 0 && (
+            <div className="px-6 py-4 bg-red-50 dark:bg-red-950/30 border-b border-red-200 dark:border-red-800/40 flex items-center gap-3 text-red-600 dark:text-red-400">
+              <AlertCircle className="h-5 w-5 shrink-0 text-red-500" />
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider">Product Selection Required</p>
+                <p className="text-[11px] font-medium text-red-500/90">Please add at least one product item to this adjustment before saving.</p>
+              </div>
+            </div>
+          )}
           <CardHeader className="bg-card border-b border-border flex flex-col md:flex-row md:items-center justify-between gap-4 py-4 px-6">
             <div>
               <CardTitle className="text-base font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
@@ -1489,117 +1323,6 @@ export function StockAdjustmentForm({
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            {/* Global Serial Scanner Control Panel */}
-            {!isReadOnly && Number(watchedBranchId) > 0 && Number(watchedSupplierId) > 0 && watchedType === "OUT" && (
-              <div className="border-b border-border bg-muted/10 p-6 flex flex-col gap-4">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="relative flex items-center justify-center h-10 w-10 rounded-full bg-primary/10 border border-primary/20">
-                      <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping opacity-75" style={{ animationDuration: '3s' }} />
-                      <Tag className="h-5 w-5 text-primary animate-pulse" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-                        Global Serial Scanner
-                        <span className="flex h-2 w-2 relative">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                        </span>
-                      </h3>
-                      <p className="text-[11px] text-muted-foreground font-medium">
-                        Focus anywhere on the page and scan serial numbers to adjust quantities instantly.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="text-[11px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/40 px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm shrink-0">
-                    <ScanLine className="h-3.5 w-3.5" />
-                    Smart Serial Routing Active
-                  </div>
-                </div>
-
-                {/* Scan Input & Logs */}
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-stretch mt-1">
-                  {/* Manual input / capture field with auto-uppercase conversion */}
-                  <div className="md:col-span-4 relative flex items-center">
-                    <input
-                      ref={globalScanInputRef}
-                      type="text"
-                      placeholder="Scan Serial number..."
-                      value={globalScanInputVal}
-                      onChange={(e) => setGlobalScanInputVal(e.target.value.toUpperCase())}
-                      onInput={(e: React.FormEvent<HTMLInputElement>) => {
-                        // Development Note: Auto-convert typed or scanned characters to uppercase in real-time
-                        const target = e.currentTarget;
-                        target.value = target.value.toUpperCase();
-                      }}
-                      onKeyDown={async (e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          const val = globalScanInputVal;
-                          setGlobalScanInputVal("");
-                          await handleGlobalScan(val);
-                        }
-                      }}
-                      className="w-full h-10 pl-9 pr-24 text-xs font-semibold border border-primary/40 focus:border-primary rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm transition-all uppercase font-mono tracking-wider"
-                      disabled={isGlobalScanValidating}
-                    />
-                    <ScanLine className="absolute left-3 h-4 w-4 text-muted-foreground/60" />
-                    {isGlobalScanValidating ? (
-                      <span className="absolute right-3 text-[10px] font-bold text-primary animate-pulse flex items-center gap-1">
-                        <span className="h-3 w-3 animate-spin">⌾</span>
-                        Validating...
-                      </span>
-                    ) : (
-                      <span className="absolute right-3 text-[9px] font-bold bg-muted text-muted-foreground px-2 py-1 rounded border uppercase tracking-wider">
-                        Auto Focus
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Scan History Logs */}
-                  <div className="md:col-span-8 border border-border/80 rounded-xl bg-background p-3 flex flex-col justify-center min-h-[50px]">
-                    <div className="text-[9px] font-black text-muted-foreground/50 uppercase tracking-[0.15em] mb-1.5 pl-1 flex items-center justify-between">
-                      <span>Live Scan Log</span>
-                      {scanLog.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => setScanLog([])}
-                          className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-red-600 hover:text-white bg-red-50 hover:bg-red-500 border border-red-200 hover:border-red-500 rounded-md transition-all cursor-pointer shadow-sm ml-auto"
-                        >
-                          Clear log
-                        </button>
-                      )}
-                    </div>
-                    {scanLog.length === 0 ? (
-                      <span className="text-[11px] text-muted-foreground italic pl-1">
-                        No serial numbers scanned yet. Position cursor/scanner and scan.
-                      </span>
-                    ) : (
-                      <div className="flex flex-col gap-1.5">
-                        {scanLog.slice(0, 3).map((log, idx) => (
-                          <div key={idx} className="flex items-center justify-between text-xs font-semibold px-2 py-1 rounded bg-muted/30">
-                            <div className="flex items-center gap-2 truncate">
-                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${log.status === 'success' ? 'bg-green-500' : 'bg-red-500 animate-pulse'
-                                }`} />
-                              <span className="font-mono text-[10px] text-muted-foreground/80 tracking-wider">
-                                {log.serial}
-                              </span>
-                              <span className="text-foreground truncate text-[11px] font-bold">
-                                {log.message}
-                              </span>
-                            </div>
-                            <span className="text-[9px] text-muted-foreground/50 shrink-0 pl-2">
-                              {log.timestamp.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
 
             {isFormLoading || (isProductsLoading && fields.length === 0) ? (
               <div className="p-6 space-y-6">
@@ -1660,6 +1383,7 @@ export function StockAdjustmentForm({
                         <StockAdjustmentItemRow
                           key={field.id}
                           index={index}
+                          fieldItem={field as StockAdjustmentItem}
                           control={form.control}
                           onRemove={(idx) => setDeletingIndex(idx)}
                           setValue={form.setValue}
@@ -1779,7 +1503,7 @@ export function StockAdjustmentForm({
             <Button
               type="button"
               variant="outline"
-              onClick={() => handleCancelOrExit("/ids/scm/inventory-management/stock-adjustment-serial-summary")}
+              onClick={() => handleCancelOrExit("/industrial-distribution-system/scm/stock-adjustment/stock-adjustment-summary")}
               className="h-10 px-8 font-bold border-border text-muted-foreground hover:bg-card rounded-lg transition-colors text-xs"
             >
               Cancel
@@ -1830,22 +1554,41 @@ export function StockAdjustmentForm({
         </div>
       </form>
 
+      {/* AG-COMMENT: For Stock OUT, open SerialPickerModal which fetches AVAILABLE on-hand serials
+          from v_serial_onhand (status = 'Full') for the selected branch+product.
+          For Stock IN, open SerialInputModal which allows scanning/registering new serials.
+          This ensures Stock OUT never exposes a registration interface. */}
       {scannerContext && (
-        <SerialInputModal
-          open={showSerialInput}
-          onOpenChange={setShowSerialInput}
-          productName={scannerContext.productName}
-          onSave={handleSerialSave}
-          type={form.getValues("type")}
-          initialSerials={form.getValues(`items.${scannerContext.index}.serial_numbers`) || []}
-          branchId={Number(form.getValues("branch_id"))}
-          productId={Number(form.getValues(`items.${scannerContext.index}.product_id`))}
-          validateSerial={validateSerialAvailability}
-          unitName={form.getValues(`items.${scannerContext.index}.unit_name`) || undefined}
-          excludeSerials={form.getValues("items")
-            ?.filter((_, idx) => idx !== scannerContext.index)
-            ?.flatMap((item) => item.serial_numbers || []) || []}
-        />
+        form.getValues("type") === "OUT" ? (
+          <SerialPickerModal
+            open={showSerialInput}
+            onOpenChange={setShowSerialInput}
+            productName={scannerContext.productName}
+            productId={scannerContext.productId || parseNumericId(form.getValues(`items.${scannerContext.index}.product_id`))}
+            branchId={scannerContext.branchId || parseNumericId(watchedBranchId) || parseNumericId(form.getValues("branch_id"))}
+            initialSerials={scannerContext.initialSerials || []}
+            excludeSerials={form.getValues("items")
+              ?.filter((_, idx) => idx !== scannerContext.index)
+              ?.flatMap((item) => item.serial_numbers || []) || []}
+            onSave={handleSerialSave}
+          />
+        ) : (
+          <SerialInputModal
+            open={showSerialInput}
+            onOpenChange={setShowSerialInput}
+            productName={scannerContext.productName}
+            onSave={handleSerialSave}
+            type={form.getValues("type")}
+            initialSerials={scannerContext.initialSerials || []}
+            branchId={scannerContext.branchId || parseNumericId(watchedBranchId) || parseNumericId(form.getValues("branch_id"))}
+            productId={scannerContext.productId || parseNumericId(form.getValues(`items.${scannerContext.index}.product_id`))}
+            validateSerial={validateSerialAvailability}
+            unitName={scannerContext.unitName}
+            excludeSerials={form.getValues("items")
+              ?.filter((_, idx) => idx !== scannerContext.index)
+              ?.flatMap((item) => item.serial_numbers || []) || []}
+          />
+        )
       )}
 
       {isModalOpen && (
