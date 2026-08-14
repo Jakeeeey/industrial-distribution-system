@@ -1,2 +1,2 @@
-export * from "./ReviewReceiptStep";
-export * from "./TagRFIDStep";
+export { ReviewReceiptStep } from "./ReviewReceiptStep";
+export { SelectProductsStep } from "./SelectProductsStep";

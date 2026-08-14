@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useReceivingProducts } from "../providers/ReceivingProductsProvider";
 import { 
-    TagRFIDStep, 
+    SelectProductsStep, 
     ReviewReceiptStep 
 } from "./steps";
 
@@ -48,15 +48,15 @@ export function ReceivingWorkbench({ receiverName }: { receiverName?: string }) 
         <Card className="p-4 min-w-0">
             <div className="flex items-start justify-between gap-3">
                 <div>
-                    <div className="text-base font-semibold">Receiving Workbench RFID</div>
+                    <div className="text-base font-semibold">PO Receipt Workbench</div>
                     <div className="text-xs text-muted-foreground">
-                        Follow the steps to receive items for {selectedPO.poNumber}
+                        Organize received items into receipts for {selectedPO.poNumber}
                     </div>
                 </div>
 
                 <div className="flex items-center gap-2">
                     <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mr-2">
-                        {step === 1 ? "Step 2: Tagging" : "Step 3: Finalization"}
+                        {step === 1 ? "Step 1: Select Products" : "Step 2: Finalization"}
                     </div>
                     <StepDot active={false} />
                     <StepDot active={step === 1} />
@@ -66,7 +66,7 @@ export function ReceivingWorkbench({ receiverName }: { receiverName?: string }) 
 
             <div className="mt-4">
                 {step === 1 ? (
-                    <TagRFIDStep onContinue={() => setStep(2)} />
+                    <SelectProductsStep onContinue={() => setStep(2)} />
                 ) : step === 2 ? (
                     <ReviewReceiptStep key={editingReceiptId || "new"} onBack={() => setStep(1)} receiverName={receiverName} />
                 ) : null}

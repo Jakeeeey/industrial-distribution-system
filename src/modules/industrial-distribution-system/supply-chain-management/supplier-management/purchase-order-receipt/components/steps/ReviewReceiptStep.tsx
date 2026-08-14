@@ -66,26 +66,10 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
     } = useReceivingProducts();
 
     const [clientSaveError, setClientSaveError] = React.useState("");
-    const [customCounts, setCustomCounts] = React.useState<Record<string, number>>({});
-    const [selectedRows, setSelectedRows] = React.useState<Record<string, boolean>>({});
-    const [currentPhase, setCurrentPhase] = React.useState<"select_products" | "enter_details">("select_products");
 
     React.useEffect(() => {
         setReviewPage(1);
-    }, [currentPhase]);
-
-    const physicalCounts = React.useMemo(() => {
-        const counts: Record<string, number> = {};
-        if (selectedPO?.allocations) {
-            selectedPO.allocations.forEach(a => {
-                a.items.forEach(it => {
-                    const porId = String(it.porId || it.id);
-                    counts[porId] = Math.max(0, Number(it.taggedQty || 0) - Number(it.receivedQty || 0));
-                });
-            });
-        }
-        return counts;
-    }, [selectedPO]);
+    }, []);
 
     const lastInitializedRef = React.useRef<{ poId: string | null; editingReceiptId: string | null }>({ poId: null, editingReceiptId: null });
 
@@ -95,44 +79,17 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
 
         const isNewPO = lastInitializedRef.current.poId !== poId;
         const isNewEdit = editingReceiptId && lastInitializedRef.current.editingReceiptId !== editingReceiptId;
-        // ✅ Detect cancel edit: editingReceiptId went from non-null to null
         const isCancelledEdit = !editingReceiptId && lastInitializedRef.current.editingReceiptId !== null;
 
         if (isNewPO || isNewEdit || isCancelledEdit) {
-            if (editingReceiptId) {
-                if (scannedCountByPorId && Object.keys(scannedCountByPorId).length > 0) {
-                    lastInitializedRef.current = { poId, editingReceiptId };
-                    setCustomCounts(scannedCountByPorId);
-                    const initialSelected: Record<string, boolean> = {};
-                    Object.entries(scannedCountByPorId).forEach(([porId, val]) => {
-                        if (val > 0) {
-                            initialSelected[porId] = true;
-                        }
-                    });
-                    setSelectedRows(initialSelected);
-                }
-            } else if (selectedPO?.allocations) {
-                lastInitializedRef.current = { poId, editingReceiptId: null };
-                const counts: Record<string, number> = {};
-                const initialSelected: Record<string, boolean> = {};
-                selectedPO.allocations.forEach(a => {
-                    a.items.forEach(it => {
-                        const porId = String(it.porId || it.id);
-                        counts[porId] = 0;
-                        initialSelected[porId] = false;
-                    });
-                });
-                setCustomCounts(counts);
-                setSelectedRows(initialSelected);
-                // ✅ Reset metadata fields when cancelling edit to clear stale reverted data
-                if (isCancelledEdit) {
-                    setLotIds({});
-                    setBatchNos({});
-                    setExpiryDates({});
-                }
+            lastInitializedRef.current = { poId, editingReceiptId: editingReceiptId || null };
+            if (isCancelledEdit) {
+                setLotIds({});
+                setBatchNos({});
+                setExpiryDates({});
             }
         }
-    }, [selectedPO, editingReceiptId, scannedCountByPorId]);
+    }, [selectedPO, editingReceiptId]);
     const [lotIds, setLotIds] = React.useState<Record<string, string>>({});
     const [batchNos, setBatchNos] = React.useState<Record<string, string>>({});
     const [expiryDates, setExpiryDates] = React.useState<Record<string, string>>({});
@@ -267,7 +224,7 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
         setClientSaveError("");
     }, [receiptSaved]);
 
-    const safeCounts = customCounts;
+    const safeCounts = scannedCountByPorId;
 
     // All active products (the ones checked/verified)
     const allItems = React.useMemo(() => {
@@ -281,12 +238,10 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                     branchName: a?.branch?.name ?? "Unassigned",
                 }))
                 .filter((it) => {
-                    const hasPhysical = (physicalCounts[it.porId] || 0) > 0;
-                    const hasCustom = (customCounts[it.porId] || 0) > 0;
-                    return hasPhysical || hasCustom;
+                    return (safeCounts[it.porId] || 0) > 0;
                 }) as Array<ReceivingPOItem & { branchName: string }>;
         });
-    }, [selectedPO, physicalCounts, customCounts]);
+    }, [selectedPO, safeCounts]);
 
     const filteredItems = React.useMemo(() => {
         const query = searchQuery.trim().toLowerCase();
@@ -302,9 +257,9 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
         return allItems.filter((it) => {
             const porId = String(it.porId || it.id);
             const scanned = safeCounts[porId] ?? 0;
-            return selectedRows[porId] && scanned > 0;
+            return scanned > 0;
         });
-    }, [allItems, selectedRows, safeCounts]);
+    }, [allItems, safeCounts]);
 
     const filteredStep2Items = React.useMemo(() => {
         const query = searchQuery.trim().toLowerCase();
@@ -338,7 +293,7 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
         Object.keys(lotIds).forEach(id => {
             metaData[id] = { lotId: lotIds[id] || "", batchNo: batchNos[id] || "", expiryDate: expiryDates[id] || "" };
         });
-        await saveReceipt(metaData, customCounts);
+        await saveReceipt(metaData, safeCounts);
         setIsPartialModalOpen(false);
     };
 
@@ -415,11 +370,10 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
             metaData[id] = { lotId: lotIds[id] || "", batchNo: batchNos[id] || "", expiryDate: expiryDates[id] || "" };
         });
 
-        await saveReceipt(metaData, customCounts);
-    }, [saveReceipt, selectedPO?.status, allItems, safeCounts, customCounts, lotIds, batchNos, expiryDates, receiptNo, receiptType, receiptDate, receiptNoDupError]);
+        await saveReceipt(metaData, safeCounts);
+    }, [saveReceipt, selectedPO?.status, allItems, safeCounts, lotIds, batchNos, expiryDates, receiptNo, receiptType, receiptDate, receiptNoDupError]);
 
     const totalScanned = Object.values(safeCounts).reduce((a, b) => a + Number(b), 0);
-    const totalPhysicalScanned = Object.values(physicalCounts).reduce((a, b) => a + Number(b), 0);
     const totalExpected = allItems.reduce((a, b) => a + Number(b.expectedQty || 0), 0);
 
     const financials = React.useMemo(() => {
@@ -665,12 +619,10 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
                             <div>
                                 <div className="text-sm font-semibold">
-                                    {currentPhase === "select_products" ? "Step 1: Products Selection & Quantities" : "Step 2: Batch, Lot & Expiry Details"}
+                                    Step 2: Batch, Lot & Expiry Details
                                 </div>
                                 <div className="text-xs text-muted-foreground">
-                                    {currentPhase === "select_products"
-                                        ? "Select products and input the quantity to receive."
-                                        : "Specify the Batch No, Lot selection and Expiry Date for each selected product."}
+                                    Specify the Batch No, Lot selection and Expiry Date for each selected product.
                                 </div>
                             </div>
                             <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -688,25 +640,20 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                                 <TableHeader className="bg-muted/50">
                                     <TableRow>
                                         <TableHead className="text-[10px] uppercase font-bold text-muted-foreground">Product Name</TableHead>
-                                        {currentPhase === "enter_details" && (
-                                            <>
-                                                <TableHead className="text-[10px] uppercase font-bold text-muted-foreground w-36">Batch</TableHead>
-                                                <TableHead className="text-[10px] uppercase font-bold text-muted-foreground w-44">Lot</TableHead>
-                                                <TableHead className="text-[10px] uppercase font-bold text-muted-foreground w-44">Expiry</TableHead>
-                                                <TableHead className="text-[10px] uppercase font-bold text-muted-foreground text-right">Unit Price</TableHead>
-                                                <TableHead className="text-[10px] uppercase font-bold text-muted-foreground text-center w-24">Disc. Type</TableHead>
-                                                <TableHead className="text-[10px] uppercase font-bold text-muted-foreground text-right">Disc. Amt</TableHead>
-                                                <TableHead className="text-[10px] uppercase font-bold text-muted-foreground text-right">Net Amt</TableHead>
-                                            </>
-                                        )}
+                                        <TableHead className="text-[10px] uppercase font-bold text-muted-foreground w-36">Batch</TableHead>
+                                        <TableHead className="text-[10px] uppercase font-bold text-muted-foreground w-44">Lot</TableHead>
+                                        <TableHead className="text-[10px] uppercase font-bold text-muted-foreground w-44">Expiry</TableHead>
+                                        <TableHead className="text-[10px] uppercase font-bold text-muted-foreground text-right">Unit Price</TableHead>
+                                        <TableHead className="text-[10px] uppercase font-bold text-muted-foreground text-center w-24">Disc. Type</TableHead>
+                                        <TableHead className="text-[10px] uppercase font-bold text-muted-foreground text-right">Disc. Amt</TableHead>
+                                        <TableHead className="text-[10px] uppercase font-bold text-muted-foreground text-right">Net Amt</TableHead>
                                         <TableHead className="text-[10px] uppercase font-bold text-muted-foreground text-center w-20">Expected</TableHead>
-                                        <TableHead className="text-[10px] uppercase font-bold text-muted-foreground text-center w-24">Phys. Tagged</TableHead>
                                         <TableHead className="text-[10px] uppercase font-bold text-muted-foreground text-center w-24">Receive Qty</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {(() => {
-                                        const activeItemsList = currentPhase === "select_products" ? filteredItems : filteredStep2Items;
+                                        const activeItemsList = filteredStep2Items;
                                         const PAGE_SIZE = 10;
                                         const paginatedItems = activeItemsList.slice((reviewPage - 1) * PAGE_SIZE, reviewPage * PAGE_SIZE);
                                         return paginatedItems.map((it: ReceivingPOItem) => {
@@ -724,8 +671,6 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                                                         <div className="font-bold text-xs">{it.name}</div>
                                                         <div className="text-[9px] text-muted-foreground font-mono">SKU: {it.barcode} | UOM: {it.uom}</div>
                                                     </TableCell>
-                                                    {currentPhase === "enter_details" && (
-                                                        <>
                                                             <TableCell>
                                                                 <Input
                                                                     className={cn(
@@ -765,63 +710,11 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                                                             <TableCell className="text-center text-[10px] text-muted-foreground">{it.discountType}</TableCell>
                                                             <TableCell className="text-right text-xs text-destructive font-medium">{(discA || 0) > 0 ? `${formatPHP(discA * scanned)}` : "—"}</TableCell>
                                                             <TableCell className="text-right font-bold text-xs">{formatPHP(lineTotal)}</TableCell>
-                                                        </>
-                                                    )}
                                                     <TableCell className="text-center font-bold text-xs">{expected}</TableCell>
                                                     <TableCell className="text-center">
-                                                        <Badge variant="outline" className="h-5 border-primary/30 text-primary font-bold">
-                                                            {physicalCounts[porId] ?? 0}
+                                                        <Badge variant="secondary" className="h-6 px-3 bg-muted text-foreground font-black text-xs">
+                                                            {scanned}
                                                         </Badge>
-                                                    </TableCell>
-                                                    <TableCell className="text-center">
-                                                        {currentPhase === "select_products" ? (
-                                                            !selectedRows[porId] ? (
-                                                                <Button
-                                                                    type="button"
-                                                                    variant="outline"
-                                                                    size="sm"
-                                                                    className="h-8 w-24 text-xs font-bold border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/5 mx-auto flex items-center justify-center"
-                                                                    onClick={() => {
-                                                                        setSelectedRows(prev => ({ ...prev, [porId]: true }));
-                                                                        setCustomCounts(prev => ({ ...prev, [porId]: 0 }));
-                                                                    }}
-                                                                >
-                                                                    Select
-                                                                </Button>
-                                                            ) : (
-                                                                <div className="flex items-center gap-1 justify-center">
-                                                                    <Input
-                                                                        type="number"
-                                                                        min={0}
-                                                                        max={physicalCounts[porId] ?? 0}
-                                                                        value={customCounts[porId] ?? 0}
-                                                                        onChange={(e) => {
-                                                                            const limit = physicalCounts[porId] ?? 0;
-                                                                            const val = Math.max(0, Math.min(limit, Number(e.target.value)));
-                                                                            setCustomCounts(prev => ({ ...prev, [porId]: val }));
-                                                                        }}
-                                                                        className="w-16 h-8 text-center text-xs font-bold bg-background"
-                                                                    />
-                                                                    <Button
-                                                                        type="button"
-                                                                        variant="ghost"
-                                                                        size="icon"
-                                                                        className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                                                                        onClick={() => {
-                                                                            setSelectedRows(prev => ({ ...prev, [porId]: false }));
-                                                                            setCustomCounts(prev => ({ ...prev, [porId]: 0 }));
-                                                                        }}
-                                                                        title="Deselect product"
-                                                                    >
-                                                                        <XCircle className="h-4 w-4" />
-                                                                    </Button>
-                                                                </div>
-                                                            )
-                                                        ) : (
-                                                            <Badge variant="secondary" className="h-6 px-3 bg-muted text-foreground font-black text-xs">
-                                                                {scanned}
-                                                            </Badge>
-                                                        )}
                                                     </TableCell>
                                                 </TableRow>
                                             )
@@ -830,12 +723,9 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                                 </TableBody>
                                 <TableFooter className="bg-muted/10 border-t">
                                     <TableRow>
-                                        <TableCell colSpan={currentPhase === "enter_details" ? 7 : 1} className="text-right text-[10px] font-bold uppercase">Subtotal</TableCell>
-                                        {currentPhase === "enter_details" && (
-                                            <TableCell className="text-right font-black text-foreground">{formatPHP(financials.gross)}</TableCell>
-                                        )}
+                                        <TableCell colSpan={7} className="text-right text-[10px] font-bold uppercase">Subtotal</TableCell>
+                                        <TableCell className="text-right font-black text-foreground">{formatPHP(financials.gross)}</TableCell>
                                         <TableCell className="text-center font-bold">{totalExpected}</TableCell>
-                                        <TableCell className="text-center font-bold">{totalPhysicalScanned}</TableCell>
                                         <TableCell className="text-center font-black">{totalScanned}</TableCell>
                                     </TableRow>
                                 </TableFooter>
@@ -844,7 +734,7 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
 
                         {/* Pagination Controls */}
                         {(() => {
-                            const activeItemsList = currentPhase === "select_products" ? filteredItems : filteredStep2Items;
+                            const activeItemsList = filteredStep2Items;
                             if (activeItemsList.length <= 10) return null;
                             return (
                                 <div className="flex items-center justify-between px-4 py-3 border rounded-md bg-muted/10 mt-2">
@@ -866,8 +756,7 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                             );
                         })()}
 
-                        {currentPhase === "enter_details" && (
-                            <div className="mt-4 flex flex-col md:flex-row justify-end gap-6 border-t pt-4">
+                        <div className="mt-4 flex flex-col md:flex-row justify-end gap-6 border-t pt-4">
                                 <div className="flex-1 max-w-sm ml-auto space-y-2 text-xs">
                                     <div className="flex justify-between items-center text-muted-foreground">
                                         <span className="font-bold uppercase tracking-wider text-[10px]">Gross Amount:</span>
@@ -903,8 +792,7 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                                         </p>
                                     )}
                                 </div>
-                            </div>
-                        )}
+                        </div>
 
                         {(clientSaveError || saveError) && (
                             <div className="mt-4 p-3 bg-destructive/15 text-destructive text-xs font-bold text-center border border-destructive/20 rounded-md">
@@ -913,46 +801,25 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                         )}
 
                         <div className="mt-4 flex justify-end gap-3 border-t pt-4">
-                            {currentPhase === "select_products" ? (
-                                <>
-                                    {onBack && (
-                                        <Button
-                                            variant="outline"
-                                            className="border-primary/20 hover:border-primary hover:bg-primary/5 font-black uppercase text-xs tracking-wider h-11 px-8"
-                                            onClick={onBack}
-                                            type="button"
-                                            disabled={savingReceipt}
-                                        >
-                                            Back
-                                        </Button>
-                                    )}
-                                    <Button
-                                        className="bg-primary text-primary-foreground hover:bg-primary/90 font-black uppercase text-xs tracking-wider h-11 px-8 shadow-md"
-                                        onClick={() => setCurrentPhase("enter_details")}
-                                        disabled={totalScanned === 0}
-                                    >
-                                        Next
-                                    </Button>
-                                </>
-                            ) : (
-                                <>
+                            <>
+                                {onBack && (
                                     <Button
                                         variant="outline"
                                         className="border-primary/20 hover:border-primary hover:bg-primary/5 font-black uppercase text-xs tracking-wider h-11 px-8"
-                                        onClick={() => setCurrentPhase("select_products")}
+                                        onClick={onBack}
                                         disabled={savingReceipt}
                                     >
                                         Back
                                     </Button>
-                                    <Button
-                                        className="bg-primary text-primary-foreground hover:bg-primary/90 font-black uppercase text-xs tracking-wider h-11 px-8 shadow-md"
-                                        onClick={handleSaveReceipt}
-                                        disabled={savingReceipt}
-                                    >
+                                )}
+                                <Button
+                                    className="bg-primary text-primary-foreground hover:bg-primary/90 font-black uppercase text-xs tracking-wider h-11 px-8 shadow-md"
+                                    onClick={handleSaveReceipt}
+                                    disabled={savingReceipt}
+                                >
                                         {savingReceipt ? "Saving..." : "Save Final Receipt"}
                                     </Button>
                                 </>
-                            )}
                         </div>
                     </Card>
                 </div>

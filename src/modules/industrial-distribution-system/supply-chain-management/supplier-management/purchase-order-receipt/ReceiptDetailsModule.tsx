@@ -8,8 +8,8 @@ import { ReceiptDetailsWorkbench } from "./components/ReceiptDetailsWorkbench";
 export function ReceiptDetailsModule({ receiverId, receiverName }: { receiverId?: number; receiverName?: string }) {
     return (
         <ReceivingProductsProvider receiverId={receiverId}>
-            <div className="w-full px-6 py-8">
-                <div className="mb-6">
+            <div className="h-full flex flex-col px-6 py-4 overflow-hidden">
+                <div className="mb-4 shrink-0">
                     <h1 className="text-2xl font-semibold tracking-tight">
                         Purchase Order Receipt RFID
                     </h1>
@@ -18,9 +18,13 @@ export function ReceiptDetailsModule({ receiverId, receiverName }: { receiverId?
                     </p>
                 </div>
 
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-[380px_1fr] items-start">
-                    <AvailableForReceiving />
-                    <ReceiptDetailsWorkbench receiverName={receiverName} />
+                <div className="flex-1 grid grid-cols-1 gap-6 lg:grid-cols-[380px_1fr] min-h-0 overflow-hidden">
+                    <div className="h-full overflow-hidden flex flex-col">
+                        <AvailableForReceiving />
+                    </div>
+                    <div className="h-full overflow-hidden flex flex-col">
+                        <ReceiptDetailsWorkbench receiverName={receiverName} />
+                    </div>
                 </div>
             </div>
         </ReceivingProductsProvider>

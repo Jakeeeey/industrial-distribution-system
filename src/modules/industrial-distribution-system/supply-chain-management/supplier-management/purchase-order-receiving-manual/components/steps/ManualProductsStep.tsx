@@ -42,7 +42,7 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
     const [serialModalOpen, setSerialModalOpen] = React.useState(false);
     const [activePorId, setActivePorId] = React.useState<string | null>(null);
     const [activeProductName, setActiveProductName] = React.useState("");
-    const [tempSerials, setTempSerials] = React.useState<{ sn: string; tareWeight: string; expiryDate: string }[]>([]);
+    const [tempSerials, setTempSerials] = React.useState<{ sn: string; tareWeight: string; expiryDate: string; isSaved?: boolean }[]>([]);
     const [newSerial, setNewSerial] = React.useState("");
     const [newTare, setNewTare] = React.useState("");
     const [newExpiry, setNewExpiry] = React.useState("");
@@ -53,7 +53,7 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
     const [blockedAssetSerial, setBlockedAssetSerial] = React.useState<{ sn: string; assetId: unknown; status: unknown; condition: unknown } | null>(null);
     const [isBlockedSerialOpen, setIsBlockedSerialOpen] = React.useState(false);
     const [isSerialOverLimitOpen, setIsSerialOverLimitOpen] = React.useState(false);
-    const [pendingSerialEntry, setPendingSerialEntry] = React.useState<{ sn: string; tare: string; expiry: string } | null>(null);
+    const [pendingSerialEntry, setPendingSerialEntry] = React.useState<{ sn: string; tare: string; expiry: string; isSaved?: boolean } | null>(null);
     const [isCancelConfirmOpen, setIsCancelConfirmOpen] = React.useState(false);
     
     // ✅ Registration Modal state
@@ -115,14 +115,16 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
         });
     }, [filteredItems, manualCounts]);
 
+    const { saveReceipt, savingReceipt } = useReceivingProductsManual();
+
     const [isPartialWarningOpen, setIsPartialWarningOpen] = React.useState(false);
 
-    const proceedToNextStep = () => {
+    const proceedToSave = async () => {
         setIsPartialWarningOpen(false);
-        onContinue();
+        await saveReceipt();
     };
 
-    const handleContinueClick = () => {
+    const handleSaveClick = () => {
         if (incompleteSerialized.length > 0) {
             const first = incompleteSerialized[0];
             toast.error("Incomplete Registration", {
@@ -135,7 +137,7 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
             setIsPartialWarningOpen(true);
             return;
         }
-        proceedToNextStep();
+        proceedToSave();
     };
 
     const openSerialModal = (id: string, name: string) => {
@@ -144,7 +146,8 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
         const existingSerials = (serialsByPorId[id] || []).map(s => ({
             sn: s.sn,
             tareWeight: s.tareWeight || "",
-            expiryDate: s.expiryDate || todayYMD()
+            expiryDate: s.expiryDate || todayYMD(),
+            isSaved: s.isSaved
         }));
         setTempSerials(existingSerials);
         setNewSerial("");
@@ -297,7 +300,7 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
             }
             const isDup = tempSerials.some(x => x.sn === pending);
             if (!isDup) {
-                finalSerials.push({ sn: pending, tareWeight: newTare, expiryDate: newExpiry });
+                finalSerials.push({ sn: pending, tareWeight: newTare, expiryDate: newExpiry, isSaved: false });
             }
         } else if (pending && !isPendingValid) {
             toast.warning("Incomplete Entry Ignored", { 
@@ -341,7 +344,7 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                                     poId,
                                     productId,
                                     branchId,
-                                    serial: { sn: s.sn, tareWeight: s.tareWeight, expiryDate: s.expiryDate },
+                                    serial: { sn: s.sn, tareWeight: s.tareWeight, expiryDate: s.expiryDate, isSaved: s.isSaved },
                                 }),
                             }).catch(e => console.warn("[presave_serial] Non-blocking failure:", e))
                         )
@@ -381,7 +384,7 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
         <div className="h-full flex flex-col overflow-hidden">
             <div className="shrink-0 flex items-center justify-between mb-4 px-1">
                 <div className="flex flex-col gap-0.5">
-                    <div className="text-[10px] font-black text-primary uppercase tracking-widest">Step 3: Manual Receipt</div>
+                    <div className="text-[10px] font-black text-primary uppercase tracking-widest">Step 2: Tag Serials and Quantities</div>
                     <div className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Enter quantities or register serials for verified products</div>
                 </div>
                 <Button variant="ghost" size="sm" onClick={onBack} className="h-8 rounded-lg font-black uppercase text-[9px] tracking-widest text-slate-400 hover:text-primary">
@@ -502,16 +505,16 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                     </div>
                 </div>
                 <Button
-                    onClick={handleContinueClick}
+                    onClick={handleSaveClick}
                     className={cn(
                         "h-12 px-10 rounded-xl font-black uppercase tracking-widest text-xs shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]",
-                        incompleteSerialized.length > 0 
+                        incompleteSerialized.length > 0 || savingReceipt
                             ? "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none" 
                             : "bg-primary text-white shadow-primary/20"
                     )}
-                    disabled={totalEntered === 0}
+                    disabled={totalEntered === 0 || savingReceipt}
                 >
-                    Proceed to Final Review <ChevronRight className="ml-2 w-4 h-4" />
+                    {savingReceipt ? "Saving..." : "Save Tagged Quantities"} <ChevronRight className="ml-2 w-4 h-4" />
                 </Button>
             </div>
 
@@ -557,7 +560,7 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                     <div className="p-4 bg-slate-50 flex gap-3 justify-end">
                         <AlertDialogCancel className="rounded-xl px-6 font-black uppercase tracking-widest text-[10px]">Back</AlertDialogCancel>
                         <AlertDialogAction
-                            onClick={proceedToNextStep}
+                            onClick={proceedToSave}
                             className="bg-orange-600 hover:bg-orange-700 rounded-xl px-6 font-black uppercase tracking-widest text-[10px]"
                         >
                             Proceed
@@ -780,7 +783,7 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                                     <Button
                                         variant="link"
                                         onClick={async () => {
-                                            const toDelete = tempSerials.map(s => s.sn);
+                                            const toDelete = tempSerials.filter(s => !s.isSaved).map(s => s.sn);
                                             if (toDelete.length > 0) {
                                                 try {
                                                     await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
@@ -800,12 +803,12 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                                                     console.error("Failed to bulk clear serials", e);
                                                 }
                                             }
-                                            setTempSerials([]);
-                                            toast.info("Cleared all serials");
+                                            setTempSerials(prev => prev.filter(s => s.isSaved));
+                                            toast.info("Cleared all unsaved serials");
                                         }}
                                         className="h-auto p-0 text-[10px] font-black uppercase tracking-widest text-red-500 hover:text-red-600"
                                     >
-                                        Clear All
+                                        Clear Unsaved
                                     </Button>
                                 )}
                             </div>
@@ -840,14 +843,16 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                                                             {item.expiryDate || "-"}
                                                         </TableCell>
                                                         <TableCell className="py-2 px-2 text-center">
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="h-8 w-8 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all opacity-0 group-hover:opacity-100"
-                                                                onClick={() => removeSerial(idx)}
-                                                            >
-                                                                <Trash2 className="h-3.5 w-3.5" />
-                                                            </Button>
+                                                            {!item.isSaved && (
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-8 w-8 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all opacity-0 group-hover:opacity-100"
+                                                                    onClick={() => removeSerial(idx)}
+                                                                >
+                                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                                </Button>
+                                                            )}
                                                         </TableCell>
                                                     </TableRow>
                                                 ))

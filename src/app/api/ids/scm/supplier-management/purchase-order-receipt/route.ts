@@ -903,52 +903,7 @@ export async function POST(req: NextRequest) {
                 draftRfids: draftRfids.length > 0 ? draftRfids : undefined,
             });
         }
-        if (action === "scan_rfid") {
-            const rawRfid = toStr(body.rfid);
-            const rfid = normalizeRfid(rawRfid);
-            const poId = toNum(body.poId);
-            if (!rfid || rfid.length !== RFID_LEN) return bad(`Invalid RFID. Must be exactly ${RFID_LEN} hex characters.`, 400);
-            const url = `${base}/items/${POR_ITEMS_COLLECTION}?limit=1&filter[rfid_code][_eq]=${encodeURIComponent(rfid)}&fields=receiving_item_id,purchase_order_product_id,product_id,rfid_code`;
-            const j = await fetchJson<{ data: Record<string, unknown>[] }>(url);
-            const row = j?.data?.[0];
-            if (!row) {
-                const lines = await fetchPOProductsByPOId(base, poId);
-                const productsMap = await fetchProductsMap(base, lines.map(l => toNum(l.product_id)));
-                const branchesMap = await fetchBranchesMap(base, lines.map(l => toNum(l.branch_id ?? 0)));
-                const untaggedItems = lines.map((ln) => {
-                    const pid = toNum(ln.product_id);
-                    const bid = toNum(ln.branch_id ?? 0);
-                    const p = productsMap.get(pid);
-                    return { productId: String(pid), branchId: String(bid), name: toStr(p?.product_name, `Product #${pid}`), barcode: productDisplayCode(p, pid), branchName: branchesMap.get(bid) || "Unassigned", expectedQty: toNum(ln.ordered_quantity) };
-                });
-                return ok({ status: "unknown", rfid, items: untaggedItems });
-            }
 
-            // RFID is known! Fetch associated product and PO for better feedback
-            let productName = "Unknown Product";
-            let poNumber = "Unknown PO";
-            try {
-                const porProdId = toNum(row.purchase_order_product_id);
-                const prodUrl = `${base}/items/${PO_PRODUCTS_COLLECTION}/${porProdId}?fields=product_id.product_name,purchase_order_id.purchase_order_no`;
-                const pdj = await fetchJson<{ data: { product_id?: { product_name?: string }; purchase_order_id?: { purchase_order_no?: string } } }>(prodUrl);
-                const pd = pdj?.data;
-                if (pd) {
-                    productName = pd.product_id?.product_name || productName;
-                    poNumber = pd.purchase_order_id?.purchase_order_no || poNumber;
-                }
-            } catch (e) {
-                console.error("Failed to fetch tag owner details:", e);
-            }
-
-            return ok({
-                status: "known",
-                rfid: row.rfid_code,
-                porId: String(row.purchase_order_product_id),
-                productName,
-                poNumber,
-                alreadyReceived: true
-            });
-        }
         if (action === "lookup_product") {
             const code = toStr(body.barcode).trim();
             const sid = toNum(body.supplierId);
@@ -1000,134 +955,7 @@ export async function POST(req: NextRequest) {
             });
         }
 
-        // -------------------------
-        // tag_and_receive — on-the-fly tagging + receiving
-        // -------------------------
-        if (action === "tag_and_receive") {
-            const poId = toNum(body.poId);
-            const productId = toNum(body.productId);
-            const branchId = toNum(body.branchId);
-            const rawRfid = toStr(body.rfid);
-            const rfid = normalizeRfid(rawRfid);
 
-            if (!poId) return bad("Missing poId.", 400);
-            if (!productId) return bad("Missing productId.", 400);
-            if (!branchId) return bad("Missing branchId.", 400);
-            if (!rfid || rfid.length !== RFID_LEN) {
-                return bad(`Invalid RFID. Must be exactly ${RFID_LEN} hex characters.`, 400);
-            }
-
-            // ✅ RFID duplicate validation (global check across ALL POs)
-            const dup = await checkRfidDuplicate(base, rfid);
-            if (dup.exists) return bad(dup.detail ?? "Duplicate RFID.", 409);
-
-            // ✅ Fetch current totals to enforce cap
-            const lines = await fetchPOProductsByPOId(base, poId);
-
-            const matchingLine = lines.find((ln: POProductRow) => toNum(ln.product_id) === productId && toNum(ln.branch_id ?? 0) === branchId);
-
-
-
-            // Resolve discount from PO header
-            const poUrl = `${base}/items/${PO_COLLECTION}/${poId}?fields=supplier_name,discount_type.*,discount_type.line_per_discount_type.line_id.*,vat_amount,withholding_tax_amount`;
-            const pj = await fetchJson<{ data: POHeaderRow }>(poUrl);
-            const po = pj?.data;
-
-            let poDiscountPercent = toNum(po?.discount_percentage);
-            const dType = po?.discount_type;
-            const dLines = dType?.line_per_discount_type || [];
-            if (dLines.length > 0) {
-                poDiscountPercent = calculateDiscountFromLines(dLines);
-            } else if (!poDiscountPercent) {
-                poDiscountPercent = deriveDiscountPercentFromCode(toStr(dType?.discount_type));
-            }
-
-            const productLinksMap = await fetchProductSupplierLinks(base, [productId], toNum(po?.supplier_name));
-            const discountMap = await fetchDiscountTypesMap(base);
-
-            const lineDiscountTypeId = matchingLine?.discount_type ?? productLinksMap.get(productId)?.discount_type;
-            let discountPercent = 0;
-            let discountTypeId = null;
-
-            const resolvedLineId = ensureId(lineDiscountTypeId);
-            if (resolvedLineId) {
-                discountTypeId = resolvedLineId;
-                const dt = discountMap.get(String(resolvedLineId));
-                if (dt) {
-                    discountPercent = dt.pct;
-                }
-            } else {
-                discountTypeId = ensureId(dType);
-                discountPercent = poDiscountPercent;
-            }
-
-            let unitPrice = 0;
-            if (matchingLine) {
-                unitPrice = toNum(matchingLine.unit_price);
-            } else {
-                const pUrl = `${base}/items/${PRODUCTS_COLLECTION}/${productId}?fields=cost_per_unit`;
-                const productJ = await fetchJson<{ data: ProductRow }>(pUrl);
-                unitPrice = toNum(productJ?.data?.cost_per_unit || 0);
-            }
-
-            const isInvoice = (toNum(po?.vat_amount) > 0) || (toNum(po?.withholding_tax_amount) > 0);
-
-            const ensured = await ensureOpenReceivingRow({
-                base,
-                poId,
-                productId,
-                branchId,
-                unitPrice,
-                discountTypeId,
-                discountPercent,
-                isInvoice
-            });
-
-            await fetchJson(`${base}/items/${POR_ITEMS_COLLECTION}`, {
-                method: "POST",
-                body: JSON.stringify({
-                    purchase_order_product_id: ensured.porId,
-                    product_id: productId,
-                    rfid_code: rfid,
-                    created_at: nowISO()
-                }),
-            });
-
-            return ok({
-                status: "tagged",
-                porId: String(ensured.porId),
-                rfid,
-                productId: String(productId),
-                branchId: String(branchId),
-                created: ensured.created,
-                isExtra: !matchingLine
-            });
-        }
-
-        // -------------------------
-        // delete_rfid — remove a single RFID tag from the database
-        // -------------------------
-        if (action === "delete_rfid") {
-            const rawRfid = toStr(body.rfid);
-            const rfid = normalizeRfid(rawRfid);
-            if (!rfid || rfid.length !== RFID_LEN) {
-                return bad(`Invalid RFID. Must be exactly ${RFID_LEN} hex characters.`, 400);
-            }
-
-            // Find the receiving item by rfid_code
-            const findUrl = `${base}/items/${POR_ITEMS_COLLECTION}?limit=1&filter[rfid_code][_eq]=${encodeURIComponent(rfid)}&fields=receiving_item_id`;
-            const found = await fetchJson<{ data: Array<{ receiving_item_id: number }> }>(findUrl);
-            const row = found?.data?.[0];
-            if (!row?.receiving_item_id) {
-                // Tag not found in DB — already deleted or never persisted; treat as success
-                return ok({ deleted: false, message: "Tag not found in database." });
-            }
-
-            // Delete the receiving item
-            await fetchJson(`${base}/items/${POR_ITEMS_COLLECTION}/${row.receiving_item_id}`, { method: "DELETE" });
-
-            return ok({ deleted: true, rfid, receivingItemId: row.receiving_item_id });
-        }
 
         if (action === "save_receipt") {
             const poId = toNum(body.poId);
@@ -1255,47 +1083,9 @@ export async function POST(req: NextRequest) {
                 }
             }
 
-            // ✅ Handle Edit Mode: Remove tags that were deleted from the UI
-            if (isEdit) {
-                const existingRows = porRows.filter(r => toStr(r.receipt_no) === editReceiptNo);
-                const existingPorIds = existingRows.map(r => toNum(r.purchase_order_product_id)).filter(id => id > 0);
 
-                if (existingPorIds.length > 0) {
-                    const rfidUrl = `${base}/items/${POR_ITEMS_COLLECTION}?limit=-1&filter[purchase_order_product_id][_in]=${existingPorIds.join(",")}&fields=receiving_item_id,rfid_code`;
-                    const existingRfidsRes = await fetchJson<{ data: Array<{ receiving_item_id: number, rfid_code: string }> }>(rfidUrl).catch(() => null);
-                    const existingRfids = existingRfidsRes?.data || [];
 
-                    const newRfidCodes = new Set(Array.isArray(newTags) ? newTags.map(t => t.rfid) : []);
-                    const toDelete = existingRfids.filter(r => !newRfidCodes.has(r.rfid_code));
 
-                    for (const r of toDelete) {
-                        await fetchJson(`${base}/items/${POR_ITEMS_COLLECTION}/${r.receiving_item_id}`, { method: "DELETE" }).catch(() => { });
-                    }
-                }
-            }
-
-            // ✅ 2. Persist RFID Tags (resolving local IDs to real IDs)
-            if (Array.isArray(newTags)) {
-                for (const t of newTags) {
-                    if (!t.rfid || !t.porId) continue;
-                    const realPorId = realPorIdsByLocalKey.get(String(t.porId)) || toNum(t.porId);
-                    if (!realPorId) continue;
-
-                    // Double check if already exists to prevent duplication
-                    const check = await checkRfidDuplicate(base, t.rfid);
-                    if (check.exists) continue;
-
-                    await fetchJson(`${base}/items/${POR_ITEMS_COLLECTION}`, {
-                        method: "POST",
-                        body: JSON.stringify({
-                            purchase_order_product_id: realPorId,
-                            product_id: toNum(t.productId),
-                            rfid_code: t.rfid,
-                            created_at: nowISO()
-                        })
-                    }).catch(() => { });
-                }
-            }
 
             // ✅ 3. Aggregate ALL Tags for the PO to Recalculate Totals (Source of Truth)
             const allPorRows = [...porRows];
@@ -1347,23 +1137,8 @@ export async function POST(req: NextRequest) {
                 const userRequestedQty = toNum(porCounts[localKey]);
                 const newQty = userRequestedQty;
 
-                // If quantity is now 0, move ALL tags currently on this record to an open POR row (so they stay in the pool)
-                // and reset/delete the item from this receipt.
+                // If quantity is now 0, reset/delete the item from this receipt.
                 if (newQty <= 0) {
-                    const lineTags = receivingItems.filter(it => toNum(it.purchase_order_product_id) === realPorId);
-                    if (lineTags.length > 0) {
-                        const ensuredOpen = await ensureOpenReceivingRow({
-                            base, poId, productId: pId, branchId: toNum(pr.branch_id),
-                            unitPrice: uPrice, discountTypeId: dtId, discountPercent: linePct, isInvoice: poIsInvoice
-                        });
-                        for (const t of lineTags) {
-                            await fetchJson(`${base}/items/${POR_ITEMS_COLLECTION}/${t.receiving_item_id}`, {
-                                method: "PATCH",
-                                body: JSON.stringify({ purchase_order_product_id: ensuredOpen.porId })
-                            }).catch(() => { });
-                        }
-                    }
-
                     const isExtra = !lines.some(l => toNum(l.product_id) === pId && toNum(l.branch_id ?? 0) === toNum(pr.branch_id ?? 0));
                     if (isExtra) {
                         await fetchJson(`${base}/items/${POR_COLLECTION}/${realPorId}`, { method: "DELETE" }).catch(() => { });
@@ -1378,20 +1153,27 @@ export async function POST(req: NextRequest) {
                     continue;
                 }
 
-                // If quantity is N > 0, and we have MORE tags than N, move the excess tags back to the open POR row!
-                const lineTags = receivingItems.filter(it => toNum(it.purchase_order_product_id) === realPorId);
-                if (lineTags.length > newQty) {
-                    const ensuredOpen = await ensureOpenReceivingRow({
-                        base, poId, productId: pId, branchId: toNum(pr.branch_id),
-                        unitPrice: uPrice, discountTypeId: dtId, discountPercent: linePct, isInvoice: poIsInvoice
-                    });
-                    const excessTags = lineTags.slice(newQty);
-                    for (const t of excessTags) {
-                        await fetchJson(`${base}/items/${POR_ITEMS_COLLECTION}/${t.receiving_item_id}`, {
-                            method: "PATCH",
-                            body: JSON.stringify({ purchase_order_product_id: ensuredOpen.porId })
-                        }).catch(() => { });
-                    }
+                // Split logic: If original quantity is greater than the new requested quantity,
+                // we create a new open row for the remainder.
+                const originalQty = toNum(pr.received_quantity);
+                if (originalQty > newQty) {
+                    const remainder = originalQty - newQty;
+                    // Create an open row for the remainder
+                    await fetchJson(`${base}/items/${POR_COLLECTION}`, {
+                        method: "POST",
+                        body: JSON.stringify({
+                            purchase_order_id: poId,
+                            product_id: pId,
+                            branch_id: toNum(pr.branch_id),
+                            unit_price: uPrice,
+                            discount_type: dtId || null,
+                            received_quantity: remainder,
+                            receipt_no: null,
+                            isPosted: 0,
+                            is_reverted: 0,
+                            receiving_method: "manual"
+                        })
+                    }).catch(() => { });
                 }
 
                 const lineGross = uPrice * newQty;

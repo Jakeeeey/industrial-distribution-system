@@ -895,7 +895,10 @@ export async function POST(req: NextRequest) {
         }
 
         if (action === "save_receipt") {
-            const { poId, receiptNo, receiptType, receiptDate, porCounts, porSerials, porMetaData, receiverId } = body;
+            const { poId, porCounts, porSerials, porMetaData, receiverId } = body;
+            const receiptNo = null; // No longer organizing receipts here
+            const receiptDate = null;
+            const receiptType = null;
             const rollbackTracker: Array<{ execute: () => Promise<void>, undo: () => Promise<void> }> = [];
             const thePoId = toNum(poId);
             if (!thePoId) return bad("Missing PO ID");
@@ -1031,12 +1034,9 @@ export async function POST(req: NextRequest) {
                     if (!dtId) dtId = ensureId(dType);
                 }
 
-                // ✅ Fix 5: Use submitted qty as absolute value when receipt already exists (idempotent re-submission) - AG 2026-07-14
-                // Check if this receipt_no already exists for this POR (re-submission scenario)
-                const existingReceiptRow = porRows.find(r => toStr(r.receipt_no) === toStr(receiptNo) && toNum(r.purchase_order_product_id) === targetPorId);
-                const newQty = existingReceiptRow
-                    ? qty  // Re-submission: use submitted count directly, not cumulative
-                    : toNum(pr?.received_quantity || 0) + qty;  // New receipt session: accumulate on top of prior receipts
+                // For draft sessions (no receipt No), always use the submitted count directly
+                const existingReceiptRow = porRows.find(r => !r.receipt_no && toNum(r.purchase_order_product_id) === targetPorId);
+                const newQty = qty; // Just overwrite the draft quantity with the current modal selection
                 const lineGross = uPrice * newQty;
                 const lineDisc = Number((lineGross * (linePct / 100)).toFixed(2));
                 const lineNet = lineGross - lineDisc;
@@ -1063,10 +1063,10 @@ export async function POST(req: NextRequest) {
                 }
 
                 const patch: Record<string, unknown> = {
-                    receipt_no: receiptNo, receipt_date: receiptDate, received_quantity: newQty, received_date: nowISO(),
-                    receipt_type: toNum(receiptType) || null,
-                    isPosted: (isRefill || isSerialized) ? 0 : 1,
-                    is_reverted: 0, // ✅ FIX: Explicitly clear reverted flag on re-submission
+                    received_quantity: newQty, 
+                    received_date: nowISO(),
+                    isPosted: 0, // Always draft in PO Receiving
+                    is_reverted: 0,
                     discount_type: dtId || null, discounted_amount: lineDisc,
                     vat_amount: vatAmtTotal, withholding_amount: ewtAmtTotal,
                     total_amount: Number(lineGross.toFixed(2))
@@ -1315,8 +1315,8 @@ export async function POST(req: NextRequest) {
                 const pors = updatedPorIdsByKey.get(k) || [];
                 const allRows = pors.map(id => fPors.find(r => toNum(r.purchase_order_product_id) === id)).filter(Boolean);
 
-                const currentRows = allRows.filter(r => toStr(r!.receipt_no) === toStr(receiptNo));
-                const previousRows = allRows.filter(r => toStr(r!.receipt_no) !== toStr(receiptNo));
+                const currentRows = allRows.filter((r): r is NonNullable<typeof r> => r != null && !r.receipt_no && toNum(r.isPosted) === 0);
+                const previousRows = allRows.filter((r): r is NonNullable<typeof r> => r != null && (!!r.receipt_no || toNum(r.isPosted) !== 0));
 
                 const prevRecQty = previousRows.reduce((sum, r) => sum + effectiveReceivedQty(r!), 0);
                 const currRecQty = currentRows.reduce((sum, r) => sum + effectiveReceivedQty(r!), 0);
@@ -1346,9 +1346,8 @@ export async function POST(req: NextRequest) {
                 }]);
             }
 
-            // 2. Process extra POR rows that aren't in fLines
             for (const r of fPors) {
-                if (toStr(r.receipt_no) !== toStr(receiptNo)) continue; // ONLY show items from THIS receipt
+                if (r.receipt_no || toNum(r.isPosted) !== 0) continue; // ONLY show draft items from THIS session
 
                 const pid = toNum(r.product_id);
                 const bid = toNum(r.branch_id);

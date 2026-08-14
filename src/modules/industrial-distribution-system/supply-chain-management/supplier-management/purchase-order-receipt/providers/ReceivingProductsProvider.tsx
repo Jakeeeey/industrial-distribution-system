@@ -201,6 +201,7 @@ type Ctx = {
 
     // Virtual count based on DB scans + local buffer
     scannedCountByPorId: Record<string, number>;
+    setScannedCountByPorId: React.Dispatch<React.SetStateAction<Record<string, number>>>;
 
     // ✅ NEW: receipt saved signal (non-breaking)
     receiptSaved: ReceiptSavedInfo | null;
@@ -1434,6 +1435,7 @@ export function ReceivingProductsProvider({ children, receiverId }: { children: 
         activity,
 
         scannedCountByPorId: scannedCountByPorId ?? {},
+        setScannedCountByPorId,
 
         receiptSaved,
         clearReceiptSaved,
