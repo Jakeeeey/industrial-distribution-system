@@ -249,7 +249,8 @@ export async function getSpringSerialLookup(serialNumber: string, branchId: numb
   const SPRING_URL = process.env.SPRING_API_BASE_URL;
   if (!SPRING_URL) throw new Error("SPRING_API_BASE_URL is not defined");
 
-  const inputSerial = serialNumber.trim().toUpperCase();
+  // Strictly check case sensitivity (do not uppercase)
+  const inputSerial = serialNumber.trim();
   const extractData = (raw: unknown): unknown[] => {
     if (Array.isArray(raw)) return raw;
     if (raw && typeof raw === "object") {
@@ -317,7 +318,8 @@ export async function getSpringSerialLookup(serialNumber: string, branchId: numb
     const dbVal = item.serialNumber ?? item.serial_number ?? item.serialNo ?? item.serial;
     if (dbVal === undefined || dbVal === null) return false;
     
-    const dbSerial = String(dbVal).trim().toUpperCase();
+    // Enforce strict case-sensitive match
+    const dbSerial = String(dbVal).trim();
     const dbBranchId = item.branchId ?? item.branch_id;
     
     // Must match serial exactly, and branch if provided in record
@@ -407,7 +409,8 @@ export async function deleteRecords(collection: "rts_items" | "rts_item_rfid" | 
  * Persistence: Get cylinder asset by serial.
  */
 export async function getCylinderAssetBySerial(serial: string) {
-  const encoded = encodeURIComponent(serial.trim().toUpperCase());
+  // Query with exact case to validate strictly case sensitive
+  const encoded = encodeURIComponent(serial.trim());
   return directusGet<{ data: Record<string, unknown>[] }>(
     `/items/cylinder_assets?filter[serial_number][_eq]=${encoded}&limit=1`
   );
@@ -428,7 +431,8 @@ export async function createCylinderAsset(payload: Record<string, unknown>) {
  * Persistence: Delete a cylinder asset by serial.
  */
 export async function deleteCylinderAssetBySerial(serial: string) {
-  const encoded = encodeURIComponent(serial.trim().toUpperCase());
+  // Delete with exact case to validate strictly case sensitive
+  const encoded = encodeURIComponent(serial.trim());
   const checkRes = await directusGet<{ data: { id: number }[] }>(
     `/items/cylinder_assets?filter[serial_number][_eq]=${encoded}&fields=id&limit=1`
   );

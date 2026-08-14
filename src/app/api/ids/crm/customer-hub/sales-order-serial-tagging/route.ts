@@ -115,6 +115,131 @@ async function getSalesmanCustomerCodes(userId: number | null): Promise<string[]
   return customers.map((c: { customer_code: string }) => c.customer_code).filter(Boolean);
 }
 
+/**
+ * DEV-CHANGE: Resolves the Sales Order IDs and Order Numbers assigned to the logged-in truck driver.
+ * Returns null if the user is not a truck driver (e.g. admin, salesman, dispatcher).
+ * Returns an array (which may be empty) of sales_order_ids/order_nos if the user is a truck driver.
+ */
+async function getDriverSalesOrderIds(userId: number | null): Promise<(number | string)[] | null> {
+  if (!userId) return null;
+
+  try {
+    // 1. Check if user belongs to Department 8 (Truck Drivers) or is assigned in post-dispatch plans
+    let isDriver = false;
+    try {
+      const userRes = await fetchDirectus(`/items/user/${userId}?fields=id,department_id`);
+      const userData = userRes.data || {};
+      if (Number(userData.department_id) === 8) {
+        isDriver = true;
+      }
+    } catch {
+      // Ignore user fetch error
+    }
+
+    // 2. Query post_dispatch_plan for driver_id = userId (pdp.driver_id = userId)
+    const pdpRes = await fetchDirectus(
+      `/items/post_dispatch_plan?filter[driver_id][_eq]=${userId}&fields=id&limit=-1`
+    );
+    const pdpList = pdpRes.data || [];
+    let postDispatchIds = pdpList
+      .map((p: { id: number | string }) => Number(p.id))
+      .filter((id: number) => !isNaN(id) && id > 0);
+
+    // Also check post_dispatch_plan_staff for user_id = userId
+    try {
+      const staffRes = await fetchDirectus(
+        `/items/post_dispatch_plan_staff?filter[user_id][_eq]=${userId}&fields=post_dispatch_plan_id&limit=-1`
+      );
+      const staffList = staffRes.data || [];
+      const staffPdpIds = staffList
+        .map((s: { post_dispatch_plan_id: number | string }) => Number(s.post_dispatch_plan_id))
+        .filter((id: number) => !isNaN(id) && id > 0);
+      postDispatchIds = Array.from(new Set([...postDispatchIds, ...staffPdpIds]));
+    } catch (staffErr) {
+      console.warn("[getDriverSalesOrderIds] Staff query error:", staffErr);
+    }
+
+    if (postDispatchIds.length > 0) {
+      isDriver = true;
+    } else if (isDriver) {
+      return []; // User is a truck driver with no PDP plans assigned
+    } else {
+      return null; // Not a truck driver
+    }
+
+    const orderRefs = new Set<number | string>();
+
+    if (postDispatchIds.length > 0) {
+      // 3. Fetch linked dispatch_plan_ids from post_dispatch_dispatch_plans
+      let linkedDispatchIds: number[] = [];
+      try {
+        const junctionRes = await fetchDirectus(
+          `/items/post_dispatch_dispatch_plans?filter[post_dispatch_plan_id][_in]=${postDispatchIds.join(",")}&fields=dispatch_plan_id&limit=-1`
+        );
+        const junctions = junctionRes.data || [];
+        linkedDispatchIds = junctions
+          .map((j: { dispatch_plan_id: unknown }) => {
+            if (typeof j.dispatch_plan_id === "object" && j.dispatch_plan_id !== null) {
+              const obj = j.dispatch_plan_id as Record<string, unknown>;
+              return Number(obj.dispatch_id || obj.id);
+            }
+            return Number(j.dispatch_plan_id);
+          })
+          .filter((id: number) => !isNaN(id) && id > 0);
+      } catch (err) {
+        console.warn("[getDriverSalesOrderIds] Junction fetch error:", err);
+      }
+
+      // Fetch sales_order_ids from dispatch_plan_details for these PDP dispatches
+      if (linkedDispatchIds.length > 0) {
+        const dpdRes = await fetchDirectus(
+          `/items/dispatch_plan_details?filter[dispatch_id][_in]=${linkedDispatchIds.join(",")}&fields=sales_order_id&limit=-1`
+        );
+        const dpdList = dpdRes.data || [];
+        dpdList.forEach((d: { sales_order_id: number | string }) => {
+          if (d.sales_order_id) {
+            orderRefs.add(d.sales_order_id);
+            const num = Number(d.sales_order_id);
+            if (!isNaN(num)) orderRefs.add(num);
+          }
+        });
+      }
+
+      // Fetch linked invoices from post_dispatch_invoices
+      try {
+        const pdInvoicesRes = await fetchDirectus(
+          `/items/post_dispatch_invoices?filter[post_dispatch_plan_id][_in]=${postDispatchIds.join(",")}&fields=invoice_id&limit=-1`
+        );
+        const pdInvoices = pdInvoicesRes.data || [];
+        const linkedInvoiceIds = pdInvoices
+          .map((i: { invoice_id: number | string }) => i.invoice_id)
+          .filter(Boolean);
+
+        if (linkedInvoiceIds.length > 0) {
+          const invoicesRes = await fetchDirectus(
+            `/items/sales_invoice?filter[invoice_id][_in]=${linkedInvoiceIds.join(",")}&fields=order_id&limit=-1`
+          );
+          (invoicesRes.data || []).forEach((inv: { order_id: number | string }) => {
+            if (inv.order_id) {
+              orderRefs.add(inv.order_id);
+              const num = Number(inv.order_id);
+              if (!isNaN(num)) orderRefs.add(num);
+            }
+          });
+        }
+      } catch (pdiErr) {
+        console.warn("[getDriverSalesOrderIds] Post dispatch invoices fetch error:", pdiErr);
+      }
+    }
+
+    return Array.from(orderRefs);
+  } catch (error) {
+    console.error("[getDriverSalesOrderIds] Error resolving driver sales order IDs:", error);
+    return null;
+  }
+}
+
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -126,6 +251,14 @@ export async function GET(req: NextRequest) {
 
     switch (action) {
       case "list-orders": {
+        interface RawSalesInvoice {
+          invoice_id: number;
+          invoice_no?: string;
+          order_id: number | string;
+          transaction_status?: string;
+          is_visit?: number;
+        }
+
         interface RawSalesOrder {
           order_id: number;
           order_no: string;
@@ -135,18 +268,162 @@ export async function GET(req: NextRequest) {
           created_date: string;
         }
 
-        // Modified: Changed order status filter from "For Shipping" to "En Route"
-        const ordersRes = await fetchDirectus(`/items/sales_order?filter[branch_id][_in]=196,197&filter[order_status][_eq]=En%20Route&fields=order_id,order_no,customer_code,branch_id,order_status,created_date&sort=-created_date&limit=-1`);
-        let rawOrders = (ordersRes.data || []) as RawSalesOrder[];
-
         const userId = getUserIdFromToken(req);
-        const allowedCustomerCodes = await getSalesmanCustomerCodes(userId);
-        if (allowedCustomerCodes !== null) {
-          rawOrders = rawOrders.filter((o) => allowedCustomerCodes.includes(o.customer_code));
+
+        // Read branch filter from search parameters (default: 196 or 197)
+        const branchParam = searchParams.get("branchId");
+        let branchInvoiceFilter = "filter[branch_id][_in]=196,197";
+        let branchOrderFilter = "filter[branch_id][_in]=196,197";
+
+        if (branchParam && branchParam !== "all") {
+          branchInvoiceFilter = `filter[branch_id][_eq]=${encodeURIComponent(branchParam)}`;
+          branchOrderFilter = `filter[branch_id][_eq]=${encodeURIComponent(branchParam)}`;
         }
 
-        const uniqueCustCodes = Array.from(new Set(rawOrders.map((o) => o.customer_code).filter(Boolean)));
+        // 1. Query sales_invoice with transaction_status = 'En Route' and branch filter
+        const invoicesRes = await fetchDirectus(
+          `/items/sales_invoice?filter[transaction_status][_eq]=En%20Route&${branchInvoiceFilter}&fields=invoice_id,invoice_no,order_id,branch_id,transaction_status,is_visit&sort=-invoice_id&limit=-1`
+        );
+        const rawInvoices = (invoicesRes.data || []) as RawSalesInvoice[];
 
+        if (rawInvoices.length === 0) {
+          return NextResponse.json({ data: [] });
+        }
+
+        // Extract unique order_id references from sales_invoice
+        const invoiceOrderRefs = Array.from(
+          new Set(rawInvoices.map((inv) => String(inv.order_id)).filter(Boolean))
+        );
+
+        if (invoiceOrderRefs.length === 0) {
+          return NextResponse.json({ data: [] });
+        }
+
+        // Map order reference (order_id or order_no) -> RawSalesInvoice
+        const invoiceByOrderRefMap = new Map<string, RawSalesInvoice>();
+        rawInvoices.forEach((inv) => {
+          if (inv.order_id) {
+            invoiceByOrderRefMap.set(String(inv.order_id), inv);
+          }
+        });
+
+        // 2. Fetch sales_order records matching these invoice order references cleanly using _in filters
+        const orderMap = new Map<number, RawSalesOrder>();
+
+        if (invoiceOrderRefs.length > 0) {
+          try {
+            const encodedRefs = invoiceOrderRefs.map((r) => encodeURIComponent(r)).join(",");
+            const resByNo = await fetchDirectus(
+              `/items/sales_order?${branchOrderFilter}&filter[order_no][_in]=${encodedRefs}&fields=order_id,order_no,customer_code,branch_id,order_status,created_date&sort=-created_date&limit=-1`
+            );
+            (resByNo.data || []).forEach((o: RawSalesOrder) => {
+              orderMap.set(o.order_id, o);
+            });
+          } catch (err) {
+            console.warn("Fetch sales_order by order_no error:", err);
+          }
+
+          const numericIds = invoiceOrderRefs
+            .map((ref) => Number(ref))
+            .filter((num) => !isNaN(num) && num > 0);
+
+          if (numericIds.length > 0) {
+            try {
+              const resById = await fetchDirectus(
+                `/items/sales_order?${branchOrderFilter}&filter[order_id][_in]=${numericIds.join(",")}&fields=order_id,order_no,customer_code,branch_id,order_status,created_date&sort=-created_date&limit=-1`
+              );
+              (resById.data || []).forEach((o: RawSalesOrder) => {
+                orderMap.set(o.order_id, o);
+              });
+            } catch (err) {
+              console.warn("Fetch sales_order by order_id error:", err);
+            }
+          }
+        }
+
+        let rawOrders = Array.from(orderMap.values());
+
+        // 3. Driver Filter: Filter orders by logged-in Truck Driver's assigned PDP dispatch plans
+        const driverOrderIds = await getDriverSalesOrderIds(userId);
+        if (driverOrderIds !== null) {
+          const driverOrderSet = new Set(driverOrderIds.map((id) => String(id)));
+          rawOrders = rawOrders.filter(
+            (o) => driverOrderSet.has(String(o.order_id)) || driverOrderSet.has(String(o.order_no))
+          );
+        } else {
+          // If user is not a driver, filter by Salesman customer codes (if user is a salesman)
+          const allowedCustomerCodes = await getSalesmanCustomerCodes(userId);
+          if (allowedCustomerCodes !== null) {
+            rawOrders = rawOrders.filter((o) => allowedCustomerCodes.includes(o.customer_code));
+          }
+        }
+
+        // 4. Resolve dispatch plans & driver assignments for each sales_order
+        const orderIds = rawOrders.map((o) => o.order_id);
+        const dpInfoMap = new Map<number, { dispatch_no?: string; doc_no?: string; dp_driver_id?: number | null; pdp_driver_id?: number | null }>();
+
+        if (orderIds.length > 0) {
+          try {
+            const dpdRes = await fetchDirectus(
+              `/items/dispatch_plan_details?filter[sales_order_id][_in]=${orderIds.join(",")}&fields=sales_order_id,dispatch_id.dispatch_id,dispatch_id.dispatch_no,dispatch_id.driver_id&limit=-1`
+            );
+            const dpdList = dpdRes.data || [];
+
+            const dispatchIds = Array.from(new Set(
+              dpdList.map((d: { dispatch_id: unknown }) => {
+                if (typeof d.dispatch_id === "object" && d.dispatch_id !== null) {
+                  const obj = d.dispatch_id as Record<string, unknown>;
+                  return Number(obj.dispatch_id || obj.id);
+                }
+                return Number(d.dispatch_id);
+              }).filter((id: number) => !isNaN(id) && id > 0)
+            )) as number[];
+
+            const pdpDriverMap = new Map<number, { doc_no?: string; driver_id?: number | null }>();
+            if (dispatchIds.length > 0) {
+              try {
+                const junctionRes = await fetchDirectus(
+                  `/items/post_dispatch_dispatch_plans?filter[dispatch_plan_id][_in]=${dispatchIds.join(",")}&fields=dispatch_plan_id,post_dispatch_plan_id.id,post_dispatch_plan_id.doc_no,post_dispatch_plan_id.driver_id&limit=-1`
+                );
+                (junctionRes.data || []).forEach((j: { dispatch_plan_id: unknown; post_dispatch_plan_id: unknown }) => {
+                  const dpId = typeof j.dispatch_plan_id === "object" && j.dispatch_plan_id !== null ? (j.dispatch_plan_id as { id?: number }).id : j.dispatch_plan_id;
+                  const pdpObj = typeof j.post_dispatch_plan_id === "object" && j.post_dispatch_plan_id !== null ? (j.post_dispatch_plan_id as { doc_no?: string; driver_id?: number | string }) : null;
+                  if (dpId && pdpObj) {
+                    pdpDriverMap.set(Number(dpId), {
+                      doc_no: pdpObj.doc_no,
+                      driver_id: pdpObj.driver_id ? Number(pdpObj.driver_id) : null,
+                    });
+                  }
+                });
+              } catch (jErr) {
+                console.warn("Could not fetch post dispatch plan junction:", jErr);
+              }
+            }
+
+            dpdList.forEach((d: { sales_order_id: number | string; dispatch_id: unknown }) => {
+              const soId = Number(d.sales_order_id);
+              const dpObj = typeof d.dispatch_id === "object" && d.dispatch_id !== null ? (d.dispatch_id as { dispatch_id?: number; id?: number; dispatch_no?: string; driver_id?: number | string }) : null;
+              const dpId = dpObj ? Number(dpObj.dispatch_id || dpObj.id) : Number(d.dispatch_id);
+              const dpNo = dpObj?.dispatch_no || undefined;
+              const dpDriverId = dpObj?.driver_id ? Number(dpObj.driver_id) : null;
+              const pdpInfo = dpId ? pdpDriverMap.get(dpId) : undefined;
+
+              if (soId) {
+                dpInfoMap.set(soId, {
+                  dispatch_no: dpNo,
+                  doc_no: pdpInfo?.doc_no,
+                  dp_driver_id: dpDriverId,
+                  pdp_driver_id: pdpInfo?.driver_id,
+                });
+              }
+            });
+          } catch (dpErr) {
+            console.warn("Could not fetch dispatch plan details for order list:", dpErr);
+          }
+        }
+
+        // 6. Fetch Customer Names
+        const uniqueCustCodes = Array.from(new Set(rawOrders.map((o) => o.customer_code).filter(Boolean)));
         const customerMap = new Map<string, string>();
         if (uniqueCustCodes.length > 0) {
           interface RawCustomer {
@@ -161,7 +438,7 @@ export async function GET(req: NextRequest) {
           }
         }
 
-        // Fetch Branch Names
+        // 7. Fetch Branch Names
         const branchMap = new Map<number, string>();
         try {
           const branchesRes = await fetchDirectus(`/items/branches?filter[id][_in]=196,197&fields=id,branch_name`);
@@ -173,7 +450,7 @@ export async function GET(req: NextRequest) {
           console.warn("Could not retrieve branch names:", branchErr);
         }
 
-        const orderIds = rawOrders.map((o) => o.order_id);
+        // 8. Calculate Tagging Status
         const targetQtyMap = new Map<number, number>();
         const taggedQtyMap = new Map<number, number>();
 
@@ -223,6 +500,9 @@ export async function GET(req: NextRequest) {
             }
           }
 
+          const inv = invoiceByOrderRefMap.get(String(o.order_id)) || invoiceByOrderRefMap.get(String(o.order_no));
+          const dpInfo = dpInfoMap.get(o.order_id);
+
           return {
             order_id: o.order_id,
             order_no: o.order_no,
@@ -233,6 +513,12 @@ export async function GET(req: NextRequest) {
             order_status: o.order_status,
             created_date: o.created_date,
             tagging_status: taggingStatus,
+            invoice_id: inv?.invoice_id || null,
+            invoice_no: inv?.invoice_no || null,
+            transaction_status: inv?.transaction_status || "En Route",
+            is_visit: inv?.is_visit ?? 0,
+            dispatch_no: dpInfo?.dispatch_no || null,
+            doc_no: dpInfo?.doc_no || null,
           };
         });
 
@@ -253,11 +539,21 @@ export async function GET(req: NextRequest) {
           return NextResponse.json({ error: "Sales Order not found" }, { status: 404 });
         }
 
-        // Authorization check for salesman
+        // Authorization check for truck driver & salesman
         const userId = getUserIdFromToken(req);
-        const allowedCustomerCodes = await getSalesmanCustomerCodes(userId);
-        if (allowedCustomerCodes !== null && (!order.customer_code || !allowedCustomerCodes.includes(order.customer_code))) {
-          return NextResponse.json({ error: "Unauthorized access to this Sales Order" }, { status: 403 });
+
+        // DEV-CHANGE: Role-based authorization check (Driver vs Salesman)
+        const driverOrderIds = await getDriverSalesOrderIds(userId);
+        if (driverOrderIds !== null) {
+          const driverOrderSet = new Set(driverOrderIds.map((id) => String(id)));
+          if (!driverOrderSet.has(String(orderId)) && !driverOrderSet.has(String(order.order_id)) && !driverOrderSet.has(String(order.order_no))) {
+            return NextResponse.json({ error: "Unauthorized: Sales order is not assigned to logged-in driver" }, { status: 403 });
+          }
+        } else {
+          const allowedCustomerCodes = await getSalesmanCustomerCodes(userId);
+          if (allowedCustomerCodes !== null && (!order.customer_code || !allowedCustomerCodes.includes(order.customer_code))) {
+            return NextResponse.json({ error: "Unauthorized access to this Sales Order" }, { status: 403 });
+          }
         }
 
         // Fetch Customer Details
@@ -407,14 +703,34 @@ export async function GET(req: NextRequest) {
           return NextResponse.json({ error: "orderId is required" }, { status: 400 });
         }
 
-        // Authorization check for salesman
+        // Authorization check for truck driver & salesman
         const userId = getUserIdFromToken(req);
-        const allowedCustomerCodes = await getSalesmanCustomerCodes(userId);
-        if (allowedCustomerCodes !== null) {
-          const orderRes = await fetchDirectus(`/items/sales_order/${orderId}?fields=customer_code`);
-          const order = orderRes.data || {};
-          if (!order.customer_code || !allowedCustomerCodes.includes(order.customer_code)) {
-            return NextResponse.json({ error: "Unauthorized access to this Sales Order mappings" }, { status: 403 });
+
+        let orderObj: { order_id?: number | string; order_no?: string; customer_code?: string } = {};
+        try {
+          const orderRes = await fetchDirectus(`/items/sales_order/${orderId}?fields=order_id,order_no,customer_code`);
+          orderObj = orderRes.data || {};
+        } catch {
+          // Ignore fetch error if not found by primary key
+        }
+
+        // DEV-CHANGE: Role-based authorization check (Driver vs Salesman)
+        const driverOrderIds = await getDriverSalesOrderIds(userId);
+        if (driverOrderIds !== null) {
+          const driverOrderSet = new Set(driverOrderIds.map((id) => String(id)));
+          if (
+            !driverOrderSet.has(String(orderId)) &&
+            !driverOrderSet.has(String(orderObj.order_id)) &&
+            !driverOrderSet.has(String(orderObj.order_no))
+          ) {
+            return NextResponse.json({ error: "Unauthorized: Sales order mapping is not assigned to logged-in driver" }, { status: 403 });
+          }
+        } else {
+          const allowedCustomerCodes = await getSalesmanCustomerCodes(userId);
+          if (allowedCustomerCodes !== null) {
+            if (!orderObj.customer_code || !allowedCustomerCodes.includes(orderObj.customer_code)) {
+              return NextResponse.json({ error: "Unauthorized access to this Sales Order mappings" }, { status: 403 });
+            }
           }
         }
 
@@ -422,7 +738,7 @@ export async function GET(req: NextRequest) {
         // DEV-CHANGE: Handle multiple dispatch plan details for the order
         const dpdRes = await fetchDirectus(`/items/dispatch_plan_details?filter[sales_order_id][_eq]=${orderId}&fields=dispatch_id&limit=-1`);
         const dpdList = dpdRes.data || [];
-        
+
         const initialDispatchIds = Array.from(new Set(
           dpdList.map((d: { dispatch_id: unknown }) => {
             if (typeof d.dispatch_id === "object" && d.dispatch_id !== null) {
@@ -490,7 +806,7 @@ export async function GET(req: NextRequest) {
         const encodedDispatchNos = dispatchNos.map((no) => encodeURIComponent(no)).join(",");
         const cdispRes = await fetchDirectus(`/items/consolidator_dispatches?filter[dispatch_no][_in]=${encodedDispatchNos}&fields=consolidator_id&limit=-1`);
         const cdispList = cdispRes.data || [];
-        
+
         const consolidatorIds = Array.from(new Set(
           cdispList.map((cd: { consolidator_id: unknown }) => {
             if (typeof cd.consolidator_id === "object" && cd.consolidator_id !== null) {
@@ -539,12 +855,12 @@ export async function GET(req: NextRequest) {
               serial_number: string;
               cylinder_status?: string;
             }
-            const encodedSerials = serialNumbers.map((s: string) => encodeURIComponent(s.trim().toUpperCase())).join(",");
+            const encodedSerials = serialNumbers.map((s: string) => encodeURIComponent(s.trim())).join(",");
             const assetsRes = await fetchDirectus(`/items/cylinder_assets?filter[serial_number][_in]=${encodedSerials}&fields=serial_number,cylinder_status&limit=-1`);
             const assets = (assetsRes.data || []) as AssetMin[];
             for (const asset of assets) {
               if (asset.serial_number) {
-                statusMap.set(asset.serial_number.toUpperCase(), asset.cylinder_status || "LOADED");
+                statusMap.set(asset.serial_number.trim(), asset.cylinder_status || "LOADED");
               }
             }
           } catch (assetErr) {
@@ -576,7 +892,7 @@ export async function GET(req: NextRequest) {
           }
 
           const cylStatus = mapping.serial_number
-            ? (statusMap.get(mapping.serial_number.toUpperCase()) || "LOADED")
+            ? (statusMap.get(mapping.serial_number.trim()) || "LOADED")
             : "LOADED";
 
           return {
@@ -595,11 +911,14 @@ export async function GET(req: NextRequest) {
           return NextResponse.json({ error: "customerCode is required" }, { status: 400 });
         }
 
-        // Authorization check for salesman
+        // Authorization check for driver & salesman
         const userId = getUserIdFromToken(req);
-        const allowedCustomerCodes = await getSalesmanCustomerCodes(userId);
-        if (allowedCustomerCodes !== null && !allowedCustomerCodes.includes(customerCode)) {
-          return NextResponse.json({ error: "Unauthorized access to this Customer's assets" }, { status: 403 });
+        const driverOrderIds = await getDriverSalesOrderIds(userId);
+        if (driverOrderIds === null) {
+          const allowedCustomerCodes = await getSalesmanCustomerCodes(userId);
+          if (allowedCustomerCodes !== null && !allowedCustomerCodes.includes(customerCode)) {
+            return NextResponse.json({ error: "Unauthorized access to this Customer's assets" }, { status: 403 });
+          }
         }
 
         // Fetch cylinder assets currently with the customer
@@ -658,10 +977,18 @@ export async function POST(req: NextRequest) {
     const branchId = order.branch_id || null;
     const finalCustomerCode = order.customer_code || customerCode;
 
-    // Authorization check for salesman
-    const allowedCustomerCodes = await getSalesmanCustomerCodes(userId);
-    if (allowedCustomerCodes !== null && !allowedCustomerCodes.includes(finalCustomerCode)) {
-      return NextResponse.json({ error: "Unauthorized access to target Customer" }, { status: 403 });
+    // Role-based authorization check (Driver vs Salesman)
+    const driverOrderIds = await getDriverSalesOrderIds(userId);
+    if (driverOrderIds !== null) {
+      const driverOrderSet = new Set(driverOrderIds.map((id) => String(id)));
+      if (!driverOrderSet.has(String(orderId)) && !driverOrderSet.has(String(order.order_id)) && !driverOrderSet.has(String(order.order_no))) {
+        return NextResponse.json({ error: "Unauthorized: Cannot tag serials for Sales Order not assigned to logged-in driver" }, { status: 403 });
+      }
+    } else {
+      const allowedCustomerCodes = await getSalesmanCustomerCodes(userId);
+      if (allowedCustomerCodes !== null && !allowedCustomerCodes.includes(finalCustomerCode)) {
+        return NextResponse.json({ error: "Unauthorized access to target Customer" }, { status: 403 });
+      }
     }
 
     // Fetch Customer Name
@@ -846,62 +1173,62 @@ export async function POST(req: NextRequest) {
       results.push(serial_number);
     }
 
-  // 4. DEV-CHANGE: Update is_visit to 1 in linked sales_invoice
-  if (results.length > 0) {
-    try {
-      const orderNoStr = order.order_no ? String(order.order_no) : null;
+    // 4. DEV-CHANGE: Update is_visit to 1 in linked sales_invoice
+    if (results.length > 0) {
+      try {
+        const orderNoStr = order.order_no ? String(order.order_no) : null;
 
-      console.log("[sales-order-serial-tagging] orderId:", orderId);
-      console.log("[sales-order-serial-tagging] orderNo:", order.order_no);
+        console.log("[sales-order-serial-tagging] orderId:", orderId);
+        console.log("[sales-order-serial-tagging] orderNo:", order.order_no);
 
-      const filters: string[] = [];
-      const parsedOrderId = Number(orderId);
-      const isOrderIdNumeric = !Number.isNaN(parsedOrderId) && parsedOrderId > 0;
+        const filters: string[] = [];
+        const parsedOrderId = Number(orderId);
+        const isOrderIdNumeric = !Number.isNaN(parsedOrderId) && parsedOrderId > 0;
 
-      if (isOrderIdNumeric) {
-        filters.push(`filter[_or][${filters.length}][order_id][_eq]=${parsedOrderId}`);
-      }
+        if (isOrderIdNumeric) {
+          filters.push(`filter[_or][${filters.length}][order_id][_eq]=${parsedOrderId}`);
+        }
 
-      if (orderNoStr) {
-        filters.push(`filter[_or][${filters.length}][order_id][_eq]=${encodeURIComponent(orderNoStr)}`);
-      }
+        if (orderNoStr) {
+          filters.push(`filter[_or][${filters.length}][order_id][_eq]=${encodeURIComponent(orderNoStr)}`);
+        }
 
-      if (filters.length === 0) {
-        filters.push(`filter[order_id][_eq]=${encodeURIComponent(String(orderId))}`);
-      }
+        if (filters.length === 0) {
+          filters.push(`filter[order_id][_eq]=${encodeURIComponent(String(orderId))}`);
+        }
 
-      const invoicesRes = await fetchDirectus(
-        `/items/sales_invoice?${filters.join("&")}&fields=invoice_id,order_id,is_visit`
-      );
-
-      console.log(
-        "[sales-order-serial-tagging] sales invoices found:",
-        JSON.stringify(invoicesRes.data, null, 2)
-      );
-
-      const invoices = invoicesRes.data || [];
-
-      console.log("[sales-order-serial-tagging] invoice count:", invoices.length);
-
-      for (const inv of invoices) {
-        const patchResult = await fetchDirectus(
-          `/items/sales_invoice/${inv.invoice_id}`,
-          {
-            method: "PATCH",
-            body: JSON.stringify({
-              is_visit: 1,
-            }),
-          }
+        const invoicesRes = await fetchDirectus(
+          `/items/sales_invoice?${filters.join("&")}&fields=invoice_id,order_id,is_visit`
         );
-        console.log(`[sales-order-serial-tagging] Patched sales_invoice ${inv.invoice_id} is_visit:`, patchResult);
+
+        console.log(
+          "[sales-order-serial-tagging] sales invoices found:",
+          JSON.stringify(invoicesRes.data, null, 2)
+        );
+
+        const invoices = invoicesRes.data || [];
+
+        console.log("[sales-order-serial-tagging] invoice count:", invoices.length);
+
+        for (const inv of invoices) {
+          const patchResult = await fetchDirectus(
+            `/items/sales_invoice/${inv.invoice_id}`,
+            {
+              method: "PATCH",
+              body: JSON.stringify({
+                is_visit: 1,
+              }),
+            }
+          );
+          console.log(`[sales-order-serial-tagging] Patched sales_invoice ${inv.invoice_id} is_visit:`, patchResult);
+        }
+      } catch (siErr) {
+        console.warn(
+          "Could not update is_visit on linked sales_invoice:",
+          siErr
+        );
       }
-    } catch (siErr) {
-      console.warn(
-        "Could not update is_visit on linked sales_invoice:",
-        siErr
-      );
     }
-  }
 
     return NextResponse.json({ success: true, count: results.length });
   } catch (error: unknown) {

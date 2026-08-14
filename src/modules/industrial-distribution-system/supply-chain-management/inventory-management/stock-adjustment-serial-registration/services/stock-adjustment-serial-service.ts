@@ -15,24 +15,37 @@ interface DraftCylinder {
   [key: string]: unknown;
 }
 
+/**
+ * Returns current Asia/Manila (UTC+8) timestamp formatted as YYYY-MM-DDTHH:mm:ss.
+ * Ensures stock adjustment database records save Philippines local time (+8).
+ */
+function nowPH(): string {
+  return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Manila" }).replace(" ", "T");
+}
+
+interface RawProductRelation {
+  id?: number;
+  product_id?: number;
+  product_name?: string;
+  product_code?: string;
+  cost_per_unit?: number;
+  price_per_unit?: number;
+  product_brand?: { brand_name?: string; is_industrial?: number | boolean | string | null };
+  product_category?: { category_name?: string; is_industrial?: number | boolean | string | null };
+  unit_of_measurement?: { unit_name?: string; order?: number; unit_id?: number };
+  barcode?: string;
+  description?: string;
+  is_serialized?: boolean | number | string;
+}
+
 interface RawItem {
   id?: number;
   doc_no: string;
   quantity: number;
-  product_id?: {
-    id: number;
-    product_id: number;
-    product_name?: string;
-    product_code?: string;
-    cost_per_unit?: number;
-    price_per_unit?: number;
-    product_brand?: { brand_name: string };
-    product_category?: { category_name: string };
-    unit_of_measurement?: { unit_name: string; order: number };
-    barcode?: string;
-    description?: string;
-    is_serialized?: boolean;
-  };
+  product_id?: RawProductRelation;
+  product_name?: string;
+  product_code?: string;
+  barcode?: string;
   unit_id?: { unit_name: string };
   cost_per_unit?: number;
   brand_name?: string;
@@ -92,7 +105,7 @@ export const stockAdjustmentService = {
    * Fetch all stock adjustment headers with optional filtering
    */
   async fetchAllHeaders(params?: { search?: string; branchId?: number; type?: string; status?: string }) {
-    let query = `fields=*,branch_id.branch_name,branch_id.id,supplier_id.id,supplier_id.supplier_name,created_by.user_fname,created_by.user_lname,created_by.user_id,posted_by.user_fname,posted_by.user_lname,items.id,stock_adjustment.id&sort=-created_at`;
+    let query = `fields=*,branch_id.branch_name,branch_id.id,created_by.user_fname,created_by.user_lname,created_by.user_id,posted_by.user_fname,posted_by.user_lname,items.id,stock_adjustment.id&sort=-created_at`;
 
     const filters: Record<string, unknown> = {
       is_delete: { _neq: true },
@@ -248,22 +261,69 @@ export const stockAdjustmentService = {
    */
   async fetchById(id: number): Promise<StockAdjustmentDetail> {
     const headerRes = await directusFetch<{ data: StockAdjustmentHeader }>(
-      `${DIRECTUS_URL}/items/stock_adjustment_header/${id}?fields=*,branch_id.id,branch_id.branch_name,supplier_id.id,supplier_id.supplier_name,created_by.user_fname,created_by.user_lname,posted_by.user_fname,posted_by.user_lname`
+      `${DIRECTUS_URL}/items/stock_adjustment_header/${id}?fields=*,branch_id.id,branch_id.branch_name,created_by.user_fname,created_by.user_lname,posted_by.user_fname,posted_by.user_lname`
     );
     const header = headerRes.data;
 
     const itemsRes = await directusFetch<{ data: RawItem[] }>(
       `${DIRECTUS_URL}/items/stock_adjustment?filter={"doc_no":{"_eq":"${header.doc_no}"}}&fields=*,product_id.product_id,product_id.product_name,product_id.product_code,product_id.cost_per_unit,product_id.price_per_unit,product_id.unit_of_measurement.unit_name,product_id.unit_of_measurement.order,product_id.product_brand.brand_name,product_id.product_category.category_name,product_id.barcode,product_id.description,unit_id.unit_name&limit=-1`
     );
-    const items = (itemsRes.data || []).map((item: RawItem) => {
+    const rawItems = itemsRes.data || [];
+
+    // AG-COMMENT: If any product relations were not expanded, fetch product details from master products collection
+    const missingProdIds = rawItems
+      .filter((i) => !i.product_name && !i.product_id?.product_name)
+      .map((i) => (typeof i.product_id === 'object' && i.product_id !== null ? Number(i.product_id.product_id || i.product_id.id) : Number(i.product_id)))
+      .filter((id) => !isNaN(id) && id > 0);
+
+    const productMap = new Map<number, { product_name: string; product_code?: string; barcode?: string; brand_name?: string; unit_name?: string; unit_order?: number }>();
+    if (missingProdIds.length > 0) {
+      try {
+        const prodRes = await directusFetch<{
+          data: Array<{
+            product_id: number;
+            product_name: string;
+            product_code?: string;
+            barcode?: string;
+            product_brand?: { brand_name?: string };
+            unit_of_measurement?: { unit_name?: string; order?: number };
+          }>;
+        }>(
+          `${DIRECTUS_URL}/items/products?filter={"product_id":{"_in":${JSON.stringify(missingProdIds)}}}&fields=product_id,product_name,product_code,barcode,product_brand.brand_name,unit_of_measurement.unit_name,unit_of_measurement.order&limit=-1`
+        );
+        (prodRes.data || []).forEach((p) => {
+          productMap.set(p.product_id, {
+            product_name: p.product_name,
+            product_code: p.product_code,
+            barcode: p.barcode,
+            brand_name: p.product_brand?.brand_name,
+            unit_name: p.unit_of_measurement?.unit_name,
+            unit_order: p.unit_of_measurement?.order,
+          });
+        });
+      } catch (err) {
+        console.error("Failed to fetch product details fallback in fetchById:", err);
+      }
+    }
+
+    const items = rawItems.map((item: RawItem) => {
+      const pId = typeof item.product_id === 'object' && item.product_id !== null ? Number(item.product_id.product_id || item.product_id.id) : Number(item.product_id);
+      const fallback = productMap.get(pId);
       const cost = item.cost_per_unit || item.product_id?.cost_per_unit || item.product_id?.price_per_unit || 0;
+      const pName = item.product_id?.product_name || item.product_name || fallback?.product_name || "Unknown Product";
+      const pCode = item.product_id?.product_code || item.product_code || fallback?.product_code || "";
+      const bName = item.product_id?.product_brand?.brand_name || item.brand_name || fallback?.brand_name || "N/A";
+      const uName = item.unit_id?.unit_name || item.product_id?.unit_of_measurement?.unit_name || item.unit_name || fallback?.unit_name || "pcs";
+      const barcode = item.product_id?.barcode || item.barcode || fallback?.barcode || "N/A";
+
       return {
         ...item,
-        product_name: item.product_id?.product_name,
-        product_code: item.product_id?.product_code,
+        product_name: pName,
+        product_code: pCode,
         cost_per_unit: cost,
-        unit_name: item.unit_id?.unit_name || item.product_id?.unit_of_measurement?.unit_name || item.unit_name || "pcs",
-        brand_name: item.product_id?.product_brand?.brand_name || item.brand_name || "N/A",
+        unit_name: uName,
+        brand_name: bName,
+        barcode: barcode,
         category_name: item.product_id?.product_category?.category_name || "N/A"
       };
     });
@@ -607,16 +667,15 @@ export const stockAdjustmentService = {
     branchId?: number;
     productId?: number;
     type: "IN" | "OUT";
-  }): Promise<{ exists: boolean; location?: string; productId?: number; isBlocked?: boolean; errorMsg?: string }> {
+  }): Promise<{ exists: boolean; location?: string; productId?: number; productName?: string; isBlocked?: boolean; errorMsg?: string }> {
     const { serial, token, branchId, productId, type } = params;
     const cleanSerial = serial.trim().toUpperCase();
 
     try {
       // 1. Check if present in v_serial_onhand using filter endpoint (case-insensitive checks)
-      // WORKFLOW RULE: For Stock IN, we check on-hand status globally (without branch constraint) to detect
-      // whether the cylinder is on-hand at the current branch or another branch.
       let onHand = false;
       let onHandProdId: number | undefined = undefined;
+      let onHandProdName: string | undefined = undefined;
       let onHandBranch: string | undefined = undefined;
       let onHandBranchId: number | undefined = undefined;
 
@@ -628,7 +687,6 @@ export const stockAdjustmentService = {
         if (type === "OUT" && branchId) {
           filterUrl.searchParams.set("branchId", String(branchId));
         }
-        if (productId) filterUrl.searchParams.set("productId", String(productId));
 
         const springRes = await fetch(filterUrl.toString(), {
           headers: { "Authorization": `Bearer ${token}` }
@@ -648,12 +706,13 @@ export const stockAdjustmentService = {
                     : [data]
               : [];
 
-          // Define typed interface for items in v_serial_onhand to resolve lint errors
           interface SerialOnHandItem {
             serialNumber?: string;
             serial_number?: string;
             productId?: string | number;
             product_id?: string | number;
+            productName?: string;
+            product_name?: string;
             branch_name?: string;
             branch_id?: string | number;
           }
@@ -665,6 +724,7 @@ export const stockAdjustmentService = {
           if (exactMatch) {
             onHand = true;
             onHandProdId = Number(exactMatch.productId || exactMatch.product_id);
+            onHandProdName = exactMatch.productName || exactMatch.product_name;
             onHandBranch = exactMatch.branch_name || (exactMatch.branch_id ? `Branch #${exactMatch.branch_id}` : "Inventory");
             onHandBranchId = exactMatch.branch_id ? Number(exactMatch.branch_id) : undefined;
             return true;
@@ -681,8 +741,15 @@ export const stockAdjustmentService = {
       }
 
       // 2. Check if present in cylinder_assets (case-insensitive query using OR)
-      const assetRes = await directusFetch<{ data: Array<{ id: number; cylinder_status?: string; product_id?: number | { id: number } | null; serial_number?: string }> }>(
-        `${DIRECTUS_URL}/items/cylinder_assets?filter={"_or":[{"serial_number":{"_eq":"${serial.trim().toUpperCase()}"}},{"serial_number":{"_eq":"${serial.trim().toLowerCase()}"}}]}&fields=id,cylinder_status,product_id,serial_number`
+      const assetRes = await directusFetch<{
+        data: Array<{
+          id: number;
+          cylinder_status?: string;
+          product_id?: number | { product_id?: number; id?: number; product_name?: string } | null;
+          serial_number?: string;
+        }>;
+      }>(
+        `${DIRECTUS_URL}/items/cylinder_assets?filter={"_or":[{"serial_number":{"_eq":"${serial.trim().toUpperCase()}"}},{"serial_number":{"_eq":"${serial.trim().toLowerCase()}"}}]}&fields=id,cylinder_status,product_id.product_id,product_id.product_name,serial_number`
       );
       
       const asset = assetRes.data?.find((a) =>
@@ -690,13 +757,128 @@ export const stockAdjustmentService = {
       );
 
       // 3. Check if present in cylinder_assets_draft (already registered in draft table, awaiting document posting)
-      const draftRes = await directusFetch<{ data: Array<{ id: number; cylinder_status?: string; product_id?: number | { id: number } | null; serial_number?: string }> }>(
-        `${DIRECTUS_URL}/items/cylinder_assets_draft?filter={"_or":[{"serial_number":{"_eq":"${serial.trim().toUpperCase()}"}},{"serial_number":{"_eq":"${serial.trim().toLowerCase()}"}}]}&fields=id,cylinder_status,product_id,serial_number`
+      const draftRes = await directusFetch<{
+        data: Array<{
+          id: number;
+          cylinder_status?: string;
+          product_id?: number | { product_id?: number; id?: number; product_name?: string } | null;
+          serial_number?: string;
+        }>;
+      }>(
+        `${DIRECTUS_URL}/items/cylinder_assets_draft?filter={"_or":[{"serial_number":{"_eq":"${serial.trim().toUpperCase()}"}},{"serial_number":{"_eq":"${serial.trim().toLowerCase()}"}}]}&fields=id,cylinder_status,product_id.product_id,product_id.product_name,serial_number`
       );
 
       const draftAsset = draftRes.data?.find((a) =>
         String(a.serial_number || "").toUpperCase() === cleanSerial
       );
+
+      // Helper to extract productId and productName from asset joins
+      const getAssetProductId = (p: unknown): number | undefined => {
+        if (!p) return undefined;
+        if (typeof p === "object" && p !== null) {
+          const obj = p as { product_id?: number; id?: number };
+          return Number(obj.product_id || obj.id || 0) || undefined;
+        }
+        return Number(p) || undefined;
+      };
+
+      const getAssetProductName = (p: unknown): string | undefined => {
+        if (!p) return undefined;
+        if (typeof p === "object" && p !== null) {
+          const obj = p as { product_name?: string };
+          return obj.product_name || undefined;
+        }
+        return undefined;
+      };
+
+      const assetProdId = asset ? getAssetProductId(asset.product_id) : undefined;
+      const assetProdName = asset ? getAssetProductName(asset.product_id) : undefined;
+      const draftProdId = draftAsset ? getAssetProductId(draftAsset.product_id) : undefined;
+      const draftProdName = draftAsset ? getAssetProductName(draftAsset.product_id) : undefined;
+
+      // AG-COMMENT: Fetch target product details (ID, parent_id, product_name) for accurate matching
+      let targetProduct: { product_id: number; parent_id?: number | null; product_name?: string } | null = null;
+      if (productId) {
+        try {
+          const prodRes = await directusFetch<{ data: { product_id: number; parent_id?: number | null; product_name?: string } }>(
+            `${DIRECTUS_URL}/items/products/${productId}?fields=product_id,parent_id,product_name`
+          );
+          if (prodRes?.data) {
+            targetProduct = prodRes.data;
+          }
+        } catch {
+          // fallback if direct ID fetch is unavailable
+        }
+      }
+
+      const isProductMatch = (assetId?: number, assetName?: string): boolean => {
+        if (!productId) return true;
+        const targetId = Number(productId);
+
+        // 1. Direct ID match
+        if (assetId && Number(assetId) === targetId) return true;
+
+        // 2. Direct product name match
+        if (
+          assetName &&
+          targetProduct?.product_name &&
+          assetName.trim().toLowerCase() === targetProduct.product_name.trim().toLowerCase()
+        ) {
+          return true;
+        }
+
+        // 3. Parent / Variant ID match
+        if (
+          targetProduct?.parent_id &&
+          assetId &&
+          Number(assetId) === Number(targetProduct.parent_id)
+        ) {
+          return true;
+        }
+
+        if (
+          targetProduct?.product_id &&
+          assetId &&
+          Number(targetProduct.product_id) === Number(assetId)
+        ) {
+          return true;
+        }
+
+        return false;
+      };
+
+      // AG-COMMENT: Validate if existing serial belongs to the selected product
+      if (productId) {
+        if (asset && !isProductMatch(assetProdId, assetProdName)) {
+          return {
+            exists: true,
+            isBlocked: true,
+            errorMsg: `Serial "${serial}" belongs to product "${assetProdName || `Product #${assetProdId}`}". It cannot be added to this product.`,
+            productId: assetProdId,
+            productName: assetProdName
+          };
+        }
+
+        if (draftAsset && !isProductMatch(draftProdId, draftProdName)) {
+          return {
+            exists: true,
+            isBlocked: true,
+            errorMsg: `Serial "${serial}" is already registered for product "${draftProdName || `Product #${draftProdId}`}". It cannot be added to this product.`,
+            productId: draftProdId,
+            productName: draftProdName
+          };
+        }
+
+        if (onHand && !isProductMatch(onHandProdId, onHandProdName)) {
+          return {
+            exists: true,
+            isBlocked: true,
+            errorMsg: `Serial "${serial}" is on-hand but belongs to product "${onHandProdName || `Product #${onHandProdId}`}". It cannot be added to this product.`,
+            productId: onHandProdId,
+            productName: onHandProdName
+          };
+        }
+      }
 
       if (type === "IN") {
         /**
@@ -718,49 +900,50 @@ export const stockAdjustmentService = {
             exists: true,
             isBlocked: true,
             errorMsg,
-            productId: onHandProdId
+            productId: onHandProdId,
+            productName: onHandProdName
           };
         }
 
         const currentStatus = (asset?.cylinder_status || "").toUpperCase();
 
         if (asset && currentStatus === "WITH_CUSTOMER") {
-          const pId = typeof asset.product_id === "object" ? asset.product_id?.id : asset.product_id;
           return {
             exists: true,
             isBlocked: true,
             errorMsg: `Serial "${serial}" is currently WITH_CUSTOMER. Please receive it via Customer Cylinder Return.`,
-            productId: pId ? Number(pId) : undefined
+            productId: assetProdId,
+            productName: assetProdName
           };
         }
 
         if (asset && currentStatus === "WITH_SUPPLIER") {
-          const pId = typeof asset.product_id === "object" ? asset.product_id?.id : asset.product_id;
           return {
             exists: true,
             isBlocked: true,
             errorMsg: `Serial "${serial}" is currently WITH_SUPPLIER. Please receive it via Supplier Receiving / PO Receiving.`,
-            productId: pId ? Number(pId) : undefined
+            productId: assetProdId,
+            productName: assetProdName
           };
         }
 
         if (asset) {
-          const pId = typeof asset.product_id === "object" ? asset.product_id?.id : asset.product_id;
           return {
             exists: true,
-            productId: pId ? Number(pId) : undefined,
-            location: `Registered in Cylinder Assets (${asset.cylinder_status})`
+            productId: assetProdId,
+            productName: assetProdName,
+            // location: `Registered in Cylinder Assets (${asset.cylinder_status})`
           };
         }
 
         // WORKFLOW CHECK: If present in cylinder_assets_draft, serial is already registered in draft
         // and should pass directly without forcing re-registration. It will be promoted to cylinder_assets upon posting.
         if (draftAsset) {
-          const pId = typeof draftAsset.product_id === "object" ? draftAsset.product_id?.id : draftAsset.product_id;
           return {
             exists: true,
-            productId: pId ? Number(pId) : undefined,
-            location: `Registered in Cylinder Assets Draft`
+            productId: draftProdId,
+            productName: draftProdName,
+            // location: `Registered in Cylinder Assets Draft`
           };
         }
 
@@ -773,6 +956,7 @@ export const stockAdjustmentService = {
           return {
             exists: true,
             productId: onHandProdId,
+            productName: onHandProdName,
             location: onHandBranch
           };
         }
@@ -780,7 +964,7 @@ export const stockAdjustmentService = {
         // Not present on hand
         return {
           exists: false,
-          location: `Serial "${serial}" is not on-hand in this branch.`
+          errorMsg: `Serial "${serial}" is not on-hand in this branch.`
         };
       }
     } catch (err) {
@@ -802,17 +986,21 @@ export const stockAdjustmentService = {
       finalRemarks = `${finalRemarks}\n[SUPPLIER_ID: ${header.supplier_id}]`.trim();
     }
 
+    // Asia/Manila (+08:00) timestamp for database record creation
+    const phNow = nowPH();
+
     const headerRes = await directusFetch<{ data: { id: number } }>(`${DIRECTUS_URL}/items/stock_adjustment_header`, {
       method: "POST",
       body: JSON.stringify({
         doc_no: header.doc_no,
-        branch_id: header.branch_id,
-        supplier_id: header.supplier_id,
+        date: header.date,
+        branch_id: Number(header.branch_id),
         type: header.type,
         remarks: finalRemarks,
         amount: header.amount || items.reduce((acc: number, item: StockAdjustmentItem) => acc + (item.quantity * (item.cost_per_unit || 0)), 0),
         isPosted: 0,
         created_by: payload.userId,
+        created_at: phNow,
       }),
     });
     const headerId = headerRes.data.id;
@@ -826,7 +1014,8 @@ export const stockAdjustmentService = {
       quantity: Number(item.quantity),
       remarks: item.remarks,
       unit_id: item.unit_id ? Number(item.unit_id) : null,
-      created_by: payload.userId
+      created_by: payload.userId,
+      created_at: phNow,
     }));
 
     const itemsRes = await directusFetch<{ data: Array<{ id: number }> | { id: number } }>(`${DIRECTUS_URL}/items/stock_adjustment`, {
@@ -835,7 +1024,8 @@ export const stockAdjustmentService = {
     });
     const createdItems = Array.isArray(itemsRes.data) ? itemsRes.data : [itemsRes.data];
 
-    const serialPayload: { serial_number: string; stock_adjustment_id: number; created_by?: number }[] = [];
+    // Pass created_at explicitly in Asia/Manila time zone to stock_adjustment_serial table
+    const serialPayload: { serial_number: string; stock_adjustment_id: number; created_by?: number; created_at?: string }[] = [];
     items.forEach((item: StockAdjustmentItem, index: number) => {
       if (item.serial_numbers && Array.isArray(item.serial_numbers) && createdItems[index]) {
         const itemId = createdItems[index].id;
@@ -843,7 +1033,8 @@ export const stockAdjustmentService = {
           serialPayload.push({
             serial_number: serial,
             stock_adjustment_id: itemId,
-            created_by: payload.userId
+            created_by: payload.userId,
+            created_at: phNow,
           });
         });
       }
@@ -854,6 +1045,55 @@ export const stockAdjustmentService = {
         method: "POST",
         body: JSON.stringify(serialPayload),
       });
+
+      // AG-COMMENT: Sync cylinder_assets_draft with adjustment remarks, branch, and audit fields
+      const cleanedHeaderRemarks = String(header.remarks || "").replace(/\s*\[SUPPLIER_ID:\s*(\d+)\]/g, "").trim();
+      const serialMap = new Map<string, { productId: number; branchId: number; remarks: string }>();
+      items.forEach((item) => {
+        const pId = Number(typeof item.product_id === "object" && item.product_id !== null ? (item.product_id as { product_id?: number; id?: number }).product_id || (item.product_id as { id?: number }).id : item.product_id);
+        const bId = Number(item.branch_id || header.branch_id);
+        const itemRemarks = String(item.remarks || "").trim();
+        const remarksToUse = itemRemarks || cleanedHeaderRemarks || "Registered via Stock Adjustment";
+        if (Array.isArray(item.serial_numbers)) {
+          item.serial_numbers.forEach((s) => {
+            if (s) {
+              serialMap.set(String(s).trim().toUpperCase(), {
+                productId: pId,
+                branchId: bId,
+                remarks: remarksToUse,
+              });
+            }
+          });
+        }
+      });
+
+      const serialList = Array.from(serialMap.keys());
+      if (serialList.length > 0) {
+        try {
+          const draftRes = await directusFetch<{ data: Array<{ id: number; serial_number: string }> }>(
+            `${DIRECTUS_URL}/items/cylinder_assets_draft?filter={"serial_number":{"_in":${JSON.stringify(serialList)}}}&fields=id,serial_number&limit=-1`
+          );
+          const draftRows = draftRes.data || [];
+          if (draftRows.length > 0) {
+            const draftPatches = draftRows.map((draft) => {
+              const meta = serialMap.get(String(draft.serial_number || "").toUpperCase());
+              return directusFetch(`${DIRECTUS_URL}/items/cylinder_assets_draft/${draft.id}`, {
+                method: "PATCH",
+                body: JSON.stringify({
+                  product_id: meta?.productId,
+                  current_branch_id: meta?.branchId,
+                  remarks: meta?.remarks,
+                  modified_by: payload.userId || undefined,
+                  modified_date: phNow,
+                }),
+              });
+            });
+            await Promise.all(draftPatches);
+          }
+        } catch (err) {
+          console.error("Failed to sync cylinder_assets_draft on create:", err);
+        }
+      }
     }
 
     if (header.stock_adjustment_attachment && Array.isArray(header.stock_adjustment_attachment) && (header.stock_adjustment_attachment as StockAdjustmentAttachment[]).length > 0) {
@@ -882,6 +1122,7 @@ export const stockAdjustmentService = {
   async update(id: number, payload: { header: Record<string, unknown>; items: StockAdjustmentItem[]; userId?: number }) {
     let finalRemarks = String(payload.header.remarks || "").trim();
     finalRemarks = finalRemarks.replace(/\s*\[SUPPLIER_ID:\s*(\d+)\]/g, "").trim();
+    const rawCleanedRemarks = finalRemarks;
     if (payload.header.supplier_id) {
       finalRemarks = `${finalRemarks}\n[SUPPLIER_ID: ${payload.header.supplier_id}]`.trim();
     }
@@ -891,7 +1132,6 @@ export const stockAdjustmentService = {
       type: payload.header.type,
       branch_id: Number(payload.header.branch_id),
       remarks: finalRemarks,
-      supplier_id: payload.header.supplier_id ? Number(payload.header.supplier_id) : null,
       amount: Number(payload.header.amount),
     };
 
@@ -907,43 +1147,16 @@ export const stockAdjustmentService = {
     const itemIds = existingItemsRes.data.map((i: { id: number }) => i.id);
 
     if (itemIds.length > 0) {
-      // Delete old attachments first using old item IDs
-      try {
-        const existingAttRes = await directusFetch<{ data: { id: number }[] }>(
-          `${DIRECTUS_URL}/items/stock_adjustment_attachment?filter={"stock_adjustment_id":{"_in":${JSON.stringify(itemIds)}}}&fields=id&limit=-1`
-        );
-        const attIds = existingAttRes.data.map(a => a.id);
-        if (attIds.length > 0) {
-          await directusFetch(`${DIRECTUS_URL}/items/stock_adjustment_attachment`, {
-            method: "DELETE",
-            body: JSON.stringify(attIds),
-          });
-        }
-      } catch (err) {
-        console.warn("Failed to delete old attachments during update:", err);
-      }
-
-      // First delete associated serials
-      try {
-        const existingSerialsRes = await directusFetch<{ data: { id: number }[] }>(
-          `${DIRECTUS_URL}/items/stock_adjustment_serial?filter={"stock_adjustment_id":{"_in":${JSON.stringify(itemIds)}}}&fields=id&limit=-1`
-        );
-        const serialIds = existingSerialsRes.data.map(s => s.id);
-        if (serialIds.length > 0) {
-          await directusFetch(`${DIRECTUS_URL}/items/stock_adjustment_serial`, {
-            method: "DELETE",
-            body: JSON.stringify(serialIds)
-          });
-        }
-      } catch (err) {
-        console.warn("Failed to delete serial numbers during update:", err);
-      }
-
-      await directusFetch(`${DIRECTUS_URL}/items/stock_adjustment`, {
+      await directusFetch(`${DIRECTUS_URL}/items/stock_adjustment_serial?filter={"stock_adjustment_id":{"_in":${JSON.stringify(itemIds)}}}`, {
         method: "DELETE",
-        body: JSON.stringify(itemIds),
+      });
+      await directusFetch(`${DIRECTUS_URL}/items/stock_adjustment?filter={"doc_no":{"_eq":"${docNo}"}}`, {
+        method: "DELETE",
       });
     }
+
+    // Asia/Manila (+08:00) timestamp for database record creation
+    const phNow = nowPH();
 
     const itemsPayload = payload.items.map((item: StockAdjustmentItem) => ({
       doc_no: payload.header.doc_no,
@@ -954,7 +1167,8 @@ export const stockAdjustmentService = {
       quantity: Number(item.quantity),
       remarks: item.remarks,
       unit_id: item.unit_id ? Number(item.unit_id) : null,
-      created_by: payload.userId
+      created_by: payload.userId,
+      created_at: phNow,
     }));
 
     const itemsRes = await directusFetch<{ data: Array<{ id: number }> | { id: number } }>(`${DIRECTUS_URL}/items/stock_adjustment`, {
@@ -963,7 +1177,8 @@ export const stockAdjustmentService = {
     });
     const createdItems = Array.isArray(itemsRes.data) ? itemsRes.data : [itemsRes.data];
 
-    const serialPayload: { serial_number: string; stock_adjustment_id: number; created_by?: number }[] = [];
+    // Pass created_at explicitly in Asia/Manila time zone to stock_adjustment_serial table
+    const serialPayload: { serial_number: string; stock_adjustment_id: number; created_by?: number; created_at?: string }[] = [];
     payload.items.forEach((item: StockAdjustmentItem, index: number) => {
       if (item.serial_numbers && Array.isArray(item.serial_numbers) && createdItems[index]) {
         const itemId = createdItems[index].id;
@@ -971,7 +1186,8 @@ export const stockAdjustmentService = {
           serialPayload.push({
             serial_number: serial,
             stock_adjustment_id: itemId,
-            created_by: payload.userId
+            created_by: payload.userId,
+            created_at: phNow,
           });
         });
       }
@@ -982,40 +1198,142 @@ export const stockAdjustmentService = {
         method: "POST",
         body: JSON.stringify(serialPayload),
       });
+
+      // AG-COMMENT: Sync cylinder_assets_draft and cylinder_assets with updated adjustment remarks, branch, product, and modified audit trail
+      const serialMap = new Map<string, { productId: number; branchId: number; remarks: string }>();
+      payload.items.forEach((item) => {
+        const pId = Number(typeof item.product_id === "object" && item.product_id !== null ? (item.product_id as { product_id?: number; id?: number }).product_id || (item.product_id as { id?: number }).id : item.product_id);
+        const bId = Number(item.branch_id || payload.header.branch_id);
+        const itemRemarks = String(item.remarks || "").trim();
+        const remarksToUse = itemRemarks || rawCleanedRemarks || `Stock Adjustment ${docNo}`;
+        if (Array.isArray(item.serial_numbers)) {
+          item.serial_numbers.forEach((s) => {
+            if (s) {
+              serialMap.set(String(s).trim().toUpperCase(), {
+                productId: pId,
+                branchId: bId,
+                remarks: remarksToUse,
+              });
+            }
+          });
+        }
+      });
+
+      const serialList = Array.from(serialMap.keys());
+      if (serialList.length > 0) {
+        try {
+          const [draftRes, existingRes] = await Promise.all([
+            directusFetch<{ data: Array<{ id: number; serial_number: string }> }>(
+              `${DIRECTUS_URL}/items/cylinder_assets_draft?filter={"serial_number":{"_in":${JSON.stringify(serialList)}}}&fields=id,serial_number&limit=-1`
+            ),
+            directusFetch<{ data: Array<{ id: number; serial_number: string }> }>(
+              `${DIRECTUS_URL}/items/cylinder_assets?filter={"serial_number":{"_in":${JSON.stringify(serialList)}}}&fields=id,serial_number&limit=-1`
+            )
+          ]);
+
+          const draftRows = draftRes.data || [];
+          const existingRows = existingRes.data || [];
+
+          const patchPromises: Promise<unknown>[] = [];
+
+          draftRows.forEach((draft) => {
+            const meta = serialMap.get(String(draft.serial_number || "").toUpperCase());
+            if (meta) {
+              patchPromises.push(
+                directusFetch(`${DIRECTUS_URL}/items/cylinder_assets_draft/${draft.id}`, {
+                  method: "PATCH",
+                  body: JSON.stringify({
+                    product_id: meta.productId,
+                    current_branch_id: meta.branchId,
+                    remarks: meta.remarks,
+                    modified_by: payload.userId || undefined,
+                    modified_date: phNow,
+                  }),
+                })
+              );
+            }
+          });
+
+          existingRows.forEach((existing) => {
+            const meta = serialMap.get(String(existing.serial_number || "").toUpperCase());
+            if (meta) {
+              patchPromises.push(
+                directusFetch(`${DIRECTUS_URL}/items/cylinder_assets/${existing.id}`, {
+                  method: "PATCH",
+                  body: JSON.stringify({
+                    product_id: meta.productId,
+                    current_branch_id: meta.branchId,
+                    remarks: meta.remarks,
+                    modified_by: payload.userId || undefined,
+                    modified_date: phNow,
+                  }),
+                })
+              );
+            }
+          });
+
+          if (patchPromises.length > 0) {
+            await Promise.all(patchPromises);
+          }
+        } catch (err) {
+          console.error("Failed to sync cylinder assets during adjustment update:", err);
+        }
+      }
     }
 
-    // Save new attachments linked to first new item's id
-    if (payload.header.stock_adjustment_attachment && Array.isArray(payload.header.stock_adjustment_attachment) && (payload.header.stock_adjustment_attachment as StockAdjustmentAttachment[]).length > 0) {
+    if (payload.header.stock_adjustment_attachment && Array.isArray(payload.header.stock_adjustment_attachment)) {
       const firstItemId = createdItems[0]?.id;
       if (firstItemId) {
+        await directusFetch(`${DIRECTUS_URL}/items/stock_adjustment_attachment?filter={"stock_adjustment_id":{"_eq":${firstItemId}}}`, {
+          method: "DELETE",
+        }).catch(() => {});
+
         const atts = (payload.header.stock_adjustment_attachment as StockAdjustmentAttachment[]).map((att: StockAdjustmentAttachment) => ({
           stock_adjustment_id: firstItemId,
           attachment: typeof att.attachment === 'object' ? (att.attachment as { id?: string | number }).id : att.attachment,
           created_by: payload.userId
         }));
-        await directusFetch(`${DIRECTUS_URL}/items/stock_adjustment_attachment`, {
-          method: "POST",
-          body: JSON.stringify(atts),
-        }).catch(err => console.error("Failed to update attachments:", err));
-      } else {
-        console.warn("No item id returned on update — attachments could not be linked.");
+        if (atts.length > 0) {
+          await directusFetch(`${DIRECTUS_URL}/items/stock_adjustment_attachment`, {
+            method: "POST",
+            body: JSON.stringify(atts),
+          }).catch(err => console.error("Failed to save attachments:", err));
+        }
       }
     }
 
-    return { success: true };
+    return headerPayload;
   },
 
   /**
-   * Post (finalize) a Stock Adjustment (promoting cylinder drafts to assets)
+   * Post (finalize) a Stock Adjustment (promoting cylinder drafts to assets & synchronizing existing cylinder assets)
    */
   async postStockAdjustment(id: number, userId?: number) {
+    const phNow = nowPH();
     try {
-      const headerRes = await directusFetch<{ data: { doc_no: string } }>(
-        `${DIRECTUS_URL}/items/stock_adjustment_header/${id}?fields=doc_no`
+      const headerRes = await directusFetch<{
+        data: {
+          doc_no: string;
+          branch_id?: number | { id: number };
+          remarks?: string;
+        };
+      }>(
+        `${DIRECTUS_URL}/items/stock_adjustment_header/${id}?fields=doc_no,branch_id,remarks`
       );
       const docNo = headerRes.data?.doc_no;
+      const rawBranchId = headerRes.data?.branch_id;
+      const branchId = typeof rawBranchId === "object" && rawBranchId !== null
+        ? Number(rawBranchId.id)
+        : Number(rawBranchId || 0);
 
+      let supplierId = 0;
+      if (headerRes.data?.remarks) {
+        const match = headerRes.data.remarks.match(/\[SUPPLIER_ID:\s*(\d+)\]/i);
+        if (match) supplierId = Number(match[1]);
+      }
       if (docNo) {
+        const cleanedHeaderRemarks = String(headerRes.data?.remarks || "").replace(/\s*\[SUPPLIER_ID:\s*(\d+)\]/g, "").trim();
+
         const itemsRes = await directusFetch<{
           data: Array<{
             id: number;
@@ -1024,12 +1342,16 @@ export const stockAdjustmentService = {
               unit_of_measurement?: { unit_name?: string } | null;
             };
             unit_id?: { unit_name?: string } | null;
+            branch_id?: number | { id: number };
+            remarks?: string;
           }>;
         }>(
-          `${DIRECTUS_URL}/items/stock_adjustment?filter={"doc_no":{"_eq":"${docNo}"}}&fields=id,product_id.product_id,product_id.unit_of_measurement.unit_name,unit_id.unit_name&limit=-1`
+          `${DIRECTUS_URL}/items/stock_adjustment?filter={"doc_no":{"_eq":"${docNo}"}}&fields=id,product_id.product_id,product_id.unit_of_measurement.unit_name,unit_id.unit_name,branch_id,remarks&limit=-1`
         );
 
         const productUomMap = new Map<number, string>();
+        const itemMap = new Map<number, { productId: number; branchId: number; uom: string; remarks: string }>();
+
         const itemIds = (itemsRes.data || []).map((item) => {
           const isProductObject = typeof item.product_id === "object" && item.product_id !== null;
           const pId = isProductObject
@@ -1042,6 +1364,18 @@ export const stockAdjustmentService = {
           if (pId && uom) {
             productUomMap.set(pId, uom);
           }
+
+          const rawItemBranch = item.branch_id;
+          const itemBranchId = typeof rawItemBranch === "object" && rawItemBranch !== null
+            ? Number(rawItemBranch.id)
+            : Number(rawItemBranch || branchId);
+
+          itemMap.set(item.id, {
+            productId: pId,
+            branchId: itemBranchId,
+            uom,
+            remarks: String(item.remarks || "").trim()
+          });
           return item.id;
         });
 
@@ -1054,21 +1388,82 @@ export const stockAdjustmentService = {
           const emptyUnit = unitsList.find(u => u.unit_name.toUpperCase() === "EMPTY" || u.unit_shortcut.toUpperCase() === "EMPTY");
           const emptyName = emptyUnit ? emptyUnit.unit_name.toUpperCase() : "EMPTY";
 
-          const serialRes = await directusFetch<{ data: { serial_number: string }[] }>(
-            `${DIRECTUS_URL}/items/stock_adjustment_serial?filter={"stock_adjustment_id":{"_in":${JSON.stringify(itemIds)}}}&fields=serial_number&limit=-1`
+          const serialRes = await directusFetch<{ data: { id: number; serial_number: string; stock_adjustment_id: number }[] }>(
+            `${DIRECTUS_URL}/items/stock_adjustment_serial?filter={"stock_adjustment_id":{"_in":${JSON.stringify(itemIds)}}}&fields=id,serial_number,stock_adjustment_id&limit=-1`
           );
-          const serials = (serialRes.data || []).map((s) => s.serial_number);
+          const serialRows = serialRes.data || [];
+          const serials = serialRows.map((s) => s.serial_number);
+
+          // Map serials to their respective line-item metadata
+          const serialToItemMap = new Map<string, { productId: number; branchId: number; supplierId: number; uom: string; remarks: string }>();
+          serialRows.forEach((row) => {
+            const snUpper = String(row.serial_number || "").toUpperCase();
+            const meta = itemMap.get(row.stock_adjustment_id);
+            if (meta) {
+              serialToItemMap.set(snUpper, {
+                productId: meta.productId,
+                branchId: meta.branchId,
+                supplierId: supplierId,
+                uom: meta.uom,
+                remarks: meta.remarks,
+              });
+            }
+          });
 
           if (serials.length > 0) {
-            const draftRes = await directusFetch<{ data: DraftCylinder[] }>(
-              `${DIRECTUS_URL}/items/cylinder_assets_draft?filter={"serial_number":{"_in":${JSON.stringify(serials)}}}&limit=-1`
-            );
-            const draftCylinders = draftRes.data || [];
+            // AG-COMMENT: Fetch both draft cylinder assets and existing cylinder assets to validate required tare weight and expiration date
+            const [draftRes, existingRes] = await Promise.all([
+              directusFetch<{ data: DraftCylinder[] }>(
+                `${DIRECTUS_URL}/items/cylinder_assets_draft?filter={"serial_number":{"_in":${JSON.stringify(serials)}}}&limit=-1`
+              ),
+              directusFetch<{ data: Array<{ id: number; serial_number: string; product_id: number; tare_weight?: number | string | null; expiration_date?: string | null; cylinder_status?: string; current_branch_id?: number; current_supplier_id?: number; remarks?: string | null }> }>(
+                `${DIRECTUS_URL}/items/cylinder_assets?filter={"serial_number":{"_in":${JSON.stringify(serials)}}}&fields=id,serial_number,product_id,tare_weight,expiration_date,cylinder_status,current_branch_id,current_supplier_id,remarks&limit=-1`
+              )
+            ]);
 
+            const draftCylinders = draftRes.data || [];
+            const existingCylinders = existingRes.data || [];
+
+            const draftMap = new Map(draftCylinders.map((c) => [String(c.serial_number || "").toUpperCase(), c]));
+            const existingMap = new Map(existingCylinders.map((c) => [String(c.serial_number || "").toUpperCase(), c]));
+
+            const missingDetails: string[] = [];
+
+            for (const s of serials) {
+              const cleanS = String(s || "").trim().toUpperCase();
+              const asset = draftMap.get(cleanS) || existingMap.get(cleanS);
+
+              if (!asset) {
+                missingDetails.push(`Serial "${s}" is not registered in cylinder assets`);
+                continue;
+              }
+
+              const tareVal = asset.tare_weight;
+              const hasTare = tareVal !== undefined && tareVal !== null && String(tareVal).trim() !== "" && !isNaN(Number(tareVal)) && Number(tareVal) > 0;
+              const expVal = asset.expiration_date;
+              const hasExp = expVal !== undefined && expVal !== null && String(expVal).trim() !== "";
+
+              if (!hasTare && !hasExp) {
+                missingDetails.push(`Serial "${s}" is missing tare weight and expiration date`);
+              } else if (!hasTare) {
+                missingDetails.push(`Serial "${s}" is missing tare weight`);
+              } else if (!hasExp) {
+                missingDetails.push(`Serial "${s}" is missing expiration date`);
+              }
+            }
+
+            // AG-COMMENT: Restrict posting if any serial lacks tare weight or expiration date
+            if (missingDetails.length > 0) {
+              throw new Error(`Cannot post adjustment. All serials must have tare weight (> 0) and expiration date: ${missingDetails.join(", ")}`);
+            }
+
+            // 1. Promote draft cylinders into cylinder_assets with full audit and relation fields
             if (draftCylinders.length > 0) {
               const cylindersToInsert = draftCylinders.map((c) => {
-                const pId = Number(c.product_id);
-                const uom = productUomMap.get(pId);
+                const cleanS = String(c.serial_number || "").toUpperCase();
+                const itemMeta = serialToItemMap.get(cleanS);
+                const pId = itemMeta?.productId || Number(c.product_id);
+                const uom = itemMeta?.uom || productUomMap.get(pId);
                 let finalStatus = (c.cylinder_status as string) || "AVAILABLE";
                 if (uom) {
                   if (uom === emptyName) {
@@ -1078,7 +1473,8 @@ export const stockAdjustmentService = {
                   }
                 }
 
-                const postingDate = new Date().toISOString().split("T")[0];
+                // Use Asia/Manila date for cylinder acquisition date
+                const postingDate = phNow.split("T")[0];
                 const copy: Record<string, unknown> = {};
                 for (const key in c) {
                   if (key !== "id" && key !== "acquisition_date") {
@@ -1086,10 +1482,23 @@ export const stockAdjustmentService = {
                   }
                 }
 
+                // AG-COMMENT: Adjustment form remarks (line item or header) take precedence over draft placeholder remarks
+                const userAdjRemarks = itemMeta?.remarks || cleanedHeaderRemarks;
+                const targetRemarks = userAdjRemarks || (c.remarks && c.remarks !== "Registered via Stock Adjustment" ? c.remarks : `Stock Adjustment ${docNo}`);
+
                 const record = {
                   ...copy,
+                  product_id: pId,
                   cylinder_status: finalStatus,
-                  acquisition_date: postingDate,
+                  current_branch_id: itemMeta?.branchId || c.current_branch_id || branchId || null,
+                  current_supplier_id: itemMeta?.supplierId || supplierId || null,
+                  acquisition_date: c.acquisition_date || postingDate,
+                  remarks: targetRemarks,
+                  created_by: c.created_by || userId || null,
+                  created_date: c.created_date || phNow,
+                  modified_by: userId || null,
+                  modified_date: phNow,
+                  is_deleted: 0,
                 };
 
                 return record;
@@ -1106,20 +1515,60 @@ export const stockAdjustmentService = {
                 body: JSON.stringify(draftIdsToDelete),
               });
             }
+
+            // 2. Synchronize existing cylinder_assets (update product_id, supplier_id, branch_id, remarks, modified audit fields)
+            if (existingCylinders.length > 0) {
+              const patchPromises = existingCylinders.map((c) => {
+                const cleanS = String(c.serial_number || "").toUpperCase();
+                const itemMeta = serialToItemMap.get(cleanS);
+                if (!itemMeta) return Promise.resolve();
+
+                const pId = itemMeta.productId;
+                const uom = itemMeta.uom || productUomMap.get(pId);
+                let finalStatus = (c.cylinder_status as string) || "AVAILABLE";
+                if (uom) {
+                  if (uom === emptyName) {
+                    finalStatus = "EMPTY";
+                  } else {
+                    finalStatus = "AVAILABLE";
+                  }
+                }
+
+                // AG-COMMENT: Adjustment form remarks (line item or header) take precedence over existing placeholder remarks
+                const userAdjRemarks = itemMeta.remarks || cleanedHeaderRemarks;
+                const targetRemarks = userAdjRemarks || (c.remarks && c.remarks !== "Registered via Stock Adjustment" ? c.remarks : `Stock Adjustment ${docNo}`);
+
+                return directusFetch(`${DIRECTUS_URL}/items/cylinder_assets/${c.id}`, {
+                  method: "PATCH",
+                  body: JSON.stringify({
+                    product_id: pId,
+                    cylinder_status: finalStatus,
+                    current_branch_id: itemMeta.branchId || branchId || c.current_branch_id || null,
+                    current_supplier_id: itemMeta.supplierId || supplierId || c.current_supplier_id || null,
+                    remarks: targetRemarks,
+                    modified_by: userId || null,
+                    modified_date: phNow,
+                  }),
+                });
+              });
+
+              await Promise.all(patchPromises);
+            }
           }
         }
       }
     } catch (err) {
-      console.error("Failed to promote draft cylinder assets during posting:", err);
+      console.error("Failed to promote and synchronize cylinder assets during posting:", err);
       throw err;
     }
 
+    // Save postedAt in Asia/Manila (+08:00) local time
     const res = await directusFetch<{ data: unknown }>(`${DIRECTUS_URL}/items/stock_adjustment_header/${id}`, {
       method: "PATCH",
       body: JSON.stringify({
         isPosted: 1,
         posted_by: userId,
-        postedAt: new Date().toISOString()
+        postedAt: phNow
       }),
     });
     return res;
@@ -1198,19 +1647,33 @@ export const stockAdjustmentService = {
   /**
    * Fetch approved products (SKUs) for the dropdown
    */
+  /**
+   * Fetch approved products (SKUs) for the dropdown
+   */
   async fetchProducts(params?: { search?: string }) {
-    let query = `fields=product_id,product_name,product_code,price_per_unit,cost_per_unit,barcode,description,unit_of_measurement.unit_name,unit_of_measurement.order,product_brand.brand_name&limit=100&sort=product_name`;
+    // AG-COMMENT: Include is_serialized, category and brand is_industrial fields to filter products where category is_industrial = 1 or brand is_industrial = 1
+    let query = `fields=product_id,product_name,product_code,price_per_unit,cost_per_unit,barcode,description,is_serialized,unit_of_measurement.unit_name,unit_of_measurement.order,product_brand.brand_id,product_brand.brand_name,product_brand.is_industrial,product_category.category_id,product_category.category_name,product_category.is_industrial&limit=500&sort=product_name`;
 
     const filters: Record<string, unknown> = {
-      isActive: { _eq: 1 }
+      _and: [
+        { isActive: { _eq: 1 } },
+        {
+          _or: [
+            { product_category: { is_industrial: { _eq: 1 } } },
+            { product_brand: { is_industrial: { _eq: 1 } } },
+          ],
+        },
+      ],
     };
 
     if (params?.search) {
-      filters._or = [
-        { product_name: { _icontains: params.search } },
-        { product_code: { _icontains: params.search } },
-        { barcode: { _icontains: params.search } }
-      ];
+      (filters._and as unknown[]).push({
+        _or: [
+          { product_name: { _icontains: params.search } },
+          { product_code: { _icontains: params.search } },
+          { barcode: { _icontains: params.search } },
+        ],
+      });
     }
 
     query += `&filter=${JSON.stringify(filters)}`;
@@ -1224,21 +1687,39 @@ export const stockAdjustmentService = {
       .filter((item: unknown) => {
         const p = item as Record<string, unknown>;
         const uom = p['unit_of_measurement'] as Record<string, unknown> | undefined;
+        const brand = p['product_brand'] as Record<string, unknown> | undefined;
+        const category = p['product_category'] as Record<string, unknown> | undefined;
+
         const unitName = typeof uom?.['unit_name'] === 'string' ? uom['unit_name'].toUpperCase() : '';
         const fallbackName = typeof p['unit_name'] === 'string' ? p['unit_name'].toUpperCase() : '';
-        return !excludedUnits.includes(unitName) && !excludedUnits.includes(fallbackName);
+        if (excludedUnits.includes(unitName) || excludedUnits.includes(fallbackName)) {
+          return false;
+        }
+
+        // AG-COMMENT: Show all products where category is_industrial = 1 or brand is_industrial = 1
+        const isCategoryIndustrial = category?.['is_industrial'] === 1 || category?.['is_industrial'] === true || category?.['is_industrial'] === '1';
+        const isBrandIndustrial = brand?.['is_industrial'] === 1 || brand?.['is_industrial'] === true || brand?.['is_industrial'] === '1';
+
+        return isCategoryIndustrial || isBrandIndustrial;
       })
       .map((item: unknown) => {
       const p = item as Record<string, unknown>;
       const uom = p['unit_of_measurement'] as Record<string, unknown> | undefined;
       const brand = p['product_brand'] as Record<string, unknown> | undefined;
+      const category = p['product_category'] as Record<string, unknown> | undefined;
+
+      const isCategoryIndustrial = category?.['is_industrial'] === 1 || category?.['is_industrial'] === true || category?.['is_industrial'] === '1';
+      const isBrandIndustrial = brand?.['is_industrial'] === 1 || brand?.['is_industrial'] === true || brand?.['is_industrial'] === '1';
 
       return {
         ...p,
         id: p['product_id'],
         unit_name: uom?.['unit_name'] || p['unit_name'] || "pcs",
         unit_id: uom?.['unit_id'] || p['unit_id'] || null,
-        brand_name: brand?.['brand_name'] || p['brand_name'] || "N/A"
+        brand_name: brand?.['brand_name'] || p['brand_name'] || "N/A",
+        category_name: category?.['category_name'] || p['category_name'] || "N/A",
+        is_industrial: isCategoryIndustrial || isBrandIndustrial,
+        is_serialized: p['is_serialized'] === 1 || p['is_serialized'] === true || p['is_serialized'] === '1'
       };
     }) as unknown as StockAdjustmentProduct[];
   },
@@ -1291,6 +1772,12 @@ export const stockAdjustmentService = {
             { parent_id: { _in: supplierProductIds } },
           ],
         },
+        {
+          _or: [
+            { product_category: { is_industrial: { _eq: 1 } } },
+            { product_brand: { is_industrial: { _eq: 1 } } },
+          ],
+        },
       ],
     };
 
@@ -1304,7 +1791,8 @@ export const stockAdjustmentService = {
       });
     }
 
-    const query = `fields=product_id,product_name,product_code,price_per_unit,cost_per_unit,barcode,description,unit_of_measurement.unit_name,unit_of_measurement.order,product_brand.brand_name&limit=500&sort=product_name&filter=${JSON.stringify(filters)}`;
+    // AG-COMMENT: Include is_serialized, product_brand.is_industrial, and product_category.is_industrial in fields parameter
+    const query = `fields=product_id,product_name,product_code,price_per_unit,cost_per_unit,barcode,description,is_serialized,unit_of_measurement.unit_name,unit_of_measurement.order,product_brand.brand_id,product_brand.brand_name,product_brand.is_industrial,product_category.category_id,product_category.category_name,product_category.is_industrial&limit=500&sort=product_name&filter=${JSON.stringify(filters)}`;
     const res = await directusFetch<{ data: unknown[] }>(`${DIRECTUS_URL}/items/products?${query}`);
     const products = res.data || [];
 
@@ -1314,14 +1802,29 @@ export const stockAdjustmentService = {
       .filter((item: unknown) => {
         const p = item as Record<string, unknown>;
         const uom = p['unit_of_measurement'] as Record<string, unknown> | undefined;
+        const brand = p['product_brand'] as Record<string, unknown> | undefined;
+        const category = p['product_category'] as Record<string, unknown> | undefined;
+
         const unitName = typeof uom?.['unit_name'] === 'string' ? uom['unit_name'].toUpperCase() : '';
         const fallbackName = typeof p['unit_name'] === 'string' ? p['unit_name'].toUpperCase() : '';
-        return !excludedUnits.includes(unitName) && !excludedUnits.includes(fallbackName);
+        if (excludedUnits.includes(unitName) || excludedUnits.includes(fallbackName)) {
+          return false;
+        }
+
+        // AG-COMMENT: Filter to only include products where category is_industrial = 1 or brand is_industrial = 1
+        const isCategoryIndustrial = category?.['is_industrial'] === 1 || category?.['is_industrial'] === true || category?.['is_industrial'] === '1';
+        const isBrandIndustrial = brand?.['is_industrial'] === 1 || brand?.['is_industrial'] === true || brand?.['is_industrial'] === '1';
+
+        return isCategoryIndustrial || isBrandIndustrial;
       })
       .map((item: unknown) => {
       const p = item as Record<string, unknown>;
       const uom = p['unit_of_measurement'] as Record<string, unknown> | undefined;
       const brand = p['product_brand'] as Record<string, unknown> | undefined;
+      const category = p['product_category'] as Record<string, unknown> | undefined;
+
+      const isCategoryIndustrial = category?.['is_industrial'] === 1 || category?.['is_industrial'] === true || category?.['is_industrial'] === '1';
+      const isBrandIndustrial = brand?.['is_industrial'] === 1 || brand?.['is_industrial'] === true || brand?.['is_industrial'] === '1';
 
       return {
         ...p,
@@ -1329,6 +1832,9 @@ export const stockAdjustmentService = {
         unit_name: uom?.['unit_name'] || p['unit_name'] || "pcs",
         unit_id: uom?.['unit_id'] || p['unit_id'] || null,
         brand_name: brand?.['brand_name'] || p['brand_name'] || "N/A",
+        category_name: category?.['category_name'] || p['category_name'] || "N/A",
+        is_industrial: isCategoryIndustrial || isBrandIndustrial,
+        is_serialized: p['is_serialized'] === 1 || p['is_serialized'] === true || p['is_serialized'] === '1',
       };
     }) as unknown as StockAdjustmentProduct[];
   },
@@ -1365,31 +1871,41 @@ export const stockAdjustmentService = {
       const res = await directusFetch<{
         data: {
           product_id: number;
-          product_name?: string | null;
-          product_code?: string | null;
+          product_name: string;
+          product_code: string;
           price_per_unit?: number | null;
           cost_per_unit?: number | null;
           barcode?: string | null;
           description?: string | null;
-          unit_of_measurement?: { unit_name?: string; order?: number; unit_id?: number } | null;
-          product_brand?: { brand_name?: string } | null;
+          is_serialized?: number | boolean | string | null;
+          unit_of_measurement?: { unit_name?: string; order?: number; unit_id?: number | null } | null;
+          product_brand?: { brand_name?: string; is_industrial?: number | boolean | string | null } | null;
+          product_category?: { category_name?: string; is_industrial?: number | boolean | string | null } | null;
           unit_name?: string | null;
           unit_id?: number | null;
           brand_name?: string | null;
         };
       }>(
-        `${DIRECTUS_URL}/items/products/${productId}?fields=product_id,product_name,product_code,price_per_unit,cost_per_unit,barcode,description,unit_of_measurement.unit_name,unit_of_measurement.order,product_brand.brand_name`
+        `${DIRECTUS_URL}/items/products/${productId}?fields=product_id,product_name,product_code,price_per_unit,cost_per_unit,barcode,description,is_serialized,unit_of_measurement.unit_name,unit_of_measurement.order,product_brand.brand_name,product_brand.is_industrial,product_category.category_name,product_category.is_industrial`
       );
       const p = res.data;
       if (!p) return null;
       const uom = p.unit_of_measurement;
       const brand = p.product_brand;
+      const category = p.product_category;
+
+      const isCategoryIndustrial = category?.is_industrial === 1 || category?.is_industrial === true || String(category?.is_industrial) === "1";
+      const isBrandIndustrial = brand?.is_industrial === 1 || brand?.is_industrial === true || String(brand?.is_industrial) === "1";
+
       return {
         ...p,
         id: p.product_id,
         unit_name: uom?.unit_name || p.unit_name || "pcs",
         unit_id: uom?.unit_id || p.unit_id || null,
-        brand_name: brand?.brand_name || p.brand_name || "N/A"
+        brand_name: brand?.brand_name || p.brand_name || "N/A",
+        category_name: category?.category_name || "N/A",
+        is_industrial: isCategoryIndustrial || isBrandIndustrial,
+        is_serialized: p.is_serialized === 1 || p.is_serialized === true || String(p.is_serialized) === "1"
       } as unknown as StockAdjustmentProduct;
     } catch (err) {
       console.error("Error fetching product by id:", err);

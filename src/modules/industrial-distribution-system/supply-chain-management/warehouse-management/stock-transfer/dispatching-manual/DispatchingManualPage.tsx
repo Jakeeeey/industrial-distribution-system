@@ -7,6 +7,7 @@ import { useStockTransferDispatchManual } from './hooks/use-stock-transfer-dispa
 import { OrderGroupItem, CurrentUser } from '../types/stock-transfer.types';
 import { cn } from '@/lib/utils';
 import { StockTransferPicklistPreview } from '../shared/components/StockTransferPicklistPreview';
+import { DiscrepancyModal } from '../shared/components/DiscrepancyModal';
 
 // Shared components
 import { OrderSelectionModal } from '../shared/components/OrderSelectionModal';
@@ -49,6 +50,7 @@ export default function StockTransferDispatchManualView({ currentUser }: { curre
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [showPicklist, setShowPicklist] = useState(false);
+  const [showDiscrepancyModal, setShowDiscrepancyModal] = useState(false);
 
   // Reset page when group changes
   React.useEffect(() => {
@@ -276,11 +278,24 @@ export default function StockTransferDispatchManualView({ currentUser }: { curre
                   <div className="flex items-center gap-3 w-full sm:w-auto mt-4 sm:mt-0">
                     <Button
                       className={cn(
-                        "flex-1 sm:flex-none font-bold text-xs shadow-none",
-                        selectedGroup.status === 'Picked' ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-muted text-muted-foreground"
+                        "flex-1 sm:flex-none font-bold text-xs shadow-none px-6 transition-all",
+                        hasScannedAny
+                          ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                          : "bg-muted text-muted-foreground"
                       )}
-                      disabled={processing || selectedGroup.status !== 'Picked'}
-                      onClick={() => dispatchOrder(selectedGroup.orderNo)}
+                      disabled={processing || !hasScannedAny}
+                      onClick={() => {
+                        const hasShortage = selectedGroup.items.some((i) => {
+                          const targetQty = Math.max(0, i.allocated_quantity ?? i.ordered_quantity ?? 0);
+                          const actualQty = scannedQtys[i.id] ?? 0;
+                          return actualQty < targetQty;
+                        });
+                        if (hasShortage) {
+                          setShowDiscrepancyModal(true);
+                        } else {
+                          dispatchOrder(selectedGroup.orderNo);
+                        }
+                      }}
                     >
                       {processing && <Loader2 className="mr-2 h-3 w-3 animate-spin text-white" />}
                       <Truck className="w-3 h-3 mr-2" />
@@ -305,6 +320,25 @@ export default function StockTransferDispatchManualView({ currentUser }: { curre
           sourceBranch={getBranchName(selectedGroup.sourceBranch)}
           targetBranch={getBranchName(selectedGroup.targetBranch)}
           requestedDate={new Date(selectedGroup.dateRequested).toLocaleString('en-PH')}
+        />
+      )}
+
+      {/* Discrepancy Modal */}
+      {selectedGroup && (
+        <DiscrepancyModal
+          open={showDiscrepancyModal}
+          onClose={() => setShowDiscrepancyModal(false)}
+          orderNo={selectedGroup.orderNo}
+          items={selectedGroup.items}
+          processing={processing}
+          onConfirm={async (payload) => {
+            await dispatchOrder(selectedGroup.orderNo, {
+              globalReason: payload.globalReason,
+              globalRemarks: payload.globalRemarks,
+              itemReasons: payload.itemReasons,
+            });
+            setShowDiscrepancyModal(false);
+          }}
         />
       )}
     </div>

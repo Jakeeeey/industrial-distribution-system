@@ -89,26 +89,53 @@ export const cylinderAssetsService = {
     return { data, total };
   },
 
+  // Helper: Sanitize payload (convert empty expiration_date to null) and validate tare_weight (> 0)
+  // Ensures database DATE column compatibility and prevents zero/negative weight entries.
+  sanitizeAndValidatePayload(item: Partial<CylinderAsset>, isUpdate = false): Partial<CylinderAsset> {
+    const sanitized = { ...item };
+
+    // Convert empty or whitespace-only expiration_date strings to null to avoid SQL DATE type mismatch 500 error
+    if (typeof sanitized.expiration_date === "string" && !sanitized.expiration_date.trim()) {
+      sanitized.expiration_date = null;
+    }
+
+    // Validate tare_weight: must be a number > 0 for creation, or whenever tare_weight is passed in update payload
+    if (!isUpdate || sanitized.tare_weight !== undefined) {
+      const tareNum = Number(sanitized.tare_weight);
+      if (sanitized.tare_weight === null || sanitized.tare_weight === undefined || isNaN(tareNum) || tareNum <= 0) {
+        throw new Error("Tare weight is required and must be greater than zero.");
+      }
+    }
+
+    return sanitized;
+  },
+
   async create(payload: Partial<CylinderAsset>) {
+    // Sanitize expiration_date and validate tare weight before saving
+    const sanitizedPayload = this.sanitizeAndValidatePayload(payload, false);
     const res = await directusFetch<{ data: CylinderAsset }>(`${DIRECTUS_URL}/items/cylinder_assets`, {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify(sanitizedPayload),
     });
     return res.data;
   },
 
   async createBulk(payloads: Partial<CylinderAsset>[]) {
+    // Sanitize expiration_date and validate tare weight for each asset in bulk payload
+    const sanitizedPayloads = payloads.map((p) => this.sanitizeAndValidatePayload(p, false));
     const res = await directusFetch<{ data: CylinderAsset[] }>(`${DIRECTUS_URL}/items/cylinder_assets`, {
       method: "POST",
-      body: JSON.stringify(payloads),
+      body: JSON.stringify(sanitizedPayloads),
     });
     return res.data;
   },
 
   async update(id: number, payload: Partial<CylinderAsset>) {
+    // Sanitize expiration_date and validate tare weight on asset edit update
+    const sanitizedPayload = this.sanitizeAndValidatePayload(payload, true);
     const res = await directusFetch<{ data: CylinderAsset }>(`${DIRECTUS_URL}/items/cylinder_assets/${id}`, {
       method: "PATCH",
-      body: JSON.stringify(payload),
+      body: JSON.stringify(sanitizedPayload),
     });
     return res.data;
   },

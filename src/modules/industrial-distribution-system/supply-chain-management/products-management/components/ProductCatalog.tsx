@@ -46,34 +46,35 @@ export function ProductCatalog({
     );
   }
 
-  // Group products by product_name
+  // Group products by parent_id or product_id to keep parent products and their variants together
   const groupedProducts = products.reduce((acc, product) => {
-    const name = product.product_name || "Unknown";
-    if (!acc[name]) {
-      acc[name] = [];
+    const groupKey = product.parent_id ? String(product.parent_id) : String(product.product_id);
+    if (!acc[groupKey]) {
+      acc[groupKey] = [];
     }
-    acc[name].push(product);
+    acc[groupKey].push(product);
     return acc;
   }, {} as Record<string, Product[]>);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-2">
-      {Object.entries(groupedProducts).map(([groupName, groupItems]) => {
-        const firstItem = groupItems[0];
-        const categoryName = getCategoryName(firstItem.product_category);
-        const brandName = getBrandName(firstItem.product_brand);
+      {Object.entries(groupedProducts).map(([groupKey, groupItems]) => {
+        const parentItem = groupItems.find((p) => !p.parent_id) || groupItems[0];
+        const groupName = parentItem.product_name || "Unknown";
+        const categoryName = getCategoryName(parentItem.product_category);
+        const brandName = getBrandName(parentItem.product_brand);
 
         return (
           <Card 
-            key={groupName} 
+            key={groupKey} 
             className="cursor-pointer overflow-hidden transition-all duration-200 border group relative flex flex-col border-border/50 hover:shadow-lg hover:border-border"
-            onClick={() => onView(firstItem)}
+            onClick={() => onView(parentItem)}
           >
             <div className="h-32 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800/50 dark:to-slate-900/50 flex items-center justify-center border-b border-border/50 relative overflow-hidden group/image">
-              {firstItem.product_image ? (
+              {parentItem.product_image ? (
                 <Image
-                  src={`${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8055"}/assets/${firstItem.product_image}`}
-                  alt={firstItem.product_name}
+                  src={`${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8055"}/assets/${parentItem.product_image}`}
+                  alt={parentItem.product_name}
                   fill
                   className="object-cover group-hover/image:scale-105 transition-transform duration-500"
                   unoptimized
@@ -82,8 +83,8 @@ export function ProductCatalog({
                 <Package className="w-12 h-12 text-slate-400/50 dark:text-slate-500/50" />
               )}
               <div className="absolute top-3 right-3 flex flex-col gap-1.5 items-end">
-                <Badge variant={firstItem.isActive ? "default" : "secondary"} className="shadow-sm">
-                  {firstItem.isActive ? "Active" : "Inactive"}
+                <Badge variant={parentItem.isActive ? "default" : "secondary"} className="shadow-sm">
+                  {parentItem.isActive ? "Active" : "Inactive"}
                 </Badge>
               </div>
             </div>
@@ -102,7 +103,7 @@ export function ProductCatalog({
                   </Badge>
                 )}
               </div>
-              <CardTitle className="text-[15px] font-bold leading-tight line-clamp-2" title={firstItem.product_name}>
+              <CardTitle className="text-[15px] font-bold leading-tight line-clamp-2" title={parentItem.product_name}>
                 {groupName}
               </CardTitle>
               

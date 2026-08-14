@@ -276,13 +276,57 @@ export async function fetchWiwoBillingTransactionById(id: number): Promise<Meter
   }
   return null;
 }
-
-// ─── Reference Lookups ────────────────────────────────────────────────────────
-export async function fetchCustomers(): Promise<{ customer_code: string; customer_name: string }[]> {
+export async function fetchCustomers(userId?: number): Promise<{ customer_code: string; customer_name: string }[]> {
   const res = await directusFetch<{ data: { customer_code: string; customer_name: string }[] }>(
     `${DIRECTUS_URL}/items/customer?fields=customer_code,customer_name&filter[isActive][_eq]=1&limit=-1&sort=customer_name`
   );
-  return res.data ?? [];
+  const customers = res.data ?? [];
+
+  if (userId) {
+    try {
+      const pdpRes = await directusFetch<{ data: { id: number }[] }>(
+        `${DIRECTUS_URL}/items/post_dispatch_plan?filter[driver_id][_eq]=${userId}&fields=id&limit=-1`
+      );
+      let pdpIds = (pdpRes.data || []).map(p => Number(p.id)).filter(Boolean);
+
+      try {
+        const staffRes = await directusFetch<{ data: { post_dispatch_plan_id: number }[] }>(
+          `${DIRECTUS_URL}/items/post_dispatch_plan_staff?filter[user_id][_eq]=${userId}&fields=post_dispatch_plan_id&limit=-1`
+        );
+        const staffPdpIds = (staffRes.data || []).map(s => Number(s.post_dispatch_plan_id)).filter(Boolean);
+        pdpIds = Array.from(new Set([...pdpIds, ...staffPdpIds]));
+      } catch {
+        // Ignore staff error
+      }
+
+      if (pdpIds.length > 0) {
+        const junctionRes = await directusFetch<{ data: { dispatch_plan_id: number | { id: number } }[] }>(
+          `${DIRECTUS_URL}/items/post_dispatch_dispatch_plans?filter[post_dispatch_plan_id][_in]=${pdpIds.join(",")}&fields=dispatch_plan_id&limit=-1`
+        );
+        const dpIds = (junctionRes.data || []).map(j => typeof j.dispatch_plan_id === "object" ? j.dispatch_plan_id.id : j.dispatch_plan_id).filter(Boolean);
+
+        const driverCustCodes = new Set<string>();
+        if (dpIds.length > 0) {
+          const dpdRes = await directusFetch<{ data: { sales_order_id: number | string | { customer_code?: string } }[] }>(
+            `${DIRECTUS_URL}/items/dispatch_plan_details?filter[dispatch_id][_in]=${dpIds.join(",")}&fields=sales_order_id.customer_code,sales_order_id.order_id&limit=-1`
+          );
+          (dpdRes.data || []).forEach(d => {
+            if (typeof d.sales_order_id === "object" && d.sales_order_id?.customer_code) {
+              driverCustCodes.add(d.sales_order_id.customer_code.trim());
+            }
+          });
+        }
+
+        if (driverCustCodes.size > 0) {
+          return customers.filter(c => driverCustCodes.has(c.customer_code.trim()));
+        }
+      }
+    } catch (err) {
+      console.warn("Could not filter customers by PDP driver:", err);
+    }
+  }
+
+  return customers;
 }
 
 export async function fetchSites(customerCode?: string): Promise<CustomerSite[]> {
@@ -304,7 +348,7 @@ export async function checkSiteOnboarded(siteId: number): Promise<boolean> {
   return (res.data ?? []).length > 0;
 }
 
-export async function fetchInvoicesForCustomer(customerCode?: string): Promise<{
+export async function fetchInvoicesForCustomer(customerCode?: string, userId?: number): Promise<{
   invoice_id: number;
   invoice_no: string;
   total_amount: number;
@@ -320,6 +364,57 @@ export async function fetchInvoicesForCustomer(customerCode?: string): Promise<{
   };
   if (customerCode) {
     filters.customer_code = { _eq: customerCode };
+  }
+
+  // PDP Driver Filter logic: Resolve assigned PDP orders and invoices for logged-in driver
+  let driverInvoiceIds: Set<number> | null = null;
+  let driverOrderRefs: Set<string> | null = null;
+
+  if (userId) {
+    try {
+      const pdpRes = await directusFetch<{ data: { id: number }[] }>(
+        `${DIRECTUS_URL}/items/post_dispatch_plan?filter[driver_id][_eq]=${userId}&fields=id&limit=-1`
+      );
+      let pdpIds = (pdpRes.data || []).map(p => Number(p.id)).filter(Boolean);
+
+      try {
+        const staffRes = await directusFetch<{ data: { post_dispatch_plan_id: number }[] }>(
+          `${DIRECTUS_URL}/items/post_dispatch_plan_staff?filter[user_id][_eq]=${userId}&fields=post_dispatch_plan_id&limit=-1`
+        );
+        const staffPdpIds = (staffRes.data || []).map(s => Number(s.post_dispatch_plan_id)).filter(Boolean);
+        pdpIds = Array.from(new Set([...pdpIds, ...staffPdpIds]));
+      } catch {
+        // Ignore staff error
+      }
+
+      if (pdpIds.length > 0) {
+        driverInvoiceIds = new Set<number>();
+        driverOrderRefs = new Set<string>();
+
+        const junctionRes = await directusFetch<{ data: { dispatch_plan_id: number | { id: number } }[] }>(
+          `${DIRECTUS_URL}/items/post_dispatch_dispatch_plans?filter[post_dispatch_plan_id][_in]=${pdpIds.join(",")}&fields=dispatch_plan_id&limit=-1`
+        );
+        const dpIds = (junctionRes.data || []).map(j => typeof j.dispatch_plan_id === "object" ? j.dispatch_plan_id.id : j.dispatch_plan_id).filter(Boolean);
+
+        if (dpIds.length > 0) {
+          const dpdRes = await directusFetch<{ data: { sales_order_id: number | string }[] }>(
+            `${DIRECTUS_URL}/items/dispatch_plan_details?filter[dispatch_id][_in]=${dpIds.join(",")}&fields=sales_order_id&limit=-1`
+          );
+          (dpdRes.data || []).forEach(d => {
+            if (d.sales_order_id) driverOrderRefs!.add(String(d.sales_order_id).trim().toUpperCase());
+          });
+        }
+
+        const pdInvoicesRes = await directusFetch<{ data: { invoice_id: number }[] }>(
+          `${DIRECTUS_URL}/items/post_dispatch_invoices?filter[post_dispatch_plan_id][_in]=${pdpIds.join(",")}&fields=invoice_id&limit=-1`
+        );
+        (pdInvoicesRes.data || []).forEach(i => {
+          if (i.invoice_id) driverInvoiceIds!.add(Number(i.invoice_id));
+        });
+      }
+    } catch (err) {
+      console.warn("Could not resolve PDP driver invoices:", err);
+    }
   }
 
   // Fetch header-invoice linkings to exclude POSTED ones
@@ -396,7 +491,21 @@ export async function fetchInvoicesForCustomer(customerCode?: string): Promise<{
   
   const rawInvoices = res.data ?? [];
   return rawInvoices
-    .filter(inv => !postedInvoiceIds.has(inv.invoice_id) && !postedTxInvoiceIds.has(inv.invoice_id))
+    .filter(inv => {
+      if (postedInvoiceIds.has(inv.invoice_id) || postedTxInvoiceIds.has(inv.invoice_id)) {
+        return false;
+      }
+      if (driverInvoiceIds !== null || driverOrderRefs !== null) {
+        const matchesInvoiceId = driverInvoiceIds ? driverInvoiceIds.has(inv.invoice_id) : false;
+        const orderObj = inv.order_id && typeof inv.order_id === "object" ? (inv.order_id as { order_id: number; order_no: string }) : null;
+        const orderIdStr = orderObj ? String(orderObj.order_id).trim().toUpperCase() : inv.order_id ? String(inv.order_id).trim().toUpperCase() : "";
+        const orderNoStr = orderObj ? String(orderObj.order_no).trim().toUpperCase() : "";
+        const matchesOrderRef = driverOrderRefs ? (driverOrderRefs.has(orderIdStr) || driverOrderRefs.has(orderNoStr)) : false;
+
+        return matchesInvoiceId || matchesOrderRef;
+      }
+      return true;
+    })
     .map(inv => {
       const orderObj =
         inv.order_id && typeof inv.order_id === "object"
@@ -464,71 +573,201 @@ export async function fetchAvailableCylinders(): Promise<CylinderAsset[]> {
   return cylinders;
 }
 
-export async function validateSerialForOnboarding(serialNumber: string, salesOrderId?: number): Promise<CylinderAsset | null> {
-  // DEV-CHANGE: Added delivery truck query traversal logic if salesOrderId is supplied
+/**
+ * Helper to resolve all consolidator detail IDs loaded on the truck assigned to an order, invoice, or driver.
+ */
+async function getTruckConsolidatorDetailIds(
+  salesOrderId?: number | string,
+  salesInvoiceId?: number | string,
+  userId?: number | null
+): Promise<number[]> {
+  let targetOrderId: number | null = null;
+
   if (salesOrderId) {
-    // 1. Fetch dispatch plan details for this Sales Order
-    const dpdRes = await directusFetch<{ data: { dispatch_id: number | { id: number } }[] }>(
-      `${DIRECTUS_URL}/items/dispatch_plan_details?filter[sales_order_id][_eq]=${salesOrderId}&fields=dispatch_id`
-    );
-    const dpd = dpdRes.data?.[0];
-    if (!dpd) {
-      throw new Error(`Serial ${serialNumber} not found on the delivery truck assigned to this order (no dispatch plan details found).`);
-    }
-
-    // 2. Fetch dispatch plan to get the dispatch_no
-    const dispatchId = typeof dpd.dispatch_id === "object" && dpd.dispatch_id !== null ? dpd.dispatch_id.id : dpd.dispatch_id;
-    const dpRes = await directusFetch<{ data: { dispatch_no: string } }>(
-      `${DIRECTUS_URL}/items/dispatch_plan/${dispatchId}?fields=dispatch_no`
-    );
-    const dispatchNo = dpRes.data?.dispatch_no;
-    if (!dispatchNo) {
-      throw new Error(`Dispatch plan ${dispatchId} does not have a valid dispatch number.`);
-    }
-
-    // 3. Fetch consolidator linked to this dispatch
-    const cdispRes = await directusFetch<{ data: { consolidator_id: number | { id: number } }[] }>(
-      `${DIRECTUS_URL}/items/consolidator_dispatches?filter[dispatch_no][_eq]=${encodeURIComponent(dispatchNo)}&fields=consolidator_id`
-    );
-    const cdisp = cdispRes.data?.[0];
-    if (!cdisp) {
-      throw new Error(`No loading sheet linked to dispatch number ${dispatchNo}.`);
-    }
-    const consolidatorId = typeof cdisp.consolidator_id === "object" && cdisp.consolidator_id !== null
-      ? cdisp.consolidator_id.id
-      : cdisp.consolidator_id;
-    if (!consolidatorId) {
-      throw new Error(`Loading sheet for dispatch ${dispatchNo} does not have a valid consolidator ID.`);
-    }
-
-    // 4. Fetch consolidator details to get the detail IDs
-    const cdRes = await directusFetch<{ data: { id: number; product_id: number }[] }>(
-      `${DIRECTUS_URL}/items/consolidator_details?filter[consolidator_id][_eq]=${consolidatorId}&fields=id,product_id`
-    );
-    const consolidatorDetails = cdRes.data || [];
-    const detailIds = consolidatorDetails.map((cd) => cd.id);
-    if (detailIds.length === 0) {
-      throw new Error(`No loaded products found on the loading sheet (consolidator #${consolidatorId}).`);
-    }
-
-    // 5. Fetch serial mappings associated with these details for the scanned serial number
-    const mappingRes = await directusFetch<{ data: { serial_number: string }[] }>(
-      `${DIRECTUS_URL}/items/consolidator_serial_mappings?filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&filter[detail_id][_in]=${detailIds.join(",")}&limit=1`
-    );
-    if (!mappingRes.data || mappingRes.data.length === 0) {
-      throw new Error(`Serial ${serialNumber} not found on the loading sheet of delivery truck for this order.`);
-    }
-  } else {
-    // Fallback: Check if it exists in consolidator_serial_mappings globally
-    const mappingRes = await directusFetch<{ data: { serial_number: string }[] }>(
-      `${DIRECTUS_URL}/items/consolidator_serial_mappings?filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&limit=1`
-    );
-    if (!mappingRes.data || mappingRes.data.length === 0) {
-      throw new Error(`Serial ${serialNumber} not found in consolidator serial mappings.`);
+    const num = Number(salesOrderId);
+    if (!isNaN(num) && num > 0) {
+      targetOrderId = num;
+    } else {
+      try {
+        const soRes = await directusFetch<{ data: { order_id: number }[] }>(
+          `${DIRECTUS_URL}/items/sales_order?filter[order_no][_eq]=${encodeURIComponent(String(salesOrderId))}&fields=order_id&limit=1`
+        );
+        if (soRes.data?.[0]?.order_id) {
+          targetOrderId = Number(soRes.data[0].order_id);
+        }
+      } catch {
+        // Ignore resolution error
+      }
     }
   }
 
-  // 2. Fetch from cylinder_assets
+  if (!targetOrderId && salesInvoiceId) {
+    try {
+      const invRes = await directusFetch<{ data: { order_id?: number | string | { order_id?: number; order_no?: string } } }>(
+        `${DIRECTUS_URL}/items/sales_invoice/${salesInvoiceId}?fields=order_id`
+      );
+      const inv = invRes.data;
+      if (inv?.order_id) {
+        if (typeof inv.order_id === "object" && inv.order_id !== null) {
+          targetOrderId = inv.order_id.order_id ? Number(inv.order_id.order_id) : null;
+        } else if (typeof inv.order_id === "number") {
+          targetOrderId = inv.order_id;
+        } else if (typeof inv.order_id === "string") {
+          const num = Number(inv.order_id);
+          if (!isNaN(num) && num > 0) {
+            targetOrderId = num;
+          } else {
+            const soRes = await directusFetch<{ data: { order_id: number }[] }>(
+              `${DIRECTUS_URL}/items/sales_order?filter[order_no][_eq]=${encodeURIComponent(inv.order_id)}&fields=order_id&limit=1`
+            );
+            if (soRes.data?.[0]?.order_id) {
+              targetOrderId = Number(soRes.data[0].order_id);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Could not resolve sales_order_id from salesInvoiceId:", e);
+    }
+  }
+
+  let dispatchIds: number[] = [];
+
+  if (targetOrderId) {
+    const dpdRes = await directusFetch<{ data: { dispatch_id: number | { id: number; dispatch_id?: number } }[] }>(
+      `${DIRECTUS_URL}/items/dispatch_plan_details?filter[sales_order_id][_eq]=${targetOrderId}&fields=dispatch_id&limit=-1`
+    );
+    const dpdList = dpdRes.data || [];
+    dispatchIds = Array.from(new Set(
+      dpdList.map((d) => {
+        if (typeof d.dispatch_id === "object" && d.dispatch_id !== null) {
+          return Number(d.dispatch_id.dispatch_id || d.dispatch_id.id);
+        }
+        return Number(d.dispatch_id);
+      }).filter((id) => !isNaN(id) && id > 0)
+    ));
+  }
+
+  // Fallback: If no order-specific dispatch found, resolve driver's assigned PDP dispatch plans
+  if (dispatchIds.length === 0 && userId) {
+    try {
+      const pdpRes = await directusFetch<{ data: { id: number }[] }>(
+        `${DIRECTUS_URL}/items/post_dispatch_plan?filter[driver_id][_eq]=${userId}&fields=id&limit=-1`
+      );
+      let pdpIds = (pdpRes.data || []).map((p) => Number(p.id)).filter(Boolean);
+
+      try {
+        const staffRes = await directusFetch<{ data: { post_dispatch_plan_id: number }[] }>(
+          `${DIRECTUS_URL}/items/post_dispatch_plan_staff?filter[user_id][_eq]=${userId}&fields=post_dispatch_plan_id&limit=-1`
+        );
+        const staffPdpIds = (staffRes.data || []).map((s) => Number(s.post_dispatch_plan_id)).filter(Boolean);
+        pdpIds = Array.from(new Set([...pdpIds, ...staffPdpIds]));
+      } catch {
+        // Ignore staff query error
+      }
+
+      if (pdpIds.length > 0) {
+        const junctionRes = await directusFetch<{ data: { dispatch_plan_id: number | { id: number } }[] }>(
+          `${DIRECTUS_URL}/items/post_dispatch_dispatch_plans?filter[post_dispatch_plan_id][_in]=${pdpIds.join(",")}&fields=dispatch_plan_id&limit=-1`
+        );
+        dispatchIds = (junctionRes.data || []).map((j) => typeof j.dispatch_plan_id === "object" ? j.dispatch_plan_id.id : j.dispatch_plan_id).filter(Boolean);
+      }
+    } catch (err) {
+      console.warn("Could not resolve driver PDP dispatch IDs:", err);
+    }
+  }
+
+  if (dispatchIds.length === 0) {
+    return [];
+  }
+
+  // Traversal: Check merged post_dispatch_dispatch_plans junction table
+  let allDispatchIds = [...dispatchIds];
+  try {
+    const pdpJunctionRes = await directusFetch<{ data: { post_dispatch_plan_id: number | { id: number } }[] }>(
+      `${DIRECTUS_URL}/items/post_dispatch_dispatch_plans?filter[dispatch_plan_id][_in]=${dispatchIds.join(",")}&fields=post_dispatch_plan_id&limit=-1`
+    );
+    const postDispatchPlanIds = Array.from(new Set(
+      (pdpJunctionRes.data || []).map((j) => {
+        if (typeof j.post_dispatch_plan_id === "object" && j.post_dispatch_plan_id !== null) {
+          return Number(j.post_dispatch_plan_id.id);
+        }
+        return Number(j.post_dispatch_plan_id);
+      }).filter((id) => !isNaN(id) && id > 0)
+    ));
+
+    if (postDispatchPlanIds.length > 0) {
+      const allLinkedRes = await directusFetch<{ data: { dispatch_plan_id: number | { id: number; dispatch_id?: number } }[] }>(
+        `${DIRECTUS_URL}/items/post_dispatch_dispatch_plans?filter[post_dispatch_plan_id][_in]=${postDispatchPlanIds.join(",")}&fields=dispatch_plan_id&limit=-1`
+      );
+      const linkedDispatchIds = (allLinkedRes.data || []).map((j) => {
+        if (typeof j.dispatch_plan_id === "object" && j.dispatch_plan_id !== null) {
+          return Number(j.dispatch_plan_id.dispatch_id || j.dispatch_plan_id.id);
+        }
+        return Number(j.dispatch_plan_id);
+      }).filter((id) => !isNaN(id) && id > 0);
+
+      allDispatchIds = Array.from(new Set([...allDispatchIds, ...linkedDispatchIds]));
+    }
+  } catch (pdpErr) {
+    console.warn("Could not retrieve post_dispatch_dispatch_plans junction records:", pdpErr);
+  }
+
+  const dpRes = await directusFetch<{ data: { dispatch_no?: string }[] }>(
+    `${DIRECTUS_URL}/items/dispatch_plan?filter[dispatch_id][_in]=${allDispatchIds.join(",")}&fields=dispatch_no&limit=-1`
+  );
+  const dispatchNos = Array.from(new Set(
+    (dpRes.data || []).map((dp) => dp.dispatch_no).filter(Boolean)
+  )) as string[];
+
+  if (dispatchNos.length === 0) {
+    return [];
+  }
+
+  const cdispRes = await directusFetch<{ data: { consolidator_id: number | { id: number } }[] }>(
+    `${DIRECTUS_URL}/items/consolidator_dispatches?filter[dispatch_no][_in]=${dispatchNos.map((n) => encodeURIComponent(n)).join(",")}&fields=consolidator_id&limit=-1`
+  );
+  const consolidatorIds = Array.from(new Set(
+    (cdispRes.data || []).map((cd) => {
+      if (typeof cd.consolidator_id === "object" && cd.consolidator_id !== null) {
+        return Number(cd.consolidator_id.id);
+      }
+      return Number(cd.consolidator_id);
+    }).filter((id) => !isNaN(id) && id > 0)
+  ));
+
+  if (consolidatorIds.length === 0) {
+    return [];
+  }
+
+  const cdRes = await directusFetch<{ data: { id: number }[] }>(
+    `${DIRECTUS_URL}/items/consolidator_details?filter[consolidator_id][_in]=${consolidatorIds.join(",")}&fields=id&limit=-1`
+  );
+  return (cdRes.data || []).map((cd) => cd.id);
+}
+
+export async function validateSerialForOnboarding(
+  serialNumber: string,
+  salesOrderId?: number,
+  salesInvoiceId?: number,
+  userId?: number | null
+): Promise<CylinderAsset | null> {
+  const detailIds = await getTruckConsolidatorDetailIds(salesOrderId, salesInvoiceId, userId);
+
+  if (detailIds.length === 0) {
+    throw new Error(`No active delivery truck loading sheet found for the selected order or driver trip.`);
+  }
+
+  // Strictly check that the scanned serial number exists in consolidator_serial_mappings for THIS delivery truck trip ONLY
+  const mappingRes = await directusFetch<{ data: { serial_number: string }[] }>(
+    `${DIRECTUS_URL}/items/consolidator_serial_mappings?filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&filter[detail_id][_in]=${detailIds.join(",")}&limit=1`
+  );
+
+  if (!mappingRes.data || mappingRes.data.length === 0) {
+    throw new Error(`Serial ${serialNumber} is NOT loaded on your assigned delivery truck.`);
+  }
+
+  // Fetch from cylinder_assets
   const qs = `fields=id,serial_number,tare_weight,cylinder_status,cylinder_condition,product_id,product_id.product_name,product.product_name&filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&limit=1`;
   const assetRes = await directusFetch<{ data: CylinderAsset[] }>(`${DIRECTUS_URL}/items/cylinder_assets?${qs}`);
   const asset = assetRes.data?.[0];
@@ -541,7 +780,6 @@ export async function validateSerialForOnboarding(serialNumber: string, salesOrd
     throw new Error(`Cylinder ${serialNumber} condition is ${asset.cylinder_condition}, must be GOOD.`);
   }
 
-  // DEV-CHANGE: Specifically check if status is WITH_CUSTOMER to indicate it is already tagged/delivered
   if (asset.cylinder_status === "WITH_CUSTOMER") {
     throw new Error(`Cylinder ${serialNumber} has already been tagged/delivered under another order or truck.`);
   }

@@ -21,12 +21,14 @@ export interface UnitOfMeasurement {
 export interface ProductBrand {
   brand_id: number;
   brand_name: string;
+  is_industrial?: number | boolean | string | null;
 }
 
 /** Resolved category object from Directus relational expansion. */
 export interface ProductCategory {
   category_id: number;
   category_name: string;
+  is_industrial?: number | boolean | string | null;
 }
 
 /** Resolved supplier shortcut from Directus nested junction expansion. */
@@ -54,6 +56,7 @@ export interface ProductRow {
   product_category?: ProductCategory | number;
   product_per_supplier?: ProductPerSupplier[];
   is_serialized?: number;
+  is_industrial?: boolean | number;
 }
 
 // ─── Stock Transfer Row Shapes ──────────────────────────────
@@ -79,6 +82,10 @@ export interface StockTransferRow {
   date_received: string | null;
   encoder_id: number;
   receiver_id: number | null;
+  /** Captured discrepancy reason if picked quantity differed from allocated quantity. */
+  discrepancy_reason?: string | null;
+  /** Detailed remarks explaining inventory variance on the warehouse floor. */
+  discrepancy_remarks?: string | null;
   /** Attached by the GET handler after fetching dispatched RFIDs. */
   dispatched_rfids?: string[];
 }
@@ -89,6 +96,8 @@ export interface StockTransferRfidRow {
   stock_transfer_id: number;
   rfid_tag: string;
   scan_type: "DISPATCH" | "RECEIVE";
+  /** Asia/Manila (+08:00) timestamp for when RFID tag was scanned */
+  created_at?: string;
 }
 
 // ─── Scanned / Manual Item (Client-Side) ────────────────────
@@ -226,7 +235,12 @@ export interface UpdateTransferItem {
   allocated_quantity?: number;
   picked_quantity?: number;
   scanned_quantity?: number;
+  received_quantity?: number;
   date_received?: string | null;
+  /** Discrepancy reason code if picked/scanned qty differs from allocated qty. */
+  discrepancy_reason?: string;
+  /** Optional variance remarks explaining real-world floor discrepancy. */
+  discrepancy_remarks?: string;
 }
 
 /** RFID tracking entry in the PATCH request body. */
@@ -249,6 +263,10 @@ export interface UpdateTransferPayload {
   scanType?: "DISPATCH" | "RECEIVE";
   /** ID of the user performing the update. */
   userId?: number;
+  /** Global order-level discrepancy reason code. */
+  discrepancy_reason?: string;
+  /** Global order-level discrepancy remarks. */
+  discrepancy_remarks?: string;
 }
 
 /** Directus payload for batch-inserting a stock_transfer row. */

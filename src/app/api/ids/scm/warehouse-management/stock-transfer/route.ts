@@ -10,7 +10,7 @@ import type {
   CreateTransferPayload,
   UpdateTransferPayload
 } from "@/modules/industrial-distribution-system/supply-chain-management/warehouse-management/stock-transfer/types/stock-transfer.types";
-import { decodeJwtPayload } from "@/lib/auth-utils";
+import { extractUserIdFromToken } from "@/modules/industrial-distribution-system/supply-chain-management/warehouse-management/stock-transfer/services/stock-transfer.helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -117,11 +117,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as CreateTransferPayload;
-    // Extract userId from token
+    // Extract userId from token with fallback to dev mode admin user ID (1)
     const token = request.cookies.get("vos_access_token")?.value;
-    const decoded = token ? decodeJwtPayload(token) : null;
-    const userId = decoded?.sub ? Number(decoded.sub)
-      : (process.env.NEXT_PUBLIC_AUTH_DISABLED === "true" ? 1 : undefined);
+    const userId = extractUserIdFromToken(token);
 
     const result = await createTransfer(body, userId);
     return NextResponse.json(result, { status: 201 });
@@ -137,12 +135,9 @@ export async function PATCH(request: NextRequest) {
   try {
     const body = (await request.json()) as UpdateTransferPayload;
 
-    // Extract userId from token
+    // Extract userId from token with fallback to dev mode admin user ID (1)
     const token = request.cookies.get("vos_access_token")?.value;
-    const decoded = token ? decodeJwtPayload(token) : null;
-    // Dev-mode fallback: when auth is disabled, no cookie exists so userId would be undefined
-    const userId = decoded?.sub ? Number(decoded.sub)
-      : (process.env.NEXT_PUBLIC_AUTH_DISABLED === "true" ? 1 : undefined);
+    const userId = extractUserIdFromToken(token);
 
     console.log("[Stock Transfer PATCH Route] Incoming payload:", JSON.stringify(body));
     console.log("[Stock Transfer PATCH Route] Extracted userId:", userId, "(token present:", !!token, ")");

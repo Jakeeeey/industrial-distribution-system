@@ -1194,11 +1194,11 @@ export type MeteredSite = {
   billing_mode?: string | null;
 };
 
-export async function fetchMeteredSites(): Promise<MeteredSite[]> {
+export async function fetchMeteredSites(userId?: number): Promise<MeteredSite[]> {
   const res = await directusFetch<{ data: Record<string, unknown>[] }>(
     `${DIRECTUS_URL}/items/lpg_customer_lpg_sites?fields=id,site_name,customer_code,default_price_per_kg,meter_unit,meter_direction,conversion_factor,last_meter_reading,billing_mode,default_pressure_line,default_psi,default_atmospheric_pressure&filter[is_active][_eq]=1&filter[billing_mode][_in]=METERED,BOTH&sort=site_name&limit=-1`,
   );
-  return (res.data ?? []).map((site) => ({
+  let sites = (res.data ?? []).map((site) => ({
     ...site,
     default_pressure_line:
       site.default_pressure_line !== undefined &&
@@ -1215,6 +1215,52 @@ export async function fetchMeteredSites(): Promise<MeteredSite[]> {
         ? Number(site.default_atmospheric_pressure)
         : 14.7,
   })) as MeteredSite[];
+
+  if (userId) {
+    try {
+      const pdpRes = await directusFetch<{ data: { id: number }[] }>(
+        `${DIRECTUS_URL}/items/post_dispatch_plan?filter[driver_id][_eq]=${userId}&fields=id&limit=-1`
+      );
+      let pdpIds = (pdpRes.data || []).map(p => Number(p.id)).filter(Boolean);
+
+      try {
+        const staffRes = await directusFetch<{ data: { post_dispatch_plan_id: number }[] }>(
+          `${DIRECTUS_URL}/items/post_dispatch_plan_staff?filter[user_id][_eq]=${userId}&fields=post_dispatch_plan_id&limit=-1`
+        );
+        const staffPdpIds = (staffRes.data || []).map(s => Number(s.post_dispatch_plan_id)).filter(Boolean);
+        pdpIds = Array.from(new Set([...pdpIds, ...staffPdpIds]));
+      } catch {
+        // Ignore staff error
+      }
+
+      if (pdpIds.length > 0) {
+        const junctionRes = await directusFetch<{ data: { dispatch_plan_id: number | { id: number } }[] }>(
+          `${DIRECTUS_URL}/items/post_dispatch_dispatch_plans?filter[post_dispatch_plan_id][_in]=${pdpIds.join(",")}&fields=dispatch_plan_id&limit=-1`
+        );
+        const dpIds = (junctionRes.data || []).map(j => typeof j.dispatch_plan_id === "object" ? j.dispatch_plan_id.id : j.dispatch_plan_id).filter(Boolean);
+
+        const driverCustCodes = new Set<string>();
+        if (dpIds.length > 0) {
+          const dpdRes = await directusFetch<{ data: { sales_order_id: number | string | { customer_code?: string } }[] }>(
+            `${DIRECTUS_URL}/items/dispatch_plan_details?filter[dispatch_id][_in]=${dpIds.join(",")}&fields=sales_order_id.customer_code,sales_order_id.order_id&limit=-1`
+          );
+          (dpdRes.data || []).forEach(d => {
+            if (typeof d.sales_order_id === "object" && d.sales_order_id?.customer_code) {
+              driverCustCodes.add(d.sales_order_id.customer_code.trim());
+            }
+          });
+        }
+
+        if (driverCustCodes.size > 0) {
+          sites = sites.filter(s => s.customer_code && driverCustCodes.has(s.customer_code.trim()));
+        }
+      }
+    } catch (err) {
+      console.warn("Could not filter metered sites by PDP driver:", err);
+    }
+  }
+
+  return sites;
 }
 
 // ─── Site last reading update ─────────────────────────────────────────────────

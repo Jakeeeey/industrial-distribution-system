@@ -233,6 +233,15 @@ export const SalesReturnProvider = {
     return handleResponse(res);
   },
 
+  async deleteDraftAsset(serial: string): Promise<any> {
+    const res = await fetch(API_BASE, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete-draft-asset", serial }),
+    });
+    return handleResponse(res);
+  },
+
   // --- INTERNAL CACHES ---
   _referencesCache: null as any,
   _referencesCacheTime: 0,

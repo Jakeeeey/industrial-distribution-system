@@ -31,13 +31,30 @@ export function ProductSelectionModal({
   const [cartItems, setCartItems] = useState<StockAdjustmentItem[]>(initialSelectedItems || []);
 
   const filteredProducts = useMemo(() => {
-    if (!catalogSearch.trim()) return products;
+    // AG-COMMENT: Show all products where category is_industrial = 1 or brand is_industrial = 1 (do not exclude non-serialized products)
+    const industrialProducts = products.filter((p) => {
+      const category = p.product_category as { is_industrial?: boolean | number | string } | undefined;
+      const brand = p.product_brand as { is_industrial?: boolean | number | string } | undefined;
+
+      const isCatInd = category?.is_industrial === 1 || category?.is_industrial === true || String(category?.is_industrial) === "1";
+      const isBrandInd = brand?.is_industrial === 1 || brand?.is_industrial === true || String(brand?.is_industrial) === "1";
+      const isProductInd = p.is_industrial === 1 || p.is_industrial === true || String(p.is_industrial) === "1";
+
+      // If is_industrial properties are present, filter by them; otherwise keep products (pre-filtered by backend)
+      if (category !== undefined || brand !== undefined || p.is_industrial !== undefined) {
+        return isCatInd || isBrandInd || isProductInd;
+      }
+      return true;
+    });
+
+    if (!catalogSearch.trim()) return industrialProducts;
     const t = catalogSearch.toLowerCase();
-    return products.filter(
+    return industrialProducts.filter(
       (p) =>
         p.product_name?.toLowerCase().includes(t) ||
         p.product_code?.toLowerCase().includes(t) ||
-        p.barcode?.toLowerCase().includes(t)
+        p.barcode?.toLowerCase().includes(t) ||
+        p.brand_name?.toLowerCase().includes(t)
     );
   }, [products, catalogSearch]);
 
@@ -53,7 +70,14 @@ export function ProductSelectionModal({
     const productId = product.product_id || product.id;
     if (addedProductIds.has(Number(productId))) return;
 
-    const isSerialized = serialProductIds.has(Number(productId)) || product.unit_of_measurement?.order === 3;
+    // AG-COMMENT: Check if product is serialized via is_serialized = 1, serialProductIds, or UOM order = 3
+    const isSerialized = Boolean(
+      product.is_serialized === true ||
+      product.is_serialized === 1 ||
+      String(product.is_serialized) === "1" ||
+      serialProductIds.has(Number(productId)) ||
+      product.unit_of_measurement?.order === 3
+    );
 
     const newItem: StockAdjustmentItem = {
       product_id: Number(productId),
@@ -148,7 +172,14 @@ export function ProductSelectionModal({
                   {filteredProducts.map((product) => {
                     const pid = Number(product.product_id || product.id);
                     const isAdded = addedProductIds.has(pid);
-                    const isProductSerial = serialProductIds.has(pid) || product.unit_of_measurement?.order === 3;
+                    // AG-COMMENT: Badge SERIAL if product.is_serialized is 1/true, in serialProductIds, or UOM order = 3
+                    const isProductSerial = Boolean(
+                      product.is_serialized === true ||
+                      product.is_serialized === 1 ||
+                      String(product.is_serialized) === "1" ||
+                      serialProductIds.has(pid) ||
+                      product.unit_of_measurement?.order === 3
+                    );
                     
                     return (
                       <div
@@ -276,7 +307,7 @@ export function ProductSelectionModal({
                         {isItemSerial && (
                           <div className="inline-flex items-center gap-1 text-[10px] font-bold uppercase text-amber-500 tracking-wide">
                             <Tag className="h-2.5 w-2.5 fill-amber-500" />
-                            SERIALIZED
+                            SERIAL
                           </div>
                         )}
                       </div>

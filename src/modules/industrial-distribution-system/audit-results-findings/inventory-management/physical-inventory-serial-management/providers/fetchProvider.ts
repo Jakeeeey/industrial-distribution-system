@@ -242,26 +242,29 @@ export function getSupplierScopedCategoriesFromLookup(
     supplierId: number,
     lookup: ProductLookupBundle,
 ): CategoryRow[] {
+    // Coerce IDs to numbers to ensure robust matching even if backend APIs return IDs as strings (e.g. "1" vs 1)
+    const sId = Number(supplierId);
+
     const allowedProductIds = new Set(
         lookup.product_per_supplier
-            .filter((row) => row.supplier_id === supplierId)
-            .map((row) => row.product_id),
+            .filter((row) => Number(row.supplier_id) === sId)
+            .map((row) => Number(row.product_id)),
     );
 
     const categoryIds = new Set(
         lookup.products
             .filter(
                 (product) =>
-                    product.isActive === 1 &&
-                    product.is_serialized === 1 &&
-                    allowedProductIds.has(product.product_id) &&
+                    Number(product.isActive) === 1 &&
+                    (product.is_serialized === undefined || product.is_serialized === null || Number(product.is_serialized) === 1) &&
+                    allowedProductIds.has(Number(product.product_id)) &&
                     product.product_category !== null,
             )
-            .map((product) => product.product_category as number),
+            .map((product) => Number(product.product_category)),
     );
 
     const realScopedCategories = lookup.categories.filter((category) =>
-        categoryIds.has(category.category_id),
+        categoryIds.has(Number(category.category_id)),
     );
 
     const allCategory = lookup.categories.find((category) =>
@@ -272,7 +275,7 @@ export function getSupplierScopedCategoriesFromLookup(
         ? [
             allCategory,
             ...realScopedCategories.filter(
-                (row) => row.category_id !== allCategory.category_id,
+                (row) => Number(row.category_id) !== Number(allCategory.category_id),
             ),
         ]
         : realScopedCategories;
@@ -398,91 +401,97 @@ export function buildEligibleVariants(input: {
 }): EligibleVariantRow[] {
     const { supplierId, categoryId, priceTypeId, lookup } = input;
 
+    // Coerce input IDs to numbers for type-safe comparisons across API responses (prevent string "1" vs number 1 mismatches)
+    const sId = Number(supplierId);
+    const cId = Number(categoryId);
+    const pId = Number(priceTypeId);
+
     const selectedCategory = lookup.categories.find(
-        (row) => row.category_id === categoryId,
+        (row) => Number(row.category_id) === cId,
     );
     const isAllCategory = isAllCategoryName(selectedCategory?.category_name);
 
     const directlyEligibleBySupplier = new Set(
         lookup.product_per_supplier
-            .filter((row) => row.supplier_id === supplierId)
-            .map((row) => row.product_id),
+            .filter((row) => Number(row.supplier_id) === sId)
+            .map((row) => Number(row.product_id)),
     );
 
     // If any member of a family is mapped to the supplier, the whole family is considered eligible
     const eligibleFamilyKeys = new Set<number>();
     for (const productId of directlyEligibleBySupplier) {
-        const product = lookup.products.find((p) => p.product_id === productId);
+        const product = lookup.products.find((p) => Number(p.product_id) === productId);
         if (product) {
             eligibleFamilyKeys.add(
-                (product.parent_id && product.parent_id > 0)
+                Number((product.parent_id && Number(product.parent_id) > 0)
                     ? product.parent_id
-                    : product.product_id
+                    : product.product_id)
             );
         }
     }
 
     const priceMap = new Map<number, ProductPerPriceTypeRow>();
     for (const row of lookup.product_per_price_type) {
-        if (row.price_type_id === priceTypeId) {
-            priceMap.set(row.product_id, row);
+        if (Number(row.price_type_id) === pId) {
+            priceMap.set(Number(row.product_id), row);
         }
     }
 
     const categoryMap = new Map<number, CategoryRow>();
     for (const row of lookup.categories) {
-        categoryMap.set(row.category_id, row);
+        categoryMap.set(Number(row.category_id), row);
     }
 
     const unitMap = new Map<number, UnitRow>();
     for (const row of lookup.units) {
-        unitMap.set(row.unit_id, row);
+        unitMap.set(Number(row.unit_id), row);
     }
 
     return lookup.products
-        .filter((product) => product.isActive === 1)
+        .filter((product) => Number(product.isActive) === 1)
         .filter((product) => {
             if (product.unit_of_measurement === null) return true;
-            return ![19, 20, 21, 22].includes(product.unit_of_measurement);
+            return ![19, 20, 21, 22].includes(Number(product.unit_of_measurement));
         })
         .filter((product) => {
-            const familyKey = (product.parent_id && product.parent_id > 0)
+            const familyKey = Number((product.parent_id && Number(product.parent_id) > 0)
                 ? product.parent_id
-                : product.product_id;
+                : product.product_id);
             return eligibleFamilyKeys.has(familyKey);
         })
         .filter((product) => {
             if (isAllCategory) return true;
-            return product.product_category === categoryId;
+            return Number(product.product_category) === cId;
         })
         .map((product) => {
-            const priceRow = priceMap.get(product.product_id) ?? null;
+            const productIdNum = Number(product.product_id);
+            const priceRow = priceMap.get(productIdNum) ?? null;
             const category =
                 product.product_category !== null
-                    ? categoryMap.get(product.product_category) ?? null
+                    ? categoryMap.get(Number(product.product_category)) ?? null
                     : null;
             const unit =
                 product.unit_of_measurement !== null
-                    ? unitMap.get(product.unit_of_measurement) ?? null
+                    ? unitMap.get(Number(product.unit_of_measurement)) ?? null
                     : null;
 
             return {
-                product_id: product.product_id,
-                parent_id: product.parent_id,
+                product_id: productIdNum,
+                parent_id: product.parent_id ? Number(product.parent_id) : null,
                 product_code: product.product_code,
                 product_name: product.product_name,
                 barcode: product.barcode,
-                category_id: product.product_category,
+                category_id: product.product_category ? Number(product.product_category) : null,
                 category_name: category?.category_name ?? null,
-                unit_id: product.unit_of_measurement,
+                unit_id: product.unit_of_measurement ? Number(product.unit_of_measurement) : null,
                 unit_name: unit?.unit_name ?? null,
                 unit_shortcut: unit?.unit_shortcut ?? null,
-                unit_order: unit?.order ?? null,
+                unit_order: unit?.order ? Number(unit.order) : null,
                 unit_count: normalizeUnitCount(product.unit_of_measurement_count),
-                unit_price: priceRow?.price ?? null,
-                cost_per_unit: product.cost_per_unit,
+                unit_price: priceRow?.price ? Number(priceRow.price) : null,
+                cost_per_unit: product.cost_per_unit ? Number(product.cost_per_unit) : null,
                 brand_name: null,
-                is_serialized: product.is_serialized ?? null,
+                is_serialized: product.is_serialized ? Number(product.is_serialized) : null,
             };
         })
         .sort((a, b) => {
@@ -908,11 +917,18 @@ export async function createPhysicalInventoryDetailSerial(input: {
     pi_detail_id: number;
     serial_number: string;
     created_by?: number | null;
+    created_at?: string | null;
 }): Promise<PhysicalInventoryDetailSerialRow> {
+    // Generate Asia/Manila (+08:00) timestamp for physical_inventory_details_serial created_at field
+    const phNow = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Manila" }).replace(" ", "T");
+    const payload = {
+        ...input,
+        created_at: input.created_at || phNow,
+    };
     return directusPostItem<
-        { pi_detail_id: number; serial_number: string; created_by?: number | null },
+        typeof payload,
         PhysicalInventoryDetailSerialRow
-    >(TABLES.physical_inventory_details_serial, input);
+    >(TABLES.physical_inventory_details_serial, payload);
 }
 
 export async function updateCylinderAsset(
@@ -944,11 +960,22 @@ export async function createCylinderAssetsBulk(
     );
 }
 
-export async function fetchCylinderAssetBySerial(serial: string): Promise<CylinderAssetRow | null> {
+// Fetches cylinder asset by serial number, optionally restricted to a specific branch_id.
+// Used for branch ownership verification in Physical Inventory Serial Tag Review and Scanners.
+export async function fetchCylinderAssetBySerial(
+    serial: string,
+    branchId?: number | null,
+): Promise<CylinderAssetRow | null> {
+    const filterObj: Record<string, unknown> = {
+        serial_number: { _eq: serial.trim() },
+    };
+
+    if (branchId !== undefined && branchId !== null) {
+        filterObj.current_branch_id = { _eq: branchId };
+    }
+
     const rows = await directusGetItems<CylinderAssetRow>(TABLES.cylinder_assets, {
-        filter: JSON.stringify({
-            serial_number: { _eq: serial.trim() },
-        }),
+        filter: JSON.stringify(filterObj),
         limit: "1",
     });
 

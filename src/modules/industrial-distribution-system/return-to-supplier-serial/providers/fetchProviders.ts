@@ -169,16 +169,5 @@ export async function validateSerialNumber(
   return handleResponse<{ success: boolean; isUnregistered?: boolean }>(res);
 }
 
-/**
- * Bulk registers cylinder assets.
- * @param assets - Array of asset records.
- */
-export async function registerAssets(assets: unknown[]): Promise<unknown> {
-  const res = await fetch(API_BASE, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "register-assets", assets }),
-  });
-  return handleResponse(res);
-}
+// [MODIFIED] Removed registerAssets function as asset registration is no longer allowed in Return to Supplier.
 

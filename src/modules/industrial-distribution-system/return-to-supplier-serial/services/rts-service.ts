@@ -372,20 +372,21 @@ export async function validateSerialNumber(
     throw new Error(`Serial Number "${serialNumber}" has already been scanned or returned in another transaction.`);
   }
 
-  // 1. If Serial is on-hand, reject because it is in inventory
+  // 2. Retrieve on-hand info for the specific branch.
+  // [MODIFIED] Check that the serial is on-hand at the selected branch. If it is NOT on-hand, reject it.
   const onhandInfo = await repo.getSpringSerialLookup(serialNumber, branchId, token);
-  if (onhandInfo) {
-    throw new Error(`Serial Number "${serialNumber}" is currently on-hand in the warehouse.`);
+  if (!onhandInfo) {
+    throw new Error(`Serial Number "${serialNumber}" is not currently on-hand in this branch.`);
   }
 
-  // 2. If Serial is on cylinder_assets, accepts and proceeds.
-  const cylinderAssetRes = await repo.getCylinderAssetBySerial(serialNumber);
-  if (cylinderAssetRes?.data && cylinderAssetRes.data.length > 0) {
-    return { success: true };
+  // 3. Verify that the serial number matches the product being returned.
+  // [ADDED] Reject if the serial belongs to a different product ID.
+  if (onhandInfo.productId !== productId) {
+    throw new Error(`Serial Number "${serialNumber}" belongs to a different product.`);
   }
 
-  // 3. If Serial is not found on cylinder_assets AND not in on-hand, accepts and proceeds as unregistered.
-  return { success: true, isUnregistered: true };
+  // If the serial is present on-hand and belongs to the correct product, accept it.
+  return { success: true };
 }
 
 /**

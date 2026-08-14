@@ -6,12 +6,14 @@ import {
 } from '../types';
 
 // Aggregation Helper using Local API
+// DEV-CHANGE: Added optional driverId parameter to support Post-Dispatch Plan driver-based scoping
 export const getJoinedDispatchData = async (
   page: number = 1,
   limit: number = 10,
   search: string = '',
   startDate?: string,
-  endDate?: string
+  endDate?: string,
+  driverId?: string | number
 ): Promise<{ data: DispatchRow[]; total: number }> => {
   const params: Record<string, string> = {
     page: page.toString(),
@@ -21,6 +23,7 @@ export const getJoinedDispatchData = async (
 
   if (startDate) params.startDate = startDate;
   if (endDate) params.endDate = endDate;
+  if (driverId) params.driverId = driverId.toString();
 
   const query = new URLSearchParams(params).toString();
 

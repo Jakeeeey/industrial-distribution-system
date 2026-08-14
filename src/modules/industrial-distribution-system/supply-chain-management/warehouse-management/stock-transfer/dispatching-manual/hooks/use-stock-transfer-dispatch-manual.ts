@@ -118,28 +118,40 @@ export function useStockTransferDispatchManual() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [base.selectedOrderNo]);
 
-  const dispatchOrder = async (orderNo: string) => {
+  const dispatchOrder = async (
+    orderNo: string,
+    discrepancyOptions?: {
+      globalReason?: string;
+      globalRemarks?: string;
+      itemReasons?: Record<number, { reason: string; remarks?: string }>;
+    }
+  ) => {
     const group = orderGroups.find((g: OrderGroup) => g.orderNo === orderNo);
     if (!group) return;
 
-    // Build item payload — include all items but only send picked_quantity > 0
-    // This supports partial dispatch: items with 0 qty still get status updated
-    const itemsPayload = group.items.map((i: OrderGroupItem) => ({
-      id: i.id,
-      status: 'For Loading',
-      picked_quantity: scannedQtys[i.id] ?? 0,
-    }));
+    // Build item payload — include all items with picked_quantity
+    // This supports partial dispatch: items with 0 qty still get status updated with discrepancy reasons
+    const itemsPayload = group.items.map((i: OrderGroupItem) => {
+      const itemReasonObj = discrepancyOptions?.itemReasons?.[i.id];
+      const reason = itemReasonObj?.reason || discrepancyOptions?.globalReason;
+      const remarks = itemReasonObj?.remarks || discrepancyOptions?.globalRemarks;
 
-    if (!itemsPayload.some(i => i.picked_quantity > 0)) {
-      toast.error('No quantities entered — please enter at least one quantity before dispatching.');
-      return;
-    }
+      return {
+        id: i.id,
+        status: 'For Loading',
+        picked_quantity: scannedQtys[i.id] ?? 0,
+        ...(reason ? { discrepancy_reason: reason } : {}),
+        ...(remarks ? { discrepancy_remarks: remarks } : {})
+      };
+    });
 
     base.setProcessing(true);
     try {
       await stockTransferLifecycleService.submitStatusUpdate({
         items: itemsPayload,
         status: 'For Loading',
+        ...(discrepancyOptions?.globalReason ? { discrepancy_reason: discrepancyOptions.globalReason } : {}),
+        ...(discrepancyOptions?.globalRemarks ? { discrepancy_remarks: discrepancyOptions.globalRemarks } : {})
       });
 
       toast.success(`Order ${orderNo} successfully dispatched.`);

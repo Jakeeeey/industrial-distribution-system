@@ -226,7 +226,14 @@ export function useStockTransferDispatch() {
     }
   };
 
-  const dispatchOrder = async (orderNo: string) => {
+  const dispatchOrder = async (
+    orderNo: string,
+    discrepancyOptions?: {
+      globalReason?: string;
+      globalRemarks?: string;
+      itemReasons?: Record<number, { reason: string; remarks?: string }>;
+    }
+  ) => {
     const group = orderGroups.find((g: OrderGroup) => g.orderNo === orderNo);
     if (!group) return;
 
@@ -253,16 +260,26 @@ export function useStockTransferDispatch() {
         };
       }).filter((p): p is NonNullable<typeof p> => p !== null);
 
-      const itemsPayload = group.items.map(i => ({
-        id: i.id,
-        status: 'For Loading',
-        picked_quantity: i.scannedQty
-      }));
+      const itemsPayload = group.items.map(i => {
+        const itemReasonObj = discrepancyOptions?.itemReasons?.[i.id];
+        const reason = itemReasonObj?.reason || discrepancyOptions?.globalReason;
+        const remarks = itemReasonObj?.remarks || discrepancyOptions?.globalRemarks;
+
+        return {
+          id: i.id,
+          status: 'For Loading',
+          picked_quantity: i.scannedQty,
+          ...(reason ? { discrepancy_reason: reason } : {}),
+          ...(remarks ? { discrepancy_remarks: remarks } : {})
+        };
+      });
 
       await stockTransferLifecycleService.submitStatusUpdate({
         items: itemsPayload,
         status: 'For Loading',
         rfids: rfidsPayload,
+        ...(discrepancyOptions?.globalReason ? { discrepancy_reason: discrepancyOptions.globalReason } : {}),
+        ...(discrepancyOptions?.globalRemarks ? { discrepancy_remarks: discrepancyOptions.globalRemarks } : {})
       });
 
       toast.success(`Order ${orderNo} successfully dispatched.`);

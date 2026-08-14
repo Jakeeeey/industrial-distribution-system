@@ -145,26 +145,19 @@ export async function getRawSerialsByDetailIds(detailIds: number[]) {
 }
 
 export async function checkSerialDuplicate(serialNumber: string) {
-  const serial = serialNumber.trim().toUpperCase();
+  const serial = serialNumber.trim();
   const encoded = encodeURIComponent(serial);
-  const encodedLower = encodeURIComponent(serial.toLowerCase());
   
-  const paths = [
-    `/items/sales_return_serial?filter[serial_number][_eq]=${encoded}&fields=id,serial_number,sales_return_detail_id.*,sales_return_detail_id.sales_return_id.*&limit=1`,
-    `/items/sales_return_serial?filter[serial_number][_eq]=${encodedLower}&fields=id,serial_number,sales_return_detail_id.*,sales_return_detail_id.sales_return_id.*&limit=1`,
-    `/items/sales_return_serial?filter[serial_number][_icontains]=${encoded}&fields=id,serial_number,sales_return_detail_id.*,sales_return_detail_id.sales_return_id.*&limit=1`
-  ];
+  const path = `/items/sales_return_serial?filter[serial_number][_eq]=${encoded}&fields=id,serial_number,sales_return_detail_id.*,sales_return_detail_id.sales_return_id.*&limit=1`;
 
-  for (const path of paths) {
-    try {
-      const res = await directusGet<{ data: any[] }>(path).catch(() => ({ data: [] }));
-      if (res?.data?.length > 0) {
-        const match = res.data.find(i => String(i.serial_number || "").trim().toUpperCase() === serial);
-        if (match) return { data: [match] };
-      }
-    } catch (err) {
-      console.warn(`Duplicate check failed for path ${path}:`, err);
+  try {
+    const res = await directusGet<{ data: any[] }>(path).catch(() => ({ data: [] }));
+    if (res?.data?.length > 0) {
+      const match = res.data.find(i => String(i.serial_number || "").trim() === serial);
+      if (match) return { data: [match] };
     }
+  } catch (err) {
+    console.warn(`Duplicate check failed for path ${path}:`, err);
   }
 
   return { data: [] };
@@ -173,5 +166,11 @@ export async function checkSerialDuplicate(serialNumber: string) {
 export async function getRawProductById(productId: number) {
   return directusGet<{ data: Record<string, unknown> }>(
     `/items/products/${productId}?fields=product_id,product_code,product_name,description,priceA,priceB,priceC,priceD,priceE,unit_of_measurement,unit_of_measurement_count,is_serialized`,
+  );
+}
+
+export async function getSerialsByReturnNumber(returnNumber: string) {
+  return directusGet<{ data: { serial_number: string }[] }>(
+    `/items/sales_return_serial?filter[sales_return_detail_id][return_no][_eq]=${encodeURIComponent(returnNumber)}&fields=serial_number&limit=-1`
   );
 }

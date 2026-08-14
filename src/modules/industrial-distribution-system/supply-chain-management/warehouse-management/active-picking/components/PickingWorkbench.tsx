@@ -31,7 +31,6 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { RegisterCylinderModal } from "./RegisterCylinderModal";
 
 export function PickingWorkbench() {
     const {
@@ -53,8 +52,6 @@ export function PickingWorkbench() {
     const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({});
     const [showSaveConfirm, setShowSaveConfirm] = useState(false);
     const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
-    const [isRegisterOpen, setIsRegisterOpen] = useState(false);
-    const [unregisteredSerial, setUnregisteredSerial] = useState("");
     const inputRef = useRef<HTMLInputElement>(null);
 
     const activePicking = pickings.find(p => p.id === activePickingId);
@@ -99,21 +96,20 @@ export function PickingWorkbench() {
         const hasPendingItems = details.some(d => d.picked_quantity < d.ordered_quantity);
         if (!hasPendingItems) {
             toast.error("Order limit reached for all items. Cannot pick or register any more serial numbers.");
-            inputRef.current?.select();
+            setSerialInput("");
+            setTimeout(() => {
+                inputRef.current?.focus();
+            }, 50);
             return;
         }
 
-        const result = await processSerial(activePickingId, currentSerial, activePicking.branch_id || 0);
+        await processSerial(activePickingId, currentSerial, activePicking.branch_id || 0);
 
-        if (result === "UNREGISTERED_SERIAL") {
-            setUnregisteredSerial(currentSerial);
-            setIsRegisterOpen(true);
-        } else if (result) {
-            setSerialInput("");
+        // Success or failure: clear input and focus for the next scan
+        setSerialInput("");
+        setTimeout(() => {
             inputRef.current?.focus();
-        } else {
-            inputRef.current?.select();
-        }
+        }, 50);
     };
 
     const handleComplete = async () => {
@@ -182,15 +178,15 @@ export function PickingWorkbench() {
                     {/* Global Serial Input - Moved outside per revision */}
                     <form onSubmit={handleSerialSubmit} className="flex items-center gap-2 w-full max-w-md ml-4">
                         <div className="relative flex-1">
-                            <Input
+                             <Input
                                 ref={inputRef}
                                 placeholder="Enter serial number to pick..."
                                 value={serialInput}
                                 onChange={(e) => setSerialInput(e.target.value)}
-                                disabled={isProcessingSerial}
+                                readOnly={isProcessingSerial}
                                 className={cn(
                                     "h-10 text-sm font-mono tracking-widest px-3 border-2 focus-visible:ring-primary/20",
-                                    isProcessingSerial && "bg-muted animate-pulse border-primary/50"
+                                    isProcessingSerial && "bg-muted animate-pulse border-primary/50 cursor-not-allowed"
                                 )}
                             />
                             {isProcessingSerial && (
@@ -403,23 +399,6 @@ export function PickingWorkbench() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
-
-            <RegisterCylinderModal
-                open={isRegisterOpen}
-                onOpenChange={setIsRegisterOpen}
-                serialNumber={unregisteredSerial}
-                branchId={activePicking?.branch_id || 0}
-                details={details}
-                onSuccess={async (prodId, serial) => {
-                    const success = await processSerial(activePickingId, serial, activePicking?.branch_id || 0);
-                    if (success === true) {
-                        setSerialInput("");
-                        inputRef.current?.focus();
-                        return true;
-                    }
-                    return false;
-                }}
-            />
         </div>
     );
 }

@@ -297,6 +297,13 @@ export async function checkSerialOnHand(
     return { isOnInventory: false, isUnregistered: false };
   }
 
+  // 2b. Check cylinder_assets_draft
+  const { getDraftsBySerialNumbers } = await import("./sales-return-cylinder.repo");
+  const draftRes = await getDraftsBySerialNumbers([serial]);
+  if (draftRes && draftRes.data && draftRes.data.length > 0) {
+    return { isOnInventory: false, isUnregistered: false };
+  }
+
   // 3. If Serial is not found on cylinder_assets AND not in on-hand, it is unregistered
   return { isOnInventory: false, isUnregistered: true };
 }

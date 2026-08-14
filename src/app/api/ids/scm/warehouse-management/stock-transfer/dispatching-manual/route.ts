@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { updateTransferStatus } from "@/modules/industrial-distribution-system/supply-chain-management/warehouse-management/stock-transfer/services/stock-transfer.service";
-import { decodeJwtPayload } from "@/lib/auth-utils";
+import { extractUserIdFromToken } from "@/modules/industrial-distribution-system/supply-chain-management/warehouse-management/stock-transfer/services/stock-transfer.helpers";
 
 export const dynamic = "force-dynamic";
 
@@ -12,10 +12,9 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Missing required field: ids array" }, { status: 400 });
     }
 
-    // Extract userId from token
-    const token = request.cookies.get("vos_access_token")?.value;
-    const decoded = token ? decodeJwtPayload(token) : null;
-    const userId = decoded?.sub ? Number(decoded.sub) : undefined;
+    // Extract userId from token with fallback to dev mode admin user ID (1)
+    const token = request.cookies.get("vos_access_token")?.value || request.cookies.get("springboot_token")?.value;
+    const userId = extractUserIdFromToken(token);
 
     const { success } = await updateTransferStatus({ ids, status, userId });
 

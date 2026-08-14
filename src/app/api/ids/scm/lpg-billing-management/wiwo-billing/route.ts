@@ -58,8 +58,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ data: result.data });
     }
 
+    const authorization = request.headers.get("authorization");
+    const bearerToken = authorization?.startsWith("Bearer ")
+      ? authorization.slice(7).trim()
+      : undefined;
+    const token = request.cookies.get("vos_access_token")?.value ?? bearerToken;
+    const userId = getUserIdFromToken(token);
+
     if (type === "customers") {
-      const data = await fetchCustomers();
+      const data = await fetchCustomers(userId ?? undefined);
       return NextResponse.json({ data });
     }
 
@@ -83,17 +90,19 @@ export async function GET(request: NextRequest) {
 
     if (type === "validate-serial") {
       const serial = searchParams.get("serial");
-      // DEV-CHANGE: Retrieve optional salesOrderId from searchParams
+      // DEV-CHANGE: Retrieve optional salesOrderId and salesInvoiceId from searchParams
       const salesOrderIdParam = searchParams.get("salesOrderId");
+      const salesInvoiceIdParam = searchParams.get("salesInvoiceId");
       const salesOrderId = salesOrderIdParam ? Number(salesOrderIdParam) : undefined;
+      const salesInvoiceId = salesInvoiceIdParam ? Number(salesInvoiceIdParam) : undefined;
       if (!serial) return NextResponse.json({ error: "Serial number is required" }, { status: 400 });
-      const data = await validateSerialForOnboarding(serial, salesOrderId);
+      const data = await validateSerialForOnboarding(serial, salesOrderId, salesInvoiceId, userId ?? undefined);
       return NextResponse.json({ data });
     }
 
     if (type === "invoices") {
       const customerCode = searchParams.get("customerCode") || undefined;
-      const data = await fetchInvoicesForCustomer(customerCode);
+      const data = await fetchInvoicesForCustomer(customerCode, userId ?? undefined);
       return NextResponse.json({ data });
     }
 

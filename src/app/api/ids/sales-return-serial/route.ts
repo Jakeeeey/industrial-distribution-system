@@ -169,17 +169,23 @@ export async function POST(req: NextRequest) {
     
     // Support registering assets
     if (body.action === "register-assets") {
-      const { createCylinderAsset } = await import("@/modules/industrial-distribution-system/sales-return-serial/services/sales-return-cylinder.repo");
+      const { createCylinderAssetDraft } = await import("@/modules/industrial-distribution-system/sales-return-serial/services/sales-return-cylinder.repo");
       const assets = Array.isArray(body.assets) ? body.assets : [];
       const phNow = getManilaTimestamp();
       for (const asset of assets) {
-        await createCylinderAsset({
+        await createCylinderAssetDraft({
           ...asset,
           created_by: userId,
           created_date: phNow,
         });
       }
       return json({ success: true }, 201);
+    }
+
+    if (body.action === "delete-draft-asset") {
+      const { deleteCylinderAssetDraftBySerial } = await import("@/modules/industrial-distribution-system/sales-return-serial/services/sales-return-cylinder.repo");
+      await deleteCylinderAssetDraftBySerial(body.serial);
+      return json({ success: true }, 200);
     }
 
     const data = await submitReturn(body, userId);

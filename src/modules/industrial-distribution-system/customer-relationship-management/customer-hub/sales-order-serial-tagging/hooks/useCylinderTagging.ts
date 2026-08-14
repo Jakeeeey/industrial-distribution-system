@@ -37,7 +37,7 @@ export function useCylinderTagging(orderId: string | null) {
     const map = new Map<string, MappedSerial>();
     for (const m of mappedSerials) {
       if (m.serial_number) {
-        map.set(m.serial_number.trim().toUpperCase(), m);
+        map.set(m.serial_number.trim(), m);
       }
     }
     return map;
@@ -90,7 +90,7 @@ export function useCylinderTagging(orderId: string | null) {
   }, [orderId, loadData]);
 
   const handleScan = useCallback((serialInput: string) => {
-    const serial = serialInput.trim().toUpperCase();
+    const serial = serialInput.trim();
     if (!serial) return;
 
     if (!orderDetails) {
@@ -108,7 +108,7 @@ export function useCylinderTagging(orderId: string | null) {
 
     // 2. Check if already tagged in the database (previously submitted)
     const alreadyTagged = orderDetails.items.find((item) =>
-      item.tagged_serials.some((ts) => ts.serial_number.toUpperCase() === serial)
+      item.tagged_serials.some((ts) => ts.serial_number === serial)
     );
     if (alreadyTagged) {
       toast.error(`Serial "${serial}" has already been tagged to this order.`);
@@ -117,7 +117,7 @@ export function useCylinderTagging(orderId: string | null) {
 
     // 2b. Check if already in the customer's custody (current holdings)
     const currentCustomerAssets = customerAssetsRef.current;
-    if (currentCustomerAssets.some((asset) => (asset.serial_number || "").trim().toUpperCase() === serial)) {
+    if (currentCustomerAssets.some((asset) => (asset.serial_number || "").trim() === serial)) {
       toast.error(`Serial "${serial}" is already in the customer's custody.`);
       return;
     }
@@ -207,7 +207,7 @@ export function useCylinderTagging(orderId: string | null) {
 
       toast.success(`Successfully tagged ${currentScannedList.length} cylinder(s) to customer.`);
       setScannedList([]);
-      
+
       // Reload order details & customer assets to update the UI views
       await loadData(orderId);
     } catch (err: unknown) {
