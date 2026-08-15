@@ -100,6 +100,9 @@ export interface ReconciliationRow {
   missingQtys?: Record<string | number, number>;
   scannedQtys?: Record<string | number, number>;
   scannedSerials?: Record<string | number, string[]>;
+  // DEV-RULE: Track missing cylinder quantities and serials that have been scanned/reconciled
+  scannedMissingQtys?: Record<string | number, number>;
+  scannedMissingSerials?: Record<string | number, string[]>;
   is_visit?: number;
 }
 
@@ -137,4 +140,6 @@ export interface SerialMapping {
   product_id: number;
   dispatch_id: number;
   serial: string;
+  // DEV-RULE: Status in cylinder_assets ('WITH_CUSTOMER' | 'AVAILABLE' | etc.)
+  cylinder_status?: string;
 }

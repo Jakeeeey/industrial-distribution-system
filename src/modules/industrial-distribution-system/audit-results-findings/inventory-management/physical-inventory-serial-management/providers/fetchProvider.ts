@@ -44,6 +44,8 @@ const TABLES = {
     branches: "branches",
     suppliers: "suppliers",
     cylinder_assets: "cylinder_assets",
+    // AG-COMMENT: Added cylinder_assets_draft table mapping for Physical Inventory serial draft registration
+    cylinder_assets_draft: "cylinder_assets_draft",
 } as const;
 
 type DirectusBulkItemsResponse<T> = {
@@ -960,6 +962,16 @@ export async function createCylinderAssetsBulk(
     );
 }
 
+// AG-COMMENT: Register cylinder assets into cylinder_assets_draft table prior to document commit
+export async function createCylinderAssetsDraftBulk(
+    payloads: CylinderAssetUpsertPayload[],
+): Promise<CylinderAssetRow[]> {
+    return directusPostItems<CylinderAssetUpsertPayload, CylinderAssetRow>(
+        TABLES.cylinder_assets_draft,
+        payloads,
+    );
+}
+
 // Fetches cylinder asset by serial number, optionally restricted to a specific branch_id.
 // Used for branch ownership verification in Physical Inventory Serial Tag Review and Scanners.
 export async function fetchCylinderAssetBySerial(
@@ -983,6 +995,43 @@ export async function fetchCylinderAssetBySerial(
         return null;
     }
     return rows[0] ?? null;
+}
+
+// AG-COMMENT: Fetches cylinder asset from cylinder_assets_draft by serial number and optional branch_id
+export async function fetchCylinderAssetDraftBySerial(
+    serial: string,
+    branchId?: number | null,
+): Promise<CylinderAssetRow | null> {
+    const filterObj: Record<string, unknown> = {
+        serial_number: { _eq: serial.trim() },
+    };
+
+    if (branchId !== undefined && branchId !== null) {
+        filterObj.current_branch_id = { _eq: branchId };
+    }
+
+    const rows = await directusGetItems<CylinderAssetRow>(TABLES.cylinder_assets_draft, {
+        filter: JSON.stringify(filterObj),
+        limit: "1",
+    });
+
+    if (rows.length === 0) {
+        return null;
+    }
+    const row = rows[0];
+    return row ? { ...row, isDraft: true } : null;
+}
+
+// AG-COMMENT: Unified lookup helper that checks cylinder_assets master first, then cylinder_assets_draft
+export async function fetchCylinderAssetOrDraftBySerial(
+    serial: string,
+    branchId?: number | null,
+): Promise<CylinderAssetRow | null> {
+    const masterAsset = await fetchCylinderAssetBySerial(serial, branchId);
+    if (masterAsset) {
+        return masterAsset;
+    }
+    return fetchCylinderAssetDraftBySerial(serial, branchId);
 }
 
 export async function deletePhysicalInventoryDetailSerial(id: number): Promise<void> {

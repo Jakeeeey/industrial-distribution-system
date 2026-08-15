@@ -18,7 +18,8 @@ import {
     fetchSerialOnhandByTag,
     fetchSerialOnhandByBranch,
     updatePhysicalInventoryDetail,
-    fetchCylinderAssetBySerial,
+    // AG-COMMENT: Updated import to use fetchCylinderAssetOrDraftBySerial to recognize draft serial assets
+    fetchCylinderAssetOrDraftBySerial,
 } from "../providers/fetchProvider";
 import {
     computeAmount,
@@ -296,9 +297,10 @@ export function PhysicalInventorySerialDialog(props: Props) {
                 }
             }
 
-            // Not found in local branch on-hand? Check cylinder_assets globally
+            // Not found in local branch on-hand? Check cylinder_assets and cylinder_assets_draft globally
             if (serialProductId === null) {
-                const globalAsset = await fetchCylinderAssetBySerial(serialTag);
+                // AG-COMMENT: Using fetchCylinderAssetOrDraftBySerial to validate against both master assets and draft assets
+                const globalAsset = await fetchCylinderAssetOrDraftBySerial(serialTag);
                 if (globalAsset) {
                     // Strict Branch Restriction: If serial belongs to a DIFFERENT branch, reject cross-branch entry
                     if (globalAsset.current_branch_id !== null && globalAsset.current_branch_id !== undefined && globalAsset.current_branch_id !== branchId) {
@@ -355,8 +357,9 @@ export function PhysicalInventorySerialDialog(props: Props) {
                 return;
             }
 
-            // Safety check for cylinder_asset record and branch ownership
-            const cylinderAsset = await fetchCylinderAssetBySerial(serialTag);
+            // Safety check for cylinder_asset or draft record and branch ownership
+            // AG-COMMENT: Checking both master asset table and draft table to allow pending draft serials to scan directly
+            const cylinderAsset = await fetchCylinderAssetOrDraftBySerial(serialTag);
             if (!cylinderAsset) {
                 setPendingSerials((prev) => [...new Set([...prev, serialTag])]);
                 setSerialInput("");

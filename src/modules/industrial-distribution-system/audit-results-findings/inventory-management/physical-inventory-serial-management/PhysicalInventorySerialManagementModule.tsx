@@ -1469,7 +1469,8 @@ export function PhysicalInventorySerialManagementModule(props: Props) {
                             variant="outline"
                             className="cursor-pointer"
                             onClick={() => setIsGlobalScannerOpen(true)}
-                            disabled={!canEdit || !header.id || !hasLoadedDetails}
+                            // AG-COMMENT: Removed !hasLoadedDetails check so Global Serial Scanner can be opened once header is saved
+                            disabled={!canEdit || !header.id}
                         >
                             <ScanLine className="mr-2 h-4 w-4" />
                             Global Serial Scanner
@@ -1784,8 +1785,19 @@ export function PhysicalInventorySerialManagementModule(props: Props) {
                         <Button
                             variant="outline"
                             className="cursor-pointer shrink-0 border-primary/20 bg-primary/5 text-primary hover:bg-primary/10"
-                            onClick={() => setOpenAddProductDialog(true)}
-                            disabled={!canEdit || !header?.id || !hasLoadedDetails}
+                            onClick={async () => {
+                                try {
+                                    if (!header?.id) {
+                                        await ensureHeaderSaved();
+                                    }
+                                    setOpenAddProductDialog(true);
+                                } catch (error) {
+                                    const message = error instanceof Error ? error.message : "Please complete required header fields first.";
+                                    toast.error(message);
+                                }
+                            }}
+                            // AG-COMMENT: Removed !hasLoadedDetails restriction so Add Product is accessible even when 0 products are currently loaded
+                            disabled={!canEdit || (!header?.id && !validateLoadProductsFilters(filters).ok)}
                         >
                             <Plus className="mr-2 h-4 w-4" />
                             Add Product

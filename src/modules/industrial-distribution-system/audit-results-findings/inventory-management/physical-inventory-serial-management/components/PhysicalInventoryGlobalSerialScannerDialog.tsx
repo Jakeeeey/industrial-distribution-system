@@ -14,7 +14,8 @@ import {
     fetchSerialOnhandByTag,
     fetchSerialOnhandByBranch,
     updatePhysicalInventoryDetail,
-    fetchCylinderAssetBySerial,
+    // AG-COMMENT: Updated import to use fetchCylinderAssetOrDraftBySerial to recognize draft serial assets
+    fetchCylinderAssetOrDraftBySerial,
 } from "../providers/fetchProvider";
 import {
     computeAmount,
@@ -551,8 +552,9 @@ export function PhysicalInventoryGlobalSerialScannerDialog(props: Props) {
                     return;
                 }
 
-                // Enforce that it exists in cylinder_assets and belongs to the active branch
-                const cylinderAsset = await fetchCylinderAssetBySerial(normalized);
+                // Enforce that it exists in cylinder_assets or cylinder_assets_draft and belongs to the active branch
+                // AG-COMMENT: Using fetchCylinderAssetOrDraftBySerial to recognize registered draft serials
+                const cylinderAsset = await fetchCylinderAssetOrDraftBySerial(normalized);
                 if (!cylinderAsset) {
                     const message = "Serial is not registered as a Cylinder Asset. Please register it via the Specific Product Modal.";
                     toast.error(message, {
