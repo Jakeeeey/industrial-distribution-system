@@ -10,10 +10,13 @@ export type ReceivingListItem = {
     poNumber: string;
     supplierName: string;
     status: POStatus;
+    inventoryStatus?: number;
     totalAmount: number;
     currency: "PHP";
     itemsCount: number;
     branchesCount: number;
+    isRefill?: boolean;
+    isTagged?: boolean;
 };
 
 export type ReceivingPOItem = {
@@ -56,6 +59,7 @@ export type ReceivingPODetail = {
     poNumber: string;
     supplier: { id: string; name: string };
     status: POStatus;
+    inventoryStatus?: number;
     allocations: Array<{
         branch: { id: string; name: string };
         items: ReceivingPOItem[];
@@ -70,6 +74,8 @@ export type ReceivingPODetail = {
     createdAt: string;
     priceType?: string;
     isInvoice?: boolean;
+    isRefill?: boolean;
+    isTagged?: boolean;
     draftData?: Array<{
         porId: number;
         productId: number;

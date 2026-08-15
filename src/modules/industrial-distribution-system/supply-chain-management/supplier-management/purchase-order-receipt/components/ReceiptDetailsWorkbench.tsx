@@ -26,7 +26,7 @@ export function ReceiptDetailsWorkbench({ receiverName }: { receiverName?: strin
     }
 
     return (
-        <Card className="p-4 min-w-0">
+        <Card className="p-4 h-full flex flex-col overflow-hidden min-w-0">
             <div className="flex items-start justify-between gap-3">
                 <div>
                     <div className="text-base font-semibold">Receipt Details</div>
@@ -42,7 +42,7 @@ export function ReceiptDetailsWorkbench({ receiverName }: { receiverName?: strin
                 </div>
             </div>
 
-            <div className="mt-4">
+            <div className="mt-4 flex-1 overflow-y-auto pr-2">
                 <ReviewReceiptStep key={editingReceiptId || "new"} receiverName={receiverName} />
             </div>
         </Card>

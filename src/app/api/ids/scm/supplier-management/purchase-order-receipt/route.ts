@@ -206,6 +206,8 @@ interface POHeaderRow {
     } | null;
     vat_amount?: string | number;
     withholding_tax_amount?: string | number;
+    is_refill?: boolean | number;
+    is_tagged?: boolean | number;
 }
 
 interface ProductRow {
@@ -224,16 +226,36 @@ interface ProductRow {
 
 
 async function fetchApprovedNotReceivedPOs(base: string): Promise<POHeaderRow[]> {
-    const qs = [
+    const supUrl = `${base}/items/${SUPPLIERS_COLLECTION}?limit=-1&filter[division_id][_eq]=1&fields=id`;
+    let validSupplierIds: number[] = [];
+    try {
+        const supJ = await fetchJson<{ data: { id: number }[] }>(supUrl);
+        validSupplierIds = (supJ?.data || []).map((s) => Number(s.id)).filter((id) => id > 0);
+    } catch {
+        return [];
+    }
+
+    if (validSupplierIds.length === 0) return [];
+
+    const baseQs = [
         "limit=-1", "sort=-purchase_order_id",
-        "fields=purchase_order_id,purchase_order_no,date,date_encoded,approver_id,date_approved,payment_status,inventory_status,date_received,supplier_name,total_amount,price_type",
-        "filter[_or][0][inventory_status][_eq]=3", "filter[_or][1][inventory_status][_eq]=9",
-        "filter[_or][2][inventory_status][_eq]=11", "filter[_or][3][inventory_status][_eq]=12",
-        "filter[_or][4][inventory_status][_eq]=13",
+        "fields=purchase_order_id,purchase_order_no,date,date_encoded,approver_id,date_approved,payment_status,inventory_status,date_received,supplier_name,total_amount,price_type,is_refill,is_tagged",
+        "filter[_or][0][is_posted][_neq]=1",
+        "filter[_or][1][is_posted][_null]=true"
     ].join("&");
-    const url = `${base}/items/${PO_COLLECTION}?${qs}`;
-    const j = await fetchJson<{ data: POHeaderRow[] }>(url);
-    return j?.data ?? [];
+
+    const allRows: POHeaderRow[] = [];
+
+    for (const ids of chunk(validSupplierIds, 150)) {
+        const qs = `${baseQs}&filter[supplier_name][_in]=${encodeURIComponent(ids.join(","))}`;
+        const url = `${base}/items/${PO_COLLECTION}?${qs}`;
+        try {
+            const j = await fetchJson<{ data: POHeaderRow[] }>(url);
+            if (j?.data) allRows.push(...j.data);
+        } catch { }
+    }
+
+    return allRows.sort((a, b) => Number(b.purchase_order_id) - Number(a.purchase_order_id));
 }
 
 interface PORow {
@@ -614,25 +636,17 @@ export async function GET() {
             const lines = poLinesAll.filter((l) => toNum(l.purchase_order_id) === poId);
             const porRows = porRowsAll.filter((r) => toNum(r.purchase_order_id) === poId);
 
-            const hasPending = lines.some(ln => {
-                const received = porRows.filter(r => toNum(r.product_id) === toNum(ln.product_id) && toNum(r.branch_id) === toNum(ln.branch_id));
-                const totalReceived = received.reduce((sum, r) => sum + effectiveReceivedQty(r), 0);
-                return totalReceived < toNum(ln.ordered_quantity);
-            });
-
-            const hasUnposted = porRows.some(r => toNum(r.isPosted) === 0 && (toStr(r.receipt_no) || toNum(r.received_quantity) > 0 || toNum(r.is_reverted) === 1));
-
-            if (!hasPending && !hasUnposted && lines.length > 0) return null;
-
             return {
-                id: String(poId),
-                poNumber: toStr(po.purchase_order_no),
+                id: String(poId), poNumber: toStr(po.purchase_order_no),
                 supplierName: supplierMap.get(toNum(po.supplier_name)) || "—",
                 status: receivingStatusFrom(poId, lines, porRows),
-                totalAmount: toNum(po.total_amount),
-                currency: "PHP",
-                itemsCount: new Set(lines.map((l) => l.product_id)).size,
-                branchesCount: new Set(lines.map((l) => l.branch_id)).size,
+                inventoryStatus: toNum(po.inventory_status),
+                totalAmount: toNum(po.total_amount), currency: "PHP",
+                itemsCount: new Set(lines.map(l => l.product_id)).size,
+                branchesCount: new Set(lines.map(l => l.branch_id)).size,
+                priceType: toStr(po.price_type, "Cost Per Unit"),
+                isRefill: Number(po.is_refill ?? 0) === 1,
+                isTagged: Number(po.is_tagged ?? 0) === 1
             };
         }).filter(Boolean);
         return ok(list);
@@ -894,10 +908,13 @@ export async function POST(req: NextRequest) {
                 poNumber: toStr(po.purchase_order_no),
                 supplier: { id: String(po.supplier_name), name: supplierMap.get(toNum(po.supplier_name)) || "Supplier Name" },
                 status: receivingStatusFrom(poId, lines, porRows),
+                inventoryStatus: toNum(po.inventory_status),
                 allocations: Array.from(allocationsMap.entries()).map(([branchId, items]) => ({ branch: { id: String(branchId || "0"), name: branchesMap.get(branchId) || `Branch ${branchId}` }, items })),
                 priceType: toStr(po.price_type, "Cost Per Unit"),
                 isInvoice: (toNum((po as unknown as Record<string, unknown>)?.vat_amount) > 0) || (toNum((po as unknown as Record<string, unknown>)?.withholding_tax_amount) > 0),
                 createdAt: po.date_encoded ? new Date(po.date_encoded).toISOString() : new Date().toISOString(),
+                isRefill: Number(po.is_refill ?? 0) === 1,
+                isTagged: Number(po.is_tagged ?? 0) === 1,
                 history,
                 draftData: draftData.length > 0 ? draftData : undefined,
                 draftRfids: draftRfids.length > 0 ? draftRfids : undefined,
