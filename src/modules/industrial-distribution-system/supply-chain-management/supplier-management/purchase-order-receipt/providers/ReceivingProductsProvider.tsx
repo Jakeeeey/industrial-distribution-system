@@ -221,7 +221,7 @@ type Ctx = {
     scanRFID: (rfidOverride?: string) => Promise<void>;
     removeActivity: (id: string) => void;
     saveReceipt: (
-        porMetaData?: Record<string, { lotId: string; batchNo: string; expiryDate: string }>,
+        porMetaData?: Record<string, { lotId: string; batchNo: string }>,
         customCounts?: Record<string, number>
     ) => Promise<void>;
     savingReceipt: boolean;
@@ -237,8 +237,8 @@ type Ctx = {
     getSupplierProducts: (supplierId: string) => Promise<{ productId: string; name: string; sku: string; barcode: string; unitPrice: number; uom: string; discountType: string; discountPercent: number; }[]>;
 
     // ✅ METADATA (Batch, Lot, Expiry)
-    metaDataByPorId: Record<string, { batchNo?: string; lotNo?: string; lotId?: string; expiryDate?: string }>;
-    setMetaDataByPorId: React.Dispatch<React.SetStateAction<Record<string, { batchNo?: string; lotNo?: string; lotId?: string; expiryDate?: string }>>>;
+    metaDataByPorId: Record<string, { batchNo?: string; lotNo?: string; lotId?: string }>;
+    setMetaDataByPorId: React.Dispatch<React.SetStateAction<Record<string, { batchNo?: string; lotNo?: string; lotId?: string }>>>;
 
     // ✅ LEGACY COMPAT: kept for TagRFIDStep internal usage
     markProductAsVerified: (productId: string, porId: string) => void;
@@ -256,6 +256,7 @@ type Ctx = {
     // ✅ STEP state for workbench coordination
     step: number;
     setStep: React.Dispatch<React.SetStateAction<number>>;
+    isReceiptMode?: boolean;
 };
 
 const ReceivingProductsContext = React.createContext<Ctx | null>(null);
@@ -304,7 +305,7 @@ type DraftState = {
     receiptNo: string;
     receiptType: string;
     receiptDate: string;
-    metaDataByPorId?: Record<string, { batchNo?: string; lotNo?: string; lotId?: string; expiryDate?: string }>;
+    metaDataByPorId?: Record<string, { batchNo?: string; lotNo?: string; lotId?: string }>;
     extraItems?: ExtraItemDraft[];
     savedAt: number;
 };
@@ -353,7 +354,7 @@ const playBeep = (type: "success" | "error" = "success") => {
     }
 };
 
-export function ReceivingProductsProvider({ children, receiverId }: { children: React.ReactNode, receiverId?: number }) {
+export function ReceivingProductsProvider({ children, receiverId, isReceiptMode }: { children: React.ReactNode, receiverId?: number, isReceiptMode?: boolean }) {
     const [list, setList] = React.useState<ReceivingListItem[]>([]);
     const [listLoading, setListLoading] = React.useState(false);
     const [listError, setListError] = React.useState("");
@@ -576,6 +577,20 @@ export function ReceivingProductsProvider({ children, receiverId }: { children: 
 
                 const detail = (j?.data ?? null) as ReceivingPODetail | null;
                 setSelectedPO(detail);
+
+                if (isReceiptMode && detail?.allocations) {
+                    const seeded: Record<string, number> = {};
+                    for (const alloc of detail.allocations) {
+                        for (const item of alloc.items) {
+                            const porId = String(item.porId || item.id);
+                            const count = Number((item as Record<string, unknown>).serialCount || 0);
+                            if (count > 0) {
+                                seeded[porId] = count;
+                            }
+                        }
+                    }
+                    setScannedCountByPorId(seeded);
+                }
 
                 if (!silent) {
                     setPoBarcode(detail?.poNumber ?? "");
@@ -1237,7 +1252,17 @@ export function ReceivingProductsProvider({ children, receiverId }: { children: 
             // ✅ Restore Metadata from POR items
             const meta: Record<string, { lotId?: string; batchNo?: string; expiryDate?: string }> = {};
             const items = j?.data?.items || [];
-            items.forEach((it: { purchase_order_product_id: string; lot_id?: string; batch_no?: string; expiry_date?: string }) => {
+
+            // Fallback: for items with received_quantity but no serial registrations
+            //           (covers reverted receipts where serials were already deleted)
+            items.forEach((it: { purchase_order_product_id: string | number; received_quantity?: number; lot_id?: string; batch_no?: string; expiry_date?: string }) => {
+                const porId = String(it.purchase_order_product_id);
+                if (!newCounts[porId] && Number(it.received_quantity) > 0) {
+                    newCounts[porId] = Number(it.received_quantity);
+                }
+            });
+
+            items.forEach((it: { purchase_order_product_id: string | number; received_quantity?: number; lot_id?: string; batch_no?: string; expiry_date?: string }) => {
                 const porId = String(it.purchase_order_product_id);
                 if (it.lot_id || it.batch_no || it.expiry_date) {
                     meta[porId] = {
@@ -1280,7 +1305,7 @@ export function ReceivingProductsProvider({ children, receiverId }: { children: 
     }, [selectedPO]);
 
     const saveReceipt = React.useCallback(async (
-        porMetaData?: Record<string, { lotId: string; batchNo: string; expiryDate: string }>,
+        porMetaData?: Record<string, { lotId: string; batchNo: string }>,
         customCounts?: Record<string, number>
     ) => {
         setSaveError("");
@@ -1343,7 +1368,6 @@ export function ReceivingProductsProvider({ children, receiverId }: { children: 
                         rfids: Array.from(new Set(itemRfids)),
                         lotId: meta?.lotId,
                         batchNo: meta?.batchNo,
-                        expiryDate: meta?.expiryDate,
                         unitPrice: Number(it.unitPrice) || 0,
                         discountAmount: Number(it.discountAmount) || 0,
                         discountType: it.discountType || "No Discount",
@@ -1486,6 +1510,7 @@ export function ReceivingProductsProvider({ children, receiverId }: { children: 
         // ✅ STEP STATE
         step,
         setStep,
+        isReceiptMode,
     };
 
     return <ReceivingProductsContext.Provider value={value}>{children}</ReceivingProductsContext.Provider>;

@@ -168,9 +168,8 @@ type POItem = {
     expectedQty: number;
     originalOrderedQty?: number;
     receivedQty: number;
-    requiresRfid: true;
-    taggedQty: number;
-    rfids: string[];
+    requiresRfid: boolean;
+    serialCount: number;
     isReceived: boolean;
     unitPrice: number;
     discountType: string;
@@ -296,15 +295,23 @@ interface POProductRow {
 const POR_SAFE_FIELDS = "purchase_order_product_id,purchase_order_id,product_id,branch_id,received_quantity,receipt_no,receipt_date,receipt_type,received_date,isPosted,is_reverted,lot_id,batch_no,expiry_date,discount_type,unit_price,discounted_amount,receiving_method";
 
 
-async function fetchReceivingItemsByLinkIds(base: string, linkIds: number[]) {
-    if (!linkIds.length) return [];
-    const out: Record<string, unknown>[] = [];
-    for (const ids of chunk(Array.from(new Set(linkIds)).filter(Boolean), 250)) {
-        const url = `${base}/items/${POR_ITEMS_COLLECTION}?limit=-1&fields=receiving_item_id,purchase_order_product_id,product_id,rfid_code,created_at&filter[purchase_order_product_id][_in]=${encodeURIComponent(ids.join(","))}`;
-        const j = await fetchJson<{ data: Record<string, unknown>[] }>(url);
-        out.push(...(j?.data ?? []));
+async function fetchSerialCountsByPorIds(base: string, porIds: number[]): Promise<Map<number, number>> {
+    const map = new Map<number, number>();
+    const uniq = Array.from(new Set(porIds.filter(id => id > 0)));
+    if (!uniq.length) return map;
+
+    for (const ids of chunk(uniq, 250)) {
+        const url = `${base}/items/purchase_order_receiving_serial?limit=-1` +
+            `&filter[purchase_order_receiving_id][_in]=${encodeURIComponent(ids.join(","))}` +
+            `&fields=purchase_order_receiving_id`;
+        const j = await fetchJson<{ data: Array<{ purchase_order_receiving_id: number }> }>(url)
+            .catch(() => ({ data: [] }));
+        for (const row of (j?.data ?? [])) {
+            const porId = toNum(row.purchase_order_receiving_id);
+            if (porId) map.set(porId, (map.get(porId) || 0) + 1);
+        }
     }
-    return out;
+    return map;
 }
 
 async function fetchPORByPOIds(base: string, poIds: number[]) {
@@ -484,23 +491,7 @@ function buildPorIdsByKey(porRows: PORow[]) {
     return map;
 }
 
-function buildTagMapsForScopes(args: { poLines: POProductRow[], porRows: PORow[], receivingItems: Record<string, unknown>[] }) {
-    const linkToKey = new Map<number, string>();
-    for (const r of args.porRows) linkToKey.set(toNum(r.purchase_order_product_id), keyLine(toNum(r.purchase_order_id), toNum(r.product_id), toNum(r.branch_id)));
-    for (const ln of args.poLines) linkToKey.set(toNum(ln.purchase_order_product_id), keyLine(toNum(ln.purchase_order_id), toNum(ln.product_id), toNum(ln.branch_id ?? 0)));
-
-    const rfidsByKey = new Map<string, string[]>();
-    for (const it of args.receivingItems) {
-        const k = linkToKey.get(toNum(it.purchase_order_product_id));
-        if (!k) continue;
-        const arr = rfidsByKey.get(k) ?? [];
-        arr.push(toStr(it.rfid_code));
-        rfidsByKey.set(k, arr);
-    }
-    const taggedCountByKey = new Map<string, number>();
-    Array.from(rfidsByKey.entries()).forEach(([k, v]) => taggedCountByKey.set(k, v.length));
-    return { taggedCountByKey, rfidsByKey };
-}
+// buildTagMapsForScopes removed
 
 function isFullyReceived(poId: number, lines: POProductRow[], porRows: PORow[]) {
     for (const ln of lines) {
@@ -709,8 +700,10 @@ export async function POST(req: NextRequest) {
             if (!po) return bad("PO not found", 404);
             const lines = await fetchPOProductsByPOId(base, poId);
             const porRows = await fetchPORByPOIds(base, [poId]);
-            const receivingItems = await fetchReceivingItemsByLinkIds(base, [...porRows.map(r => toNum(r.purchase_order_product_id)), ...lines.map(l => toNum(l.purchase_order_product_id))]);
-            const { taggedCountByKey, rfidsByKey } = buildTagMapsForScopes({ poLines: lines, porRows, receivingItems });
+            const openPorIds = porRows
+                .filter(r => toNum(r.isPosted) === 0 && toNum(r.is_reverted) !== 1)
+                .map(r => toNum(r.purchase_order_product_id));
+            const serialCountMap = await fetchSerialCountsByPorIds(base, openPorIds);
             const productIdsAll = lines.map(l => toNum(l.product_id));
             const productsMap = await fetchProductsMap(base, productIdsAll);
             const branchesMap = await fetchBranchesMap(base, lines.map(l => toNum(l.branch_id ?? 0)));
@@ -785,9 +778,8 @@ export async function POST(req: NextRequest) {
                     uomCount: Number(p?.unit_of_measurement_count) || 1,
                     expectedQty: remainingQty,
                     receivedQty,
-                    requiresRfid: true,
-                    taggedQty: taggedCountByKey.get(k) || 0,
-                    rfids: rfidsByKey.get(k) || [],
+                    requiresRfid: false,
+                    serialCount: serialCountMap.get(toNum(openRow?.purchase_order_product_id)) || 0,
                     isReceived: receivedQty >= orderedQty,
                     unitPrice: uPrice,
                     discountType: lineDiscountTypeStr,
@@ -852,9 +844,8 @@ export async function POST(req: NextRequest) {
                     uomCount: Number(p?.unit_of_measurement_count) || 1,
                     expectedQty: 0,
                     receivedQty,
-                    requiresRfid: true,
-                    taggedQty: taggedCountByKey.get(k) || 0,
-                    rfids: rfidsByKey.get(k) || [],
+                    requiresRfid: false,
+                    serialCount: serialCountMap.get(toNum(openRow?.purchase_order_product_id)) || 0,
                     isReceived: receivedQty > 0,
                     unitPrice: uPrice,
                     discountType: lineDiscountTypeStr,
@@ -1104,15 +1095,7 @@ export async function POST(req: NextRequest) {
 
 
 
-            // ✅ 3. Aggregate ALL Tags for the PO to Recalculate Totals (Source of Truth)
             const allPorRows = [...porRows];
-            const receivingItems = await fetchReceivingItemsByLinkIds(base, allPorRows.map(r => toNum(r.purchase_order_product_id)));
-            const tagCountByPorId = new Map<number, number>();
-            receivingItems.forEach(it => {
-                const id = toNum(it.purchase_order_product_id);
-                tagCountByPorId.set(id, (tagCountByPorId.get(id) || 0) + 1);
-            });
-
             // ✅ 4. Update POR Rows
             const meta = (porMetaData && typeof porMetaData === "object") ? porMetaData : {};
 
@@ -1188,7 +1171,7 @@ export async function POST(req: NextRequest) {
                             receipt_no: null,
                             isPosted: 0,
                             is_reverted: 0,
-                            receiving_method: "manual"
+                            receiving_method: "SERIAL"
                         })
                     }).catch(() => { });
                 }
@@ -1205,11 +1188,10 @@ export async function POST(req: NextRequest) {
                     discount_type: dtId || null, discounted_amount: lineDisc,
                     vat_amount: vatAmtTotal, withholding_amount: ewtAmtTotal,
                     total_amount: Number(lineGross.toFixed(2)),
-                    receiving_method: "rfid"
+                    receiving_method: "SERIAL"
                 };
                 if (m.lotId !== undefined && m.lotId !== null && m.lotId !== "") patch.lot_id = toNum(m.lotId);
                 if (m.batchNo !== undefined && m.batchNo !== null) patch.batch_no = String(m.batchNo).trim() || null;
-                if (m.expiryDate) patch.expiry_date = m.expiryDate;
 
                 await fetchJson(`${base}/items/${POR_COLLECTION}/${realPorId}`, { method: "PATCH", body: JSON.stringify(patch) });
             }
@@ -1237,8 +1219,7 @@ export async function POST(req: NextRequest) {
             fPors.forEach(r => allBranchIdsSet.add(toNum(r.branch_id)));
             const updatedBranchesMap = await fetchBranchesMap(base, Array.from(allBranchIdsSet));
             const updatedSupplierMap = await fetchSupplierNames(base, [toNum(po?.supplier_name)]);
-            const updatedReceivingItems = await fetchReceivingItemsByLinkIds(base, fPors.map(r => toNum(r.purchase_order_product_id)));
-            const { taggedCountByKey, rfidsByKey } = buildTagMapsForScopes({ poLines: fLines, porRows: fPors, receivingItems: updatedReceivingItems });
+            const serialCountMap = await fetchSerialCountsByPorIds(base, fPors.map(r => toNum(r.purchase_order_product_id)));
 
             const allocationsMap = new Map<number, POItem[]>();
             const processedLinesSet = new Set<string>();
@@ -1280,9 +1261,8 @@ export async function POST(req: NextRequest) {
                     uomCount: Number(p?.unit_of_measurement_count) || 1,
                     expectedQty: startingBalance,
                     receivedQty: currRecQty,
-                    requiresRfid: true,
-                    taggedQty: taggedCountByKey.get(k) || 0,
-                    rfids: rfidsByKey.get(k) || [],
+                    requiresRfid: false,
+                    serialCount: serialCountMap.get(toNum(pors[0])) || 0,
                     isReceived: currRecQty >= startingBalance && startingBalance > 0,
                     unitPrice: toNum(ln.unit_price),
                     discountType: lineDiscountTypeStr,
@@ -1321,9 +1301,8 @@ export async function POST(req: NextRequest) {
                     uomCount: Number(p?.unit_of_measurement_count) || 1,
                     expectedQty: 0,
                     receivedQty: currRecQty,
-                    requiresRfid: true,
-                    taggedQty: taggedCountByKey.get(k) || 0,
-                    rfids: rfidsByKey.get(k) || [],
+                    requiresRfid: false,
+                    serialCount: serialCountMap.get(toNum(r.purchase_order_product_id)) || 0,
                     isReceived: true,
                     unitPrice: uPrice,
                     discountType: lineDiscountTypeStr,

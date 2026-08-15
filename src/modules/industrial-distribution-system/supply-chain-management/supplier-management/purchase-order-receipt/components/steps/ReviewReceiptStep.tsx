@@ -48,6 +48,7 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
     const {
         selectedPO,
         scannedCountByPorId,
+        setScannedCountByPorId,
         saveReceipt,
         savingReceipt,
         saveError,
@@ -63,9 +64,15 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
         editingReceiptId,
         clearEditingReceiptId,
         loadReceipt,
+        isReceiptMode,
     } = useReceivingProducts();
+    const [selectedPorId, setSelectedPorId] = React.useState<string | null>(null);
 
     const [clientSaveError, setClientSaveError] = React.useState("");
+
+    React.useEffect(() => {
+        setSelectedPorId(null);
+    }, [selectedPO]);
 
     React.useEffect(() => {
         setReviewPage(1);
@@ -86,13 +93,11 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
             if (isCancelledEdit) {
                 setLotIds({});
                 setBatchNos({});
-                setExpiryDates({});
             }
         }
     }, [selectedPO, editingReceiptId]);
     const [lotIds, setLotIds] = React.useState<Record<string, string>>({});
     const [batchNos, setBatchNos] = React.useState<Record<string, string>>({});
-    const [expiryDates, setExpiryDates] = React.useState<Record<string, string>>({});
     const [previewOpen, setPreviewOpen] = React.useState(false);
     const [isPartialModalOpen, setIsPartialModalOpen] = React.useState(false);
     const [reviewPage, setReviewPage] = React.useState(1);
@@ -143,7 +148,6 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
     React.useEffect(() => {
         const newLots: Record<string, string> = {};
         const newBatches: Record<string, string> = {};
-        const newExpiries: Record<string, string> = {};
         const syncReady = true;
 
         if (selectedPO?.allocations) {
@@ -152,7 +156,6 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                     const porId = String(it.porId || it.id);
                     if (it.lot_id) newLots[porId] = String(it.lot_id);
                     if (it.batch_no) newBatches[porId] = it.batch_no;
-                    if (it.expiry_date) newExpiries[porId] = it.expiry_date;
                 });
             });
         }
@@ -162,14 +165,12 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
             Object.entries(draftMetaData).forEach(([porId, meta]) => {
                 if (meta.lotId) newLots[porId] = meta.lotId;
                 if (meta.batchNo) newBatches[porId] = meta.batchNo;
-                if (meta.expiryDate) newExpiries[porId] = meta.expiryDate;
             });
         }
 
         if (syncReady) {
             setLotIds(prev => ({ ...newLots, ...prev }));
             setBatchNos(prev => ({ ...newBatches, ...prev }));
-            setExpiryDates(prev => ({ ...newExpiries, ...prev }));
         }
 
     }, [selectedPO?.id, selectedPO?.allocations, draftMetaData]);
@@ -178,28 +179,23 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
         if (draftMetaData && Object.keys(draftMetaData).length > 0) {
             const newLots: Record<string, string> = {};
             const newBatches: Record<string, string> = {};
-            const newExpiries: Record<string, string> = {};
             
             Object.entries(draftMetaData).forEach(([porId, meta]) => {
                 if (meta.lotId) newLots[porId] = String(meta.lotId);
                 if (meta.batchNo) newBatches[porId] = meta.batchNo;
-                if (meta.expiryDate) {
-                    newExpiries[porId] = meta.expiryDate.split("T")[0];
-                }
             });
 
             setLotIds(prev => ({ ...prev, ...newLots }));
             setBatchNos(prev => ({ ...prev, ...newBatches }));
-            setExpiryDates(prev => ({ ...prev, ...newExpiries }));
         }
     }, [draftMetaData]);
 
     React.useEffect(() => {
-        const metaData: Record<string, { lotId: string; batchNo: string; expiryDate: string }> = {};
+        const metaData: Record<string, { lotId: string; batchNo: string; expiryDate?: string }> = {};
         let hasData = false;
 
         Object.keys(lotIds).forEach(id => {
-            metaData[id] = { lotId: lotIds[id] || "", batchNo: batchNos[id] || "", expiryDate: expiryDates[id] || "" };
+            metaData[id] = { lotId: lotIds[id] || "", batchNo: batchNos[id] || "" };
             hasData = true;
         });
 
@@ -208,15 +204,14 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                 const existing = draftMetaData?.[id];
                 return !existing ||
                     existing.lotId !== metaData[id].lotId ||
-                    existing.batchNo !== metaData[id].batchNo ||
-                    existing.expiryDate !== metaData[id].expiryDate;
+                    existing.batchNo !== metaData[id].batchNo;
             }) || Object.keys(draftMetaData || {}).length !== Object.keys(metaData).length;
 
             if (isDifferent) {
                 setMetaDataByPorId(metaData);
             }
         }
-    }, [lotIds, batchNos, expiryDates, setMetaDataByPorId, draftMetaData]);
+    }, [lotIds, batchNos, setMetaDataByPorId, draftMetaData]);
 
     React.useEffect(() => {
         if (!receiptSaved) return;
@@ -289,9 +284,9 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
     }, [selectedPO]);
 
     const executeSave = async () => {
-        const metaData: Record<string, { lotId: string; batchNo: string; expiryDate: string }> = {};
+        const metaData: Record<string, { lotId: string; batchNo: string }> = {};
         Object.keys(lotIds).forEach(id => {
-            metaData[id] = { lotId: lotIds[id] || "", batchNo: batchNos[id] || "", expiryDate: expiryDates[id] || "" };
+            metaData[id] = { lotId: lotIds[id] || "", batchNo: batchNos[id] || "" };
         });
         await saveReceipt(metaData, safeCounts);
         setIsPartialModalOpen(false);
@@ -330,22 +325,21 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
             return;
         }
 
-        const missingLotOrExpiry: string[] = [];
+        const missingLotOrBatch: string[] = [];
         allItems.forEach((it: ReceivingPOItem) => {
             const porId = String(it.porId || it.id);
             const scanned = safeCounts[porId] ?? 0;
             if (scanned > 0) {
                 const batch = batchNos[porId] || "";
                 const lot = lotIds[porId] || "";
-                const exp = expiryDates[porId] || "";
-                if (!batch.trim() || !lot.trim() || !exp.trim()) missingLotOrExpiry.push(it.name);
+                if (!batch.trim() || !lot.trim()) missingLotOrBatch.push(it.name);
             }
         });
 
-        if (missingLotOrExpiry.length > 0) {
+        if (missingLotOrBatch.length > 0) {
             setShowErrors(true);
             toast.error("Required Fields Missing", {
-                description: "Batch, Lot and Expiry Date are required for all tagged items."
+                description: "Batch and Lot are required for all tagged items."
             });
             return;
         }
@@ -365,13 +359,13 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
             return;
         }
 
-        const metaData: Record<string, { lotId: string; batchNo: string; expiryDate: string }> = {};
+        const metaData: Record<string, { lotId: string; batchNo: string; expiryDate?: string }> = {};
         Object.keys(lotIds).forEach(id => {
-            metaData[id] = { lotId: lotIds[id] || "", batchNo: batchNos[id] || "", expiryDate: expiryDates[id] || "" };
+            metaData[id] = { lotId: lotIds[id] || "", batchNo: batchNos[id] || "" };
         });
 
         await saveReceipt(metaData, safeCounts);
-    }, [saveReceipt, selectedPO?.status, allItems, safeCounts, lotIds, batchNos, expiryDates, receiptNo, receiptType, receiptDate, receiptNoDupError]);
+    }, [saveReceipt, selectedPO?.status, allItems, safeCounts, lotIds, batchNos, receiptNo, receiptType, receiptDate, receiptNoDupError]);
 
     const totalScanned = Object.values(safeCounts).reduce((a, b) => a + Number(b), 0);
     const totalExpected = allItems.reduce((a, b) => a + Number(b.expectedQty || 0), 0);
@@ -619,10 +613,10 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
                             <div>
                                 <div className="text-sm font-semibold">
-                                    Step 2: Batch, Lot & Expiry Details
+                                    Step 2: Batch & Lot Details
                                 </div>
                                 <div className="text-xs text-muted-foreground">
-                                    Specify the Batch No, Lot selection and Expiry Date for each selected product.
+                                    Specify the Batch No and Lot selection for each selected product.
                                 </div>
                             </div>
                             <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -642,7 +636,6 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                                         <TableHead className="text-[10px] uppercase font-bold text-muted-foreground">Product Name</TableHead>
                                         <TableHead className="text-[10px] uppercase font-bold text-muted-foreground w-36">Batch</TableHead>
                                         <TableHead className="text-[10px] uppercase font-bold text-muted-foreground w-44">Lot</TableHead>
-                                        <TableHead className="text-[10px] uppercase font-bold text-muted-foreground w-44">Expiry</TableHead>
                                         <TableHead className="text-[10px] uppercase font-bold text-muted-foreground text-right">Unit Price</TableHead>
                                         <TableHead className="text-[10px] uppercase font-bold text-muted-foreground text-center w-24">Disc. Type</TableHead>
                                         <TableHead className="text-[10px] uppercase font-bold text-muted-foreground text-right">Disc. Amt</TableHead>
@@ -695,26 +688,46 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                                                                     {lots.map((l: { lot_id: string | number; lot_name: string }) => <option key={l.lot_id} value={String(l.lot_id)}>{l.lot_name}</option>)}
                                                                 </select>
                                                             </TableCell>
-                                                            <TableCell>
-                                                                <Input
-                                                                    type="date"
-                                                                    className={cn(
-                                                                        "h-8 text-[11px]",
-                                                                        showErrors && scanned > 0 && !(expiryDates[porId] || "").trim() && "border-destructive ring-1 ring-destructive"
-                                                                    )}
-                                                                    value={expiryDates[porId] || ""}
-                                                                    onChange={(e) => setExpiryDates(prev => ({ ...prev, [porId]: e.target.value }))}
-                                                                />
-                                                            </TableCell>
                                                             <TableCell className="text-right text-xs">{formatPHP(unitP)}</TableCell>
                                                             <TableCell className="text-center text-[10px] text-muted-foreground">{it.discountType}</TableCell>
                                                             <TableCell className="text-right text-xs text-destructive font-medium">{(discA || 0) > 0 ? `${formatPHP(discA * scanned)}` : "—"}</TableCell>
                                                             <TableCell className="text-right font-bold text-xs">{formatPHP(lineTotal)}</TableCell>
                                                     <TableCell className="text-center font-bold text-xs">{expected}</TableCell>
                                                     <TableCell className="text-center">
-                                                        <Badge variant="secondary" className="h-6 px-3 bg-muted text-foreground font-black text-xs">
-                                                            {scanned}
-                                                        </Badge>
+                                                        {isReceiptMode && selectedPorId === porId ? (
+                                                            <div className="flex items-center gap-1 justify-center">
+                                                                <Input 
+                                                                    type="number"
+                                                                    min={0}
+                                                                    className="h-7 text-xs w-16 text-center px-1"
+                                                                    value={scanned || ""}
+                                                                    onChange={(e) => {
+                                                                        const val = Number(e.target.value);
+                                                                        setScannedCountByPorId(prev => ({
+                                                                            ...prev,
+                                                                            [porId]: Math.max(0, val)
+                                                                        }));
+                                                                    }}
+                                                                />
+                                                                <Button 
+                                                                    variant="ghost" 
+                                                                    size="icon" 
+                                                                    className="h-6 w-6 text-muted-foreground hover:text-foreground shrink-0"
+                                                                    onClick={() => setSelectedPorId(null)}
+                                                                >
+                                                                    <XCircle className="h-4 w-4" />
+                                                                </Button>
+                                                            </div>
+                                                        ) : (
+                                                            <div 
+                                                                className={cn("flex justify-center items-center", isReceiptMode && "cursor-pointer group")}
+                                                                onClick={() => isReceiptMode && setSelectedPorId(porId)}
+                                                            >
+                                                                <Badge variant="secondary" className={cn("h-6 px-3 bg-muted text-foreground font-black text-xs", isReceiptMode && "group-hover:bg-primary/20 transition-colors")}>
+                                                                    {scanned}
+                                                                </Badge>
+                                                            </div>
+                                                        )}
                                                     </TableCell>
                                                 </TableRow>
                                             )

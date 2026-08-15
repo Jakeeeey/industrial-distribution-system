@@ -7,7 +7,7 @@ import { ReceiptDetailsWorkbench } from "./components/ReceiptDetailsWorkbench";
 
 export function ReceiptDetailsModule({ receiverId, receiverName }: { receiverId?: number; receiverName?: string }) {
     return (
-        <ReceivingProductsProvider receiverId={receiverId}>
+        <ReceivingProductsProvider receiverId={receiverId} isReceiptMode={true}>
             <div className="h-full flex flex-col px-6 py-4 overflow-hidden">
                 <div className="mb-4 shrink-0">
                     <h1 className="text-2xl font-semibold tracking-tight">

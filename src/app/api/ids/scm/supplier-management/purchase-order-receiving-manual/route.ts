@@ -585,7 +585,7 @@ export async function POST(req: NextRequest) {
                     
                     const openPorId = pors.find(id => {
                         const row = porRows.find(r => toNum(r.purchase_order_product_id) === id);
-                        return row && toNum(row.isPosted) === 0 && toNum(row.is_reverted) !== 1;
+                        return row && toNum(row.isPosted) === 0 && toNum(row.is_reverted) !== 1 && !row.receipt_no;
                     });
                     allocationsMap.set(bid, [...existing, {
                         id: openPorId ? String(openPorId) : `${pid}-${bid}`, porId: String(openPorId || ""),
@@ -644,7 +644,7 @@ export async function POST(req: NextRequest) {
                 for (const item of (items as Record<string, unknown>[])) {
                     if (item.porId) {
                         const sourceRow = porRows.find(r => toNum(r.purchase_order_product_id) === toNum(item.porId as string));
-                        if (sourceRow && toNum(sourceRow.isPosted) !== 0) continue;
+                        if (sourceRow && (toNum(sourceRow.isPosted) !== 0 || sourceRow.receipt_no)) continue;
 
                         const sers = receiptSerialsMap.get(toNum(item.porId));
                         if (sers && sers.length > 0) {
