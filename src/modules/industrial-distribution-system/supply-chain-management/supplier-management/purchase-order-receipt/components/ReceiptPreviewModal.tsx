@@ -126,7 +126,7 @@ export function ReceiptPreviewModal({
                     </div>
                 </div>
 
-                <ScrollArea className="flex-1 px-8 py-6">
+                <div className="flex-1 min-h-0 overflow-y-auto px-8 py-6">
                     <div className="space-y-6 max-w-6xl mx-auto">
 
                         {/* Items List - Ultra Compact 1-Row Style */}
@@ -284,7 +284,7 @@ export function ReceiptPreviewModal({
                             </div>
                         </div>
                     </div>
-                </ScrollArea>
+                </div>
 
                 <DialogFooter className="p-8 border-t bg-muted/20 flex flex-row items-center justify-center sm:justify-center gap-4">
                     <Button variant="outline" onClick={onClose} className="px-8 h-11 font-black uppercase tracking-widest text-[10px] shadow-sm border-muted-foreground/20 hover:bg-muted transition-colors">

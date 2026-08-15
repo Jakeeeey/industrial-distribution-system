@@ -580,8 +580,8 @@ export async function POST(req: NextRequest) {
 
                 if (showReceivedDetails || remainingQty > 0) {
                     const existing = allocationsMap.get(bid) || [];
-                    const displayExpectedQty = showReceivedDetails ? toNum(ln.ordered_quantity) : remainingQty;
-                    const displayReceivedQty = showReceivedDetails ? receivedQty : 0;
+                    const displayExpectedQty = toNum(ln.ordered_quantity);
+                    const displayReceivedQty = receivedQty;
                     
                     const openPorId = pors.find(id => {
                         const row = porRows.find(r => toNum(r.purchase_order_product_id) === id);
@@ -642,14 +642,27 @@ export async function POST(req: NextRequest) {
             const draftSerials: Record<string, unknown[]> = {};
             for (const items of allocationsMap.values()) {
                 for (const item of (items as Record<string, unknown>[])) {
-                    if (item.porId) {
-                        const sourceRow = porRows.find(r => toNum(r.purchase_order_product_id) === toNum(item.porId as string));
-                        if (sourceRow && (toNum(sourceRow.isPosted) !== 0 || sourceRow.receipt_no)) continue;
+                    const pid = toNum(item.productId);
+                    const bid = toNum(item.branchId);
 
-                        const sers = receiptSerialsMap.get(toNum(item.porId));
+                    const allDraftsForProduct = porRows.filter(r => 
+                        toNum(r.product_id) === pid && 
+                        toNum(r.branch_id) === bid && 
+                        toNum(r.isPosted) === 0 && 
+                        !r.receipt_no && 
+                        toNum(r.is_reverted) !== 1
+                    );
+
+                    const mergedSerials: any[] = [];
+                    for (const dr of allDraftsForProduct) {
+                        const sers = receiptSerialsMap.get(toNum(dr.purchase_order_product_id));
                         if (sers && sers.length > 0) {
-                            draftSerials[String(item.porId)] = sers;
+                            mergedSerials.push(...sers);
                         }
+                    }
+
+                    if (mergedSerials.length > 0) {
+                        draftSerials[String(item.id)] = mergedSerials;
                     }
                 }
             }
@@ -675,7 +688,7 @@ export async function POST(req: NextRequest) {
         if (action === "lookup_product") {
             const code = toStr(body.barcode).trim();
             const sid = toNum(body.supplierId);
-            const url = `${base}/items/${PRODUCTS_COLLECTION}?limit=1&filter[_or][0][barcode][_eq]=${encodeURIComponent(code)}&filter[_or][1][product_code][_eq]=${encodeURIComponent(code)}&fields=product_id,product_name,barcode,product_code,cost_per_unit,unit_of_measurement.*,unit_of_measurement_count`;
+            const url = `${base}/items/${PRODUCTS_COLLECTION}?limit=1&filter[_or][0][barcode][_eq]=${encodeURIComponent(code)}&filter[_or][1][product_code][_eq]=${encodeURIComponent(code)}&fields=product_id,product_name,barcode,product_code,cost_per_unit,is_serialized,unit_of_measurement.*,unit_of_measurement_count`;
             const j = await fetchJson<{ data: ProductRow[] }>(url);
             const p = j?.data?.[0];
             if (!p) return bad("Product not found", 404);
@@ -706,7 +719,8 @@ export async function POST(req: NextRequest) {
                 discountType: discTypeStr,
                 discountPercent: discPct,
                 uom: "BOX",
-                sku: String(p.barcode || p.product_code)
+                sku: String(p.barcode || p.product_code),
+                isSerialized: !!p.is_serialized
             });
         }
 
@@ -818,10 +832,9 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        if (action === "presave_serial") {
-            const { poId, productId, branchId, serial } = body;
-            const { sn, tareWeight, expiryDate } = serial;
-            if (!poId || !productId || !branchId || !sn) return bad("Missing required fields for presave", 400);
+        if (action === "sync_draft_serials") {
+            const { poId, productId, branchId, serials } = body;
+            if (!poId || !productId || !branchId || !Array.isArray(serials)) return bad("Missing required fields for sync", 400);
 
             const lines = await fetchPOProductsByPOId(base, toNum(poId));
             const ml = lines.find(l => toNum(l.product_id) === toNum(productId) && toNum(l.branch_id) === toNum(branchId));
@@ -832,32 +845,66 @@ export async function POST(req: NextRequest) {
                 uPrice = toNum(pj2?.data?.cost_per_unit || 0);
             }
 
-            const ensured = await ensureOpenReceivingRow({
-                base, poId: toNum(poId), productId: toNum(productId), branchId: toNum(branchId),
-                unitPrice: uPrice, discountTypeId: null, discountPercent: 0
-            });
+            // 1-to-1 Architecture: Fetch ALL existing draft parent rows for this product & branch
+            const existingPorsRes = await fetchJson<{ data: any[] }>(`${base}/items/${POR_COLLECTION}?filter[purchase_order_id][_eq]=${encodeURIComponent(String(poId))}&filter[product_id][_eq]=${encodeURIComponent(String(productId))}&filter[branch_id][_eq]=${encodeURIComponent(String(branchId))}&filter[isPosted][_eq]=0&filter[receipt_no][_null]=true&filter[is_reverted][_neq]=1&fields=purchase_order_product_id`).catch(() => null);
+            const draftPorIds = (existingPorsRes?.data || []).map(r => r.purchase_order_product_id);
 
-            const payload: Record<string, unknown> = {
-                purchase_order_receiving_id: ensured.porId,
-                product_id: toNum(productId),
-                serial_number: String(sn).trim(),
-            };
-            if (tareWeight) payload.tare_weight = parseFloat(tareWeight);
-            if (expiryDate) payload.expiry_date = expiryDate;
-            payload.created_at = nowISO();
-
-            // ✅ Fix 6: Audit fields support - directus API populates created/modified fields automatically from the vos_access_token.
-            try {
-                await fetchJson(`${base}/items/purchase_order_receiving_serial`, {
-                    method: "POST",
-                    body: JSON.stringify(payload)
-                });
-            } catch (e: unknown) {
-                const msg = String((e as Error).message).toLowerCase();
-                // ✅ Fix: Catch Directus unique constraint errors
-                if (!msg.includes("duplicate") && !msg.includes("unique")) throw e;
+            // Fetch ALL existing child rows for these drafts
+            let extData: any[] = [];
+            if (draftPorIds.length > 0) {
+                const existingRows = await fetchJson<{ data: Array<{ receiving_item_id: number; serial_number: string }> }>(`${base}/items/purchase_order_receiving_serial?filter[purchase_order_receiving_id][_in]=${draftPorIds.join(',')}&fields=receiving_item_id,serial_number`).catch(() => null);
+                extData = existingRows?.data || [];
             }
-            return ok({ success: true, porId: ensured.porId });
+
+            // PURE APPEND: We only process the incoming serials. We NEVER delete existing drafts here!
+            for (const sObj of serials) {
+                const sn = String(sObj.sn || "").trim();
+                if (!sn) continue;
+                
+                const existingSerial = extData.find(r => r.serial_number === sn);
+                if (existingSerial) continue; // Already safely committed, ignore!
+
+                // Create a distinct 1-to-1 parent row
+                let tWeight: number | null = null;
+                if (sObj.tareWeight) {
+                    const tw = parseFloat(String(sObj.tareWeight));
+                    if (!isNaN(tw)) tWeight = tw;
+                }
+                
+                const patchPayload: any = { 
+                    purchase_order_id: poId,
+                    product_id: productId,
+                    branch_id: branchId,
+                    received_quantity: 1,
+                    unit_price: uPrice,
+                    total_amount: uPrice,
+                    discounted_amount: 0,
+                    vat_amount: 0,
+                    withholding_amount: 0,
+                    isPosted: 0,
+                    receipt_no: null,
+                    is_reverted: 0
+                };
+                if (tWeight !== null) patchPayload.tare_weight = tWeight;
+                if (sObj.expiryDate) patchPayload.expiry_date = sObj.expiryDate;
+
+                const createdPor = await fetchJson<{ data: { purchase_order_product_id: number } }>(`${base}/items/${POR_COLLECTION}`, {
+                    method: "POST", body: JSON.stringify(patchPayload)
+                }).catch((e) => { console.warn("Failed to create parent 1-to-1 row", e); return null; });
+
+                if (createdPor?.data?.purchase_order_product_id) {
+                    const newPorId = createdPor.data.purchase_order_product_id;
+                    const childPayload: any = {
+                        purchase_order_receiving_id: newPorId,
+                        product_id: toNum(productId),
+                        serial_number: sn
+                    };
+                    if (tWeight !== null) childPayload.tare_weight = tWeight;
+                    await fetchJson(`${base}/items/purchase_order_receiving_serial`, { method: "POST", body: JSON.stringify(childPayload) }).catch(() => {});
+                }
+            }
+
+            return ok({ success: true });
         }
 
         if (action === "delete_presaved_serial") {
@@ -874,6 +921,42 @@ export async function POST(req: NextRequest) {
                 }).catch(() => { });
             }
             return ok({ success: true });
+        }
+
+        if (action === "fetch_receipted_serials") {
+            const { poId, productId, branchId } = body;
+            if (!poId || !productId || !branchId) return bad("Missing fields", 400);
+
+            const porRows = await fetchPORByPOIds(base, [toNum(poId)]);
+            const targetPors = porRows.filter(r => 
+                toNum(r.product_id) === toNum(productId) && 
+                toNum(r.branch_id) === toNum(branchId) && 
+                toNum(r.is_reverted) !== 1
+            );
+            
+            if (targetPors.length === 0) return ok([]);
+
+            const porIds = targetPors.map(p => p.purchase_order_product_id);
+            const serialsUrl = `${base}/items/purchase_order_receiving_serial?limit=-1&filter[purchase_order_receiving_id][_in]=${porIds.join(",")}&fields=serial_number,tare_weight,purchase_order_receiving_id.purchase_order_product_id,purchase_order_receiving_id.tare_weight,purchase_order_receiving_id.expiry_date,purchase_order_receiving_id`;
+            const serialsRes = await fetchJson<{ data: any[] }>(serialsUrl).catch(() => null);
+            
+            const history = (serialsRes?.data || []).map(s => {
+                const relId = typeof s.purchase_order_receiving_id === 'object'
+                    ? (s.purchase_order_receiving_id?.id ?? s.purchase_order_receiving_id?.purchase_order_product_id)
+                    : s.purchase_order_receiving_id;
+                const por = targetPors.find(p => toNum(p.purchase_order_product_id) === toNum(relId));
+                const dbTare = typeof s.purchase_order_receiving_id === 'object' ? s.purchase_order_receiving_id.tare_weight : null;
+                const dbExpiry = typeof s.purchase_order_receiving_id === 'object' ? s.purchase_order_receiving_id.expiry_date : null;
+                
+                return {
+                    sn: s.serial_number,
+                    tareWeight: s.tare_weight || dbTare || (por as any)?.tare_weight,
+                    expiryDate: dbExpiry || (por as any)?.expiry_date,
+                    receiptNo: por?.receipt_no || (toNum(por?.isPosted) === 1 ? "POSTED" : "DRAFT (Current Session)"),
+                    receivedDate: por?.received_date
+                };
+            });
+            return ok(history);
         }
 
         if (action === "delete_presaved_serials") {
@@ -952,13 +1035,29 @@ export async function POST(req: NextRequest) {
                         if (dt) { linePct = dt.pct; }
                     } else resolvedId = ensureId(dType);
 
-                    // ✅ Removed unused isExclLine
+                    const isSerialized = !!(productsMap.get(pid)?.is_serialized);
 
-                    const ensured = await ensureOpenReceivingRow({ base, poId: thePoId, productId: pid, branchId: bid, unitPrice: uPrice, discountTypeId: resolvedId, discountPercent: linePct, receiptNo });
-                    porCounts[String(ensured.porId)] = qty;
-                    delete porCounts[key];
-                    if (porMetaData?.[key]) { porMetaData[String(ensured.porId)] = porMetaData[key]; delete porMetaData[key]; }
-                    if (porSerials?.[key]) { porSerials[String(ensured.porId)] = porSerials[key]; delete porSerials[key]; }
+                    if (isSerialized) {
+                        // 1-to-1 Architecture: Fetch ALL existing open draft rows for this product/branch
+                        const draftPorsRes = await fetchJson<{ data: any[] }>(`${base}/items/${POR_COLLECTION}?filter[purchase_order_id][_eq]=${encodeURIComponent(String(thePoId))}&filter[product_id][_eq]=${encodeURIComponent(String(pid))}&filter[branch_id][_eq]=${encodeURIComponent(String(bid))}&filter[isPosted][_eq]=0&filter[receipt_no][_null]=true&filter[is_reverted][_neq]=1&fields=purchase_order_product_id`).catch(() => null);
+                        const draftPors = draftPorsRes?.data || [];
+                        
+                        for (const draftPor of draftPors) {
+                            const dId = String(draftPor.purchase_order_product_id);
+                            porCounts[dId] = 1;
+                            if (porMetaData?.[key]) porMetaData[dId] = porMetaData[key];
+                        }
+                        
+                        delete porCounts[key];
+                        if (porMetaData?.[key]) delete porMetaData[key];
+                        if (porSerials?.[key]) delete porSerials[key]; // Serials are strictly handled by sync_draft_serials for 1-to-1
+                    } else {
+                        const ensured = await ensureOpenReceivingRow({ base, poId: thePoId, productId: pid, branchId: bid, unitPrice: uPrice, discountTypeId: resolvedId, discountPercent: linePct, receiptNo });
+                        porCounts[String(ensured.porId)] = qty;
+                        delete porCounts[key];
+                        if (porMetaData?.[key]) { porMetaData[String(ensured.porId)] = porMetaData[key]; delete porMetaData[key]; }
+                        if (porSerials?.[key]) { porSerials[String(ensured.porId)] = porSerials[key]; delete porSerials[key]; }
+                    }
                 }
             }
             const meta = (porMetaData && typeof porMetaData === "object") ? porMetaData : {};
@@ -1067,6 +1166,7 @@ export async function POST(req: NextRequest) {
                     received_date: nowISO(),
                     isPosted: 0, // Always draft in PO Receiving
                     is_reverted: 0,
+                    receipt_no: receiptNo, // ✅ FIX: Attach the row to the receipt so it stops being an active draft session
                     discount_type: dtId || null, discounted_amount: lineDisc,
                     vat_amount: vatAmtTotal, withholding_amount: ewtAmtTotal,
                     total_amount: Number(lineGross.toFixed(2))
@@ -1084,115 +1184,117 @@ export async function POST(req: NextRequest) {
                 });
 
                 // ✅ Optimal Diffing Strategy: Calculate exact Inserts, Updates, and Deletes using the unique serial_number to prevent ID burn and ensure minimal database churn.
-                const serials = Array.isArray(porSerials?.[targetPorId]) ? porSerials[targetPorId] : [];
+                if (!isSerialized) {
+                    const serials = Array.isArray(porSerials?.[targetPorId]) ? porSerials[targetPorId] : [];
 
-                const incomingMap = new Map<string, unknown>();
-                for (const sObj of serials) {
-                    const snValue = typeof sObj === 'object' ? (sObj as Record<string, unknown>).sn : sObj;
-                    if (snValue) incomingMap.set(String(snValue).trim(), sObj);
-                }
+                    const incomingMap = new Map<string, unknown>();
+                    for (const sObj of serials) {
+                        const snValue = typeof sObj === 'object' ? (sObj as Record<string, unknown>).sn : sObj;
+                        if (snValue) incomingMap.set(String(snValue).trim(), sObj);
+                    }
 
-                const existingRows: Array<{ receiving_item_id: number; serial_number: string; purchase_order_receiving_id?: Record<string, unknown> | number | string }> = [];
-                // 1. Fetch serials already assigned to this targetPorId
-                const ext1 = await fetchJson<{ data: Array<{ receiving_item_id: number; serial_number: string; purchase_order_receiving_id?: Record<string, unknown> | number | string }> }>(`${base}/items/purchase_order_receiving_serial?filter[purchase_order_receiving_id][_eq]=${targetPorId}&fields=receiving_item_id,serial_number,purchase_order_receiving_id.purchase_order_product_id,purchase_order_receiving_id.receipt_no`).catch(() => null);
-                if (ext1?.data) existingRows.push(...ext1.data);
+                    const existingRows: Array<{ receiving_item_id: number; serial_number: string; purchase_order_receiving_id?: Record<string, unknown> | number | string }> = [];
+                    // 1. Fetch serials already assigned to this targetPorId
+                    const ext1 = await fetchJson<{ data: Array<{ receiving_item_id: number; serial_number: string; purchase_order_receiving_id?: Record<string, unknown> | number | string }> }>(`${base}/items/purchase_order_receiving_serial?filter[purchase_order_receiving_id][_eq]=${targetPorId}&fields=receiving_item_id,serial_number,purchase_order_receiving_id.purchase_order_product_id,purchase_order_receiving_id.receipt_no`).catch(() => null);
+                    if (ext1?.data) existingRows.push(...ext1.data);
 
-                // 2. Fetch pre-saved serials by their exact serial numbers
-                const incomingSnList = Array.from(incomingMap.keys());
-                if (incomingSnList.length > 0) {
-                    const chunkSize = 20; // chunk to safely stay within URI length limits
-                    for (let i = 0; i < incomingSnList.length; i += chunkSize) {
-                        const chunk = incomingSnList.slice(i, i + chunkSize);
-                        const inQuery = chunk.map(s => encodeURIComponent(s)).join(',');
-                        const ext2 = await fetchJson<{ data: Array<{ receiving_item_id: number; serial_number: string; purchase_order_receiving_id?: Record<string, unknown> | number | string }> }>(`${base}/items/purchase_order_receiving_serial?filter[serial_number][_in]=${inQuery}&fields=receiving_item_id,serial_number,purchase_order_receiving_id.purchase_order_product_id,purchase_order_receiving_id.receipt_no`).catch(() => null);
-                        if (ext2?.data) {
-                            for (const row of ext2.data) {
-                                if (!existingRows.some(r => r.receiving_item_id === row.receiving_item_id)) {
-                                    existingRows.push(row);
+                    // 2. Fetch pre-saved serials by their exact serial numbers
+                    const incomingSnList = Array.from(incomingMap.keys());
+                    if (incomingSnList.length > 0) {
+                        const chunkSize = 20; // chunk to safely stay within URI length limits
+                        for (let i = 0; i < incomingSnList.length; i += chunkSize) {
+                            const chunk = incomingSnList.slice(i, i + chunkSize);
+                            const inQuery = chunk.map(s => encodeURIComponent(s)).join(',');
+                            const ext2 = await fetchJson<{ data: Array<{ receiving_item_id: number; serial_number: string; purchase_order_receiving_id?: Record<string, unknown> | number | string }> }>(`${base}/items/purchase_order_receiving_serial?filter[serial_number][_in]=${inQuery}&fields=receiving_item_id,serial_number,purchase_order_receiving_id.purchase_order_product_id,purchase_order_receiving_id.receipt_no`).catch(() => null);
+                            if (ext2?.data) {
+                                for (const row of ext2.data) {
+                                    if (!existingRows.some(r => r.receiving_item_id === row.receiving_item_id)) {
+                                        existingRows.push(row);
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                const toDeleteIds: number[] = [];
-                const toPost: Record<string, unknown>[] = [];
-                const toPatch: { id: number, payload: Record<string, unknown> }[] = [];
+                    const toDeleteIds: number[] = [];
+                    const toPost: Record<string, unknown>[] = [];
+                    const toPatch: { id: number, payload: Record<string, unknown> }[] = [];
 
-                // 2.5 Guard against stealing serials from other receipts
-                for (const row of existingRows) {
-                    const existingPor = row.purchase_order_receiving_id;
-                    const existingPorId = typeof existingPor === 'object' ? existingPor?.purchase_order_product_id : existingPor;
-                    const existingReceiptNo = typeof existingPor === 'object' ? existingPor?.receipt_no : null;
+                    // 2.5 Guard against stealing serials from other receipts
+                    for (const row of existingRows) {
+                        const existingPor = row.purchase_order_receiving_id;
+                        const existingPorId = typeof existingPor === 'object' ? existingPor?.purchase_order_product_id : existingPor;
+                        const existingReceiptNo = typeof existingPor === 'object' ? existingPor?.receipt_no : null;
 
-                    if (Number(existingPorId) !== Number(targetPorId)) {
-                        if (existingReceiptNo && existingReceiptNo !== receiptNo) {
-                            throw new Error(`Serial ${row.serial_number} already belongs to receipt ${existingReceiptNo}. Cannot re-receive.`);
-                        }
-                    }
-                }
-
-                // 3. Identify Deletes (serial exists in DB under THIS receipt, but no longer in incoming array)
-                for (const row of existingRows) {
-                    const existingPor = row.purchase_order_receiving_id;
-                    const existingPorId = typeof existingPor === 'object' ? existingPor?.purchase_order_product_id : existingPor;
-                    if (Number(existingPorId) === Number(targetPorId) && !incomingMap.has(row.serial_number)) {
-                        toDeleteIds.push(row.receiving_item_id);
-                    }
-                }
-
-                const pObj = productsMap.get(pId);
-                const effectiveProductId = (pObj?.parent_id && toNum(pObj.parent_id) > 0) ? toNum(pObj.parent_id) : Number(pId);
-
-                // 2. Identify Inserts and Updates
-                for (const [snStr, sObj] of incomingMap.entries()) {
-                    const existing = existingRows.find(r => r.serial_number === snStr);
-
-                    const serialPayload: Record<string, unknown> = {
-                        purchase_order_receiving_id: Number(targetPorId),
-                        product_id: effectiveProductId,
-                        serial_number: snStr,
-                    };
-
-                    if (typeof sObj === 'object' && sObj !== null) {
-                        const typedObj = sObj as { tareWeight?: unknown; expiryDate?: unknown };
-                        const tareWeight = formatTareWeightForCommit(typedObj.tareWeight);
-                        if (tareWeight !== null) {
-                            serialPayload.tare_weight = parseFloat(tareWeight);
-                        }
-                        if (typedObj.expiryDate) {
-                            serialPayload.expiry_date = typedObj.expiryDate;
+                        if (Number(existingPorId) !== Number(targetPorId)) {
+                            if (existingReceiptNo && existingReceiptNo !== receiptNo) {
+                                throw new Error(`Serial ${row.serial_number} already belongs to receipt ${existingReceiptNo}. Cannot re-receive.`);
+                            }
                         }
                     }
 
-                    if (existing) {
-                        toPatch.push({ id: existing.receiving_item_id, payload: serialPayload });
-                    } else {
-                        serialPayload.created_at = nowISO();
-                        toPost.push(serialPayload);
+                    // 3. Identify Deletes (serial exists in DB under THIS receipt, but no longer in incoming array)
+                    for (const row of existingRows) {
+                        const existingPor = row.purchase_order_receiving_id;
+                        const existingPorId = typeof existingPor === 'object' ? existingPor?.purchase_order_product_id : existingPor;
+                        if (Number(existingPorId) === Number(targetPorId) && !incomingMap.has(row.serial_number)) {
+                            toDeleteIds.push(row.receiving_item_id);
+                        }
                     }
-                }
 
-                // 3. Queue the Database Operations
-                if (toDeleteIds.length > 0) {
-                    rollbackTracker.push({
-                        execute: async () => { await fetchJson(`${base}/items/purchase_order_receiving_serial`, { method: "DELETE", body: JSON.stringify(toDeleteIds) }).catch(() => { }); },
-                        undo: async () => { }
-                    });
-                }
+                    const pObj = productsMap.get(pId);
+                    const effectiveProductId = (pObj?.parent_id && toNum(pObj.parent_id) > 0) ? toNum(pObj.parent_id) : Number(pId);
 
-                for (const patch of toPatch) {
-                    rollbackTracker.push({
-                        execute: async () => { await fetchJson(`${base}/items/purchase_order_receiving_serial/${patch.id}`, { method: "PATCH", body: JSON.stringify(patch.payload) }); },
-                        undo: async () => { }
-                    });
-                }
+                    // 2. Identify Inserts and Updates
+                    for (const [snStr, sObj] of incomingMap.entries()) {
+                        const existing = existingRows.find(r => r.serial_number === snStr);
 
-                for (const post of toPost) {
-                    rollbackTracker.push({
-                        execute: async () => { await fetchJson(`${base}/items/purchase_order_receiving_serial`, { method: "POST", body: JSON.stringify(post) }); },
-                        undo: async () => { await fetchJson(`${base}/items/purchase_order_receiving_serial?filter[serial_number][_eq]=${encodeURIComponent(post.serial_number as string)}`, { method: "DELETE" }).catch(() => { }); }
-                    });
+                        const serialPayload: Record<string, unknown> = {
+                            purchase_order_receiving_id: Number(targetPorId),
+                            product_id: effectiveProductId,
+                            serial_number: snStr,
+                        };
+
+                        if (typeof sObj === 'object' && sObj !== null) {
+                            const typedObj = sObj as { tareWeight?: unknown; expiryDate?: unknown };
+                            const tareWeight = formatTareWeightForCommit(typedObj.tareWeight);
+                            if (tareWeight !== null) {
+                                serialPayload.tare_weight = parseFloat(tareWeight);
+                            }
+                            if (typedObj.expiryDate) {
+                                serialPayload.expiry_date = typedObj.expiryDate;
+                            }
+                        }
+
+                        if (existing) {
+                            toPatch.push({ id: existing.receiving_item_id, payload: serialPayload });
+                        } else {
+                            serialPayload.created_at = nowISO();
+                            toPost.push(serialPayload);
+                        }
+                    }
+
+                    // 3. Queue the Database Operations
+                    if (toDeleteIds.length > 0) {
+                        rollbackTracker.push({
+                            execute: async () => { await fetchJson(`${base}/items/purchase_order_receiving_serial`, { method: "DELETE", body: JSON.stringify(toDeleteIds) }).catch(() => { }); },
+                            undo: async () => { }
+                        });
+                    }
+
+                    for (const patch of toPatch) {
+                        rollbackTracker.push({
+                            execute: async () => { await fetchJson(`${base}/items/purchase_order_receiving_serial/${patch.id}`, { method: "PATCH", body: JSON.stringify(patch.payload) }); },
+                            undo: async () => { }
+                        });
+                    }
+
+                    for (const post of toPost) {
+                        rollbackTracker.push({
+                            execute: async () => { await fetchJson(`${base}/items/purchase_order_receiving_serial`, { method: "POST", body: JSON.stringify(post) }); },
+                            undo: async () => { await fetchJson(`${base}/items/purchase_order_receiving_serial?filter[serial_number][_eq]=${encodeURIComponent(post.serial_number as string)}`, { method: "DELETE" }).catch(() => { }); }
+                        });
+                    }
                 }
             }
 
@@ -1341,6 +1443,7 @@ export async function POST(req: NextRequest) {
                     productId: String(pid), branchId: String(bid), name: toStr(p?.product_name, `Product #${pid}`),
                     barcode: productDisplayCode(p, pid), uom: String(p?.unit_of_measurement?.unit_shortcut ?? "BOX").toUpperCase(),
                     expectedQty: startingBalance, receivedQty: currRecQty, requiresRfid: false,
+                    isSerialized: !!p?.is_serialized,
                     isReceived: currRecQty >= startingBalance && startingBalance > 0, unitPrice: toNum(ln.unit_price),
                     discountType: lineDiscountTypeStr, discountAmount: dAmt, netAmount: currRecQty * (toNum(ln.unit_price) - dAmt)
                 }]);
@@ -1372,6 +1475,7 @@ export async function POST(req: NextRequest) {
                     productId: String(pid), branchId: String(bid), name: toStr(p?.product_name, `Product #${pid}`),
                     barcode: productDisplayCode(p, pid), uom: String(p?.unit_of_measurement?.unit_shortcut ?? "BOX").toUpperCase(),
                     expectedQty: 0, receivedQty: recQty, requiresRfid: false,
+                    isSerialized: !!p?.is_serialized,
                     isReceived: true, unitPrice: toNum(r.unit_price),
                     discountType: lineDiscountTypeStr, discountAmount: dAmt, netAmount: recQty * (toNum(r.unit_price) - dAmt)
                 }]);
@@ -1433,7 +1537,8 @@ export async function POST(req: NextRequest) {
                     unitPrice: toNum(p.cost_per_unit),
                     uom: "BOX",
                     discountType: discTypeStr,
-                    discountPercent: discPct
+                    discountPercent: discPct,
+                    isSerialized: !!p.is_serialized
                 };
             }).filter(Boolean);
 

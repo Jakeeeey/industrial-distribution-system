@@ -13,6 +13,8 @@ export function SelectProductsStep({ onContinue }: { onContinue: () => void }) {
         setScannedCountByPorId
     } = useReceivingProducts();
 
+    const [editingIds, setEditingIds] = React.useState<Set<string>>(new Set());
+
     // Initialize state from draftData if empty
     React.useEffect(() => {
         if (!selectedPO?.draftData) return;
@@ -20,8 +22,8 @@ export function SelectProductsStep({ onContinue }: { onContinue: () => void }) {
 
         const initialCounts: Record<string, number> = {};
         selectedPO.draftData.forEach(draft => {
-            // Default to receiving all available tagged quantity
-            initialCounts[String(draft.porId)] = draft.receivedQuantity;
+            // Default to 0 (unselected) so they show "Select" button initially
+            initialCounts[String(draft.porId)] = 0;
         });
         setScannedCountByPorId(initialCounts);
     }, [selectedPO?.draftData, scannedCountByPorId, setScannedCountByPorId]);
@@ -115,14 +117,42 @@ export function SelectProductsStep({ onContinue }: { onContinue: () => void }) {
                                                 </span>
                                             </td>
                                             <td className="px-4 py-3">
-                                                <Input 
-                                                    type="number" 
-                                                    min={0}
-                                                    max={maxQty}
-                                                    value={currentQty}
-                                                    onChange={(e) => handleQuantityChange(porIdStr, e.target.value, maxQty)}
-                                                    className="h-8 w-24 text-right"
-                                                />
+                                                {!editingIds.has(porIdStr) ? (
+                                                    <Button 
+                                                        variant="outline" 
+                                                        size="sm" 
+                                                        onClick={() => {
+                                                            setEditingIds(prev => new Set(prev).add(porIdStr));
+                                                        }}
+                                                        className="h-8 text-xs font-semibold"
+                                                    >
+                                                        Select
+                                                    </Button>
+                                                ) : (
+                                                    <div className="flex items-center gap-2">
+                                                        <Input 
+                                                            type="number" 
+                                                            min={1}
+                                                            max={maxQty}
+                                                            value={currentQty || ""}
+                                                            onChange={(e) => handleQuantityChange(porIdStr, e.target.value, maxQty)}
+                                                            className="h-8 w-20 text-right font-medium"
+                                                        />
+                                                        <Button 
+                                                            variant="ghost" 
+                                                            size="sm" 
+                                                            onClick={() => {
+                                                                const next = new Set(editingIds);
+                                                                next.delete(porIdStr);
+                                                                setEditingIds(next);
+                                                                handleQuantityChange(porIdStr, "0", maxQty);
+                                                            }}
+                                                            className="h-8 px-2 text-xs font-semibold text-slate-500 hover:text-slate-800"
+                                                        >
+                                                            Close
+                                                        </Button>
+                                                    </div>
+                                                )}
                                             </td>
                                         </tr>
                                     );
@@ -136,7 +166,7 @@ export function SelectProductsStep({ onContinue }: { onContinue: () => void }) {
             <div className="flex justify-end gap-2 mt-4">
                 <Button 
                     onClick={handleContinue}
-                    disabled={draftItems.length === 0}
+                    disabled={draftItems.length === 0 || !Object.values(scannedCountByPorId).some(qty => qty > 0)}
                 >
                     Continue to Details
                 </Button>

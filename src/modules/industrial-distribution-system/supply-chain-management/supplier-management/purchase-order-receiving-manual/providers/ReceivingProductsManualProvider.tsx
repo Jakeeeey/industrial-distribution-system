@@ -573,7 +573,7 @@ export function ReceivingProductsManualProvider({ children, receiverId, receiver
 
 
     // ✅ NEW: Add extra product locally with duplicate check
-    const addExtraProductLocally = React.useCallback((item: { productId: string; name: string; barcode: string; branchId: string; branchName: string; unitPrice?: number; discountType?: string; discountPercent?: number; uom?: string; sku?: string; }) => {
+    const addExtraProductLocally = React.useCallback((item: { productId: string; name: string; barcode: string; branchId: string; branchName: string; unitPrice?: number; discountType?: string; discountPercent?: number; uom?: string; sku?: string; isSerialized?: boolean; }) => {
         let added = false;
         setSelectedPO(prev => {
             if (!prev) return prev;
@@ -606,6 +606,7 @@ export function ReceivingProductsManualProvider({ children, receiverId, receiver
                     taggedQty: 0,
                     rfids: [],
                     isReceived: false,
+                    isSerialized: !!item.isSerialized,
                     unitPrice: uPrice,
                     discountType: item.discountType || "Standard",
                     discountAmount: dAmt,

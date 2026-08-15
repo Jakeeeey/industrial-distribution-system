@@ -327,7 +327,7 @@ async function fetchPORByPOIds(base: string, poIds: number[]) {
 
 
 async function fetchPOProductsByPOId(base: string, poId: number) {
-    const url = `${base}/items/${PO_PRODUCTS_COLLECTION}?limit=-1&filter[purchase_order_id][_eq]=${encodeURIComponent(String(poId))}&fields=purchase_order_product_id,purchase_order_id,product_id,branch_id,ordered_quantity,unit_price,total_amount,discount_type.*`;
+    const url = `${base}/items/${PO_PRODUCTS_COLLECTION}?limit=-1&filter[purchase_order_id][_eq]=${encodeURIComponent(String(poId))}&fields=purchase_order_product_id,purchase_order_id,product_id,branch_id,ordered_quantity,unit_price,total_amount,discount_type.*,discount_type.line_per_discount_type.line_id.*`;
     const j = await fetchJson<{ data: POProductRow[] }>(url);
     return (j?.data ?? []);
 }
@@ -534,16 +534,29 @@ function resolveLineDiscount(args: {
     let lineDiscountPercent = 0;
     let lineDiscountTypeStr = "No Discount";
 
-    const resolvedLineId = ensureId(lineDiscountTypeId);
-    if (resolvedLineId) {
-        const dt = discountMap.get(String(resolvedLineId));
-        if (dt) {
-            lineDiscountPercent = dt.pct;
-            lineDiscountTypeStr = dt.name;
+    if (typeof lineDiscountType === 'object' && lineDiscountType !== null) {
+        const dType = lineDiscountType as any;
+        lineDiscountTypeStr = dType.discount_type || dType.name || "No Discount";
+        const dLines = dType.line_per_discount_type || [];
+        if (dLines.length > 0) {
+            lineDiscountPercent = calculateDiscountFromLines(dLines);
+        } else if (toNum(dType.total_percent) > 0) {
+            lineDiscountPercent = toNum(dType.total_percent);
+        } else {
+            lineDiscountPercent = deriveDiscountPercentFromCode(lineDiscountTypeStr);
         }
-    } else if (headerDiscountPercent > 0) {
-        lineDiscountPercent = headerDiscountPercent;
-        lineDiscountTypeStr = headerDiscountType ? toStr(headerDiscountType.discount_type || headerDiscountType.discount_code || headerDiscountType.name, "No Discount") : "No Discount";
+    } else {
+        const resolvedLineId = ensureId(lineDiscountTypeId);
+        if (resolvedLineId) {
+            const dt = discountMap.get(String(resolvedLineId));
+            if (dt) {
+                lineDiscountPercent = dt.pct;
+                lineDiscountTypeStr = dt.name;
+            }
+        } else if (headerDiscountPercent > 0) {
+            lineDiscountPercent = headerDiscountPercent;
+            lineDiscountTypeStr = headerDiscountType ? toStr((headerDiscountType as any).discount_type || (headerDiscountType as any).discount_code || (headerDiscountType as any).name, "No Discount") : "No Discount";
+        }
     }
 
     const dAmount = unitPrice * (lineDiscountPercent / 100);

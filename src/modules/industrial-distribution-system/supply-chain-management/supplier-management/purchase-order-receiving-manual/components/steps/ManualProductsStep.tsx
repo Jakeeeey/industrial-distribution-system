@@ -19,7 +19,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { AlertTriangle, Plus, Trash2, QrCode, Package, ChevronRight, ChevronLeft } from "lucide-react";
+import { AlertTriangle, Plus, Trash2, QrCode, Package, ChevronRight, ChevronLeft, Lock, History } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { CylinderRegistrationModal } from "../CylinderRegistrationModal";
 
@@ -58,6 +58,36 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
     
     // ✅ Registration Modal state
     const [pendingRegistration, setPendingRegistration] = React.useState<{ serial: string; productId?: string | number; productName?: string; branchId?: string | number } | null>(null);
+
+    // ✅ History Modal state
+    const [historyModalOpen, setHistoryModalOpen] = React.useState(false);
+    const [historyLoading, setHistoryLoading] = React.useState(false);
+    const [historyData, setHistoryData] = React.useState<any[]>([]);
+    const [historyProductName, setHistoryProductName] = React.useState("");
+
+    const openHistoryModal = async (productId: string | number, branchId: string | number | undefined, name: string) => {
+        setHistoryProductName(name);
+        setHistoryModalOpen(true);
+        setHistoryLoading(true);
+        try {
+            const res = await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "fetch_receipted_serials",
+                    poId: selectedPO?.id,
+                    productId,
+                    branchId
+                })
+            });
+            const json = await res.json();
+            setHistoryData(json.data || []);
+        } catch (e) {
+            toast.error("Failed to fetch history");
+        } finally {
+            setHistoryLoading(false);
+        }
+    };
 
     // ✅ Auto-focus input when modal opens
     React.useEffect(() => {
@@ -143,13 +173,8 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
     const openSerialModal = (id: string, name: string) => {
         setActivePorId(id);
         setActiveProductName(name);
-        const existingSerials = (serialsByPorId[id] || []).map(s => ({
-            sn: s.sn,
-            tareWeight: s.tareWeight || "",
-            expiryDate: s.expiryDate || todayYMD(),
-            isSaved: s.isSaved
-        }));
-        setTempSerials(existingSerials);
+        // ✅ ALWAYS start the modal empty as a clean staging area for the CURRENT scan session
+        setTempSerials([]);
         setNewSerial("");
         setNewTare("");
         setNewExpiry("");
@@ -274,14 +299,6 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
     };
 
     const removeSerial = (index: number) => {
-        const serialToRemove = tempSerials[index];
-        if (serialToRemove) {
-            fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "deregister_serial", serialNumber: serialToRemove.sn })
-            }).catch(() => null);
-        }
         setTempSerials(tempSerials.filter((_, i) => i !== index));
     };
 
@@ -310,55 +327,38 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
 
         if (activePorId) {
             // 1. Write to React state immediately (fast, does not block UI)
-            setSerialsByPorId(prev => ({ ...prev, [activePorId]: finalSerials }));
-            setManualCounts(prev => ({ ...prev, [activePorId]: finalSerials.length }));
+            setSerialsByPorId(prev => {
+                const existing = prev[activePorId] || [];
+                // ✅ Append newly scanned serials to existing history
+                const merged = [...existing, ...finalSerials];
+                return { ...prev, [activePorId]: merged };
+            });
+            
+            setManualCounts(prev => {
+                const existing = serialsByPorId[activePorId] || [];
+                const newLength = existing.length + finalSerials.length;
+                return { ...prev, [activePorId]: newLength };
+            });
+            
             toast.success("Progress Saved", { description: `${finalSerials.length} serials committed.` });
 
-            // 2. ✅ FIX: Persist serials to DB via presave_serial — ensures durability before save_receipt
-            // Diff against the serials that were loaded when the modal was opened (pre-existing)
-            const preExistingSet = new Set((serialsByPorId[activePorId] || []).map(s => s.sn));
-            const finalSet = new Set(finalSerials.map(s => s.sn));
-
-            // Identify NEW serials to insert
-            const toPresave = finalSerials.filter(s => !preExistingSet.has(s.sn));
-
-            // Identify REMOVED serials to delete
-            const toDelete = (serialsByPorId[activePorId] || [])
-                .filter(s => !finalSet.has(s.sn))
-                .map(s => s.sn);
-
+            // 2. ✅ FIX: Persist ONLY the newly scanned serials atomically to DB via sync_draft_serials
             const poId = selectedPO?.id;
             const productId = activeItem?.productId;
             const branchId = activeItem?.branchId;
 
             if (poId && productId && branchId) {
-                // Fire-and-forget: persist new serials in parallel
-                if (toPresave.length > 0) {
-                    Promise.all(
-                        toPresave.map(s =>
-                            fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                    action: "presave_serial",
-                                    poId,
-                                    productId,
-                                    branchId,
-                                    serial: { sn: s.sn, tareWeight: s.tareWeight, expiryDate: s.expiryDate, isSaved: s.isSaved },
-                                }),
-                            }).catch(e => console.warn("[presave_serial] Non-blocking failure:", e))
-                        )
-                    );
-                }
-
-                // Fire-and-forget: delete removed serials in parallel
-                if (toDelete.length > 0) {
-                    fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ action: "delete_presaved_serials", serialNumbers: toDelete }),
-                    }).catch(e => console.warn("[delete_presaved_serials] Non-blocking failure:", e));
-                }
+                fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        action: "sync_draft_serials",
+                        poId,
+                        productId,
+                        branchId,
+                        serials: finalSerials,
+                    }),
+                }).catch(e => console.warn("[sync_draft_serials] Non-blocking failure:", e));
             }
         }
         setSerialModalOpen(false);
@@ -439,8 +439,23 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                                                     {it.branchName}
                                                 </Badge>
                                             </TableCell>
-                                            <TableCell className="text-center font-black text-[10px] text-slate-500">{expected}</TableCell>
-                                            <TableCell className="text-center font-black text-[10px] text-emerald-600/70">{receivedAtStart}</TableCell>
+                                            <TableCell className="text-center font-black text-[10px] text-slate-500">{Math.max(0, expected - receivedAtStart)}</TableCell>
+                                            <TableCell className="text-center font-black text-[10px] text-emerald-600/70">
+                                                <div className="flex items-center justify-center gap-1">
+                                                    {receivedAtStart}
+                                                    {receivedAtStart > 0 && it.isSerialized && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-5 w-5 rounded-full hover:bg-emerald-50 text-emerald-600/70 hover:text-emerald-700"
+                                                            onClick={() => openHistoryModal(it.productId, it.branchId, it.name)}
+                                                            title="View Receipt History"
+                                                        >
+                                                            <History className="w-3 h-3" />
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            </TableCell>
                                             <TableCell className="text-right px-4">
                                                 {it.isSerialized ? (
                                                     <Button
@@ -834,7 +849,14 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                                                 tempSerials.map((item, idx) => (
                                                     <TableRow key={idx} className="group border-slate-50 dark:border-slate-900 hover:bg-slate-50/50 dark:hover:bg-slate-900/50">
                                                         <TableCell className="py-2 px-4 font-mono text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                                                            {item.sn}
+                                                            <div className="flex items-center gap-2">
+                                                                {item.sn}
+                                                                {item.isSaved && (
+                                                                    <Badge variant="outline" className="text-[7px] h-4 px-1 py-0 uppercase border-slate-300 text-slate-500 tracking-widest bg-slate-100 flex items-center">
+                                                                        <Lock className="w-2.5 h-2.5 mr-0.5" /> Saved
+                                                                    </Badge>
+                                                                )}
+                                                            </div>
                                                         </TableCell>
                                                         <TableCell className="py-2 text-center font-bold text-[10px] text-slate-500">
                                                             {item.tareWeight || "-"}
@@ -898,6 +920,60 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                     userId={receiverId}
                 />
             )}
+
+            <Dialog open={historyModalOpen} onOpenChange={setHistoryModalOpen}>
+                <DialogContent className="max-w-2xl bg-white dark:bg-slate-950 rounded-3xl border-0 shadow-2xl p-0 overflow-hidden flex flex-col h-[80vh]">
+                    <div className="shrink-0 p-6 bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 flex flex-col gap-1">
+                        <DialogTitle className="text-xl font-black text-primary uppercase tracking-tight">Receipt History</DialogTitle>
+                        <DialogDescription className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            {historyProductName}
+                        </DialogDescription>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto p-6 bg-slate-50/30">
+                        {historyLoading ? (
+                            <div className="h-full flex items-center justify-center text-sm font-bold text-slate-400 uppercase tracking-widest">
+                                Loading History...
+                            </div>
+                        ) : historyData.length === 0 ? (
+                            <div className="h-full flex items-center justify-center text-sm font-bold text-slate-400 uppercase tracking-widest">
+                                No receipted history found.
+                            </div>
+                        ) : (
+                            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+                                <Table>
+                                    <TableHeader className="bg-slate-50">
+                                        <TableRow>
+                                            <TableHead className="text-[9px] font-black uppercase tracking-widest text-slate-500">Serial No</TableHead>
+                                            <TableHead className="text-[9px] font-black uppercase tracking-widest text-slate-500 text-center">Tare</TableHead>
+                                            <TableHead className="text-[9px] font-black uppercase tracking-widest text-slate-500 text-center">Expiry</TableHead>
+                                            <TableHead className="text-[9px] font-black uppercase tracking-widest text-slate-500 text-right">Receipt No</TableHead>
+                                            <TableHead className="text-[9px] font-black uppercase tracking-widest text-slate-500 text-right">Date</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {historyData.map((h, i) => (
+                                            <TableRow key={i}>
+                                                <TableCell className="font-mono text-[11px] font-bold text-slate-700">{h.sn}</TableCell>
+                                                <TableCell className="text-center font-bold text-[10px] text-slate-500">{h.tareWeight || "-"}</TableCell>
+                                                <TableCell className="text-center font-bold text-[10px] text-slate-500">{h.expiryDate || "-"}</TableCell>
+                                                <TableCell className="text-right font-mono text-[11px] font-bold text-emerald-700">
+                                                    <Badge variant="outline" className="text-[9px] h-5 bg-emerald-50 text-emerald-600 border-emerald-200">
+                                                        {h.receiptNo}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-right text-[10px] text-slate-500 font-medium">
+                                                    {h.receivedDate ? h.receivedDate.split("T")[0] : "-"}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

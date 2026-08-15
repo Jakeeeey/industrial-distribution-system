@@ -179,7 +179,7 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
         if (draftMetaData && Object.keys(draftMetaData).length > 0) {
             const newLots: Record<string, string> = {};
             const newBatches: Record<string, string> = {};
-            
+
             Object.entries(draftMetaData).forEach(([porId, meta]) => {
                 if (meta.lotId) newLots[porId] = String(meta.lotId);
                 if (meta.batchNo) newBatches[porId] = meta.batchNo;
@@ -219,6 +219,30 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
         setClientSaveError("");
     }, [receiptSaved]);
 
+    const [editingIds, setEditingIds] = React.useState<Set<string>>(new Set());
+
+    // We use a state that ONLY accumulates IDs, so if a user types 0 in Step 2, the row NEVER disappears.
+    const [activePorIds, setActivePorIds] = React.useState<Set<string>>(() => {
+        const ids = new Set<string>();
+        Object.entries(scannedCountByPorId).forEach(([id, count]) => {
+            if (count > 0) ids.add(id);
+        });
+        return ids;
+    });
+
+    React.useEffect(() => {
+        setActivePorIds(prev => {
+            const next = new Set(prev);
+            Object.entries(scannedCountByPorId).forEach(([id, count]) => {
+                if (count > 0) next.add(id);
+            });
+            // Also preserve anything we are currently editing
+            editingIds.forEach(id => next.add(id));
+            if (next.size > prev.size) return next;
+            return prev;
+        });
+    }, [scannedCountByPorId, editingIds]);
+
     const safeCounts = scannedCountByPorId;
 
     // All active products (the ones checked/verified)
@@ -233,10 +257,10 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                     branchName: a?.branch?.name ?? "Unassigned",
                 }))
                 .filter((it) => {
-                    return (safeCounts[it.porId] || 0) > 0;
+                    return activePorIds.has(it.porId);
                 }) as Array<ReceivingPOItem & { branchName: string }>;
         });
-    }, [selectedPO, safeCounts]);
+    }, [selectedPO, activePorIds]);
 
     const filteredItems = React.useMemo(() => {
         const query = searchQuery.trim().toLowerCase();
@@ -248,23 +272,15 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
         );
     }, [allItems, searchQuery]);
 
-    const activeStep2Items = React.useMemo(() => {
-        return allItems.filter((it) => {
-            const porId = String(it.porId || it.id);
-            const scanned = safeCounts[porId] ?? 0;
-            return scanned > 0;
-        });
-    }, [allItems, safeCounts]);
-
     const filteredStep2Items = React.useMemo(() => {
         const query = searchQuery.trim().toLowerCase();
-        if (!query) return activeStep2Items;
-        return activeStep2Items.filter(
+        if (!query) return allItems;
+        return allItems.filter(
             (it) =>
                 String(it.name || "").toLowerCase().includes(query) ||
                 String(it.barcode || "").toLowerCase().includes(query)
         );
-    }, [activeStep2Items, searchQuery]);
+    }, [allItems, searchQuery]);
 
     const branchesLabel = React.useMemo(() => {
         const allocs = Array.isArray(selectedPO?.allocations) ? selectedPO!.allocations : [];
@@ -653,6 +669,11 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                                             const porId = String(it.porId || it.id);
                                             const scanned = safeCounts[porId] ?? 0;
                                             const expected = Number(it.expectedQty || 0);
+
+                                            // Determine maxQty from draftData or fallback to expected
+                                            const draft = selectedPO?.draftData?.find(d => String(d.porId) === porId);
+                                            const maxQty = draft ? Number(draft.receivedQuantity) : expected;
+
                                             const unitP = Number(it.unitPrice || 0);
                                             const discA = Number(it.discountAmount || 0);
                                             const effectivePrice = Math.max(0, unitP - discA);
@@ -664,66 +685,83 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                                                         <div className="font-bold text-xs">{it.name}</div>
                                                         <div className="text-[9px] text-muted-foreground font-mono">SKU: {it.barcode} | UOM: {it.uom}</div>
                                                     </TableCell>
-                                                            <TableCell>
-                                                                <Input
-                                                                    className={cn(
-                                                                        "h-8 text-[11px] font-bold",
-                                                                        showErrors && scanned > 0 && !(batchNos[porId] || "").trim() && "border-destructive ring-1 ring-destructive"
-                                                                    )}
-                                                                    placeholder="Batch #"
-                                                                    value={batchNos[porId] || ""}
-                                                                    onChange={(e) => setBatchNos(prev => ({ ...prev, [porId]: e.target.value }))}
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <select
-                                                                    className={cn(
-                                                                        "h-8 w-full rounded-md border border-input bg-background px-2 text-[11px]",
-                                                                        showErrors && scanned > 0 && !(lotIds[porId] || "").trim() && "border-destructive ring-1 ring-destructive"
-                                                                    )}
-                                                                    value={lotIds[porId] || ""}
-                                                                    onChange={(e) => setLotIds(prev => ({ ...prev, [porId]: e.target.value }))}
-                                                                >
-                                                                    <option value="">Select Lot</option>
-                                                                    {lots.map((l: { lot_id: string | number; lot_name: string }) => <option key={l.lot_id} value={String(l.lot_id)}>{l.lot_name}</option>)}
-                                                                </select>
-                                                            </TableCell>
-                                                            <TableCell className="text-right text-xs">{formatPHP(unitP)}</TableCell>
-                                                            <TableCell className="text-center text-[10px] text-muted-foreground">{it.discountType}</TableCell>
-                                                            <TableCell className="text-right text-xs text-destructive font-medium">{(discA || 0) > 0 ? `${formatPHP(discA * scanned)}` : "—"}</TableCell>
-                                                            <TableCell className="text-right font-bold text-xs">{formatPHP(lineTotal)}</TableCell>
+                                                    <TableCell>
+                                                        <Input
+                                                            className={cn(
+                                                                "h-8 text-[11px] font-bold",
+                                                                showErrors && scanned > 0 && !(batchNos[porId] || "").trim() && "border-destructive ring-1 ring-destructive"
+                                                            )}
+                                                            placeholder="Batch #"
+                                                            value={batchNos[porId] || ""}
+                                                            onChange={(e) => setBatchNos(prev => ({ ...prev, [porId]: e.target.value }))}
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <select
+                                                            className={cn(
+                                                                "h-8 w-full rounded-md border border-input bg-background px-2 text-[11px]",
+                                                                showErrors && scanned > 0 && !(lotIds[porId] || "").trim() && "border-destructive ring-1 ring-destructive"
+                                                            )}
+                                                            value={lotIds[porId] || ""}
+                                                            onChange={(e) => setLotIds(prev => ({ ...prev, [porId]: e.target.value }))}
+                                                        >
+                                                            <option value="">Select Lot</option>
+                                                            {lots.map((l: { lot_id: string | number; lot_name: string }) => <option key={l.lot_id} value={String(l.lot_id)}>{l.lot_name}</option>)}
+                                                        </select>
+                                                    </TableCell>
+                                                    <TableCell className="text-right text-xs">{formatPHP(unitP)}</TableCell>
+                                                    <TableCell className="text-center text-[10px] text-muted-foreground">{it.discountType}</TableCell>
+                                                    <TableCell className="text-right text-xs text-destructive font-medium">{(discA || 0) > 0 ? `${formatPHP(discA * scanned)}` : "—"}</TableCell>
+                                                    <TableCell className="text-right font-bold text-xs">{formatPHP(lineTotal)}</TableCell>
                                                     <TableCell className="text-center font-bold text-xs">{expected}</TableCell>
                                                     <TableCell className="text-center">
-                                                        {isReceiptMode && selectedPorId === porId ? (
-                                                            <div className="flex items-center gap-1 justify-center">
-                                                                <Input 
-                                                                    type="number"
-                                                                    min={0}
-                                                                    className="h-7 text-xs w-16 text-center px-1"
-                                                                    value={scanned || ""}
-                                                                    onChange={(e) => {
-                                                                        const val = Number(e.target.value);
-                                                                        setScannedCountByPorId(prev => ({
-                                                                            ...prev,
-                                                                            [porId]: Math.max(0, val)
-                                                                        }));
-                                                                    }}
-                                                                />
-                                                                <Button 
-                                                                    variant="ghost" 
-                                                                    size="icon" 
-                                                                    className="h-6 w-6 text-muted-foreground hover:text-foreground shrink-0"
-                                                                    onClick={() => setSelectedPorId(null)}
-                                                                >
-                                                                    <XCircle className="h-4 w-4" />
-                                                                </Button>
-                                                            </div>
+                                                        {isReceiptMode ? (
+                                                            !editingIds.has(porId) ? (
+                                                                <div className="flex justify-center">
+                                                                    <Button
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        onClick={() => setEditingIds(prev => new Set(prev).add(porId))}
+                                                                        className="h-7 text-[11px] font-semibold px-4"
+                                                                    >
+                                                                        Select
+                                                                    </Button>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex items-center gap-1 justify-center">
+                                                                    <Input
+                                                                        type="number"
+                                                                        min={0}
+                                                                        max={maxQty}
+                                                                        className="h-7 text-xs w-16 text-center px-1"
+                                                                        value={scanned || ""}
+                                                                        onChange={(e) => {
+                                                                            const val = Number(e.target.value);
+                                                                            setScannedCountByPorId(prev => ({
+                                                                                ...prev,
+                                                                                [porId]: Math.max(0, Math.min(val, maxQty))
+                                                                            }));
+                                                                        }}
+                                                                    />
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="icon"
+                                                                        className="h-6 w-6 text-muted-foreground hover:text-foreground shrink-0"
+                                                                        onClick={() => {
+                                                                            setEditingIds(prev => {
+                                                                                const next = new Set(prev);
+                                                                                next.delete(porId);
+                                                                                return next;
+                                                                            });
+                                                                        }}
+                                                                    >
+                                                                        <XCircle className="h-4 w-4" />
+                                                                    </Button>
+                                                                </div>
+                                                            )
                                                         ) : (
-                                                            <div 
-                                                                className={cn("flex justify-center items-center", isReceiptMode && "cursor-pointer group")}
-                                                                onClick={() => isReceiptMode && setSelectedPorId(porId)}
-                                                            >
-                                                                <Badge variant="secondary" className={cn("h-6 px-3 bg-muted text-foreground font-black text-xs", isReceiptMode && "group-hover:bg-primary/20 transition-colors")}>
+                                                            <div className="flex justify-center items-center">
+                                                                <Badge variant="secondary" className="h-6 px-3 bg-muted text-foreground font-black text-xs">
                                                                     {scanned}
                                                                 </Badge>
                                                             </div>
@@ -770,41 +808,41 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                         })()}
 
                         <div className="mt-4 flex flex-col md:flex-row justify-end gap-6 border-t pt-4">
-                                <div className="flex-1 max-w-sm ml-auto space-y-2 text-xs">
-                                    <div className="flex justify-between items-center text-muted-foreground">
-                                        <span className="font-bold uppercase tracking-wider text-[10px]">Gross Amount:</span>
-                                        <span className="font-bold text-foreground">{formatPHP(financials.gross)}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center text-destructive">
-                                        <span className="font-bold uppercase tracking-wider text-[10px]">Discount:</span>
-                                        <span className="font-bold">{formatPHP(financials.discount)}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center text-muted-foreground pb-2 border-b">
-                                        <span className="font-bold uppercase tracking-wider text-[10px]">Net Amount:</span>
-                                        <span className="font-bold text-foreground">{formatPHP(financials.net)}</span>
-                                    </div>
-                                    {selectedPO?.isInvoice && (
-                                        <>
-                                            <div className="flex justify-between items-center text-muted-foreground">
-                                                <span className="font-bold uppercase tracking-wider text-[10px]">VAT Details:</span>
-                                                <span className="font-bold text-foreground">{financials.isExclusive ? "+" : ""}{formatPHP(financials.vatAmount)}</span>
-                                            </div>
-                                            <div className="flex justify-between items-center text-destructive pb-2 border-b">
-                                                <span className="font-bold uppercase tracking-wider text-[10px]">EWT:</span>
-                                                <span className="font-bold">{formatPHP(financials.whtAmount)}</span>
-                                            </div>
-                                        </>
-                                    )}
-                                    <div className="flex justify-between items-center pt-4">
-                                        <span className="font-black text-sm uppercase tracking-widest text-foreground underline decoration-primary underline-offset-4">Grand Total:</span>
-                                        <span className="font-black text-xl text-primary drop-shadow-sm">{formatPHP(financials.grandTotal)}</span>
-                                    </div>
-                                    {selectedPO?.isInvoice && (
-                                        <p className="text-[10px] text-muted-foreground mt-2 italic leading-tight text-right">
-                                            Note: VAT and EWT figures are for reference and have not been deducted from the total.
-                                        </p>
-                                    )}
+                            <div className="flex-1 max-w-sm ml-auto space-y-2 text-xs">
+                                <div className="flex justify-between items-center text-muted-foreground">
+                                    <span className="font-bold uppercase tracking-wider text-[10px]">Gross Amount:</span>
+                                    <span className="font-bold text-foreground">{formatPHP(financials.gross)}</span>
                                 </div>
+                                <div className="flex justify-between items-center text-destructive">
+                                    <span className="font-bold uppercase tracking-wider text-[10px]">Discount:</span>
+                                    <span className="font-bold">{formatPHP(financials.discount)}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-muted-foreground pb-2 border-b">
+                                    <span className="font-bold uppercase tracking-wider text-[10px]">Net Amount:</span>
+                                    <span className="font-bold text-foreground">{formatPHP(financials.net)}</span>
+                                </div>
+                                {selectedPO?.isInvoice && (
+                                    <>
+                                        <div className="flex justify-between items-center text-muted-foreground">
+                                            <span className="font-bold uppercase tracking-wider text-[10px]">VAT Details:</span>
+                                            <span className="font-bold text-foreground">{financials.isExclusive ? "+" : ""}{formatPHP(financials.vatAmount)}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-destructive pb-2 border-b">
+                                            <span className="font-bold uppercase tracking-wider text-[10px]">EWT:</span>
+                                            <span className="font-bold">{formatPHP(financials.whtAmount)}</span>
+                                        </div>
+                                    </>
+                                )}
+                                <div className="flex justify-between items-center pt-4">
+                                    <span className="font-black text-sm uppercase tracking-widest text-foreground underline decoration-primary underline-offset-4">Grand Total:</span>
+                                    <span className="font-black text-xl text-primary drop-shadow-sm">{formatPHP(financials.grandTotal)}</span>
+                                </div>
+                                {selectedPO?.isInvoice && (
+                                    <p className="text-[10px] text-muted-foreground mt-2 italic leading-tight text-right">
+                                        Note: VAT and EWT figures are for reference and have not been deducted from the total.
+                                    </p>
+                                )}
+                            </div>
                         </div>
 
                         {(clientSaveError || saveError) && (
@@ -830,9 +868,9 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                                     onClick={handleSaveReceipt}
                                     disabled={savingReceipt}
                                 >
-                                        {savingReceipt ? "Saving..." : "Save Final Receipt"}
-                                    </Button>
-                                </>
+                                    {savingReceipt ? "Saving..." : "Save Final Receipt"}
+                                </Button>
+                            </>
                         </div>
                     </Card>
                 </div>
