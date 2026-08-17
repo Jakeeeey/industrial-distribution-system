@@ -21,7 +21,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { AlertTriangle, Plus, Trash2, QrCode, Package, ChevronRight, ChevronLeft, Lock, History } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { CylinderRegistrationModal } from "../CylinderRegistrationModal";
 
 export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack: () => void }) {
     const {
@@ -42,7 +41,7 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
     const [serialModalOpen, setSerialModalOpen] = React.useState(false);
     const [activePorId, setActivePorId] = React.useState<string | null>(null);
     const [activeProductName, setActiveProductName] = React.useState("");
-    const [tempSerials, setTempSerials] = React.useState<{ sn: string; tareWeight: string; expiryDate: string; isSaved?: boolean }[]>([]);
+    const [tempSerials, setTempSerials] = React.useState<{ sn: string; tareWeight: string; expiryDate: string; isSaved?: boolean; isNew?: boolean }[]>([]);
     const [newSerial, setNewSerial] = React.useState("");
     const [newTare, setNewTare] = React.useState("");
     const [newExpiry, setNewExpiry] = React.useState("");
@@ -208,7 +207,7 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
             return;
         }
 
-        const val = newSerial.trim().toUpperCase();
+        const val = newSerial.trim();
 
         // 1. In-session duplicate check
         if (tempSerials.some(x => x.sn === val)) {
@@ -808,7 +807,7 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
                                                 ref={inputRef}
                                                 value={newSerial}
                                                 onChange={(e) => {
-                                                    setNewSerial(e.target.value.toUpperCase());
+                                                    setNewSerial(e.target.value);
                                                     setHighlightNewSerialFields(false);
                                                 }}
                                                 onKeyDown={(e) => e.key === "Enter" && addSerial()}

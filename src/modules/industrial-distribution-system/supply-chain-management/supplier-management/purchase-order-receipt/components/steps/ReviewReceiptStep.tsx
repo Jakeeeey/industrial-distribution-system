@@ -44,7 +44,7 @@ const RECEIPT_TYPES = [
 
 const API_URL = "/api/ids/scm/supplier-management/purchase-order-receipt";
 
-export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: string; onBack?: () => void }) {
+export function ReviewReceiptStep({ receiverName }: { receiverName?: string; onBack?: () => void }) {
     const {
         selectedPO,
         scannedCountByPorId,
@@ -64,7 +64,6 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
         editingReceiptId,
         clearEditingReceiptId,
         loadReceipt,
-        isReceiptMode,
         step,
         setStep,
     } = useReceivingProducts();

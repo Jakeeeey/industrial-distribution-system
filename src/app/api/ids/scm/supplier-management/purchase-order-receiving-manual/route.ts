@@ -991,7 +991,8 @@ export async function POST(req: NextRequest) {
         }
 
         if (action === "save_receipt") {
-            let { poId, porCounts, porSerials, porMetaData, receiverId } = body;
+            const { poId, porCounts, porMetaData, receiverId } = body;
+            let { porSerials } = body;
             const rollbackTracker: Array<{ execute: () => Promise<void>; undo: () => Promise<void> }> = [];
             const receiptNo = null; 
             const thePoId = toNum(poId);
@@ -1054,7 +1055,7 @@ export async function POST(req: NextRequest) {
                         let draftSerials: Array<{ receiving_item_id: number; serial_number: string; purchase_order_receiving_id: unknown }> = [];
                         if (draftPorIds.length > 0) {
                             const dsUrl = `${base}/items/purchase_order_receiving_serial?limit=-1&filter[purchase_order_receiving_id][_in]=${draftPorIds.join(',')}&fields=receiving_item_id,serial_number,purchase_order_receiving_id`;
-                            const dsRes = await fetchJson<{ data: any[] }>(dsUrl).catch(() => null);
+                            const dsRes = await fetchJson<{ data: Array<{ receiving_item_id: number; serial_number: string; purchase_order_receiving_id: unknown }> }>(dsUrl).catch(() => null);
                             draftSerials = dsRes?.data || [];
                         }
 
@@ -1073,7 +1074,7 @@ export async function POST(req: NextRequest) {
                             });
 
                             if (dbSerialRow) {
-                                const incSerial = incomingSerials.find((s: any) => s.sn === dbSerialRow.serial_number);
+                                const incSerial = incomingSerials.find((s: Record<string, unknown>) => s.sn === dbSerialRow.serial_number);
                                 if (incSerial) {
                                     if (!porSerials) porSerials = {};
                                     porSerials[dId] = [incSerial];
