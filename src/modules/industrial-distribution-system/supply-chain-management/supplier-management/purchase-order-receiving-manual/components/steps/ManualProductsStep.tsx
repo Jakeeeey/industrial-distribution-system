@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { useReceivingProductsManual, todayYMD } from "../../providers/ReceivingProductsManualProvider";
+import { useReceivingProductsManual } from "../../providers/ReceivingProductsManualProvider";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -23,7 +23,7 @@ import { AlertTriangle, Plus, Trash2, QrCode, Package, ChevronRight, ChevronLeft
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { CylinderRegistrationModal } from "../CylinderRegistrationModal";
 
-export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => void; onBack: () => void }) {
+export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack: () => void }) {
     const {
         selectedPO,
         manualCounts,
@@ -62,7 +62,7 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
     // ✅ History Modal state
     const [historyModalOpen, setHistoryModalOpen] = React.useState(false);
     const [historyLoading, setHistoryLoading] = React.useState(false);
-    const [historyData, setHistoryData] = React.useState<any[]>([]);
+    const [historyData, setHistoryData] = React.useState<{ sn: string; tareWeight: string; expiryDate: string; receiptNo: string; receivedDate: string }[]>([]);
     const [historyProductName, setHistoryProductName] = React.useState("");
 
     const openHistoryModal = async (productId: string | number, branchId: string | number | undefined, name: string) => {
@@ -82,7 +82,7 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
             });
             const json = await res.json();
             setHistoryData(json.data || []);
-        } catch (e) {
+        } catch {
             toast.error("Failed to fetch history");
         } finally {
             setHistoryLoading(false);
@@ -193,7 +193,7 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
     // ✅ Fix 3: Serial Verification — NEW LOGIC (AG 2026-07-14)
     // - Serial NOT in cylinder_assets (requiresRegistration=true) → AUTO-ACCEPT (new asset, free to receive)
     // - Serial IS in cylinder_assets (source="asset") → BLOCK with popup (already registered, cannot duplicate)
-    const addSerial = async (skipLimitCheckOrEvent?: boolean | any) => {
+    const addSerial = async (skipLimitCheckOrEvent?: boolean | unknown) => {
         const skipLimitCheck = typeof skipLimitCheckOrEvent === "boolean" ? skipLimitCheckOrEvent : false;
         
         if (!isPendingValid) {

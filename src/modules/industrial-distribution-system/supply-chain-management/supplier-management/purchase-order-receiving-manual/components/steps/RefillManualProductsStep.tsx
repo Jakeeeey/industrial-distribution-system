@@ -197,8 +197,6 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
     const totalPages = Math.max(1, Math.ceil(filteredItems.length / ITEMS_PER_PAGE));
     const paginatedItems = filteredItems.slice((receivingPage - 1) * ITEMS_PER_PAGE, receivingPage * ITEMS_PER_PAGE);
 
-    const supplierId = selectedPO?.supplier?.id ? Number(selectedPO.supplier.id) : null;
-    const poId = selectedPO?.id ? Number(selectedPO.id) : 0;
 
     return (
         <div className="h-full flex flex-col overflow-hidden">
@@ -408,8 +406,8 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
             <RefillRapidScanModal
                 open={rapidScanOpen}
                 onClose={() => setRapidScanOpen(false)}
-                poId={poId}
-                supplierId={supplierId}
+
+
                 lines={productLines}
                 onAddSerial={handleAddSerial}
             />

@@ -66,13 +66,7 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
         loadReceipt,
         isReceiptMode,
     } = useReceivingProducts();
-    const [selectedPorId, setSelectedPorId] = React.useState<string | null>(null);
-
     const [clientSaveError, setClientSaveError] = React.useState("");
-
-    React.useEffect(() => {
-        setSelectedPorId(null);
-    }, [selectedPO]);
 
     React.useEffect(() => {
         setReviewPage(1);
@@ -262,15 +256,7 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
         });
     }, [selectedPO, activePorIds]);
 
-    const filteredItems = React.useMemo(() => {
-        const query = searchQuery.trim().toLowerCase();
-        if (!query) return allItems;
-        return allItems.filter(
-            (it) =>
-                String(it.name || "").toLowerCase().includes(query) ||
-                String(it.barcode || "").toLowerCase().includes(query)
-        );
-    }, [allItems, searchQuery]);
+
 
     const filteredStep2Items = React.useMemo(() => {
         const query = searchQuery.trim().toLowerCase();

@@ -37,7 +37,7 @@ export function PODetailsBreakdownCard() {
     const allocations = selectedPO.allocations || [];
     if (allocations.length === 0) return null;
 
-    const isInvoice = selectedPO.isInvoice || Number(selectedPO.vatAmount) > 0 || Number(selectedPO.withholdingTaxAmount) > 0;
+    const isInvoice = (selectedPO as Record<string, unknown>).isInvoice || Number(selectedPO.vatAmount) > 0 || Number(selectedPO.withholdingTaxAmount) > 0;
 
     // Use backend-provided discount amounts directly (already calculated with full precision)
     const totalDiscount = allocations.reduce((sum, alloc) => {

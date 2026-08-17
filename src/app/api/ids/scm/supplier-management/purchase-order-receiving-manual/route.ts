@@ -589,13 +589,13 @@ export async function POST(req: NextRequest) {
                     });
                     allocationsMap.set(bid, [...existing, {
                         id: openPorId ? String(openPorId) : `${pid}-${bid}`, porId: String(openPorId || ""),
-                        purchaseOrderProductId: String(ln.purchase_order_product_id), // Passed to align serial tagging correctly
+                        purchaseOrderProductId: String(ln.purchase_order_product_id),
                         productId: String(pid), branchId: String(bid), name: toStr(p?.product_name, `Product #${pid}`),
                         barcode: productDisplayCode(p, pid), uom: String(p?.unit_of_measurement?.unit_shortcut ?? "BOX").toUpperCase(),
                         expectedQty: displayExpectedQty, receivedQty: displayReceivedQty, requiresRfid: false,
                         isSerialized: !!p?.is_serialized,
                         isReceived: showReceivedDetails ? receivedQty >= toNum(ln.ordered_quantity) : false, unitPrice: toNum(ln.unit_price),
-                        discountType: lineDiscountTypeStr, discountAmount: dAmt, netAmount: 0 // Net amount for THIS session
+                        discountType: lineDiscountTypeStr, discountAmount: dAmt, netAmount: 0
                     }]);
                 }
             }
@@ -609,7 +609,6 @@ export async function POST(req: NextRequest) {
                 unpostedPorIds
             );
             const uniqueReceipts = Array.from(new Set(porRows.map(r => r.receipt_no).filter(Boolean)));
-            // ✅ Fix 4: Include receipt status so frontend can show ACTIVE vs REVERTED badges - AG 2026-07-14
             const history = uniqueReceipts.map(rno => {
                 const rs = porRows.filter(r => r.receipt_no === rno);
                 const receiptStatus = manualReceiptStatus(rs);
@@ -639,11 +638,12 @@ export async function POST(req: NextRequest) {
                 };
             }).sort((a, b) => (b.receiptNo ?? "").localeCompare(a.receiptNo ?? ""));
 
-            const draftSerials: Record<string, unknown[]> = {};
+            const draftSerials: Record<string, Record<string, unknown>[]> = {};
             for (const items of allocationsMap.values()) {
-                for (const item of (items as Record<string, unknown>[])) {
-                    const pid = toNum(item.productId);
-                    const bid = toNum(item.branchId);
+                for (const item of items) {
+                    const itemRec = item as Record<string, unknown>;
+                    const pid = toNum(itemRec.productId);
+                    const bid = toNum(itemRec.branchId);
 
                     const allDraftsForProduct = porRows.filter(r => 
                         toNum(r.product_id) === pid && 
@@ -653,7 +653,7 @@ export async function POST(req: NextRequest) {
                         toNum(r.is_reverted) !== 1
                     );
 
-                    const mergedSerials: any[] = [];
+                    const mergedSerials: Record<string, unknown>[] = [];
                     for (const dr of allDraftsForProduct) {
                         const sers = receiptSerialsMap.get(toNum(dr.purchase_order_product_id));
                         if (sers && sers.length > 0) {
@@ -662,7 +662,7 @@ export async function POST(req: NextRequest) {
                     }
 
                     if (mergedSerials.length > 0) {
-                        draftSerials[String(item.id)] = mergedSerials;
+                        draftSerials[String(itemRec.id)] = mergedSerials;
                     }
                 }
             }
@@ -725,7 +725,7 @@ export async function POST(req: NextRequest) {
         }
 
         if (action === "validate_serial") {
-            const { serialNumber, poType } = body; // poType: 'NORMAL' | 'REFILL'
+            const { serialNumber } = body;
             if (!serialNumber) return bad("Missing serialNumber", 400);
 
             // Check cylinder_assets
@@ -734,8 +734,7 @@ export async function POST(req: NextRequest) {
             const caExists = (caJ?.data && caJ.data.length > 0);
             const ca = caExists ? caJ.data[0] : null;
 
-            if (poType === "NORMAL") {
-                // Check v_serial_onhand via Spring API
+            if (body.poType === "NORMAL") {
                 let sohExists = false;
                 const SPRING_API_BASE_URL = process.env.SPRING_API_BASE_URL || "";
                 if (SPRING_API_BASE_URL) {
@@ -751,15 +750,14 @@ export async function POST(req: NextRequest) {
                         });
                         if (springRes.ok) {
                             const data = await springRes.json();
-                            const results = Array.isArray(data) ? data : (data && typeof data === "object") ? (Array.isArray((data as any).v_serial_onhand) ? (data as any).v_serial_onhand : (Array.isArray((data as any).content) ? (data as any).content : (Array.isArray((data as any).data) ? (data as any).data : [data]))) : [];
-                            const exactMatch = results.find((item: any) => String(item.serialNumber || item.serial_number || "").toUpperCase() === String(serialNumber).trim().toUpperCase());
+                            const results = (Array.isArray(data) ? data : (data && typeof data === "object") ? (Array.isArray((data as Record<string, unknown>).v_serial_onhand) ? (data as Record<string, unknown>).v_serial_onhand : (Array.isArray((data as Record<string, unknown>).content) ? (data as Record<string, unknown>).content : (Array.isArray((data as Record<string, unknown>).data) ? (data as Record<string, unknown>).data : [data]))) : []) as Record<string, unknown>[];
+                            const exactMatch = results.find((item: Record<string, unknown>) => String(item.serialNumber || item.serial_number || "").toUpperCase() === String(serialNumber).trim().toUpperCase());
                             sohExists = !!exactMatch;
                         }
                     } catch (err) {
                         console.error("[validate_serial] Spring API onhand check failed:", err);
                     }
                 } else {
-                    // Fallback if SPRING_API_BASE_URL is not set (not recommended)
                     const sohUrl = `${base}/items/v_serial_onhand?limit=1&filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&fields=serial_number`;
                     const sohJ = await fetchJson<{ data: Array<Record<string, unknown>> }>(sohUrl).catch(() => null);
                     sohExists = !!(sohJ?.data && sohJ.data.length > 0);
@@ -778,7 +776,6 @@ export async function POST(req: NextRequest) {
 
                 return ok({ status: "REQUIRES_REGISTRATION" });
             } else {
-                // REFILL
                 if (caExists && String(ca?.cylinder_status).toUpperCase() === "AVAILABLE" && String(ca?.cylinder_condition).toUpperCase() === "GOOD") {
                     return ok({ status: "ACCEPTED" });
                 }
@@ -845,33 +842,29 @@ export async function POST(req: NextRequest) {
                 uPrice = toNum(pj2?.data?.cost_per_unit || 0);
             }
 
-            // 1-to-1 Architecture: Fetch ALL existing draft parent rows for this product & branch
-            const existingPorsRes = await fetchJson<{ data: any[] }>(`${base}/items/${POR_COLLECTION}?filter[purchase_order_id][_eq]=${encodeURIComponent(String(poId))}&filter[product_id][_eq]=${encodeURIComponent(String(productId))}&filter[branch_id][_eq]=${encodeURIComponent(String(branchId))}&filter[isPosted][_eq]=0&filter[receipt_no][_null]=true&filter[is_reverted][_neq]=1&fields=purchase_order_product_id`).catch(() => null);
+            const existingPorsRes = await fetchJson<{ data: Record<string, unknown>[] }>(`${base}/items/${POR_COLLECTION}?filter[purchase_order_id][_eq]=${encodeURIComponent(String(poId))}&filter[product_id][_eq]=${encodeURIComponent(String(productId))}&filter[branch_id][_eq]=${encodeURIComponent(String(branchId))}&filter[isPosted][_eq]=0&filter[receipt_no][_null]=true&filter[is_reverted][_neq]=1&fields=purchase_order_product_id`).catch(() => null);
             const draftPorIds = (existingPorsRes?.data || []).map(r => r.purchase_order_product_id);
 
-            // Fetch ALL existing child rows for these drafts
-            let extData: any[] = [];
+            let extData: Record<string, unknown>[] = [];
             if (draftPorIds.length > 0) {
                 const existingRows = await fetchJson<{ data: Array<{ receiving_item_id: number; serial_number: string }> }>(`${base}/items/purchase_order_receiving_serial?filter[purchase_order_receiving_id][_in]=${draftPorIds.join(',')}&fields=receiving_item_id,serial_number`).catch(() => null);
                 extData = existingRows?.data || [];
             }
 
-            // PURE APPEND: We only process the incoming serials. We NEVER delete existing drafts here!
             for (const sObj of serials) {
                 const sn = String(sObj.sn || "").trim();
                 if (!sn) continue;
                 
                 const existingSerial = extData.find(r => r.serial_number === sn);
-                if (existingSerial) continue; // Already safely committed, ignore!
+                if (existingSerial) continue;
 
-                // Create a distinct 1-to-1 parent row
                 let tWeight: number | null = null;
                 if (sObj.tareWeight) {
                     const tw = parseFloat(String(sObj.tareWeight));
                     if (!isNaN(tw)) tWeight = tw;
                 }
                 
-                const patchPayload: any = { 
+                const patchPayload: Record<string, unknown> = { 
                     purchase_order_id: poId,
                     product_id: productId,
                     branch_id: branchId,
@@ -894,7 +887,7 @@ export async function POST(req: NextRequest) {
 
                 if (createdPor?.data?.purchase_order_product_id) {
                     const newPorId = createdPor.data.purchase_order_product_id;
-                    const childPayload: any = {
+                    const childPayload: Record<string, unknown> = {
                         purchase_order_receiving_id: newPorId,
                         product_id: toNum(productId),
                         serial_number: sn
@@ -938,20 +931,20 @@ export async function POST(req: NextRequest) {
 
             const porIds = targetPors.map(p => p.purchase_order_product_id);
             const serialsUrl = `${base}/items/purchase_order_receiving_serial?limit=-1&filter[purchase_order_receiving_id][_in]=${porIds.join(",")}&fields=serial_number,tare_weight,purchase_order_receiving_id.purchase_order_product_id,purchase_order_receiving_id.tare_weight,purchase_order_receiving_id.expiry_date,purchase_order_receiving_id`;
-            const serialsRes = await fetchJson<{ data: any[] }>(serialsUrl).catch(() => null);
+            const serialsRes = await fetchJson<{ data: Record<string, unknown>[] }>(serialsUrl).catch(() => null);
             
             const history = (serialsRes?.data || []).map(s => {
-                const relId = typeof s.purchase_order_receiving_id === 'object'
-                    ? (s.purchase_order_receiving_id?.id ?? s.purchase_order_receiving_id?.purchase_order_product_id)
+                const relId = typeof s.purchase_order_receiving_id === 'object' && s.purchase_order_receiving_id !== null
+                    ? ((s.purchase_order_receiving_id as Record<string, unknown>).id ?? (s.purchase_order_receiving_id as Record<string, unknown>).purchase_order_product_id)
                     : s.purchase_order_receiving_id;
                 const por = targetPors.find(p => toNum(p.purchase_order_product_id) === toNum(relId));
-                const dbTare = typeof s.purchase_order_receiving_id === 'object' ? s.purchase_order_receiving_id.tare_weight : null;
-                const dbExpiry = typeof s.purchase_order_receiving_id === 'object' ? s.purchase_order_receiving_id.expiry_date : null;
+                const dbTare = typeof s.purchase_order_receiving_id === 'object' && s.purchase_order_receiving_id !== null ? (s.purchase_order_receiving_id as Record<string, unknown>).tare_weight : null;
+                const dbExpiry = typeof s.purchase_order_receiving_id === 'object' && s.purchase_order_receiving_id !== null ? (s.purchase_order_receiving_id as Record<string, unknown>).expiry_date : null;
                 
                 return {
                     sn: s.serial_number,
-                    tareWeight: s.tare_weight || dbTare || (por as any)?.tare_weight,
-                    expiryDate: dbExpiry || (por as any)?.expiry_date,
+                    tareWeight: s.tare_weight || dbTare || (por as unknown as Record<string, unknown>)?.tare_weight,
+                    expiryDate: dbExpiry || (por as unknown as Record<string, unknown>)?.expiry_date,
                     receiptNo: por?.receipt_no || (toNum(por?.isPosted) === 1 ? "POSTED" : "DRAFT (Current Session)"),
                     receivedDate: por?.received_date
                 };
@@ -969,7 +962,6 @@ export async function POST(req: NextRequest) {
             const idsToDelete = (sj?.data || []).map(r => r.receiving_item_id).filter(Boolean);
 
             if (idsToDelete.length > 0) {
-                // Delete one by one since Directus bulk delete might require specific format or payload
                 await Promise.all(idsToDelete.map(id =>
                     fetchJson(`${base}/items/purchase_order_receiving_serial/${id}`, { method: "DELETE" }).catch(() => { })
                 ));
@@ -979,10 +971,8 @@ export async function POST(req: NextRequest) {
 
         if (action === "save_receipt") {
             const { poId, porCounts, porSerials, porMetaData, receiverId } = body;
-            const receiptNo = null; // No longer organizing receipts here
-            const receiptDate = null;
-            const receiptType = null;
-            const rollbackTracker: Array<{ execute: () => Promise<void>, undo: () => Promise<void> }> = [];
+            const rollbackTracker: Array<{ execute: () => Promise<void>; undo: () => Promise<void> }> = [];
+            const receiptNo = null; 
             const thePoId = toNum(poId);
             if (!thePoId) return bad("Missing PO ID");
 
@@ -990,7 +980,6 @@ export async function POST(req: NextRequest) {
             const pj = await fetchJson<{ data: POHeaderRow }>(poUrl);
             const po = pj?.data;
 
-            // Block saving receipt if refill PO and not tagged
             if (Number(po?.is_refill ?? 0) === 1 && Number(po?.is_tagged ?? 0) !== 1) {
                 return bad("This refill Purchase Order is not tagged. Serials must be tagged before receiving.", 400);
             }
@@ -1003,11 +992,9 @@ export async function POST(req: NextRequest) {
             const porRows = await fetchPORByPOIds(base, [thePoId]);
             const lines = await fetchPOProductsByPOId(base, thePoId);
 
-            // ✅ Fix: Correctly resolve ALL product IDs involved (from lines AND any extra existing POR rows)
             const productIdsSet = new Set<number>();
             lines.forEach(l => productIdsSet.add(toNum(l.product_id)));
             porRows.forEach(r => productIdsSet.add(toNum(r.product_id)));
-            // Also include from porCounts keys if they are composite pid-bid
             Object.keys(porCounts).forEach(k => { if (k.includes("-")) productIdsSet.add(toNum(k.split("-")[0])); });
 
             const linksMap = await fetchProductSupplierLinks(base, Array.from(productIdsSet), toNum(po?.supplier_name));
@@ -1038,8 +1025,7 @@ export async function POST(req: NextRequest) {
                     const isSerialized = !!(productsMap.get(pid)?.is_serialized);
 
                     if (isSerialized) {
-                        // 1-to-1 Architecture: Fetch ALL existing open draft rows for this product/branch
-                        const draftPorsRes = await fetchJson<{ data: any[] }>(`${base}/items/${POR_COLLECTION}?filter[purchase_order_id][_eq]=${encodeURIComponent(String(thePoId))}&filter[product_id][_eq]=${encodeURIComponent(String(pid))}&filter[branch_id][_eq]=${encodeURIComponent(String(bid))}&filter[isPosted][_eq]=0&filter[receipt_no][_null]=true&filter[is_reverted][_neq]=1&fields=purchase_order_product_id`).catch(() => null);
+                        const draftPorsRes = await fetchJson<{ data: Record<string, unknown>[] }>(`${base}/items/${POR_COLLECTION}?filter[purchase_order_id][_eq]=${encodeURIComponent(String(thePoId))}&filter[product_id][_eq]=${encodeURIComponent(String(pid))}&filter[branch_id][_eq]=${encodeURIComponent(String(bid))}&filter[isPosted][_eq]=0&filter[receipt_no][_null]=true&filter[is_reverted][_neq]=1&fields=purchase_order_product_id`).catch(() => null);
                         const draftPors = draftPorsRes?.data || [];
                         
                         for (const draftPor of draftPors) {
@@ -1050,7 +1036,7 @@ export async function POST(req: NextRequest) {
                         
                         delete porCounts[key];
                         if (porMetaData?.[key]) delete porMetaData[key];
-                        if (porSerials?.[key]) delete porSerials[key]; // Serials are strictly handled by sync_draft_serials for 1-to-1
+                        if (porSerials?.[key]) delete porSerials[key];
                     } else {
                         const ensured = await ensureOpenReceivingRow({ base, poId: thePoId, productId: pid, branchId: bid, unitPrice: uPrice, discountTypeId: resolvedId, discountPercent: linePct, receiptNo });
                         porCounts[String(ensured.porId)] = qty;
@@ -1070,7 +1056,6 @@ export async function POST(req: NextRequest) {
                     pr = (await fetchJson<{ data: PORow }>(`${base}/items/${POR_COLLECTION}/${targetPorId}`).catch(() => ({ data: null as unknown as PORow }))).data;
                 }
 
-                // ✅ Fix: Reset in-memory properties if the row was reverted or posted-reverted to prevent old quantity/receipt leak
                 if (pr && (toNum(pr.is_reverted) === 1 || toNum(pr.isPosted) === 2)) {
                     pr.receipt_no = null;
                     pr.received_quantity = 0;
@@ -1080,7 +1065,6 @@ export async function POST(req: NextRequest) {
 
                 let uPrice = toNum(pr?.unit_price || 0), pId = toNum(pr?.product_id);
 
-                // ✅ Fix: If the existing row already belongs to a DIFFERENT receipt_no, we MUST create a new row for this delivery to satisfy UNIQUE KEY and avoid merging receipts
                 if (pr?.receipt_no && toStr(pr.receipt_no) !== toStr(receiptNo)) {
                     const bid = toNum(pr?.branch_id);
                     const line = lines.find(l => toNum(l.product_id) === pId && toNum(l.branch_id) === bid);
@@ -1096,11 +1080,9 @@ export async function POST(req: NextRequest) {
                     });
 
                     targetPorId = ensured.porId;
-                    // We can just find the row in porRows, or if it was newly created, it won't be there (which is fine, we fallback to defaults).
                     pr = porRows.find(r => toNum(r.purchase_order_product_id) === targetPorId) || null as unknown as PORow;
                     if (!pr) pr = (await fetchJson<{ data: PORow }>(`${base}/items/${POR_COLLECTION}/${targetPorId}`).catch(() => ({ data: null as unknown as PORow }))).data;
 
-                    // ✅ Fix: Do the same reset if the newly ensured row was also reverted
                     if (pr && (toNum(pr.is_reverted) === 1 || toNum(pr.isPosted) === 2)) {
                         pr.receipt_no = null;
                         pr.received_quantity = 0;
@@ -1133,9 +1115,7 @@ export async function POST(req: NextRequest) {
                     if (!dtId) dtId = ensureId(dType);
                 }
 
-                // For draft sessions (no receipt No), always use the submitted count directly
-                const existingReceiptRow = porRows.find(r => !r.receipt_no && toNum(r.purchase_order_product_id) === targetPorId);
-                const newQty = qty; // Just overwrite the draft quantity with the current modal selection
+                const newQty = qty;
                 const lineGross = uPrice * newQty;
                 const lineDisc = Number((lineGross * (linePct / 100)).toFixed(2));
                 const lineNet = lineGross - lineDisc;
@@ -1143,7 +1123,6 @@ export async function POST(req: NextRequest) {
                 const vatAmtTotal = Number((lineNet - vatExclTotal).toFixed(2));
                 const ewtAmtTotal = Number((vatExclTotal * 0.01).toFixed(2));
 
-                const isRefill = Number(po?.is_refill ?? 0) === 1;
                 const isSerialized = !!(productsMap.get(pId)?.is_serialized);
 
                 const serialsList = Array.isArray(porSerials?.[targetPorId]) ? porSerials[targetPorId] : [];

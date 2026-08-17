@@ -50,17 +50,9 @@ interface PendingRegistration {
     productName: string;
 }
 
-interface AssetInfo {
-    tare_weight?: number | string;
-    expiration_date?: string;
-    cylinder_status?: string;
-    cylinder_condition?: string;
-}
-
 interface RefillRapidScanModalProps {
     open: boolean;
     onClose: () => void;
-    poId: number;
     supplierId?: number | null;
     /** All product lines in this PO currently selected for receiving */
     lines: ProductLine[];
@@ -79,12 +71,10 @@ function todayYMD(): string {
 export function RefillRapidScanModal({
     open,
     onClose,
-    poId,
-    supplierId,
     lines,
     onAddSerial,
 }: RefillRapidScanModalProps) {
-    const { serialsByPorId, setSerialsByPorId } = useReceivingProductsManual();
+    const { serialsByPorId } = useReceivingProductsManual();
     const [inputValue, setInputValue] = React.useState("");
     const [isValidating, setIsValidating] = React.useState(false);
     const [scanLog, setScanLog] = React.useState<ScanLogEntry[]>([]);
@@ -154,8 +144,7 @@ export function RefillRapidScanModal({
 
         setIsValidating(true);
         try {
-            // Use first line with capacity as the target porId for validation
-            const targetLine = lines.find(l => l.scannedCount < l.expectedQty) ?? lines[0];
+
 
             const res = await fetch(API_URL, {
                 method: "POST",
@@ -205,7 +194,7 @@ export function RefillRapidScanModal({
             setIsValidating(false);
             setTimeout(() => inputRef.current?.focus(), 50);
         }
-    }, [inputValue, isValidating, scanLog, lines, poId, onAddSerial]);
+    }, [inputValue, isValidating, scanLog, lines, onAddSerial]);
 
     // Enter key
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

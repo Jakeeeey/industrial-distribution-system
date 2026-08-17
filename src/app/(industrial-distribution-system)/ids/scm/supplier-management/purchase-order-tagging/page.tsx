@@ -17,7 +17,7 @@ import { cookies } from "next/headers";
 
 import { Suspense } from "react";
 
-import TaggingOfPOModule from "@/modules/industrial-distribution-system/supply-chain-management/supplier-management/purchase-order-tagging/TaggingOfPOModule";
+import CreateSerialPurchaseOrderModule from "@/modules/industrial-distribution-system/supply-chain-management/supplier-management/purchase-order-creation-serial/CreateSerialPurchaseOrderModule";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -135,7 +135,7 @@ export default async function Page() {
                 <div className="p-4">
                     {/* ✅ Supplier Management - Tagging of PO */}
                     <Suspense fallback={null}>
-                        <TaggingOfPOModule />
+                        <CreateSerialPurchaseOrderModule />
                     </Suspense>
                 </div>
             </ScrollArea>

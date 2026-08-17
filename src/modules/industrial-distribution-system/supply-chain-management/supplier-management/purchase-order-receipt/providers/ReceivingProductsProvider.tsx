@@ -695,7 +695,7 @@ export function ReceivingProductsProvider({ children, receiverId, isReceiptMode 
                 }
             }
         },
-        [resetSession]
+        [resetSession, isReceiptMode]
     );
 
     const openPOByBarcode = React.useCallback(

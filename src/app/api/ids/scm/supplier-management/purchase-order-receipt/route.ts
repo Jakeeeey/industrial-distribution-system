@@ -136,13 +136,6 @@ async function fetchReceiptTypesMap(base: string): Promise<Map<number, string>> 
     return map;
 }
 
-const RFID_LEN = 24;
-function normalizeRfid(raw: string): string {
-    const up = toStr(raw).toUpperCase();
-    const matches = up.match(/[0-9A-F]{24,}/g) ?? [];
-    if (matches.length > 0) return (matches[0] ?? "").slice(0, RFID_LEN);
-    return up.replace(/[^0-9A-F]/g, "").slice(0, RFID_LEN);
-}
 
 const PO_COLLECTION = "purchase_order";
 const PO_PRODUCTS_COLLECTION = "purchase_order_products";
@@ -535,9 +528,9 @@ function resolveLineDiscount(args: {
     let lineDiscountTypeStr = "No Discount";
 
     if (typeof lineDiscountType === 'object' && lineDiscountType !== null) {
-        const dType = lineDiscountType as any;
-        lineDiscountTypeStr = dType.discount_type || dType.name || "No Discount";
-        const dLines = dType.line_per_discount_type || [];
+        const dType = lineDiscountType as Record<string, unknown>;
+        lineDiscountTypeStr = (dType.discount_type as string) || (dType.name as string) || "No Discount";
+        const dLines = (dType.line_per_discount_type as Record<string, unknown>[]) || [];
         if (dLines.length > 0) {
             lineDiscountPercent = calculateDiscountFromLines(dLines);
         } else if (toNum(dType.total_percent) > 0) {
@@ -555,7 +548,8 @@ function resolveLineDiscount(args: {
             }
         } else if (headerDiscountPercent > 0) {
             lineDiscountPercent = headerDiscountPercent;
-            lineDiscountTypeStr = headerDiscountType ? toStr((headerDiscountType as any).discount_type || (headerDiscountType as any).discount_code || (headerDiscountType as any).name, "No Discount") : "No Discount";
+            const hdt = headerDiscountType as Record<string, unknown> | undefined;
+            lineDiscountTypeStr = hdt ? toStr(hdt.discount_type || hdt.discount_code || hdt.name, "No Discount") : "No Discount";
         }
     }
 
@@ -569,13 +563,6 @@ function chunk<T>(arr: T[], size: number) {
     return out;
 }
 
-async function checkRfidDuplicate(base: string, rfid: string): Promise<{ exists: boolean; detail?: string }> {
-    const url = `${base}/items/${POR_ITEMS_COLLECTION}?limit=1&filter[rfid_code][_eq]=${encodeURIComponent(rfid)}&fields=receiving_item_id,purchase_order_product_id,product_id,rfid_code`;
-    const j = await fetchJson<{ data: Record<string, unknown>[] }>(url);
-    const row = j?.data?.[0];
-    if (!row) return { exists: false };
-    return { exists: true, detail: `RFID '${rfid}' is already registered (Item #${row.receiving_item_id}, Product #${row.product_id}).` };
-}
 
 async function ensureOpenReceivingRow(args: {
     base: string;
@@ -1011,8 +998,6 @@ export async function POST(req: NextRequest) {
             const porCounts = body.porCounts as Record<string, number>;
             const porMetaData = body.porMetaData as Record<string, Record<string, unknown>>;
             const receiverId = body.receiverId;
-            const newTags = body.newTags as Array<{ rfid: string; productId: string; porId?: string }>;
-            const isEdit = !!body.isEdit;
             const editReceiptNo = body.editingReceiptNo || receiptNo;
 
             if (!poId) return bad("Missing poId.");

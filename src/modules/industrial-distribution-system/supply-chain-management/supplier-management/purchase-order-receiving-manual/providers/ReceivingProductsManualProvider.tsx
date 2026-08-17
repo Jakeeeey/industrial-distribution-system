@@ -107,6 +107,11 @@ export type ReceiptSavedInfo = {
     items: SavedItem[];
     savedAt: number;
     receiverName?: string;
+    receiptNo?: string;
+    receiptDate?: string;
+    receiptType?: string;
+    isFullyReceived?: boolean;
+    isInvoice?: boolean;
 };
 
 type Ctx = {
@@ -134,6 +139,16 @@ type Ctx = {
 
     manualCounts: Record<string, number>;
     setManualCounts: React.Dispatch<React.SetStateAction<Record<string, number>>>;
+
+    // ✅ NEW: receipt details (compat with ReceiptDetailsStep)
+    receiptNo: string;
+    setReceiptNo: (v: string) => void;
+    receiptType: string;
+    setReceiptType: (v: string) => void;
+    receiptDate: string;
+    setReceiptDate: (v: string) => void;
+    editingRevertedReceiptNo: string | null;
+    setEditingRevertedReceiptNo: (v: string | null) => void;
 
     // ✅ NEW: receipt saved signal (non-breaking)
     receiptSaved: ReceiptSavedInfo | null;
@@ -235,6 +250,12 @@ export function ReceivingProductsManualProvider({ children, receiverId, receiver
 
     const [savingReceipt, setSavingReceipt] = React.useState(false);
     const [saveError, setSaveError] = React.useState("");
+
+    // ✅ Receipt Details
+    const [receiptNo, setReceiptNo] = React.useState("");
+    const [receiptType, setReceiptType] = React.useState("");
+    const [receiptDate, setReceiptDate] = React.useState(todayYMD());
+    const [editingRevertedReceiptNo, setEditingRevertedReceiptNo] = React.useState<string | null>(null);
 
     // ✅ NEW: success signal for UI
     const [receiptSaved, setReceiptSaved] = React.useState<ReceiptSavedInfo | null>(null);
@@ -409,8 +430,8 @@ export function ReceivingProductsManualProvider({ children, receiverId, receiver
                             (a.items || []).flatMap(i => [i.porId, i.id]).filter(Boolean)
                         )
                     );
-                    const filterDraftObj = (obj: any) => {
-                        const newObj: any = {};
+                    const filterDraftObj = <T,>(obj: Record<string, T> | null | undefined) => {
+                        const newObj: Record<string, T> = {};
                         for (const [k, v] of Object.entries(obj || {})) {
                             if (validKeys.has(k)) newObj[k] = v;
                         }
@@ -722,11 +743,6 @@ export function ReceivingProductsManualProvider({ children, receiverId, receiver
             );
             const itemsToUse = sourceItems.length > 0 ? sourceItems : snapshotItems;
 
-            // Calculate if fully received
-            const isFullyReceivedNow = itemsToUse.every((it: ReceivingPOItem) => {
-                const scannedNow = Number(snapshotCounts[it.id] || 0);
-                return (Number(it.receivedQty) + scannedNow) >= Number(it.expectedQty);
-            });
 
             const savedItems: SavedItem[] = itemsToUse.map((it: ReceivingPOItem) => {
                 // ✅ Try literal ID first, then fallback to productId-branchId key
@@ -769,7 +785,7 @@ export function ReceivingProductsManualProvider({ children, receiverId, receiver
         } finally {
             setSavingReceipt(false);
         }
-    }, [selectedPO, manualCounts, serialsByPorId, refreshList, resetSession, receiverId]);
+    }, [selectedPO, manualCounts, serialsByPorId, refreshList, resetSession, receiverId, receiverName]);
 
     const value: Ctx = {
         receiverId,
@@ -793,6 +809,15 @@ export function ReceivingProductsManualProvider({ children, receiverId, receiver
 
         manualCounts: manualCounts ?? {},
         setManualCounts,
+
+        receiptNo,
+        setReceiptNo,
+        receiptType,
+        setReceiptType,
+        receiptDate,
+        setReceiptDate,
+        editingRevertedReceiptNo,
+        setEditingRevertedReceiptNo,
 
         receiptSaved,
         clearReceiptSaved,
