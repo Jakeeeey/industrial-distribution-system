@@ -47,6 +47,7 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
     const [newTare, setNewTare] = React.useState("");
     const [newExpiry, setNewExpiry] = React.useState("");
     const inputRef = React.useRef<HTMLInputElement>(null);
+    const [highlightNewSerialFields, setHighlightNewSerialFields] = React.useState(false);
 
     // ✅ Serial Verification state
     const [verifyingSerial, setVerifyingSerial] = React.useState(false);
@@ -55,9 +56,6 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
     const [isSerialOverLimitOpen, setIsSerialOverLimitOpen] = React.useState(false);
     const [pendingSerialEntry, setPendingSerialEntry] = React.useState<{ sn: string; tare: string; expiry: string; isSaved?: boolean } | null>(null);
     const [isCancelConfirmOpen, setIsCancelConfirmOpen] = React.useState(false);
-    
-    // ✅ Registration Modal state
-    const [pendingRegistration, setPendingRegistration] = React.useState<{ serial: string; productId?: string | number; productName?: string; branchId?: string | number } | null>(null);
 
     // ✅ History Modal state
     const [historyModalOpen, setHistoryModalOpen] = React.useState(false);
@@ -173,11 +171,18 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
     const openSerialModal = (id: string, name: string) => {
         setActivePorId(id);
         setActiveProductName(name);
-        // ✅ ALWAYS start the modal empty as a clean staging area for the CURRENT scan session
-        setTempSerials([]);
+        // ✅ Initialize with previously saved serials for this session
+        const existing = serialsByPorId[id] || [];
+        setTempSerials(existing.map(s => ({
+            ...s,
+            tareWeight: s.tareWeight || "",
+            expiryDate: s.expiryDate || "",
+            isSaved: true
+        })));
         setNewSerial("");
         setNewTare("");
         setNewExpiry("");
+        setHighlightNewSerialFields(false);
         setSerialModalOpen(true);
     };
 
@@ -186,7 +191,7 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
     const orderedLimit = activeItem ? Math.max(0, Number(activeItem.expectedQty || 0) - Number(activeItem.receivedQty || 0)) : Infinity;
 
     // ✅ Validation Helper
-    const isPendingValid = newSerial.trim() !== "" && newTare.trim() !== "" && newExpiry.trim() !== "";
+    const isPendingValid = newSerial.trim() !== "";
     const isPartialEntry = newSerial.trim() !== "" || newTare.trim() !== "" || newExpiry.trim() !== "";
 
 
@@ -198,7 +203,7 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
         
         if (!isPendingValid) {
             toast.error("Incomplete Registration", {
-                description: "Please fulfill all fields: Serial, Tare, and Expiry.",
+                description: "Please enter a Serial Number.",
             });
             return;
         }
@@ -231,6 +236,46 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
             setIsSerialOverLimitOpen(true);
             return;
         }
+
+        // ✅ If it's flagged as a new serial, validate Tare & Expiry and register directly
+        if (highlightNewSerialFields) {
+            if (!newTare.trim() || !newExpiry.trim()) {
+                toast.error("New Serial Detected", { description: "Tare weight and expiry date are strictly required for new serials." });
+                return;
+            }
+            setVerifyingSerial(true);
+            try {
+                const res = await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        action: "register_serial",
+                        serialNumber: val,
+                        tareWeight: newTare,
+                        expiryDate: newExpiry,
+                        productId: activeItem?.productId,
+                        currentBranchId: activeItem?.branchId,
+                        userId: receiverId
+                    })
+                });
+                const j = await res.json();
+                if (j?.error) throw new Error(j.error);
+                
+                // Registration successful!
+                setTempSerials(prev => [...prev, { sn: val, tareWeight: newTare, expiryDate: newExpiry, isNew: true }]);
+                setNewSerial("");
+                setNewTare("");
+                setNewExpiry("");
+                setHighlightNewSerialFields(false);
+                setTimeout(() => inputRef.current?.focus(), 10);
+            } catch (e) {
+                toast.error("Registration Failed", { description: (e as Error).message });
+            } finally {
+                setVerifyingSerial(false);
+            }
+            return;
+        }
+
         // 4. Verify against Cylinder Asset master DB
         setVerifyingSerial(true);
         try {
@@ -252,17 +297,47 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
             }
 
             if (result?.status === "REQUIRES_REGISTRATION") {
-                setPendingRegistration({
-                    serial: val,
-                    productId: activeItem?.productId,
-                    productName: activeItem?.name,
-                    branchId: activeItem?.branchId
-                });
-                return; // Wait for modal to handle registration
+                if (newTare.trim() && newExpiry.trim()) {
+                    try {
+                        const res = await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                action: "register_serial",
+                                serialNumber: val,
+                                tareWeight: newTare,
+                                expiryDate: newExpiry,
+                                productId: activeItem?.productId,
+                                currentBranchId: activeItem?.branchId,
+                                userId: receiverId
+                            })
+                        });
+                        const jReg = await res.json();
+                        if (jReg?.error) throw new Error(jReg.error);
+                        
+                        setTempSerials(prev => [...prev, { sn: val, tareWeight: newTare, expiryDate: newExpiry, isNew: true }]);
+                        setNewSerial("");
+                        setNewTare("");
+                        setNewExpiry("");
+                        setHighlightNewSerialFields(false);
+                        setTimeout(() => inputRef.current?.focus(), 10);
+                    } catch (e) {
+                        toast.error("Registration Failed", { description: (e as Error).message });
+                    }
+                    return;
+                }
+
+                setHighlightNewSerialFields(true);
+                toast.error("New Serial Detected", { description: "Tare weight and expiry date are required to register this serial." });
+                return; // Wait for user to input Tare and Expiry
             }
 
-            // ACCEPTED
-            setTempSerials(prev => [...prev, { sn: val, tareWeight: newTare, expiryDate: newExpiry }]);
+            // ACCEPTED (Existing Serial)
+            setTempSerials(prev => [...prev, { 
+                sn: val, 
+                tareWeight: result.tareWeight || newTare, 
+                expiryDate: result.expiryDate || newExpiry 
+            }]);
             setNewSerial("");
             setNewTare("");
             setNewExpiry("");
@@ -272,14 +347,6 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
         } finally {
             setVerifyingSerial(false);
         }
-    };
-
-    const handleRegistrationSuccess = (sn: string) => {
-        setTempSerials(prev => [...prev, { sn, tareWeight: newTare, expiryDate: newExpiry }]);
-        setNewSerial("");
-        setNewTare("");
-        setNewExpiry("");
-        setTimeout(() => inputRef.current?.focus(), 10);
     };
 
     // ✅ Confirm adding an over-limit serial (user acknowledged warning) - AG 2026-07-14
@@ -298,7 +365,25 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
         }, 0);
     };
 
-    const removeSerial = (index: number) => {
+    const removeSerial = async (index: number) => {
+        const serialToRemove = tempSerials[index];
+        
+        // Clean up draft registration if it was purely a new item this session
+        if (serialToRemove.isNew && !serialToRemove.isSaved) {
+            try {
+                await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        action: "deregister_serial",
+                        serialNumber: serialToRemove.sn
+                    })
+                });
+            } catch (e) {
+                console.error("Failed to deregister serial", e);
+            }
+        }
+
         setTempSerials(tempSerials.filter((_, i) => i !== index));
     };
 
@@ -306,38 +391,24 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
     const saveSerials = async () => {
         const finalSerials = [...tempSerials];
         
-        // ✅ Smart Auto-Add: Only if COMPLETELY fulfilled
+        // ✅ Smart Auto-Add: Only if completely fulfilled
         const pending = newSerial.trim();
-        if (pending && isPendingValid) {
-            if (tempSerials.length >= orderedLimit) {
-                toast.error("Pending Over-Limit Entry", {
-                    description: "You have a pending serial that exceeds the limit. Please click 'Add Registered Piece' to confirm it first."
-                });
-                return;
-            }
-            const isDup = tempSerials.some(x => x.sn === pending);
-            if (!isDup) {
-                finalSerials.push({ sn: pending, tareWeight: newTare, expiryDate: newExpiry, isSaved: false });
-            }
-        } else if (pending && !isPendingValid) {
-            toast.warning("Incomplete Entry Ignored", { 
-                description: "The piece you were typing was not added because some fields were missing." 
+        if (pending) {
+            toast.error("Pending Serial Unverified", { 
+                description: "You have typed a serial number but haven't added it yet. Please click 'Add Registered Piece' first or clear the input." 
             });
+            return;
         }
 
         if (activePorId) {
             // 1. Write to React state immediately (fast, does not block UI)
+            const mappedFinal = finalSerials.map(s => ({ ...s, isSaved: true }));
             setSerialsByPorId(prev => {
-                const existing = prev[activePorId] || [];
-                // ✅ Append newly scanned serials to existing history
-                const merged = [...existing, ...finalSerials];
-                return { ...prev, [activePorId]: merged };
+                return { ...prev, [activePorId]: mappedFinal };
             });
             
             setManualCounts(prev => {
-                const existing = serialsByPorId[activePorId] || [];
-                const newLength = existing.length + finalSerials.length;
-                return { ...prev, [activePorId]: newLength };
+                return { ...prev, [activePorId]: finalSerials.length };
             });
             
             toast.success("Progress Saved", { description: `${finalSerials.length} serials committed.` });
@@ -348,17 +419,20 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
             const branchId = activeItem?.branchId;
 
             if (poId && productId && branchId) {
-                fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        action: "sync_draft_serials",
-                        poId,
-                        productId,
-                        branchId,
-                        serials: finalSerials,
-                    }),
-                }).catch(e => console.warn("[sync_draft_serials] Non-blocking failure:", e));
+                const newlyAdded = finalSerials.filter(s => !s.isSaved);
+                if (newlyAdded.length > 0) {
+                    fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            action: "sync_draft_serials",
+                            poId,
+                            productId,
+                            branchId,
+                            serials: newlyAdded,
+                        }),
+                    }).catch(e => console.warn("[sync_draft_serials] Non-blocking failure:", e));
+                }
             }
         }
         setSerialModalOpen(false);
@@ -733,7 +807,10 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
                                             <Input
                                                 ref={inputRef}
                                                 value={newSerial}
-                                                onChange={(e) => setNewSerial(e.target.value.toUpperCase())}
+                                                onChange={(e) => {
+                                                    setNewSerial(e.target.value.toUpperCase());
+                                                    setHighlightNewSerialFields(false);
+                                                }}
                                                 onKeyDown={(e) => e.key === "Enter" && addSerial()}
                                                 placeholder="Scan/Type..."
                                                 className={cn(
@@ -762,7 +839,10 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
                                                     setNewTare(val);
                                                 }
                                             }}
-                                            className="h-12 text-sm font-bold border-2 rounded-xl focus-visible:ring-primary focus-visible:border-primary px-3"
+                                            className={cn(
+                                                "h-12 text-sm font-bold border-2 rounded-xl focus-visible:ring-primary focus-visible:border-primary px-3 transition-colors",
+                                                highlightNewSerialFields ? "border-red-500 bg-red-50/10 focus-visible:border-red-600" : ""
+                                            )}
                                         />
                                     </div>
                                     <div className="col-span-4 space-y-1">
@@ -772,7 +852,10 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
                                             value={newExpiry}
                                             onChange={(e) => setNewExpiry(e.target.value)}
                                             onKeyDown={(e) => e.key === "Enter" && addSerial()}
-                                            className="h-12 text-sm font-bold border-2 rounded-xl focus-visible:ring-primary focus-visible:border-primary px-2"
+                                            className={cn(
+                                                "h-12 text-sm font-bold border-2 rounded-xl focus-visible:ring-primary focus-visible:border-primary px-2 transition-colors",
+                                                highlightNewSerialFields ? "border-red-500 bg-red-50/10 focus-visible:border-red-600" : ""
+                                            )}
                                         />
                                     </div>
                                 </div>
@@ -908,18 +991,7 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
                 </DialogContent>
             </Dialog>
 
-            {pendingRegistration && (
-                <CylinderRegistrationModal
-                    open={!!pendingRegistration}
-                    onClose={() => setPendingRegistration(null)}
-                    onSuccess={handleRegistrationSuccess}
-                    serialNumber={pendingRegistration.serial}
-                    productId={pendingRegistration.productId || ""}
-                    productName={pendingRegistration.productName || ""}
-                    currentBranchId={pendingRegistration.branchId}
-                    userId={receiverId}
-                />
-            )}
+
 
             <Dialog open={historyModalOpen} onOpenChange={setHistoryModalOpen}>
                 <DialogContent className="max-w-2xl bg-white dark:bg-slate-950 rounded-3xl border-0 shadow-2xl p-0 overflow-hidden flex flex-col h-[80vh]">

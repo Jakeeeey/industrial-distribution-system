@@ -4,6 +4,7 @@ import * as React from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { XCircle } from "lucide-react";
 import { useReceivingProducts } from "../../providers/ReceivingProductsProvider";
 
 export function SelectProductsStep({ onContinue }: { onContinue: () => void }) {
@@ -46,7 +47,7 @@ export function SelectProductsStep({ onContinue }: { onContinue: () => void }) {
     if (!selectedPO) return null;
 
     const draftItems = selectedPO.draftData || [];
-    
+
     // Create a mapping to easily find product names and details from allocations
     const productInfoMap = new Map<string, { name: string, barcode: string, branchName: string }>();
     selectedPO.allocations.forEach(alloc => {
@@ -84,7 +85,7 @@ export function SelectProductsStep({ onContinue }: { onContinue: () => void }) {
                             <tr>
                                 <th className="px-4 py-3 font-semibold">Product</th>
                                 <th className="px-4 py-3 font-semibold">Branch</th>
-                                <th className="px-4 py-3 font-semibold">Available Qty</th>
+                                <th className="px-4 py-3 font-semibold">Phys. Tagged</th>
                                 <th className="px-4 py-3 font-semibold w-32">Receipt Qty</th>
                             </tr>
                         </thead>
@@ -100,7 +101,7 @@ export function SelectProductsStep({ onContinue }: { onContinue: () => void }) {
                                     const porIdStr = String(draft.porId);
                                     let info = productInfoMap.get(porIdStr);
                                     if (!info) info = productInfoMap.get(`${draft.productId}-${draft.branchId}`);
-                                    
+
                                     const maxQty = draft.receivedQuantity;
                                     const currentQty = scannedCountByPorId[porIdStr] ?? maxQty;
 
@@ -112,44 +113,44 @@ export function SelectProductsStep({ onContinue }: { onContinue: () => void }) {
                                             </td>
                                             <td className="px-4 py-3">{info?.branchName || 'Unknown'}</td>
                                             <td className="px-4 py-3">
-                                                <span className="inline-flex items-center justify-center rounded-full bg-blue-100 px-2.5 py-0.5 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 font-medium">
+                                                <span className="inline-flex items-center justify-center rounded-full border border-blue-200 text-blue-600 bg-blue-50/50 px-2.5 py-0.5 font-black text-xs">
                                                     {maxQty}
                                                 </span>
                                             </td>
                                             <td className="px-4 py-3">
                                                 {!editingIds.has(porIdStr) ? (
-                                                    <Button 
-                                                        variant="outline" 
-                                                        size="sm" 
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
                                                         onClick={() => {
                                                             setEditingIds(prev => new Set(prev).add(porIdStr));
                                                         }}
-                                                        className="h-8 text-xs font-semibold"
+                                                        className="h-7 text-[11px] font-semibold px-4 border-primary text-primary hover:bg-primary/10"
                                                     >
                                                         Select
                                                     </Button>
                                                 ) : (
-                                                    <div className="flex items-center gap-2">
-                                                        <Input 
-                                                            type="number" 
-                                                            min={1}
+                                                    <div className="flex items-center gap-1">
+                                                        <Input
+                                                            type="number"
+                                                            min={0}
                                                             max={maxQty}
                                                             value={currentQty || ""}
                                                             onChange={(e) => handleQuantityChange(porIdStr, e.target.value, maxQty)}
-                                                            className="h-8 w-20 text-right font-medium"
+                                                            className="h-7 text-xs w-16 text-center px-1"
                                                         />
-                                                        <Button 
-                                                            variant="ghost" 
-                                                            size="sm" 
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
                                                             onClick={() => {
                                                                 const next = new Set(editingIds);
                                                                 next.delete(porIdStr);
                                                                 setEditingIds(next);
                                                                 handleQuantityChange(porIdStr, "0", maxQty);
                                                             }}
-                                                            className="h-8 px-2 text-xs font-semibold text-slate-500 hover:text-slate-800"
+                                                            className="h-6 w-6 text-destructive hover:bg-destructive/10 shrink-0"
                                                         >
-                                                            Close
+                                                            <XCircle className="h-4 w-4" />
                                                         </Button>
                                                     </div>
                                                 )}
@@ -164,7 +165,7 @@ export function SelectProductsStep({ onContinue }: { onContinue: () => void }) {
             </Card>
 
             <div className="flex justify-end gap-2 mt-4">
-                <Button 
+                <Button
                     onClick={handleContinue}
                     disabled={draftItems.length === 0 || !Object.values(scannedCountByPorId).some(qty => qty > 0)}
                 >

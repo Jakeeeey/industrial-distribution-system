@@ -65,6 +65,8 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
         clearEditingReceiptId,
         loadReceipt,
         isReceiptMode,
+        step,
+        setStep,
     } = useReceivingProducts();
     const [clientSaveError, setClientSaveError] = React.useState("");
 
@@ -346,6 +348,15 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
             return;
         }
 
+        const totalScannedItems = Object.values(safeCounts).reduce((a, b) => a + Number(b), 0);
+        if (totalScannedItems === 0) {
+            setShowErrors(true);
+            toast.error("Receipt Details Invalid", {
+                description: "Please specify a Receive Qty for at least one item."
+            });
+            return;
+        }
+
         setClientSaveError("");
 
         // Check if Incomplete
@@ -615,10 +626,10 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
                             <div>
                                 <div className="text-sm font-semibold">
-                                    Step 2: Batch & Lot Details
+                                    {step === 1 ? "Step 1: Products Selection & Quantities" : "Step 2: Batch, Lot & Expiry Details"}
                                 </div>
                                 <div className="text-xs text-muted-foreground">
-                                    Specify the Batch No and Lot selection for each selected product.
+                                    {step === 1 ? "Select products and input the quantity to receive." : "Specify the Batch No, Lot selection and Expiry Date for each selected product."}
                                 </div>
                             </div>
                             <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -636,13 +647,18 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                                 <TableHeader className="bg-muted/50">
                                     <TableRow>
                                         <TableHead className="text-[10px] uppercase font-bold text-muted-foreground">Product Name</TableHead>
-                                        <TableHead className="text-[10px] uppercase font-bold text-muted-foreground w-36">Batch</TableHead>
-                                        <TableHead className="text-[10px] uppercase font-bold text-muted-foreground w-44">Lot</TableHead>
-                                        <TableHead className="text-[10px] uppercase font-bold text-muted-foreground text-right">Unit Price</TableHead>
-                                        <TableHead className="text-[10px] uppercase font-bold text-muted-foreground text-center w-24">Disc. Type</TableHead>
-                                        <TableHead className="text-[10px] uppercase font-bold text-muted-foreground text-right">Disc. Amt</TableHead>
-                                        <TableHead className="text-[10px] uppercase font-bold text-muted-foreground text-right">Net Amt</TableHead>
+                                        {step === 2 && (
+                                            <>
+                                                <TableHead className="text-[10px] uppercase font-bold text-muted-foreground w-36">Batch</TableHead>
+                                                <TableHead className="text-[10px] uppercase font-bold text-muted-foreground w-44">Lot</TableHead>
+                                                <TableHead className="text-[10px] uppercase font-bold text-muted-foreground text-right">Unit Price</TableHead>
+                                                <TableHead className="text-[10px] uppercase font-bold text-muted-foreground text-center w-24">Disc. Type</TableHead>
+                                                <TableHead className="text-[10px] uppercase font-bold text-muted-foreground text-right">Disc. Amt</TableHead>
+                                                <TableHead className="text-[10px] uppercase font-bold text-muted-foreground text-right">Net Amt</TableHead>
+                                            </>
+                                        )}
                                         <TableHead className="text-[10px] uppercase font-bold text-muted-foreground text-center w-20">Expected</TableHead>
+                                        <TableHead className="text-[10px] uppercase font-bold text-muted-foreground text-center w-24">Phys. Tagged</TableHead>
                                         <TableHead className="text-[10px] uppercase font-bold text-muted-foreground text-center w-24">Receive Qty</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -671,44 +687,58 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                                                         <div className="font-bold text-xs">{it.name}</div>
                                                         <div className="text-[9px] text-muted-foreground font-mono">SKU: {it.barcode} | UOM: {it.uom}</div>
                                                     </TableCell>
-                                                    <TableCell>
-                                                        <Input
-                                                            className={cn(
-                                                                "h-8 text-[11px] font-bold",
-                                                                showErrors && scanned > 0 && !(batchNos[porId] || "").trim() && "border-destructive ring-1 ring-destructive"
-                                                            )}
-                                                            placeholder="Batch #"
-                                                            value={batchNos[porId] || ""}
-                                                            onChange={(e) => setBatchNos(prev => ({ ...prev, [porId]: e.target.value }))}
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <select
-                                                            className={cn(
-                                                                "h-8 w-full rounded-md border border-input bg-background px-2 text-[11px]",
-                                                                showErrors && scanned > 0 && !(lotIds[porId] || "").trim() && "border-destructive ring-1 ring-destructive"
-                                                            )}
-                                                            value={lotIds[porId] || ""}
-                                                            onChange={(e) => setLotIds(prev => ({ ...prev, [porId]: e.target.value }))}
-                                                        >
-                                                            <option value="">Select Lot</option>
-                                                            {lots.map((l: { lot_id: string | number; lot_name: string }) => <option key={l.lot_id} value={String(l.lot_id)}>{l.lot_name}</option>)}
-                                                        </select>
-                                                    </TableCell>
-                                                    <TableCell className="text-right text-xs">{formatPHP(unitP)}</TableCell>
-                                                    <TableCell className="text-center text-[10px] text-muted-foreground">{it.discountType}</TableCell>
-                                                    <TableCell className="text-right text-xs text-destructive font-medium">{(discA || 0) > 0 ? `${formatPHP(discA * scanned)}` : "—"}</TableCell>
-                                                    <TableCell className="text-right font-bold text-xs">{formatPHP(lineTotal)}</TableCell>
+                                                    {step === 2 && (
+                                                        <>
+                                                            <TableCell>
+                                                                <Input
+                                                                    className={cn(
+                                                                        "h-8 text-[11px] font-bold",
+                                                                        showErrors && scanned > 0 && !(batchNos[porId] || "").trim() && "border-destructive ring-1 ring-destructive"
+                                                                    )}
+                                                                    placeholder="Batch #"
+                                                                    value={batchNos[porId] || ""}
+                                                                    onChange={(e) => setBatchNos(prev => ({ ...prev, [porId]: e.target.value }))}
+                                                                />
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <select
+                                                                    className={cn(
+                                                                        "h-8 w-full rounded-md border border-input bg-background px-2 text-[11px]",
+                                                                        showErrors && scanned > 0 && !(lotIds[porId] || "").trim() && "border-destructive ring-1 ring-destructive"
+                                                                    )}
+                                                                    value={lotIds[porId] || ""}
+                                                                    onChange={(e) => setLotIds(prev => ({ ...prev, [porId]: e.target.value }))}
+                                                                >
+                                                                    <option value="">Select Lot</option>
+                                                                    {lots.map((l: { lot_id: string | number; lot_name: string }) => <option key={l.lot_id} value={String(l.lot_id)}>{l.lot_name}</option>)}
+                                                                </select>
+                                                            </TableCell>
+                                                            <TableCell className="text-right text-xs">{formatPHP(unitP)}</TableCell>
+                                                            <TableCell className="text-center text-[10px] text-muted-foreground">{it.discountType}</TableCell>
+                                                            <TableCell className="text-right text-xs text-destructive font-medium">{(discA || 0) > 0 ? `${formatPHP(discA * scanned)}` : "—"}</TableCell>
+                                                            <TableCell className="text-right font-bold text-xs">{formatPHP(lineTotal)}</TableCell>
+                                                        </>
+                                                    )}
                                                     <TableCell className="text-center font-bold text-xs">{expected}</TableCell>
                                                     <TableCell className="text-center">
-                                                        {isReceiptMode ? (
+                                                        <div className="flex justify-center items-center">
+                                                            <Badge variant="outline" className="border-blue-200 text-blue-600 bg-blue-50/50 h-7 px-3 text-xs font-black rounded-full">
+                                                                {maxQty}
+                                                            </Badge>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-center">
+                                                        {step === 1 ? (
                                                             !editingIds.has(porId) ? (
                                                                 <div className="flex justify-center">
                                                                     <Button
                                                                         variant="outline"
                                                                         size="sm"
-                                                                        onClick={() => setEditingIds(prev => new Set(prev).add(porId))}
-                                                                        className="h-7 text-[11px] font-semibold px-4"
+                                                                        onClick={() => {
+                                                                            setEditingIds(prev => new Set(prev).add(porId));
+                                                                            setScannedCountByPorId(prev => ({ ...prev, [porId]: 0 }));
+                                                                        }}
+                                                                        className="h-7 text-[11px] font-semibold px-4 border-primary text-primary hover:bg-primary/10"
                                                                     >
                                                                         Select
                                                                     </Button>
@@ -732,13 +762,14 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                                                                     <Button
                                                                         variant="ghost"
                                                                         size="icon"
-                                                                        className="h-6 w-6 text-muted-foreground hover:text-foreground shrink-0"
+                                                                        className="h-6 w-6 text-destructive hover:bg-destructive/10 shrink-0"
                                                                         onClick={() => {
                                                                             setEditingIds(prev => {
                                                                                 const next = new Set(prev);
                                                                                 next.delete(porId);
                                                                                 return next;
                                                                             });
+                                                                            setScannedCountByPorId(prev => ({ ...prev, [porId]: 0 }));
                                                                         }}
                                                                     >
                                                                         <XCircle className="h-4 w-4" />
@@ -747,7 +778,10 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                                                             )
                                                         ) : (
                                                             <div className="flex justify-center items-center">
-                                                                <Badge variant="secondary" className="h-6 px-3 bg-muted text-foreground font-black text-xs">
+                                                                <Badge variant="secondary" className={cn(
+                                                                    "h-6 px-3 bg-muted text-foreground font-black text-xs",
+                                                                    showErrors && (!scanned || scanned === 0) && "border-destructive text-destructive bg-destructive/10"
+                                                                )}>
                                                                     {scanned}
                                                                 </Badge>
                                                             </div>
@@ -760,9 +794,12 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                                 </TableBody>
                                 <TableFooter className="bg-muted/10 border-t">
                                     <TableRow>
-                                        <TableCell colSpan={7} className="text-right text-[10px] font-bold uppercase">Subtotal</TableCell>
-                                        <TableCell className="text-right font-black text-foreground">{formatPHP(financials.gross)}</TableCell>
+                                        <TableCell colSpan={step === 2 ? 7 : 1} className="text-right text-[10px] font-bold uppercase">Subtotal</TableCell>
+                                        {step === 2 && (
+                                            <TableCell className="text-right font-black text-foreground">{formatPHP(financials.gross)}</TableCell>
+                                        )}
                                         <TableCell className="text-center font-bold">{totalExpected}</TableCell>
+                                        <TableCell className="text-center font-bold">—</TableCell>
                                         <TableCell className="text-center font-black">{totalScanned}</TableCell>
                                     </TableRow>
                                 </TableFooter>
@@ -793,71 +830,90 @@ export function ReviewReceiptStep({ receiverName, onBack }: { receiverName?: str
                             );
                         })()}
 
-                        <div className="mt-4 flex flex-col md:flex-row justify-end gap-6 border-t pt-4">
-                            <div className="flex-1 max-w-sm ml-auto space-y-2 text-xs">
-                                <div className="flex justify-between items-center text-muted-foreground">
-                                    <span className="font-bold uppercase tracking-wider text-[10px]">Gross Amount:</span>
-                                    <span className="font-bold text-foreground">{formatPHP(financials.gross)}</span>
-                                </div>
-                                <div className="flex justify-between items-center text-destructive">
-                                    <span className="font-bold uppercase tracking-wider text-[10px]">Discount:</span>
-                                    <span className="font-bold">{formatPHP(financials.discount)}</span>
-                                </div>
-                                <div className="flex justify-between items-center text-muted-foreground pb-2 border-b">
-                                    <span className="font-bold uppercase tracking-wider text-[10px]">Net Amount:</span>
-                                    <span className="font-bold text-foreground">{formatPHP(financials.net)}</span>
-                                </div>
-                                {selectedPO?.isInvoice && (
-                                    <>
-                                        <div className="flex justify-between items-center text-muted-foreground">
-                                            <span className="font-bold uppercase tracking-wider text-[10px]">VAT Details:</span>
-                                            <span className="font-bold text-foreground">{financials.isExclusive ? "+" : ""}{formatPHP(financials.vatAmount)}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center text-destructive pb-2 border-b">
-                                            <span className="font-bold uppercase tracking-wider text-[10px]">EWT:</span>
-                                            <span className="font-bold">{formatPHP(financials.whtAmount)}</span>
-                                        </div>
-                                    </>
-                                )}
-                                <div className="flex justify-between items-center pt-4">
-                                    <span className="font-black text-sm uppercase tracking-widest text-foreground underline decoration-primary underline-offset-4">Grand Total:</span>
-                                    <span className="font-black text-xl text-primary drop-shadow-sm">{formatPHP(financials.grandTotal)}</span>
-                                </div>
-                                {selectedPO?.isInvoice && (
-                                    <p className="text-[10px] text-muted-foreground mt-2 italic leading-tight text-right">
-                                        Note: VAT and EWT figures are for reference and have not been deducted from the total.
-                                    </p>
-                                )}
-                            </div>
-                        </div>
-
-                        {(clientSaveError || saveError) && (
-                            <div className="mt-4 p-3 bg-destructive/15 text-destructive text-xs font-bold text-center border border-destructive/20 rounded-md">
-                                {clientSaveError || saveError}
-                            </div>
-                        )}
-
-                        <div className="mt-4 flex justify-end gap-3 border-t pt-4">
+                        {step === 1 && (() => {
+                                const hasSelectedProducts = editingIds.size > 0;
+                                const hasZeroQuantitySelected = Array.from(editingIds).some(id => (safeCounts[id] || 0) === 0);
+                                
+                                return (
+                                    <div className="mt-4 flex justify-end border-t pt-4">
+                                        <Button 
+                                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-8 h-11 uppercase text-xs tracking-wider"
+                                            onClick={() => setStep(2)}
+                                            disabled={!hasSelectedProducts || hasZeroQuantitySelected}
+                                        >
+                                            Next
+                                        </Button>
+                                    </div>
+                                );
+                        })()}
+                        
+                        {step === 2 && (
                             <>
-                                {onBack && (
-                                    <Button
-                                        variant="outline"
-                                        className="border-primary/20 hover:border-primary hover:bg-primary/5 font-black uppercase text-xs tracking-wider h-11 px-8"
-                                        onClick={onBack}
-                                        disabled={savingReceipt}
-                                    >
-                                        Back
-                                    </Button>
+                                <div className="mt-4 flex flex-col md:flex-row justify-end gap-6 border-t pt-4">
+                                    <div className="flex-1 max-w-sm ml-auto space-y-2 text-xs">
+                                        <div className="flex justify-between items-center text-muted-foreground">
+                                            <span className="font-bold uppercase tracking-wider text-[10px]">Gross Amount:</span>
+                                            <span className="font-bold text-foreground">{formatPHP(financials.gross)}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-destructive">
+                                            <span className="font-bold uppercase tracking-wider text-[10px]">Discount:</span>
+                                            <span className="font-bold">{formatPHP(financials.discount)}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-muted-foreground pb-2 border-b">
+                                            <span className="font-bold uppercase tracking-wider text-[10px]">Net Amount:</span>
+                                            <span className="font-bold text-foreground">{formatPHP(financials.net)}</span>
+                                        </div>
+                                        {selectedPO?.isInvoice && (
+                                            <>
+                                                <div className="flex justify-between items-center text-muted-foreground">
+                                                    <span className="font-bold uppercase tracking-wider text-[10px]">VAT Details:</span>
+                                                    <span className="font-bold text-foreground">{financials.isExclusive ? "+" : ""}{formatPHP(financials.vatAmount)}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center text-destructive pb-2 border-b">
+                                                    <span className="font-bold uppercase tracking-wider text-[10px]">EWT:</span>
+                                                    <span className="font-bold">{formatPHP(financials.whtAmount)}</span>
+                                                </div>
+                                            </>
+                                        )}
+                                        <div className="flex justify-between items-center pt-4">
+                                            <span className="font-black text-sm uppercase tracking-widest text-foreground underline decoration-primary underline-offset-4">Grand Total:</span>
+                                            <span className="font-black text-xl text-primary drop-shadow-sm">{formatPHP(financials.grandTotal)}</span>
+                                        </div>
+                                        {selectedPO?.isInvoice && (
+                                            <p className="text-[10px] text-muted-foreground mt-2 italic leading-tight text-right">
+                                                Note: VAT and EWT figures are for reference and have not been deducted from the total.
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {(clientSaveError || saveError) && (
+                                    <div className="mt-4 p-3 bg-destructive/15 text-destructive text-xs font-bold text-center border border-destructive/20 rounded-md">
+                                        {clientSaveError || saveError}
+                                    </div>
                                 )}
-                                <Button
-                                    className="bg-primary text-primary-foreground hover:bg-primary/90 font-black uppercase text-xs tracking-wider h-11 px-8 shadow-md"
-                                    onClick={handleSaveReceipt}
-                                    disabled={savingReceipt}
-                                >
-                                    {savingReceipt ? "Saving..." : "Save Final Receipt"}
-                                </Button>
+
+                                <div className="mt-4 flex justify-end gap-3 border-t pt-4">
+                                    <>
+                                        <Button
+                                            variant="outline"
+                                            className="border-primary/20 hover:border-primary hover:bg-primary/5 font-black uppercase text-xs tracking-wider h-11 px-8"
+                                            onClick={() => setStep(1)}
+                                            disabled={savingReceipt}
+                                        >
+                                            Back
+                                        </Button>
+                                        <Button
+                                            className="bg-primary text-primary-foreground hover:bg-primary/90 font-black uppercase text-xs tracking-wider h-11 px-8 shadow-md"
+                                            onClick={handleSaveReceipt}
+                                            disabled={savingReceipt}
+                                        >
+                                            {savingReceipt ? "Saving..." : "Save Final Receipt"}
+                                        </Button>
+                                    </>
+                                </div>
                             </>
-                        </div>
+                        )}
                     </Card>
                 </div>
             )}

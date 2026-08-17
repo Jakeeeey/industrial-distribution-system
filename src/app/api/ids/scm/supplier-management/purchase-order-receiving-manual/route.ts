@@ -333,17 +333,30 @@ async function fetchReceivingSerialsMap(base: string, porIds: number[]) {
             map.set(porId, list);
         }
 
-        const serialUrl = `${base}/items/purchase_order_receiving_serial?limit=-1&filter[purchase_order_receiving_id][_in]=${idList}&fields=purchase_order_receiving_id,serial_number,tare_weight`;
+        const serialUrl = `${base}/items/purchase_order_receiving_serial?limit=-1&filter[purchase_order_receiving_id][_in]=${idList}&fields=purchase_order_receiving_id,serial_number,tare_weight,purchase_order_receiving_id.expiry_date,purchase_order_receiving_id.tare_weight`;
         const serials = await fetchJson<{ data: Array<Record<string, unknown>> }>(serialUrl).catch(() => ({ data: [] }));
         for (const item of serials?.data ?? []) {
-            const porId = toNum(item.purchase_order_receiving_id);
+            let porId = 0;
+            let parentTareWeight = "";
+            let expiryDate = "";
+
+            if (typeof item.purchase_order_receiving_id === 'object' && item.purchase_order_receiving_id !== null) {
+                const parent = item.purchase_order_receiving_id as Record<string, unknown>;
+                porId = toNum(parent.id ?? parent.purchase_order_product_id);
+                parentTareWeight = toStr(parent.tare_weight);
+                expiryDate = toStr(parent.expiry_date);
+            } else {
+                porId = toNum(item.purchase_order_receiving_id);
+            }
+
             const sn = toStr(item.serial_number);
             if (!porId || !sn) continue;
             const list = map.get(porId) ?? [];
             if (!list.some((x) => x.sn === sn)) {
                 list.push({
                     sn,
-                    tareWeight: toStr(item.tare_weight),
+                    tareWeight: toStr(item.tare_weight) || parentTareWeight,
+                    expiryDate
                 });
             }
             map.set(porId, list);
@@ -729,7 +742,7 @@ export async function POST(req: NextRequest) {
             if (!serialNumber) return bad("Missing serialNumber", 400);
 
             // Check cylinder_assets
-            const caUrl = `${base}/items/cylinder_assets?limit=1&filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&fields=id,cylinder_status,cylinder_condition`;
+            const caUrl = `${base}/items/cylinder_assets?limit=1&filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&fields=id,cylinder_status,cylinder_condition,tare_weight,expiration_date`;
             const caJ = await fetchJson<{ data: Array<Record<string, unknown>> }>(caUrl).catch(() => null);
             const caExists = (caJ?.data && caJ.data.length > 0);
             const ca = caExists ? caJ.data[0] : null;
@@ -769,7 +782,11 @@ export async function POST(req: NextRequest) {
 
                 if (caExists) {
                     if (String(ca?.cylinder_status).toUpperCase() === "AVAILABLE" && String(ca?.cylinder_condition).toUpperCase() === "GOOD") {
-                        return ok({ status: "ACCEPTED" });
+                        return ok({ 
+                            status: "ACCEPTED",
+                            tareWeight: ca?.tare_weight || "",
+                            expiryDate: ca?.expiration_date || ""
+                        });
                     }
                     return ok({ status: "REJECTED", message: "Serial Number exists but is unavailable." });
                 }
@@ -777,7 +794,11 @@ export async function POST(req: NextRequest) {
                 return ok({ status: "REQUIRES_REGISTRATION" });
             } else {
                 if (caExists && String(ca?.cylinder_status).toUpperCase() === "AVAILABLE" && String(ca?.cylinder_condition).toUpperCase() === "GOOD") {
-                    return ok({ status: "ACCEPTED" });
+                    return ok({ 
+                        status: "ACCEPTED",
+                        tareWeight: ca?.tare_weight || "",
+                        expiryDate: ca?.expiration_date || ""
+                    });
                 }
                 return ok({ status: "REQUIRES_REGISTRATION" });
             }
@@ -970,7 +991,7 @@ export async function POST(req: NextRequest) {
         }
 
         if (action === "save_receipt") {
-            const { poId, porCounts, porSerials, porMetaData, receiverId } = body;
+            let { poId, porCounts, porSerials, porMetaData, receiverId } = body;
             const rollbackTracker: Array<{ execute: () => Promise<void>; undo: () => Promise<void> }> = [];
             const receiptNo = null; 
             const thePoId = toNum(poId);
@@ -1022,16 +1043,42 @@ export async function POST(req: NextRequest) {
                         if (dt) { linePct = dt.pct; }
                     } else resolvedId = ensureId(dType);
 
-                    const isSerialized = !!(productsMap.get(pid)?.is_serialized);
+                    const hasIncomingSerials = porSerials?.[key] && Array.isArray(porSerials[key]) && porSerials[key].length > 0;
+                    const isSerialized = !!(productsMap.get(pid)?.is_serialized) || hasIncomingSerials;
 
                     if (isSerialized) {
                         const draftPorsRes = await fetchJson<{ data: Record<string, unknown>[] }>(`${base}/items/${POR_COLLECTION}?filter[purchase_order_id][_eq]=${encodeURIComponent(String(thePoId))}&filter[product_id][_eq]=${encodeURIComponent(String(pid))}&filter[branch_id][_eq]=${encodeURIComponent(String(bid))}&filter[isPosted][_eq]=0&filter[receipt_no][_null]=true&filter[is_reverted][_neq]=1&fields=purchase_order_product_id`).catch(() => null);
                         const draftPors = draftPorsRes?.data || [];
                         
+                        const draftPorIds = draftPors.map(d => String(d.purchase_order_product_id));
+                        let draftSerials: Array<{ receiving_item_id: number; serial_number: string; purchase_order_receiving_id: unknown }> = [];
+                        if (draftPorIds.length > 0) {
+                            const dsUrl = `${base}/items/purchase_order_receiving_serial?limit=-1&filter[purchase_order_receiving_id][_in]=${draftPorIds.join(',')}&fields=receiving_item_id,serial_number,purchase_order_receiving_id`;
+                            const dsRes = await fetchJson<{ data: any[] }>(dsUrl).catch(() => null);
+                            draftSerials = dsRes?.data || [];
+                        }
+
+                        const incomingSerials = Array.isArray(porSerials?.[key]) ? porSerials[key] : [];
+                        
                         for (const draftPor of draftPors) {
                             const dId = String(draftPor.purchase_order_product_id);
                             porCounts[dId] = 1;
                             if (porMetaData?.[key]) porMetaData[dId] = porMetaData[key];
+
+                            const dbSerialRow = draftSerials.find(ds => {
+                                const relId = typeof ds.purchase_order_receiving_id === 'object' && ds.purchase_order_receiving_id !== null
+                                    ? ((ds.purchase_order_receiving_id as Record<string, unknown>).id ?? (ds.purchase_order_receiving_id as Record<string, unknown>).purchase_order_product_id)
+                                    : ds.purchase_order_receiving_id;
+                                return String(relId) === dId;
+                            });
+
+                            if (dbSerialRow) {
+                                const incSerial = incomingSerials.find((s: any) => s.sn === dbSerialRow.serial_number);
+                                if (incSerial) {
+                                    if (!porSerials) porSerials = {};
+                                    porSerials[dId] = [incSerial];
+                                }
+                            }
                         }
                         
                         delete porCounts[key];
@@ -1130,7 +1177,7 @@ export async function POST(req: NextRequest) {
                 let serialExpiry: string | null = null;
                 for (const s of serialsList) {
                     if (typeof s === 'object') {
-                        if (firstTareWeight === null && s.tareWeight !== undefined && s.tareWeight !== null) {
+                        if (firstTareWeight === null && s.tareWeight !== undefined && s.tareWeight !== null && String(s.tareWeight).trim() !== "") {
                             const tw = Number(s.tareWeight);
                             if (!isNaN(tw)) firstTareWeight = tw;
                         }
