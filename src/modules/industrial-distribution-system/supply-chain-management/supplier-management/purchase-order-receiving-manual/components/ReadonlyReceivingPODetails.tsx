@@ -17,7 +17,7 @@ function statusBadgeClasses(status?: string) {
 
 function receiptStatusBadgeClasses(status?: string) {
     const s = String(status || "ACTIVE").toUpperCase();
-    if (s === "REVERTED") return "bg-red-100 text-red-700 border border-red-300 font-black";
+    if (s === "REVERTED") return "bg-slate-100 text-slate-600 border border-slate-300 font-black";
     if (s === "POSTED") return "bg-primary/10 text-primary border border-primary/30 font-black";
     return "bg-amber-50 text-amber-700 border border-amber-200 font-black";
 }
@@ -91,7 +91,7 @@ export function ReadonlyReceivingPODetails() {
                                     className="flex items-center justify-between gap-3 text-[10px] border-b border-primary/10 pb-2 last:border-0 last:pb-0"
                                 >
                                     <div className="flex flex-col">
-                                        <span className={cn("font-mono font-black", historyItem.isReverted ? "text-red-500 line-through" : "text-primary")}>
+                                        <span className={cn("font-mono font-black", historyItem.isReverted ? "text-slate-400 line-through" : "text-primary")}>
                                             {historyItem.receiptNo}
                                         </span>
                                         <span className="text-[9px] font-bold text-slate-500">

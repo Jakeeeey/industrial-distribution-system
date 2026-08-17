@@ -82,6 +82,7 @@ export type ReceivingPODetail = {
     isInvoice?: boolean;
     isRefill?: boolean;
     isTagged?: boolean;
+    draftSerials?: Record<string, { sn: string; tareWeight?: string; expiryDate?: string }[]>;
 };
 
 export type SavedItem = {
@@ -92,6 +93,7 @@ export type SavedItem = {
     receivedQtyAtStart: number;
     receivedQtyNow: number;
     unitPrice?: number;
+    discountType?: string;
     discountAmount?: number;
     batchNo?: string;
     lotId?: string;
@@ -102,13 +104,13 @@ export type SavedItem = {
 
 export type ReceiptSavedInfo = {
     poId: string;
-    receiptNo: string;
-    receiptType: string;
-    receiptDate: string;
     items: SavedItem[];
-    isFullyReceived: boolean;
     savedAt: number;
     receiverName?: string;
+    receiptNo?: string;
+    receiptDate?: string;
+    receiptType?: string;
+    isFullyReceived?: boolean;
     isInvoice?: boolean;
 };
 
@@ -135,16 +137,18 @@ type Ctx = {
     verifyPO: () => Promise<void>;
     verifyError: string;
 
-    // receipt
+    manualCounts: Record<string, number>;
+    setManualCounts: React.Dispatch<React.SetStateAction<Record<string, number>>>;
+
+    // ✅ NEW: receipt details (compat with ReceiptDetailsStep)
     receiptNo: string;
     setReceiptNo: (v: string) => void;
     receiptType: string;
     setReceiptType: (v: string) => void;
     receiptDate: string;
     setReceiptDate: (v: string) => void;
-
-    manualCounts: Record<string, number>;
-    setManualCounts: React.Dispatch<React.SetStateAction<Record<string, number>>>;
+    editingRevertedReceiptNo: string | null;
+    setEditingRevertedReceiptNo: (v: string | null) => void;
 
     // ✅ NEW: receipt saved signal (non-breaking)
     receiptSaved: ReceiptSavedInfo | null;
@@ -153,6 +157,9 @@ type Ctx = {
     saveReceipt: (porMetaData?: Record<string, { lotNo: string; batchNo?: string; expiryDate: string }>) => Promise<void>;
     savingReceipt: boolean;
     saveError: string;
+    
+    // NEW: User Context
+    receiverId?: number;
 
     // ✅ NEW: Verification/Checklist
     verifiedProductIds: string[];
@@ -172,8 +179,8 @@ type Ctx = {
     lotsLoading: boolean;
 
     // ✅ SERIALS
-    serialsByPorId: Record<string, { sn: string; tareWeight?: string; expiryDate?: string; isNew?: boolean }[]>;
-    setSerialsByPorId: React.Dispatch<React.SetStateAction<Record<string, { sn: string; tareWeight?: string; expiryDate?: string; isNew?: boolean }[]>>>;
+    serialsByPorId: Record<string, { sn: string; tareWeight?: string; expiryDate?: string; isNew?: boolean; isSaved?: boolean }[]>;
+    setSerialsByPorId: React.Dispatch<React.SetStateAction<Record<string, { sn: string; tareWeight?: string; expiryDate?: string; isNew?: boolean; isSaved?: boolean }[]>>>;
 
     // ✅ UNITS
     units: UnitOption[];
@@ -207,11 +214,8 @@ function getDraftKey(poId: string) { return `${DRAFT_KEY_PREFIX}${poId}`; }
 type DraftState = {
     manualCounts: Record<string, number>;
     verifiedProductIds: string[];
-    receiptNo: string;
-    receiptType: string;
-    receiptDate: string;
     metaDataByPorId?: Record<string, { batchNo?: string; lotNo?: string; lotId?: string; expiryDate?: string }>;
-    serialsByPorId?: Record<string, { sn: string; tareWeight?: string; expiryDate?: string; isNew?: boolean }[]>;
+    serialsByPorId?: Record<string, { sn: string; tareWeight?: string; expiryDate?: string; isNew?: boolean; isSaved?: boolean }[]>;
     savedAt: number;
 };
 
@@ -230,7 +234,7 @@ function clearDraft(poId: string) {
 }
 
 
-export function ReceivingProductsManualProvider({ children, receiverId }: { children: React.ReactNode, receiverId?: number }) {
+export function ReceivingProductsManualProvider({ children, receiverId, receiverName }: { children: React.ReactNode, receiverId?: number, receiverName?: string }) {
     const [list, setList] = React.useState<ReceivingListItem[]>([]);
     const [listLoading, setListLoading] = React.useState(false);
     const [listError, setListError] = React.useState("");
@@ -242,15 +246,16 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
     const [poBarcode, setPoBarcode] = React.useState("");
     const [verifyError, setVerifyError] = React.useState("");
 
-    // receipt
-    const [receiptNo, setReceiptNo] = React.useState("");
-    const [receiptType, setReceiptType] = React.useState("");
-    const [receiptDate, setReceiptDate] = React.useState(todayYMD());
-
     const [manualCounts, setManualCounts] = React.useState<Record<string, number>>({});
 
     const [savingReceipt, setSavingReceipt] = React.useState(false);
     const [saveError, setSaveError] = React.useState("");
+
+    // ✅ Receipt Details
+    const [receiptNo, setReceiptNo] = React.useState("");
+    const [receiptType, setReceiptType] = React.useState("");
+    const [receiptDate, setReceiptDate] = React.useState(todayYMD());
+    const [editingRevertedReceiptNo, setEditingRevertedReceiptNo] = React.useState<string | null>(null);
 
     // ✅ NEW: success signal for UI
     const [receiptSaved, setReceiptSaved] = React.useState<ReceiptSavedInfo | null>(null);
@@ -261,7 +266,7 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
     const [metaDataByPorId, setMetaDataByPorId] = React.useState<Record<string, { batchNo?: string; lotNo?: string; lotId?: string; expiryDate?: string }>>({});
 
     // ✅ SERIALS
-    const [serialsByPorId, setSerialsByPorId] = React.useState<Record<string, { sn: string; tareWeight?: string; expiryDate?: string; isNew?: boolean }[]>>({});
+    const [serialsByPorId, setSerialsByPorId] = React.useState<Record<string, { sn: string; tareWeight?: string; expiryDate?: string; isNew?: boolean; isSaved?: boolean }[]>>({});
 
     // ✅ LOTS
     const [lots, setLots] = React.useState<LotOption[]>([]);
@@ -353,14 +358,11 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
         saveDraft(poId, {
             manualCounts,
             verifiedProductIds,
-            receiptNo,
-            receiptType,
-            receiptDate,
             metaDataByPorId,
             serialsByPorId,
-            savedAt: Date.now(),
+            savedAt: Date.now()
         });
-    }, [selectedPO?.id, manualCounts, verifiedProductIds, receiptNo, receiptType, receiptDate, metaDataByPorId, serialsByPorId]);
+    }, [selectedPO?.id, manualCounts, verifiedProductIds, metaDataByPorId, serialsByPorId]);
 
     // ✅ SYNC SERIALS TO COUNTS
     React.useEffect(() => {
@@ -423,18 +425,39 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
                 ) : false;
 
                 if (hasDraftData && draft) {
-                    setManualCounts(draft.manualCounts || {});
+                    const validKeys = new Set(
+                        (detail?.allocations || []).flatMap(a => 
+                            (a.items || []).flatMap(i => [i.porId, i.id]).filter(Boolean)
+                        )
+                    );
+                    const filterDraftObj = <T,>(obj: Record<string, T> | null | undefined) => {
+                        const newObj: Record<string, T> = {};
+                        for (const [k, v] of Object.entries(obj || {})) {
+                            if (validKeys.has(k)) newObj[k] = v;
+                        }
+                        return newObj;
+                    };
+
+                    setManualCounts(filterDraftObj(draft.manualCounts));
                     setVerifiedProductIds(draft.verifiedProductIds || []);
-                    setMetaDataByPorId(draft.metaDataByPorId || {});
-                    setSerialsByPorId(draft.serialsByPorId || {});
-                    setReceiptNo(draft.receiptNo || "");
-                    setReceiptType(draft.receiptType || "");
-                    setReceiptDate(draft.receiptDate || todayYMD());
+                    setMetaDataByPorId(filterDraftObj(draft.metaDataByPorId));
+                    setSerialsByPorId(filterDraftObj(draft.serialsByPorId));
                     toast.info("Draft restored from previous session.");
                 } else {
-                    setReceiptDate(todayYMD());
-                    setReceiptNo("");
-                    setReceiptType("");
+
+                    if (detail && detail.draftSerials) {
+                        const newSerials: Record<string, { sn: string; tareWeight?: string; expiryDate?: string; isNew?: boolean; isSaved?: boolean }[]> = {};
+                        const newCounts: Record<string, number> = {};
+                        for (const [porId, sers] of Object.entries(detail.draftSerials)) {
+                            newSerials[porId] = sers.map(s => ({ ...s, isSaved: true }));
+                            newCounts[porId] = sers.length;
+                        }
+                        setSerialsByPorId(newSerials);
+                        setManualCounts(newCounts);
+                    } else {
+                        setSerialsByPorId({});
+                        setManualCounts({});
+                    }
                 }
 
                 setPoBarcode(detail?.poNumber ?? "");
@@ -504,14 +527,8 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
                     setVerifiedProductIds(draft.verifiedProductIds || []);
                     setMetaDataByPorId(draft.metaDataByPorId || {});
                     setSerialsByPorId(draft.serialsByPorId || {});
-                    setReceiptNo(draft.receiptNo || "");
-                    setReceiptType(draft.receiptType || "");
-                    setReceiptDate(draft.receiptDate || todayYMD());
                     toast.info("Draft restored from previous session.");
                 } else {
-                    setReceiptDate(todayYMD());
-                    setReceiptNo("");
-                    setReceiptType("");
                 }
 
                 setPoBarcode(code);
@@ -577,7 +594,7 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
 
 
     // ✅ NEW: Add extra product locally with duplicate check
-    const addExtraProductLocally = React.useCallback((item: { productId: string; name: string; barcode: string; branchId: string; branchName: string; unitPrice?: number; discountType?: string; discountPercent?: number; uom?: string; sku?: string; }) => {
+    const addExtraProductLocally = React.useCallback((item: { productId: string; name: string; barcode: string; branchId: string; branchName: string; unitPrice?: number; discountType?: string; discountPercent?: number; uom?: string; sku?: string; isSerialized?: boolean; }) => {
         let added = false;
         setSelectedPO(prev => {
             if (!prev) return prev;
@@ -610,6 +627,7 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
                     taggedQty: 0,
                     rfids: [],
                     isReceived: false,
+                    isSerialized: !!item.isSerialized,
                     unitPrice: uPrice,
                     discountType: item.discountType || "Standard",
                     discountAmount: dAmt,
@@ -681,17 +699,6 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
 
         const poId = selectedPO?.id;
         if (!poId) return setSaveError("Select a PO first.");
-        const errs: string[] = [];
-        if (!receiptNo.trim()) errs.push("Receipt Number is required.");
-        if (!receiptType.trim()) errs.push("Receipt Type is required.");
-        if (!receiptDate.trim()) errs.push("Receipt Date is required.");
-
-        if (errs.length > 0) {
-            toast.error("Required fields missing", {
-                description: errs.join(" "),
-            });
-            return setSaveError(errs.join(" "));
-        }
 
         const counts = manualCounts ?? {};
         if (!Object.keys(counts).length || Object.values(counts).every(c => c <= 0)) {
@@ -709,8 +716,6 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
 
         setSavingReceipt(true);
         try {
-            const oldReceiptNo = receiptNo.trim();
-
             const r = await fetch(API_URL, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -718,12 +723,9 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
                     action: "save_receipt",
                     receiverId,
                     poId,
-                    receiptNo: oldReceiptNo,
-                    receiptType: receiptType.trim(),
-                    receiptDate: receiptDate.trim(),
                     porCounts: counts,
                     porSerials: serialsByPorId,
-                    porMetaData: porMetaData ?? {},
+                    porMetaData: porMetaData ?? {}
                 }),
             });
             const j = await asJson(r);
@@ -741,11 +743,6 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
             );
             const itemsToUse = sourceItems.length > 0 ? sourceItems : snapshotItems;
 
-            // Calculate if fully received
-            const isFullyReceivedNow = itemsToUse.every((it: ReceivingPOItem) => {
-                const scannedNow = Number(snapshotCounts[it.id] || 0);
-                return (Number(it.receivedQty) + scannedNow) >= Number(it.expectedQty);
-            });
 
             const savedItems: SavedItem[] = itemsToUse.map((it: ReceivingPOItem) => {
                 // ✅ Try literal ID first, then fallback to productId-branchId key
@@ -759,6 +756,7 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
                     receivedQtyAtStart: Number(it.receivedQty || 0),
                     receivedQtyNow: scannedNow,
                     unitPrice: Number(it.unitPrice) || 0,
+                    discountType: String(it.discountType || ""),
                     discountAmount: Number(it.discountAmount) || 0,
                     uom: String(it.uom || ""),
                     batchNo: porMetaData?.[it.id]?.batchNo || porMetaData?.[`${it.productId}-${it.branchId}`]?.batchNo || "",
@@ -768,27 +766,18 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
                 };
             });
 
-            toast.success(`Receipt ${oldReceiptNo} saved successfully!`);
+            toast.success(`Tagged serials and quantities saved successfully!`);
 
             // ✅ mark success for UI
             setReceiptSaved({
                 poId: String(poId),
-                receiptNo: oldReceiptNo,
-                receiptType: receiptType.trim(),
-                receiptDate: receiptDate.trim(),
                 items: savedItems,
-                isFullyReceived: isFullyReceivedNow,
                 savedAt: Date.now(),
-                isInvoice: detail?.isInvoice ?? selectedPO?.isInvoice
+                receiverName
             });
 
             refreshList();
             resetSession({ clearStorage: true, poId: String(poId) });
-
-            // ✅ prepare a new receipt immediately
-            setReceiptDate(todayYMD());
-            setReceiptNo("");
-            setReceiptType("");
         } catch (e: unknown) {
             const msg = (e as Error)?.message ?? String(e);
             setSaveError(msg);
@@ -796,9 +785,10 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
         } finally {
             setSavingReceipt(false);
         }
-    }, [selectedPO, receiptNo, receiptType, receiptDate, manualCounts, serialsByPorId, refreshList, resetSession, receiverId]);
+    }, [selectedPO, manualCounts, serialsByPorId, refreshList, resetSession, receiverId, receiverName]);
 
     const value: Ctx = {
+        receiverId,
         list,
         poList: list,
 
@@ -817,15 +807,17 @@ export function ReceivingProductsManualProvider({ children, receiverId }: { chil
         verifyPO,
         verifyError,
 
+        manualCounts: manualCounts ?? {},
+        setManualCounts,
+
         receiptNo,
         setReceiptNo,
         receiptType,
         setReceiptType,
         receiptDate,
         setReceiptDate,
-
-        manualCounts: manualCounts ?? {},
-        setManualCounts,
+        editingRevertedReceiptNo,
+        setEditingRevertedReceiptNo,
 
         receiptSaved,
         clearReceiptSaved,

@@ -7,10 +7,20 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { RefreshCw, Package, ChevronRight, ChevronLeft } from "lucide-react";
+import { RefreshCw, Package, ChevronRight, ChevronLeft, Loader2 } from "lucide-react";
 import { useReceivingProducts } from "../providers/ReceivingProductsProvider";
 import {
-} from "@/components/ui/select";
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+type ReceivingListTab = "normal" | "refill" | "received";
 
 function statusBadge(status: string) {
     const s = String(status || "").toUpperCase();
@@ -33,9 +43,50 @@ export function AvailableForReceiving() {
         refreshList,
         selectAndVerifyPO,
         selectedPO,
+        scannedCountByPorId,
+        editingReceiptId,
     } = useReceivingProducts();
 
+    const [activeTab, setActiveTab] = React.useState<ReceivingListTab>("normal");
     const [q, setQ] = React.useState("");
+    const [pendingPO, setPendingPO] = React.useState<{ id: string; poNumber: string } | null>(null);
+    const [isSwitchModalOpen, setIsSwitchModalOpen] = React.useState(false);
+
+    // Calculate PO counts for badges
+    const normalCount = React.useMemo(() => {
+        return (poList ?? []).filter((x) => receivingTabFor(x) === "normal").length;
+    }, [poList]);
+
+    const refillCount = React.useMemo(() => {
+        return (poList ?? []).filter((x) => receivingTabFor(x) === "refill").length;
+    }, [poList]);
+
+    const receivedCount = React.useMemo(() => {
+        return (poList ?? []).filter((x) => receivingTabFor(x) === "received").length;
+    }, [poList]);
+
+    const hasUnsavedProgress = React.useMemo(() => {
+        return Object.keys(scannedCountByPorId || {}).length > 0 || editingReceiptId !== null;
+    }, [scannedCountByPorId, editingReceiptId]);
+
+    const initiatePOSwitch = (id: string, poNumber: string) => {
+        if (selectedPO?.id === id) return; // already active
+
+        if (hasUnsavedProgress) {
+            setPendingPO({ id, poNumber });
+            setIsSwitchModalOpen(true);
+        } else {
+            selectAndVerifyPO(id, poNumber);
+        }
+    };
+
+    const confirmSwitch = () => {
+        if (pendingPO) {
+            selectAndVerifyPO(pendingPO.id, pendingPO.poNumber);
+        }
+        setPendingPO(null);
+        setIsSwitchModalOpen(false);
+    };
 
     // ✅ pagination state (locked to 10)
     const pageSize = 10;
@@ -43,21 +94,25 @@ export function AvailableForReceiving() {
 
     const filtered = React.useMemo(() => {
         const s = q.trim().toLowerCase();
-        if (!s) return poList ?? [];
-        return (poList ?? []).filter((x) => {
+        const tabFiltered = (poList ?? []).filter((x) => {
+            return receivingTabFor(x) === activeTab;
+        });
+
+        if (!s) return tabFiltered;
+        return tabFiltered.filter((x) => {
             const a = String(x?.poNumber ?? "").toLowerCase();
             const b = String(x?.supplierName ?? "").toLowerCase();
             return a.includes(s) || b.includes(s);
         });
-    }, [poList, q]);
+    }, [poList, q, activeTab]);
 
     const totalItems = filtered.length;
     const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
 
-    // ✅ reset to page 1 when search changes
+    // ✅ reset to page 1 when search or tab changes
     React.useEffect(() => {
         setPage(1);
-    }, [q]);
+    }, [q, activeTab]);
 
     // ✅ clamp page if list shrinks
     React.useEffect(() => {
@@ -71,7 +126,7 @@ export function AvailableForReceiving() {
     }, [filtered, startIndex, endIndex]);
 
     return (
-        <Card className="p-4 sticky top-4 self-start">
+        <Card className="p-4 h-full flex flex-col overflow-hidden">
             <div className="flex items-start justify-between gap-3">
                 <div>
                     <div className="text-base font-semibold">Available for Receiving</div>
@@ -90,6 +145,46 @@ export function AvailableForReceiving() {
                     <RefreshCw className="h-4 w-4" />
                     Refresh
                 </Button>
+            </div>
+
+            {/* Tabs for active and received POs */}
+            <div className="mt-4 flex border-b border-border shrink-0">
+                <button
+                    type="button"
+                    onClick={() => setActiveTab("normal")}
+                    className={cn(
+                        "flex-1 pb-2 text-xs font-bold border-b-2 transition-all duration-200",
+                        activeTab === "normal"
+                            ? "border-primary text-primary"
+                            : "border-transparent text-muted-foreground hover:text-foreground"
+                    )}
+                >
+                    Normal POs ({normalCount})
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setActiveTab("refill")}
+                    className={cn(
+                        "flex-1 pb-2 text-xs font-bold border-b-2 transition-all duration-200",
+                        activeTab === "refill"
+                            ? "border-primary text-primary"
+                            : "border-transparent text-muted-foreground hover:text-foreground"
+                    )}
+                >
+                    Refill POs ({refillCount})
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setActiveTab("received")}
+                    className={cn(
+                        "flex-1 pb-2 text-xs font-bold border-b-2 transition-all duration-200",
+                        activeTab === "received"
+                            ? "border-primary text-primary"
+                            : "border-transparent text-muted-foreground hover:text-foreground"
+                    )}
+                >
+                    Received ({receivedCount})
+                </button>
             </div>
 
             <div className="mt-4">
@@ -130,7 +225,7 @@ export function AvailableForReceiving() {
                 </div>
             </div>
 
-            <div className="mt-4 space-y-2">
+            <div className="mt-4 flex-1 overflow-y-auto min-h-0 pr-1 space-y-2 py-1 scrollbar-thin">
                 {listLoading ? (
                     <>
                         {Array.from({ length: 4 }).map((_, i) => (
@@ -148,24 +243,31 @@ export function AvailableForReceiving() {
                     </>
                 ) : totalItems === 0 ? (
                     <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                        No purchase orders available.
+                        {activeTab === "received" ? "No received purchase orders found." : "No purchase orders available."}
                     </div>
                 ) : (
                     pageItems.map((po) => {
                         const active = selectedPO?.id === po.id;
+                        // PO Receipt module doesn't track tagging in this UI, nor does it have async opening state
+                        const isNotTagged = false;
+                        const isOpening = false;
+                        const isSwitching = false;
 
                         return (
                             <button
                                 key={po.id}
                                 type="button"
-                                // ✅ IMPORTANT: pass (poId, poNumber) so provider uses open_po directly
-                                onClick={() => selectAndVerifyPO(po.id, po.poNumber)}
+                                onClick={() => !isNotTagged && !isSwitching && initiatePOSwitch(po.id, po.poNumber)}
+                                disabled={isNotTagged || isSwitching}
                                 className={cn(
-                                    "w-full text-left rounded-xl border border-border p-3 transition",
-                                    "hover:bg-muted/40",
-                                    active
+                                    "w-full text-left rounded-xl border border-border p-3 transition relative overflow-hidden",
+                                    !isNotTagged && !isSwitching && "hover:bg-muted/40",
+                                    active && !isNotTagged
                                         ? "ring-2 ring-primary/25 bg-muted/30"
-                                        : "bg-background"
+                                        : "bg-background",
+                                    isNotTagged && "opacity-60 cursor-not-allowed bg-slate-50 grayscale",
+                                    isSwitching && !isOpening && "opacity-60 cursor-wait",
+                                    isOpening && "ring-2 ring-primary/25 bg-primary/5 cursor-wait"
                                 )}
                             >
                                 <div className="flex items-start justify-between gap-3">
@@ -175,10 +277,13 @@ export function AvailableForReceiving() {
                                                 <Package className="h-4 w-4 text-muted-foreground" />
                                             </div>
                                             <div className="min-w-0">
-                                                <div className="truncate text-sm font-semibold text-foreground">
+                                                <div className="text-sm font-semibold text-foreground flex items-center gap-2">
                                                     {po.poNumber}
+                                                    {isNotTagged && (
+                                                        <Badge variant="outline" className="text-[9px] font-black uppercase text-red-500 border-red-200 bg-red-50 px-1.5 py-0">Not Tagged</Badge>
+                                                    )}
                                                 </div>
-                                                <div className="truncate text-xs text-muted-foreground">
+                                                <div className="text-xs text-muted-foreground">
                                                     {po.supplierName}
                                                 </div>
                                             </div>
@@ -211,7 +316,11 @@ export function AvailableForReceiving() {
                                         </div>
                                     </div>
 
-                                    <ChevronRight className="h-4 w-4 text-muted-foreground mt-1 shrink-0" />
+                                    {isOpening ? (
+                                        <Loader2 className="h-4 w-4 text-primary mt-1 shrink-0 animate-spin" />
+                                    ) : (
+                                        <ChevronRight className="h-4 w-4 text-muted-foreground mt-1 shrink-0" />
+                                    )}
                                 </div>
                             </button>
                         );
@@ -253,6 +362,36 @@ export function AvailableForReceiving() {
                     </Button>
                 </div>
             ) : null}
+
+            <AlertDialog open={isSwitchModalOpen} onOpenChange={setIsSwitchModalOpen}>
+                <AlertDialogContent className="max-w-md">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="text-xl font-bold flex items-center gap-2 text-amber-600">
+                            <Package className="h-5 w-5" />
+                            Unsaved Progress Detected
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-sm">
+                            You are currently receiving items for <span className="font-bold text-foreground">{selectedPO?.poNumber}</span>. 
+                            If you switch to <span className="font-bold text-foreground">{pendingPO?.poNumber}</span> now, your current scanned data and draft receipt will be <span className="font-bold text-red-600 underline">discarded</span>.
+                            <br /><br />
+                            Are you sure you want to proceed?
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setPendingPO(null)}>Stay on Current PO</AlertDialogCancel>
+                        <AlertDialogAction onClick={confirmSwitch} className="bg-amber-600 hover:bg-amber-700">
+                            Yes, Discard & Switch
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </Card>
     );
+}
+
+function receivingTabFor(po: { status?: string; inventoryStatus?: number; isRefill?: boolean }): ReceivingListTab {
+    if (Number(po.inventoryStatus) === 6) {
+        return "received";
+    }
+    return po.isRefill ? "refill" : "normal";
 }

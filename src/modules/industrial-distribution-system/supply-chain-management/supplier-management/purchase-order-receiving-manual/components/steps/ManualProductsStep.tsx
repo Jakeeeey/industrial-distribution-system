@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { useReceivingProductsManual, todayYMD } from "../../providers/ReceivingProductsManualProvider";
+import { useReceivingProductsManual } from "../../providers/ReceivingProductsManualProvider";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -19,10 +19,10 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { AlertTriangle, Plus, Trash2, QrCode, Package, ChevronRight, ChevronLeft } from "lucide-react";
+import { AlertTriangle, Plus, Trash2, QrCode, Package, ChevronRight, ChevronLeft, Lock, History } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
-export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => void; onBack: () => void }) {
+export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack: () => void }) {
     const {
         selectedPO,
         manualCounts,
@@ -30,35 +30,61 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
         verifiedProductIds,
         serialsByPorId,
         setSerialsByPorId,
+        receiverId
     } = useReceivingProductsManual();
 
     // ✅ Pagination state
     const [receivingPage, setReceivingPage] = React.useState(1);
     const ITEMS_PER_PAGE = 10;
 
-    // ✅ Over-receiving modal (non-serialized path & serialized over-limit path) - AG 2026-07-14
-    const [isOverReceivingModalOpen, setIsOverReceivingModalOpen] = React.useState(false);
-    // Pending count the user tried to enter (non-serialized over-limit confirm flow)
-    const [pendingOverCount, setPendingOverCount] = React.useState<{ id: string; val: number } | null>(null);
-
     // ✅ Serial Modal state
     const [serialModalOpen, setSerialModalOpen] = React.useState(false);
     const [activePorId, setActivePorId] = React.useState<string | null>(null);
     const [activeProductName, setActiveProductName] = React.useState("");
-    const [tempSerials, setTempSerials] = React.useState<{ sn: string; tareWeight: string; expiryDate: string }[]>([]);
+    const [tempSerials, setTempSerials] = React.useState<{ sn: string; tareWeight: string; expiryDate: string; isSaved?: boolean; isNew?: boolean }[]>([]);
     const [newSerial, setNewSerial] = React.useState("");
     const [newTare, setNewTare] = React.useState("");
     const [newExpiry, setNewExpiry] = React.useState("");
     const inputRef = React.useRef<HTMLInputElement>(null);
+    const [highlightNewSerialFields, setHighlightNewSerialFields] = React.useState(false);
 
-    // ✅ Fix 3: Serial Verification state - AG 2026-07-14
+    // ✅ Serial Verification state
     const [verifyingSerial, setVerifyingSerial] = React.useState(false);
-    // Holds the serial that was BLOCKED because it is already in cylinder_assets master - AG 2026-07-14
     const [blockedAssetSerial, setBlockedAssetSerial] = React.useState<{ sn: string; assetId: unknown; status: unknown; condition: unknown } | null>(null);
     const [isBlockedSerialOpen, setIsBlockedSerialOpen] = React.useState(false);
-    // When serial count exceeds ordered qty for serialized items, prompt warning
     const [isSerialOverLimitOpen, setIsSerialOverLimitOpen] = React.useState(false);
-    const [pendingSerialEntry, setPendingSerialEntry] = React.useState<{ sn: string; tare: string; expiry: string } | null>(null);
+    const [pendingSerialEntry, setPendingSerialEntry] = React.useState<{ sn: string; tare: string; expiry: string; isSaved?: boolean } | null>(null);
+    const [isCancelConfirmOpen, setIsCancelConfirmOpen] = React.useState(false);
+
+    // ✅ History Modal state
+    const [historyModalOpen, setHistoryModalOpen] = React.useState(false);
+    const [historyLoading, setHistoryLoading] = React.useState(false);
+    const [historyData, setHistoryData] = React.useState<{ sn: string; tareWeight: string; expiryDate: string; receiptNo: string; receivedDate: string }[]>([]);
+    const [historyProductName, setHistoryProductName] = React.useState("");
+
+    const openHistoryModal = async (productId: string | number, branchId: string | number | undefined, name: string) => {
+        setHistoryProductName(name);
+        setHistoryModalOpen(true);
+        setHistoryLoading(true);
+        try {
+            const res = await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "fetch_receipted_serials",
+                    poId: selectedPO?.id,
+                    productId,
+                    branchId
+                })
+            });
+            const json = await res.json();
+            setHistoryData(json.data || []);
+        } catch {
+            toast.error("Failed to fetch history");
+        } finally {
+            setHistoryLoading(false);
+        }
+    };
 
     // ✅ Auto-focus input when modal opens
     React.useEffect(() => {
@@ -91,32 +117,10 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
         let validVal = isNaN(parsed) ? 0 : parsed;
         if (validVal < 0) validVal = 0;
 
-        // ✅ Fix 2: Check if new count would exceed ordered qty for non-serialized items - AG 2026-07-14
-        const item = filteredItems.find(it => String(it.id) === id);
-        if (item && !item.isSerialized && validVal > 0) {
-            const expectedQty = Number(item.expectedQty || 0);
-            const receivedAtStart = Number(item.receivedQty || 0);
-            const remainingBalance = expectedQty - receivedAtStart;
-            if (validVal > remainingBalance && validVal > 0) {
-                // Hold the value and prompt a confirmation dialog
-                setPendingOverCount({ id, val: validVal });
-                setIsOverReceivingModalOpen(true);
-                return; // Don't apply yet — wait for user confirmation
-            }
-        }
-
         setManualCounts(prev => ({ ...prev, [id]: validVal }));
     };
 
-    const isOverReceiving = React.useMemo(() => {
-        return filteredItems.some(it => {
-            const id = String(it.id);
-            const expected = Number(it.expectedQty || 0);
-            const receivedAtStart = Number(it.receivedQty || 0);
-            const currentEntry = Number(manualCounts[id] || 0);
-            return (currentEntry + receivedAtStart) > expected && currentEntry > 0;
-        });
-    }, [filteredItems, manualCounts]);
+
 
     const incompleteSerialized = React.useMemo(() => {
         return filteredItems.filter(it => {
@@ -124,38 +128,60 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
             const count = manualCounts[String(it.id)] || 0;
             const expected = Number(it.expectedQty || 0);
             const receivedAtStart = Number(it.receivedQty || 0);
-            return (count + receivedAtStart) < expected;
+            return count === 0 && receivedAtStart < expected; // Hard block ONLY if user entered 0 items despite opening the modal
         });
     }, [filteredItems, manualCounts]);
 
-    const handleContinueClick = () => {
+    const partialSerializedWarning = React.useMemo(() => {
+        return filteredItems.filter(it => {
+            if (!it.isSerialized) return false;
+            const count = manualCounts[String(it.id)] || 0;
+            const expected = Number(it.expectedQty || 0);
+            const receivedAtStart = Number(it.receivedQty || 0);
+            return count > 0 && (count + receivedAtStart) < expected; 
+        });
+    }, [filteredItems, manualCounts]);
+
+    const { saveReceipt, savingReceipt } = useReceivingProductsManual();
+
+    const [isPartialWarningOpen, setIsPartialWarningOpen] = React.useState(false);
+
+    const proceedToSave = async () => {
+        setIsPartialWarningOpen(false);
+        await saveReceipt();
+    };
+
+    const handleSaveClick = () => {
         if (incompleteSerialized.length > 0) {
             const first = incompleteSerialized[0];
             toast.error("Incomplete Registration", {
-                description: `Please fully register serials for ${first.name}. (${manualCounts[String(first.id)] || 0}/${Number(first.expectedQty || 0) - Number(first.receivedQty || 0)} registered)`,
+                description: `Please register at least 1 serial for ${first.name}, or remove it from your receipt.`,
                 duration: 3000
             });
             return;
         }
-        if (isOverReceiving) {
-            setIsOverReceivingModalOpen(true);
-        } else {
-            onContinue();
+        if (partialSerializedWarning.length > 0) {
+            setIsPartialWarningOpen(true);
+            return;
         }
+        proceedToSave();
     };
 
     const openSerialModal = (id: string, name: string) => {
         setActivePorId(id);
         setActiveProductName(name);
-        const existingSerials = (serialsByPorId[id] || []).map(s => ({
-            sn: s.sn,
+        // ✅ Initialize with previously saved serials for this session
+        const existing = serialsByPorId[id] || [];
+        setTempSerials(existing.map(s => ({
+            ...s,
             tareWeight: s.tareWeight || "",
-            expiryDate: s.expiryDate || todayYMD()
-        }));
-        setTempSerials(existingSerials);
+            expiryDate: s.expiryDate || "",
+            isSaved: true
+        })));
         setNewSerial("");
         setNewTare("");
         setNewExpiry("");
+        setHighlightNewSerialFields(false);
         setSerialModalOpen(true);
     };
 
@@ -164,21 +190,24 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
     const orderedLimit = activeItem ? Math.max(0, Number(activeItem.expectedQty || 0) - Number(activeItem.receivedQty || 0)) : Infinity;
 
     // ✅ Validation Helper
-    const isPendingValid = newSerial.trim() !== "" && newTare.trim() !== "" && newExpiry.trim() !== "";
-    const isPartialEntry = newSerial.trim() !== "" || newTare.trim() !== ""; // If user started typing anything
+    const isPendingValid = newSerial.trim() !== "";
+    const isPartialEntry = newSerial.trim() !== "" || newTare.trim() !== "" || newExpiry.trim() !== "";
+
 
     // ✅ Fix 3: Serial Verification — NEW LOGIC (AG 2026-07-14)
     // - Serial NOT in cylinder_assets (requiresRegistration=true) → AUTO-ACCEPT (new asset, free to receive)
     // - Serial IS in cylinder_assets (source="asset") → BLOCK with popup (already registered, cannot duplicate)
-    const addSerial = async () => {
+    const addSerial = async (skipLimitCheckOrEvent?: boolean | unknown) => {
+        const skipLimitCheck = typeof skipLimitCheckOrEvent === "boolean" ? skipLimitCheckOrEvent : false;
+        
         if (!isPendingValid) {
             toast.error("Incomplete Registration", {
-                description: "Please fulfill all fields: Serial, Tare, and Expiry.",
+                description: "Please enter a Serial Number.",
             });
             return;
         }
 
-        const val = newSerial.trim().toUpperCase();
+        const val = newSerial.trim();
 
         // 1. In-session duplicate check
         if (tempSerials.some(x => x.sn === val)) {
@@ -191,8 +220,7 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
         for (const [pid, sns] of Object.entries(serialsByPorId)) {
             if (pid === activePorId) continue;
             if (sns.some(x => x.sn === val)) {
-                const p = (selectedPO?.allocations || []).flatMap(a => a.items).find(i => String(i.id) === pid);
-                existingProduct = p?.name || "another product";
+                existingProduct = activeItem?.name || "another product";
                 break;
             }
         }
@@ -202,105 +230,224 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
         }
 
         // 3. Check if over the ordered balance — warn instead of hard block - AG 2026-07-14
-        if (tempSerials.length >= orderedLimit) {
+        if (!skipLimitCheck && tempSerials.length >= orderedLimit) {
             setPendingSerialEntry({ sn: val, tare: newTare, expiry: newExpiry });
             setIsSerialOverLimitOpen(true);
             return;
         }
 
-        // 4. Verify against Cylinder Asset master DB - AG 2026-07-14
+        // ✅ If it's flagged as a new serial, validate Tare & Expiry and register directly
+        if (highlightNewSerialFields) {
+            if (!newTare.trim() || !newExpiry.trim()) {
+                toast.error("New Serial Detected", { description: "Tare weight and expiry date are strictly required for new serials." });
+                return;
+            }
+            setVerifyingSerial(true);
+            try {
+                const res = await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        action: "register_serial",
+                        serialNumber: val,
+                        tareWeight: newTare,
+                        expiryDate: newExpiry,
+                        productId: activeItem?.productId,
+                        currentBranchId: activeItem?.branchId,
+                        userId: receiverId
+                    })
+                });
+                const j = await res.json();
+                if (j?.error) throw new Error(j.error);
+                
+                // Registration successful!
+                setTempSerials(prev => [...prev, { sn: val, tareWeight: newTare, expiryDate: newExpiry, isNew: true }]);
+                setNewSerial("");
+                setNewTare("");
+                setNewExpiry("");
+                setHighlightNewSerialFields(false);
+                setTimeout(() => inputRef.current?.focus(), 10);
+            } catch (e) {
+                toast.error("Registration Failed", { description: (e as Error).message });
+            } finally {
+                setVerifyingSerial(false);
+            }
+            return;
+        }
+
+        // 4. Verify against Cylinder Asset master DB
         setVerifyingSerial(true);
         try {
             const res = await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    action: "validate_scan_serial",
+                    action: "validate_serial",
                     serialNumber: val,
-                    poId: selectedPO?.id,
+                    poType: "NORMAL",
                 }),
             });
             const j = await res.json();
             const result = j?.data;
 
-            if (result?.source === "asset") {
-                // ❌ BLOCKED: Serial is already registered in cylinder_assets master — cannot receive a duplicate - AG 2026-07-14
-                setBlockedAssetSerial({
-                    sn: val,
-                    assetId: result.asset?.id,
-                    status: result.asset?.cylinder_status,
-                    condition: result.asset?.cylinder_condition,
-                });
-                setIsBlockedSerialOpen(true);
-                return; // Do NOT add to tempSerials
+            if (result?.status === "REJECTED") {
+                toast.error("Serial Rejected", { description: result.message });
+                return;
             }
 
-            // ✅ AUTO-ACCEPT: Serial not in cylinder_assets (requiresRegistration=true) or matched via PO serial tag
-            // New cylinders / PO-tagged serials can always be received without registration friction.
-            setTempSerials(prev => [...prev, { sn: val, tareWeight: newTare, expiryDate: newExpiry }]);
+            if (result?.status === "REQUIRES_REGISTRATION") {
+                if (newTare.trim() && newExpiry.trim()) {
+                    try {
+                        const res = await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                action: "register_serial",
+                                serialNumber: val,
+                                tareWeight: newTare,
+                                expiryDate: newExpiry,
+                                productId: activeItem?.productId,
+                                currentBranchId: activeItem?.branchId,
+                                userId: receiverId
+                            })
+                        });
+                        const jReg = await res.json();
+                        if (jReg?.error) throw new Error(jReg.error);
+                        
+                        setTempSerials(prev => [...prev, { sn: val, tareWeight: newTare, expiryDate: newExpiry, isNew: true }]);
+                        setNewSerial("");
+                        setNewTare("");
+                        setNewExpiry("");
+                        setHighlightNewSerialFields(false);
+                        setTimeout(() => inputRef.current?.focus(), 10);
+                    } catch (e) {
+                        toast.error("Registration Failed", { description: (e as Error).message });
+                    }
+                    return;
+                }
+
+                setHighlightNewSerialFields(true);
+                toast.error("New Serial Detected", { description: "Tare weight and expiry date are required to register this serial." });
+                return; // Wait for user to input Tare and Expiry
+            }
+
+            // ACCEPTED (Existing Serial)
+            setTempSerials(prev => [...prev, { 
+                sn: val, 
+                tareWeight: result.tareWeight || newTare, 
+                expiryDate: result.expiryDate || newExpiry 
+            }]);
             setNewSerial("");
             setNewTare("");
             setNewExpiry("");
             setTimeout(() => inputRef.current?.focus(), 10);
-        } catch {
-            toast.error("Verification Failed", { description: "Could not verify serial. Please check your connection." });
+        } catch (e) {
+            toast.error("Action Failed", { description: (e as Error).message || "Could not verify serial." });
         } finally {
             setVerifyingSerial(false);
         }
     };
 
     // ✅ Confirm adding an over-limit serial (user acknowledged warning) - AG 2026-07-14
-    const confirmAddOverLimitSerial = () => {
+    const confirmAddOverLimitSerial = async () => {
         if (!pendingSerialEntry) return;
-        setTempSerials(prev => [...prev, { sn: pendingSerialEntry.sn, tareWeight: pendingSerialEntry.tare, expiryDate: pendingSerialEntry.expiry }]);
-        setPendingSerialEntry(null);
         setIsSerialOverLimitOpen(false);
-        setNewSerial("");
-        setNewTare("");
-        setNewExpiry("");
-        setTimeout(() => inputRef.current?.focus(), 10);
+        // We restore the pending entry values into the inputs temporarily so addSerial reads them
+        setNewSerial(pendingSerialEntry.sn);
+        setNewTare(pendingSerialEntry.tare);
+        setNewExpiry(pendingSerialEntry.expiry);
+        
+        // Use a slight delay to allow state update before validation
+        setTimeout(() => {
+            addSerial(true);
+            setPendingSerialEntry(null);
+        }, 0);
     };
 
-    // ✅ Removed: confirmRegisterCylinder and rejectUnregisteredSerial — no longer needed.
-    // Unregistered serials are now auto-accepted. Registered serials are blocked. - AG 2026-07-14
+    const removeSerial = async (index: number) => {
+        const serialToRemove = tempSerials[index];
+        
+        // Clean up draft registration if it was purely a new item this session
+        if (serialToRemove.isNew && !serialToRemove.isSaved) {
+            try {
+                await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        action: "deregister_serial",
+                        serialNumber: serialToRemove.sn
+                    })
+                });
+            } catch (e) {
+                console.error("Failed to deregister serial", e);
+            }
+        }
 
-    const removeSerial = (index: number) => {
         setTempSerials(tempSerials.filter((_, i) => i !== index));
     };
 
-    const saveSerials = () => {
+    // ✅ FIX: Made async to persist serials to DB via presave_serial on commit
+    const saveSerials = async () => {
         const finalSerials = [...tempSerials];
         
-        // ✅ Smart Auto-Add: Only if COMPLETELY fulfilled
+        // ✅ Smart Auto-Add: Only if completely fulfilled
         const pending = newSerial.trim();
-        if (pending && isPendingValid) {
-            const isDup = tempSerials.some(x => x.sn === pending);
-            const isLimit = tempSerials.length >= orderedLimit;
-            
-            if (!isDup && !isLimit) {
-                finalSerials.push({ sn: pending, tareWeight: newTare, expiryDate: newExpiry });
-            }
-        } else if (pending && !isPendingValid) {
-            toast.warning("Incomplete Entry Ignored", { 
-                description: "The piece you were typing was not added because some fields were missing." 
+        if (pending) {
+            toast.error("Pending Serial Unverified", { 
+                description: "You have typed a serial number but haven't added it yet. Please click 'Add Registered Piece' first or clear the input." 
             });
+            return;
         }
 
         if (activePorId) {
-            setSerialsByPorId(prev => ({ ...prev, [activePorId]: finalSerials }));
-            setManualCounts(prev => ({ ...prev, [activePorId]: finalSerials.length }));
+            // 1. Write to React state immediately (fast, does not block UI)
+            const mappedFinal = finalSerials.map(s => ({ ...s, isSaved: true }));
+            setSerialsByPorId(prev => {
+                return { ...prev, [activePorId]: mappedFinal };
+            });
+            
+            setManualCounts(prev => {
+                return { ...prev, [activePorId]: finalSerials.length };
+            });
+            
             toast.success("Progress Saved", { description: `${finalSerials.length} serials committed.` });
+
+            // 2. ✅ FIX: Persist ONLY the newly scanned serials atomically to DB via sync_draft_serials
+            const poId = selectedPO?.id;
+            const productId = activeItem?.productId;
+            const branchId = activeItem?.branchId;
+
+            if (poId && productId && branchId) {
+                const newlyAdded = finalSerials.filter(s => !s.isSaved);
+                if (newlyAdded.length > 0) {
+                    fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            action: "sync_draft_serials",
+                            poId,
+                            productId,
+                            branchId,
+                            serials: newlyAdded,
+                        }),
+                    }).catch(e => console.warn("[sync_draft_serials] Non-blocking failure:", e));
+                }
+            }
         }
         setSerialModalOpen(false);
     };
 
-    const handleCancelSerial = () => {
+    const handleCancelSerial = async () => {
         if (tempSerials.length > 0 || newSerial.trim()) {
-            if (!window.confirm("You have unsaved serials. Are you sure you want to discard them?")) {
-                return;
-            }
+            setIsCancelConfirmOpen(true);
+            return;
         }
+        executeCancelSerial();
+    };
+
+    const executeCancelSerial = () => {
         setSerialModalOpen(false);
+        setIsCancelConfirmOpen(false);
     };
 
     const totalPages = Math.max(1, Math.ceil(filteredItems.length / ITEMS_PER_PAGE));
@@ -310,7 +457,7 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
         <div className="h-full flex flex-col overflow-hidden">
             <div className="shrink-0 flex items-center justify-between mb-4 px-1">
                 <div className="flex flex-col gap-0.5">
-                    <div className="text-[10px] font-black text-primary uppercase tracking-widest">Step 3: Manual Receipt</div>
+                    <div className="text-[10px] font-black text-primary uppercase tracking-widest">Step 2: Tag Serials and Quantities</div>
                     <div className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Enter quantities or register serials for verified products</div>
                 </div>
                 <Button variant="ghost" size="sm" onClick={onBack} className="h-8 rounded-lg font-black uppercase text-[9px] tracking-widest text-slate-400 hover:text-primary">
@@ -365,8 +512,23 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                                                     {it.branchName}
                                                 </Badge>
                                             </TableCell>
-                                            <TableCell className="text-center font-black text-[10px] text-slate-500">{expected}</TableCell>
-                                            <TableCell className="text-center font-black text-[10px] text-emerald-600/70">{receivedAtStart}</TableCell>
+                                            <TableCell className="text-center font-black text-[10px] text-slate-500">{Math.max(0, expected - receivedAtStart)}</TableCell>
+                                            <TableCell className="text-center font-black text-[10px] text-emerald-600/70">
+                                                <div className="flex items-center justify-center gap-1">
+                                                    {receivedAtStart}
+                                                    {receivedAtStart > 0 && it.isSerialized && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-5 w-5 rounded-full hover:bg-emerald-50 text-emerald-600/70 hover:text-emerald-700"
+                                                            onClick={() => openHistoryModal(it.productId, it.branchId, it.name)}
+                                                            title="View Receipt History"
+                                                        >
+                                                            <History className="w-3 h-3" />
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            </TableCell>
                                             <TableCell className="text-right px-4">
                                                 {it.isSerialized ? (
                                                     <Button
@@ -431,48 +593,20 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                     </div>
                 </div>
                 <Button
-                    onClick={handleContinueClick}
+                    onClick={handleSaveClick}
                     className={cn(
                         "h-12 px-10 rounded-xl font-black uppercase tracking-widest text-xs shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]",
-                        incompleteSerialized.length > 0 
+                        incompleteSerialized.length > 0 || savingReceipt
                             ? "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none" 
                             : "bg-primary text-white shadow-primary/20"
                     )}
-                    disabled={totalEntered === 0}
+                    disabled={totalEntered === 0 || savingReceipt}
                 >
-                    Proceed to Final Review <ChevronRight className="ml-2 w-4 h-4" />
+                    {savingReceipt ? "Saving..." : "Save Tagged Quantities"} <ChevronRight className="ml-2 w-4 h-4" />
                 </Button>
             </div>
 
-            {/* ✅ Fix 2: Over-receiving warning for non-serialized items - AG 2026-07-14 */}
-            <AlertDialog open={isOverReceivingModalOpen} onOpenChange={(open) => {
-                if (!open) setPendingOverCount(null);
-                setIsOverReceivingModalOpen(open);
-            }}>
-                <AlertDialogContent className="rounded-2xl border-2">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2 text-red-600 font-black uppercase tracking-tight">
-                            <AlertTriangle className="w-5 h-5" /> Over-Receiving Warning
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-sm font-bold text-slate-600 uppercase tracking-wider leading-relaxed">
-                            The quantity you entered ({pendingOverCount?.val}) exceeds the remaining ordered balance.
-                            This will create an over-receiving discrepancy.
-                            Are you sure you want to proceed?
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel className="rounded-xl font-black uppercase tracking-widest text-[10px] border-2" onClick={() => setPendingOverCount(null)}>Adjust Quantity</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => {
-                            // ✅ Apply the pending over-count on explicit user confirmation - AG 2026-07-14
-                            if (pendingOverCount) {
-                                setManualCounts(prev => ({ ...prev, [pendingOverCount.id]: pendingOverCount.val }));
-                                setPendingOverCount(null);
-                            }
-                            setIsOverReceivingModalOpen(false);
-                        }} className="bg-red-600 hover:bg-red-700 rounded-xl font-black uppercase tracking-widest text-[10px]">Proceed Anyway</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+
 
             {/* ✅ Fix 2: Serial over-limit warning for serialized items - AG 2026-07-14 */}
             <AlertDialog open={isSerialOverLimitOpen} onOpenChange={(open) => {
@@ -492,17 +626,63 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel className="rounded-xl font-black uppercase tracking-widest text-[10px] border-2" onClick={() => setPendingSerialEntry(null)}>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={confirmAddOverLimitSerial} className="bg-amber-600 hover:bg-amber-700 rounded-xl font-black uppercase tracking-widest text-[10px]">Add Anyway</AlertDialogAction>
+                        <AlertDialogAction onClick={confirmAddOverLimitSerial} className="bg-amber-600 hover:bg-amber-700 rounded-xl font-black uppercase tracking-widest text-[10px]" disabled={verifyingSerial}>Add Serial</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
 
+            <AlertDialog open={isPartialWarningOpen} onOpenChange={setIsPartialWarningOpen}>
+                <AlertDialogContent className="rounded-3xl border-none shadow-2xl overflow-hidden p-0 max-w-md">
+                    <div className="bg-orange-500 p-6 text-white text-center">
+                        <AlertTriangle className="w-12 h-12 mx-auto mb-2 opacity-80" />
+                        <AlertDialogTitle className="text-xl font-black uppercase tracking-tight m-0 text-white border-0">Partial Receipt</AlertDialogTitle>
+                    </div>
+                    <div className="p-6 space-y-4 text-center">
+                        <p className="text-sm font-bold text-slate-600">
+                            You have partially registered serials for one or more items. 
+                        </p>
+                        <p className="text-xs text-slate-500">
+                            Are you sure you want to proceed with a partial receipt? You can always receive the remaining balance later.
+                        </p>
+                    </div>
+                    <div className="p-4 bg-slate-50 flex gap-3 justify-end">
+                        <AlertDialogCancel className="rounded-xl px-6 font-black uppercase tracking-widest text-[10px]">Back</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={proceedToSave}
+                            className="bg-orange-600 hover:bg-orange-700 rounded-xl px-6 font-black uppercase tracking-widest text-[10px]"
+                        >
+                            Proceed
+                        </AlertDialogAction>
+                    </div>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={isCancelConfirmOpen} onOpenChange={setIsCancelConfirmOpen}>
+                <AlertDialogContent className="rounded-3xl border-none shadow-2xl overflow-hidden p-0 max-w-md">
+                    <div className="bg-red-500 p-6 text-white text-center">
+                        <AlertTriangle className="w-12 h-12 mx-auto mb-2 opacity-80" />
+                        <AlertDialogTitle className="text-xl font-black uppercase tracking-tight m-0 text-white border-0">Discard Changes?</AlertDialogTitle>
+                    </div>
+                    <div className="p-6 space-y-4 text-center">
+                        <p className="text-sm font-bold text-slate-600">
+                            You have unsaved serials. Are you sure you want to discard them?
+                        </p>
+                    </div>
+                    <div className="p-4 bg-slate-50 flex gap-3 justify-end">
+                        <AlertDialogCancel className="rounded-xl px-6 font-black uppercase tracking-widest text-[10px]">Keep Editing</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={executeCancelSerial}
+                            className="bg-red-600 hover:bg-red-700 rounded-xl px-6 font-black uppercase tracking-widest text-[10px]"
+                        >
+                            Discard
+                        </AlertDialogAction>
+                    </div>
+                </AlertDialogContent>
+            </AlertDialog>
+
             {/* ✅ Fix 3 (UPDATED): Blocked Serial dialog — fires when serial is ALREADY in cylinder_assets master - AG 2026-07-14 */}
-            <AlertDialog open={isBlockedSerialOpen} onOpenChange={(open) => {
-                if (!open) setBlockedAssetSerial(null);
-                setIsBlockedSerialOpen(open);
-            }}>
-                <AlertDialogContent className="rounded-2xl border-2 border-red-200">
+            <AlertDialog open={isBlockedSerialOpen} onOpenChange={setIsBlockedSerialOpen}>
+                <AlertDialogContent className="rounded-3xl border-none shadow-2xl overflow-hidden p-0 max-w-md">
                     <AlertDialogHeader>
                         <AlertDialogTitle className="flex items-center gap-2 text-red-600 font-black uppercase tracking-tight">
                             <AlertTriangle className="w-5 h-5" /> Serial Already Registered
@@ -557,6 +737,7 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                     onEscapeKeyDown={(e) => {
                         if (tempSerials.length > 0 || newSerial.trim()) e.preventDefault();
                     }}
+                    showCloseButton={false}
                     className="max-w-xl p-0 overflow-hidden rounded-3xl border-none shadow-2xl"
                 >
                     <div className="bg-primary p-6 text-white relative overflow-hidden">
@@ -575,9 +756,10 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                             </div>
                             <Badge variant="outline" className={cn(
                                 "border-white/40 text-white font-mono bg-white/10 px-3 py-1",
-                                tempSerials.length === orderedLimit && "bg-emerald-500/30 border-emerald-400"
+                                tempSerials.length > orderedLimit ? "bg-red-500/80 border-red-400" :
+                                tempSerials.length === orderedLimit ? "bg-emerald-500/30 border-emerald-400" : ""
                             )}>
-                                {tempSerials.length} / {orderedLimit} REGISTERED
+                                {tempSerials.length} / {orderedLimit} REGISTERED {tempSerials.length > orderedLimit && "(OVER)"}
                             </Badge>
                         </div>
                     </div>
@@ -598,7 +780,7 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                             <div className="space-y-1.5">
                                 <div className="flex justify-between items-end text-[9px] font-black uppercase tracking-widest text-slate-400">
                                     <span>Registration Progress</span>
-                                    <span className={tempSerials.length === orderedLimit ? "text-emerald-500" : "text-primary"}>
+                                    <span className={tempSerials.length > orderedLimit ? "text-red-500" : tempSerials.length === orderedLimit ? "text-emerald-500" : "text-primary"}>
                                         {((tempSerials.length / orderedLimit) * 100).toFixed(0)}%
                                     </span>
                                 </div>
@@ -606,9 +788,10 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                                     <div
                                         className={cn(
                                             "h-full transition-all duration-500 ease-out",
+                                            tempSerials.length > orderedLimit ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]" :
                                             tempSerials.length === orderedLimit ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" : "bg-primary"
                                         )}
-                                        style={{ width: `${(tempSerials.length / orderedLimit) * 100}%` }}
+                                        style={{ width: `${Math.min(100, (tempSerials.length / orderedLimit) * 100)}%` }}
                                     />
                                 </div>
                             </div>
@@ -623,14 +806,16 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                                             <Input
                                                 ref={inputRef}
                                                 value={newSerial}
-                                                onChange={(e) => setNewSerial(e.target.value.toUpperCase())}
+                                                onChange={(e) => {
+                                                    setNewSerial(e.target.value);
+                                                    setHighlightNewSerialFields(false);
+                                                }}
                                                 onKeyDown={(e) => e.key === "Enter" && addSerial()}
-                                                disabled={tempSerials.length >= orderedLimit}
-                                                placeholder={tempSerials.length >= orderedLimit ? "Limit Reached" : "Scan/Type..."}
+                                                placeholder="Scan/Type..."
                                                 className={cn(
                                                     "h-12 px-4 rounded-xl font-mono text-sm border-2 transition-all shadow-sm uppercase",
                                                     tempSerials.length >= orderedLimit
-                                                        ? "border-emerald-500/50 bg-emerald-50/10 cursor-not-allowed"
+                                                        ? "border-amber-500/50 bg-amber-50/10 focus-visible:border-amber-500"
                                                         : "border-slate-200 dark:border-slate-800 focus-visible:ring-0 focus-visible:border-primary"
                                                 )}
                                             />
@@ -653,7 +838,10 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                                                     setNewTare(val);
                                                 }
                                             }}
-                                            className="h-12 text-sm font-bold border-2 rounded-xl focus-visible:ring-primary focus-visible:border-primary px-3"
+                                            className={cn(
+                                                "h-12 text-sm font-bold border-2 rounded-xl focus-visible:ring-primary focus-visible:border-primary px-3 transition-colors",
+                                                highlightNewSerialFields ? "border-red-500 bg-red-50/10 focus-visible:border-red-600" : ""
+                                            )}
                                         />
                                     </div>
                                     <div className="col-span-4 space-y-1">
@@ -663,7 +851,10 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                                             value={newExpiry}
                                             onChange={(e) => setNewExpiry(e.target.value)}
                                             onKeyDown={(e) => e.key === "Enter" && addSerial()}
-                                            className="h-12 text-sm font-bold border-2 rounded-xl focus-visible:ring-primary focus-visible:border-primary px-2"
+                                            className={cn(
+                                                "h-12 text-sm font-bold border-2 rounded-xl focus-visible:ring-primary focus-visible:border-primary px-2 transition-colors",
+                                                highlightNewSerialFields ? "border-red-500 bg-red-50/10 focus-visible:border-red-600" : ""
+                                            )}
                                         />
                                     </div>
                                 </div>
@@ -688,13 +879,33 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                                 {tempSerials.length > 0 && (
                                     <Button
                                         variant="link"
-                                        onClick={() => {
-                                            setTempSerials([]);
-                                            toast.info("Cleared all serials");
+                                        onClick={async () => {
+                                            const toDelete = tempSerials.filter(s => !s.isSaved).map(s => s.sn);
+                                            if (toDelete.length > 0) {
+                                                try {
+                                                    await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                                                        method: "POST",
+                                                        headers: { "Content-Type": "application/json" },
+                                                        body: JSON.stringify({ action: "delete_presaved_serials", serialNumbers: toDelete }),
+                                                    });
+                                                    // Also deregister from draft to prevent ghost records
+                                                    toDelete.forEach(sn => {
+                                                        fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                                                            method: "POST",
+                                                            headers: { "Content-Type": "application/json" },
+                                                            body: JSON.stringify({ action: "deregister_serial", serialNumber: sn })
+                                                        }).catch(() => null);
+                                                    });
+                                                } catch (e) {
+                                                    console.error("Failed to bulk clear serials", e);
+                                                }
+                                            }
+                                            setTempSerials(prev => prev.filter(s => s.isSaved));
+                                            toast.info("Cleared all unsaved serials");
                                         }}
                                         className="h-auto p-0 text-[10px] font-black uppercase tracking-widest text-red-500 hover:text-red-600"
                                     >
-                                        Clear All
+                                        Clear Unsaved
                                     </Button>
                                 )}
                             </div>
@@ -720,7 +931,14 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                                                 tempSerials.map((item, idx) => (
                                                     <TableRow key={idx} className="group border-slate-50 dark:border-slate-900 hover:bg-slate-50/50 dark:hover:bg-slate-900/50">
                                                         <TableCell className="py-2 px-4 font-mono text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                                                            {item.sn}
+                                                            <div className="flex items-center gap-2">
+                                                                {item.sn}
+                                                                {item.isSaved && (
+                                                                    <Badge variant="outline" className="text-[7px] h-4 px-1 py-0 uppercase border-slate-300 text-slate-500 tracking-widest bg-slate-100 flex items-center">
+                                                                        <Lock className="w-2.5 h-2.5 mr-0.5" /> Saved
+                                                                    </Badge>
+                                                                )}
+                                                            </div>
                                                         </TableCell>
                                                         <TableCell className="py-2 text-center font-bold text-[10px] text-slate-500">
                                                             {item.tareWeight || "-"}
@@ -729,14 +947,16 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                                                             {item.expiryDate || "-"}
                                                         </TableCell>
                                                         <TableCell className="py-2 px-2 text-center">
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="h-8 w-8 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all opacity-0 group-hover:opacity-100"
-                                                                onClick={() => removeSerial(idx)}
-                                                            >
-                                                                <Trash2 className="h-3.5 w-3.5" />
-                                                            </Button>
+                                                            {!item.isSaved && (
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-8 w-8 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all opacity-0 group-hover:opacity-100"
+                                                                    onClick={() => removeSerial(idx)}
+                                                                >
+                                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                                </Button>
+                                                            )}
                                                         </TableCell>
                                                     </TableRow>
                                                 ))
@@ -766,6 +986,62 @@ export function ManualProductsStep({ onContinue, onBack }: { onContinue: () => v
                                 Commit Pieces
                             </Button>
                         </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+
+
+            <Dialog open={historyModalOpen} onOpenChange={setHistoryModalOpen}>
+                <DialogContent className="max-w-2xl bg-white dark:bg-slate-950 rounded-3xl border-0 shadow-2xl p-0 overflow-hidden flex flex-col h-[80vh]">
+                    <div className="shrink-0 p-6 bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 flex flex-col gap-1">
+                        <DialogTitle className="text-xl font-black text-primary uppercase tracking-tight">Receipt History</DialogTitle>
+                        <DialogDescription className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            {historyProductName}
+                        </DialogDescription>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto p-6 bg-slate-50/30">
+                        {historyLoading ? (
+                            <div className="h-full flex items-center justify-center text-sm font-bold text-slate-400 uppercase tracking-widest">
+                                Loading History...
+                            </div>
+                        ) : historyData.length === 0 ? (
+                            <div className="h-full flex items-center justify-center text-sm font-bold text-slate-400 uppercase tracking-widest">
+                                No receipted history found.
+                            </div>
+                        ) : (
+                            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+                                <Table>
+                                    <TableHeader className="bg-slate-50">
+                                        <TableRow>
+                                            <TableHead className="text-[9px] font-black uppercase tracking-widest text-slate-500">Serial No</TableHead>
+                                            <TableHead className="text-[9px] font-black uppercase tracking-widest text-slate-500 text-center">Tare</TableHead>
+                                            <TableHead className="text-[9px] font-black uppercase tracking-widest text-slate-500 text-center">Expiry</TableHead>
+                                            <TableHead className="text-[9px] font-black uppercase tracking-widest text-slate-500 text-right">Receipt No</TableHead>
+                                            <TableHead className="text-[9px] font-black uppercase tracking-widest text-slate-500 text-right">Date</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {historyData.map((h, i) => (
+                                            <TableRow key={i}>
+                                                <TableCell className="font-mono text-[11px] font-bold text-slate-700">{h.sn}</TableCell>
+                                                <TableCell className="text-center font-bold text-[10px] text-slate-500">{h.tareWeight || "-"}</TableCell>
+                                                <TableCell className="text-center font-bold text-[10px] text-slate-500">{h.expiryDate || "-"}</TableCell>
+                                                <TableCell className="text-right font-mono text-[11px] font-bold text-emerald-700">
+                                                    <Badge variant="outline" className="text-[9px] h-5 bg-emerald-50 text-emerald-600 border-emerald-200">
+                                                        {h.receiptNo}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-right text-[10px] text-slate-500 font-medium">
+                                                    {h.receivedDate ? h.receivedDate.split("T")[0] : "-"}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        )}
                     </div>
                 </DialogContent>
             </Dialog>

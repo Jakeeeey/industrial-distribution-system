@@ -64,23 +64,13 @@ export function SerialEntryPanel({ line, isReadOnly, onAddSerial, onRemoveDraft 
 
     // ── Validate serial via cylinder-assets API ────────────────────────────────
     const commitSerial = React.useCallback(async (raw: string) => {
-        const sn = raw.trim().toUpperCase();
+        const sn = raw.trim();
         if (!sn) return;
-
-        // Check capacity limit: do not exceed ordered quantity
-        const totalEntered = line.savedSerials.length + line.draftSerials.length;
-        const required = line.orderedQty;
-        if (totalEntered >= required) {
-            toast.error("Limit reached", {
-                description: `Quantity cannot exceed the ordered quantity of ${required} for this product.`,
-            });
-            return;
-        }
 
         // Local duplicate check (saved + draft)
         const existing = [
-            ...line.savedSerials.map((s) => s.serial_number.toUpperCase()),
-            ...line.draftSerials.map((s) => s.serial_number.toUpperCase()),
+            ...line.savedSerials.map((s) => s.serial_number),
+            ...line.draftSerials.map((s) => s.serial_number),
         ];
         if (existing.includes(sn)) {
             toast.warning(`Serial "${sn}" is already in the list.`);
@@ -97,23 +87,29 @@ export function SerialEntryPanel({ line, isReadOnly, onAddSerial, onRemoveDraft 
 
             if (!data.exists) {
                 toast.error(`Serial "${sn}" is not registered in cylinder assets.`);
+                setInputValue("");
                 return;
             }
 
-            // Validate product match
-            const assetProductId = Number(data.asset?.product_id);
-            if (assetProductId && assetProductId !== line.productId) {
-                toast.error(
-                    `Serial "${sn}" belongs to "${data.asset?.product_name || "another product"}", not "${line.productName}".`
-                );
-                return;
-            }
-
-            // Validate EMPTY status
+            // Validate EMPTY status FIRST
             if (!data.is_empty) {
                 toast.error(
                     `Serial "${sn}" is not EMPTY (status: "${data.asset?.cylinder_status || "UNKNOWN"}").`
                 );
+                setInputValue("");
+                return;
+            }
+
+            // Validate product match SECOND
+            const assetProductId = Number(data.asset?.product_id);
+            if (assetProductId && assetProductId !== line.productId) {
+                const assetName = data.asset?.product_name || "another product";
+                if (assetName === line.productName) {
+                    toast.error(`Serial "${sn}" belongs to a different variant of "${line.productName}".`);
+                } else {
+                    toast.error(`Serial "${sn}" belongs to "${assetName}", not "${line.productName}".`);
+                }
+                setInputValue("");
                 return;
             }
 
@@ -126,7 +122,7 @@ export function SerialEntryPanel({ line, isReadOnly, onAddSerial, onRemoveDraft 
         } finally {
             setIsValidating(false);
         }
-    }, [line.savedSerials, line.draftSerials, line.productId, line.productName, line.lineId, line.orderedQty, onAddSerial]);
+    }, [line.savedSerials, line.draftSerials, line.productId, line.productName, line.lineId, onAddSerial]);
 
     // ── Keyboard: Enter submits ────────────────────────────────────────────────
     const handleKeyDown = React.useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -140,31 +136,16 @@ export function SerialEntryPanel({ line, isReadOnly, onAddSerial, onRemoveDraft 
     const processBulkTokens = React.useCallback(async (tokens: string[]) => {
         if (tokens.length === 0) return;
 
-        const totalEntered = line.savedSerials.length + line.draftSerials.length;
-        const required = line.orderedQty;
-        let remaining = Math.max(0, required - totalEntered);
-        if (remaining === 0) {
-            toast.error("Limit reached", {
-                description: `Quantity cannot exceed the ordered quantity of ${required} for this product.`,
-            });
-            return;
-        }
-
         setIsValidating(true);
         let added = 0;
         let skipped = 0;
-        let limitSkipped = 0;
         try {
             for (const t of tokens) {
-                if (remaining <= 0) {
-                    limitSkipped++;
-                    continue;
-                }
-                const sn = t.trim().toUpperCase();
+                const sn = t.trim();
                 if (!sn) continue;
                 const existing = [
-                    ...line.savedSerials.map((s) => s.serial_number.toUpperCase()),
-                    ...line.draftSerials.map((s) => s.serial_number.toUpperCase()),
+                    ...line.savedSerials.map((s) => s.serial_number),
+                    ...line.draftSerials.map((s) => s.serial_number),
                 ];
                 if (existing.includes(sn)) continue;
 
@@ -174,35 +155,27 @@ export function SerialEntryPanel({ line, isReadOnly, onAddSerial, onRemoveDraft 
                 if (!res.ok) continue;
                 const data = await res.json();
                 if (!data.exists) continue;
+                if (!data.is_empty) { skipped++; continue; }
                 const assetProductId = Number(data.asset?.product_id);
                 if (assetProductId && assetProductId !== line.productId) continue;
-                if (!data.is_empty) { skipped++; continue; }
                 
                 onAddSerial(line.lineId, sn);
                 added++;
-                remaining--;
             }
             if (added > 0) {
                 let desc = `Added ${added} serials.`;
-                if (skipped > 0 || limitSkipped > 0) {
-                    const parts = [];
-                    if (skipped > 0) parts.push(`${skipped} non-EMPTY`);
-                    if (limitSkipped > 0) parts.push(`${limitSkipped} exceeded capacity`);
-                    desc += ` Skipped ${parts.join(" and ")}.`;
+                if (skipped > 0) {
+                    desc += ` Skipped ${skipped} non-EMPTY.`;
                 }
                 toast.success(desc);
             } else {
-                if (limitSkipped > 0) {
-                    toast.warning(`Skipped ${limitSkipped} serials due to capacity limit of ${required}.`);
-                } else {
-                    toast.warning(skipped > 0 ? `Skipped ${skipped} non-EMPTY serials.` : "No valid serials added.");
-                }
+                toast.warning(skipped > 0 ? `Skipped ${skipped} non-EMPTY serials.` : "No valid serials added.");
             }
             setInputValue("");
         } finally {
             setIsValidating(false);
         }
-    }, [line.savedSerials, line.draftSerials, line.productId, line.lineId, line.orderedQty, onAddSerial]);
+    }, [line.savedSerials, line.draftSerials, line.productId, line.lineId, onAddSerial]);
 
     const handlePaste = React.useCallback(async (e: React.ClipboardEvent<HTMLInputElement>) => {
         const pasted = e.clipboardData.getData("text");

@@ -23,6 +23,7 @@ export type POListItem = {
     // posting-specific
     receiptsCount: number;
     unpostedReceiptsCount: number;
+    pendingInventoryReceiptsCount: number;
     postedInventory: number;
     unpostedInventory: number;
     postedAmount: number;
@@ -51,6 +52,7 @@ export type POItem = {
 
 export type POBranchAllocation = {
     branch: Branch;
+    receiptNo?: string;
     items: POItem[];
 };
 
@@ -77,6 +79,7 @@ export type PurchaseOrder = {
     // posting-specific counts
     receiptsCount: number;
     unpostedReceiptsCount: number;
+    pendingInventoryReceiptsCount: number;
     postedInventory?: number;
     unpostedInventory?: number;
     postedAmount?: number;

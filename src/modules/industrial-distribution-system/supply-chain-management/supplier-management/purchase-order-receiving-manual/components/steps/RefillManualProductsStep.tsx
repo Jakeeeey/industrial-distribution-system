@@ -13,17 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useReceivingProductsManual } from "../../providers/ReceivingProductsManualProvider";
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { AlertTriangle, Package, ChevronRight, ChevronLeft, Scan, Tag } from "lucide-react";
+import { Package, ChevronRight, ChevronLeft, Scan, Tag } from "lucide-react";
 import { TaggedSerialsModal } from "../TaggedSerialsModal";
 import { RefillRapidScanModal } from "../RefillRapidScanModal";
 
@@ -44,7 +34,6 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
     const ITEMS_PER_PAGE = 10;
 
     // ✅ Over-receiving modal state
-    const [isOverReceivingModalOpen, setIsOverReceivingModalOpen] = React.useState(false);
 
     // ✅ Tagged Serials modal state (product row click)
     // Comments: Track client side row id to associate and display local scanned serials inside TaggedSerialsModal.
@@ -133,16 +122,7 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
         }, 0);
     }, [filteredItems, serialsByPorId]);
 
-    // ✅ Over-receiving check
-    const isOverReceiving = React.useMemo(() => {
-        return filteredItems.some(it => {
-            const id = String(it.id);
-            const expected = Number(it.expectedQty || 0);
-            const receivedAtStart = Number(it.receivedQty || 0);
-            const current = serialsByPorId[id]?.length || 0;
-            return (current + receivedAtStart) > expected && current > 0;
-        });
-    }, [filteredItems, serialsByPorId]);
+
 
     // ✅ Build product lines for the rapid scan modal
     const productLines = React.useMemo(() => {
@@ -155,6 +135,7 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
                 productId: Number(it.productId),
                 productName: it.name,
                 branchName: it.branchName ?? "Unassigned",
+                branchId: it.branchId,
                 expectedQty: expected,
                 scannedCount: serialsByPorId[id]?.length || 0,
             };
@@ -164,9 +145,12 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
     // ✅ Called by RefillRapidScanModal when a serial is accepted
     // Comments: Supports storing an optional isNew flag to identify newly registered cylinders.
     const handleAddSerial = (porId: string, serial: string, isNew?: boolean) => {
+        // Prevent duplicate local addition first
+        const isDuplicate = serialsByPorId[porId]?.some(s => s.sn === serial);
+        if (isDuplicate) return;
+
         setSerialsByPorId(prev => {
             const existing = prev[porId] || [];
-            // Duplicate guard
             if (existing.some(s => s.sn === serial)) return prev;
             const next = [...existing, { sn: serial, tareWeight: "", expiryDate: "", isNew }];
             setManualCounts(c => ({ ...c, [porId]: next.length }));
@@ -178,7 +162,7 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
         setSerialsByPorId(prev => {
             const next = { ...prev };
             Object.keys(next).forEach(porId => {
-                next[porId] = (next[porId] || []).filter(s => s.sn.toUpperCase() !== serial.toUpperCase());
+                next[porId] = (next[porId] || []).filter(s => s.sn !== serial);
             });
             // Update manual counts as well
             setManualCounts(c => {
@@ -197,11 +181,7 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
             toast.error("No items captured", { description: "Please scan cylinders before proceeding." });
             return;
         }
-        if (isOverReceiving) {
-            setIsOverReceivingModalOpen(true);
-        } else {
-            onContinue();
-        }
+        onContinue();
     };
 
     // Comments: Opens the verification modal, tracking both the database ID (activePorId) and client row ID (activeClientRowId)
@@ -217,8 +197,6 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
     const totalPages = Math.max(1, Math.ceil(filteredItems.length / ITEMS_PER_PAGE));
     const paginatedItems = filteredItems.slice((receivingPage - 1) * ITEMS_PER_PAGE, receivingPage * ITEMS_PER_PAGE);
 
-    const supplierId = selectedPO?.supplier?.id ? Number(selectedPO.supplier.id) : null;
-    const poId = selectedPO?.id ? Number(selectedPO.id) : 0;
 
     return (
         <div className="h-full flex flex-col overflow-hidden">
@@ -408,23 +386,7 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
                 </Button>
             </div>
 
-            {/* ── Over-Receiving Confirmation ── */}
-            <AlertDialog open={isOverReceivingModalOpen} onOpenChange={setIsOverReceivingModalOpen}>
-                <AlertDialogContent className="rounded-2xl border-2">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2 text-red-600 font-black uppercase tracking-tight">
-                            <AlertTriangle className="w-5 h-5" /> Over-Receiving Detected
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-sm font-bold text-slate-600 uppercase tracking-wider leading-relaxed">
-                            Some products exceed the ordered quantity. This will create a discrepancy.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel className="rounded-xl font-black uppercase tracking-widest text-[10px] border-2">Adjust</AlertDialogCancel>
-                        <AlertDialogAction onClick={onContinue} className="bg-red-600 hover:bg-red-700 rounded-xl font-black uppercase tracking-widest text-[10px]">Proceed</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+
 
             {/* ── Tagged Serials Modal (read-only, from purchase_order_serial) ── */}
             {/* Comments: Pass the local scanned serials to TaggedSerialsModal for side-by-side reconciliation. */}
@@ -444,8 +406,8 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
             <RefillRapidScanModal
                 open={rapidScanOpen}
                 onClose={() => setRapidScanOpen(false)}
-                poId={poId}
-                supplierId={supplierId}
+
+
                 lines={productLines}
                 onAddSerial={handleAddSerial}
             />

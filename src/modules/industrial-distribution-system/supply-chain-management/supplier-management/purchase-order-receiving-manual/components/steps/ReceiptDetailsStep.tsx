@@ -19,7 +19,7 @@ import {
 import { useReceivingProductsManual } from "../../providers/ReceivingProductsManualProvider";
 import { Pencil } from "lucide-react";
 
-const RECEIPT_TYPES = [
+const RECEIPT_TYPES_FALLBACK = [
     { value: "SI-CHARGE", label: "Charge Sales Invoice [SI-CHARGE]" },
     { value: "SI-CASH", label: "Cash Sales Invoice [SI-CASH]" },
     { value: "DR", label: "Delivery Receipt [DR]" },
@@ -44,13 +44,27 @@ export function ReceiptDetailsStep({ onContinue }: { onContinue: () => void }) {
         setManualCounts,
         setMetaDataByPorId,
         setSerialsByPorId,
-        // ✅ Fix 4: Need setReceiptNo and setReceiptDate for EDIT action from reverted history - AG 2026-07-14
+        editingRevertedReceiptNo,
+        setEditingRevertedReceiptNo,
     } = useReceivingProductsManual();
+
+    const [dbReceiptTypes, setDbReceiptTypes] = React.useState<{ id: number; type: string; shortcut: string }[]>([]);
+
+    React.useEffect(() => {
+        fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "fetch_receipt_types" })
+        })
+        .then(r => r.json())
+        .then(j => { if (Array.isArray(j?.data)) setDbReceiptTypes(j.data); })
+        .catch(e => console.error("Failed to load receipt types:", e));
+    }, []);
 
     // ✅ Fix 4: Helper to map receipt status to badge styles - AG 2026-07-14
     const receiptStatusBadgeClasses = (status?: string) => {
         const s = String(status || "ACTIVE").toUpperCase();
-        if (s === "REVERTED") return "bg-red-100 text-red-700 border border-red-300 font-black";
+        if (s === "REVERTED") return "bg-slate-100 text-slate-600 border border-slate-300 font-black";
         if (s === "POSTED") return "bg-primary/10 text-primary border border-primary/30 font-black";
         return "bg-amber-50 text-amber-700 border border-amber-200 font-black"; // ACTIVE = unposted
     };
@@ -152,7 +166,7 @@ export function ReceiptDetailsStep({ onContinue }: { onContinue: () => void }) {
                                     className="flex items-center justify-between gap-3 text-[10px] border-b border-primary/10 pb-2 last:border-0 last:pb-0"
                                 >
                                     <div className="flex flex-col">
-                                        <span className={cn("font-mono font-black", h.isReverted ? "text-red-500 line-through" : "text-primary")}>
+                                        <span className={cn("font-mono font-black", h.isReverted ? "text-slate-400 line-through" : "text-primary")}>
                                             {h.receiptNo}
                                         </span>
                                         <span className="text-[9px] font-bold text-slate-500">
@@ -178,14 +192,17 @@ export function ReceiptDetailsStep({ onContinue }: { onContinue: () => void }) {
                                             <Button
                                                 variant="outline"
                                                 size="sm"
-                                                className="h-5 px-2 text-[9px] font-black uppercase tracking-widest border border-red-300 text-red-600 hover:bg-red-50 rounded"
+                                                className="h-5 px-2 text-[9px] font-black uppercase tracking-widest border border-slate-300 text-slate-600 hover:bg-slate-50 rounded"
                                                 onClick={() => {
                                                     const nextCounts: Record<string, number> = {};
                                                     const nextMeta: Record<string, { batchNo?: string; lotNo?: string; lotId?: string; expiryDate?: string }> = {};
                                                     const nextSerials: Record<string, { sn: string; tareWeight?: string; expiryDate?: string; isNew?: boolean }[]> = {};
 
+                                                    const allocs = selectedPO?.allocations.flatMap(a => a.items) || [];
                                                     for (const item of Array.isArray(h.items) ? h.items : []) {
-                                                        const porId = String(item?.porId || "");
+                                                        const matchingAlloc = allocs.find(a => String(a.productId) === String(item.productId) && String(a.branchId) === String(item.branchId));
+                                                        const porId = matchingAlloc ? matchingAlloc.id : String(item?.porId || "");
+                                                        
                                                         if (!porId) continue;
                                                         nextCounts[porId] = Number(item?.quantity || 0);
                                                         nextMeta[porId] = {
@@ -211,7 +228,8 @@ export function ReceiptDetailsStep({ onContinue }: { onContinue: () => void }) {
 
                                                     setReceiptNo(h.receiptNo);
                                                     setReceiptDate(h.receiptDate || "");
-                                                    setReceiptType("");
+                                                    setReceiptType(String(h.receiptType || ""));
+                                                    setEditingRevertedReceiptNo(h.receiptNo);
                                                     setManualCounts(nextCounts);
                                                     setMetaDataByPorId(nextMeta);
                                                     setSerialsByPorId(nextSerials);
@@ -220,7 +238,7 @@ export function ReceiptDetailsStep({ onContinue }: { onContinue: () => void }) {
                                                     });
                                                 }}
                                             >
-                                                <Pencil className="w-2.5 h-2.5 mr-1" /> EDIT
+                                                <Pencil className="w-2.5 h-2.5 mr-1" /> RESUME
                                             </Button>
                                         )}
                                     </div>
@@ -237,10 +255,19 @@ export function ReceiptDetailsStep({ onContinue }: { onContinue: () => void }) {
                     </div>
 
                     <div className="mt-4 grid gap-4">
+                        {editingRevertedReceiptNo && (
+                            <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-600 rounded-md">
+                                <div className="text-xs font-black uppercase tracking-widest flex items-center">
+                                    <Pencil className="w-3 h-3 mr-1" /> Editing Reverted Receipt
+                                </div>
+                                <div className="text-[11px] mt-1 font-medium">You are correcting receipt <b>{editingRevertedReceiptNo}</b>. The receipt number cannot be changed.</div>
+                            </div>
+                        )}
                         <div className="grid gap-1.5">
                             <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Receipt Number *</Label>
                             <Input 
                                 value={receiptNo} 
+                                disabled={!!editingRevertedReceiptNo}
                                 onChange={(e) => setReceiptNo(e.target.value)} 
                                 placeholder="Enter receipt number" 
                                 className="h-10 text-sm font-bold border-2 rounded-xl focus-visible:border-primary focus-visible:ring-0"
@@ -254,11 +281,19 @@ export function ReceiptDetailsStep({ onContinue }: { onContinue: () => void }) {
                                     <SelectValue placeholder="Select type..." />
                                 </SelectTrigger>
                                 <SelectContent className="rounded-xl border-2 shadow-xl">
-                                    {RECEIPT_TYPES.map((t) => (
-                                        <SelectItem key={t.value} value={t.value} className="text-xs font-bold py-2.5">
-                                            {t.label}
-                                        </SelectItem>
-                                    ))}
+                                    {dbReceiptTypes.length > 0 ? (
+                                        dbReceiptTypes.map((t) => (
+                                            <SelectItem key={t.id} value={String(t.id)} className="text-xs font-bold py-2.5">
+                                                {t.type} [{t.shortcut}]
+                                            </SelectItem>
+                                        ))
+                                    ) : (
+                                        RECEIPT_TYPES_FALLBACK.map((t) => (
+                                            <SelectItem key={t.value} value={t.value} className="text-xs font-bold py-2.5">
+                                                {t.label}
+                                            </SelectItem>
+                                        ))
+                                    )}
                                 </SelectContent>
                             </Select>
                         </div>

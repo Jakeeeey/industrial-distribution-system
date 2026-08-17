@@ -62,6 +62,7 @@ interface Receipt {
   receiptNo: string;
   receiptDate: string;
   isPosted: boolean;
+  isPostedAmounts?: boolean;
   items: ReceiptItem[];
 }
 
@@ -1054,11 +1055,14 @@ export default function PurchaseOrderSummaryModule({
                                   <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform shrink-0 ${isExpanded ? 'rotate-90' : ''}`} />
                                   <div className="flex items-center gap-2 min-w-0">
                                     <span className="text-xs font-black text-foreground font-mono tracking-tight">{receipt.receiptNo}</span>
-                                    <Badge variant="outline" className={`text-[8px] font-black px-1.5 py-0 border rounded-md uppercase ${receipt.isPosted
-                                      ? 'bg-green-500/15 text-green-600 border-green-500/30'
-                                      : 'bg-amber-500/15 text-amber-600 border-amber-500/30'
+                                    <Badge variant="outline" className={`text-[8px] font-black px-1.5 py-0 border rounded-md uppercase ${
+                                      receipt.isPostedAmounts 
+                                        ? 'bg-blue-500/15 text-blue-600 border-blue-500/30'
+                                        : receipt.isPosted
+                                          ? 'bg-green-500/15 text-green-600 border-green-500/30'
+                                          : 'bg-amber-500/15 text-amber-600 border-amber-500/30'
                                       }`}>
-                                      {receipt.isPosted ? 'Posted' : 'Unposted'}
+                                      {receipt.isPostedAmounts ? 'POSTED IN AMOUNTS' : receipt.isPosted ? 'RECEIVED IN INVENTORY' : 'Unposted'}
                                     </Badge>
                                   </div>
                                 </div>

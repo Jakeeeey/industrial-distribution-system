@@ -135,25 +135,16 @@ export function useSerialTagging(): UseSerialTaggingReturn {
 
     // ── Add a draft serial to a line ──────────────────────────────────────────
     const addDraftSerial = React.useCallback((lineId: number, serial: string) => {
-        const sn = serial.trim().toUpperCase();
+        const sn = serial.trim();
         if (!sn || !rawSelectedPO) return;
         
         // Prevent duplicates in saved serials (draft duplicates are handled by store)
         const line = rawSelectedPO.lines.find(l => l.lineId === lineId);
         if (!line) return;
-        if (line.savedSerials.some(s => s.serial_number.toUpperCase() === sn)) return;
-        
-        // Check capacity limit: do not exceed ordered quantity
-        const poDrafts = drafts[rawSelectedPO.poId] || {};
-        const lineDrafts = poDrafts[lineId] || [];
-        const currentCount = line.savedSerials.length + lineDrafts.length;
-        if (currentCount >= line.orderedQty) {
-            toast.error(`Cannot exceed ordered quantity of ${line.orderedQty} for this product.`);
-            return;
-        }
+        if (line.savedSerials.some(s => s.serial_number === sn)) return;
         
         store.addDraft(rawSelectedPO.poId, lineId, sn);
-    }, [rawSelectedPO, store, drafts]);
+    }, [rawSelectedPO, store]);
 
     // ── Remove a draft serial from a line (by index within draftSerials) ──────
     const removeDraftSerial = React.useCallback((lineId: number, index: number) => {

@@ -1,5 +1,6 @@
 export type ManualReceivingRow = {
     isPosted?: string | number | boolean | null;
+    is_reverted?: string | number | boolean | null;
     receipt_no?: string | null;
     receipt_date?: string | null;
     received_date?: string | null;
@@ -21,16 +22,16 @@ function toNumber(v: unknown) {
 }
 
 export function isManualReceiptReverted(rows: ManualReceivingRow[]) {
-    return rows.length > 0 && rows.every((row) => toNumber(row?.isPosted) === 2);
+    return rows.length > 0 && rows.every((row) => toNumber(row?.is_reverted) === 1 || toNumber(row?.isPosted) === 2);
 }
 
 export function hasManualReceiptEvidence(row: ManualReceivingRow | null | undefined) {
-    if (toNumber(row?.isPosted) === 2) return false;
+    if (toNumber(row?.is_reverted) === 1 || toNumber(row?.isPosted) === 2) return false;
     return Boolean(toText(row?.receipt_no) || toText(row?.receipt_date) || toText(row?.received_date));
 }
 
 export function effectiveManualReceivedQty(row: ManualReceivingRow | null | undefined) {
-    if (toNumber(row?.isPosted) === 2) return 0;
+    if (toNumber(row?.is_reverted) === 1 || toNumber(row?.isPosted) === 2) return 0;
     if (toNumber(row?.isPosted) === 1) return Math.max(0, toNumber(row?.received_quantity ?? 0));
     if (!hasManualReceiptEvidence(row)) return 0;
     return Math.max(0, toNumber(row?.received_quantity ?? 0));

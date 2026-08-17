@@ -30,6 +30,7 @@ interface ProductLine {
     productId: number;
     productName: string;
     branchName: string;
+    branchId?: string | number;
     expectedQty: number;
     scannedCount: number;
 }
@@ -49,17 +50,9 @@ interface PendingRegistration {
     productName: string;
 }
 
-interface AssetInfo {
-    tare_weight?: number | string;
-    expiration_date?: string;
-    cylinder_status?: string;
-    cylinder_condition?: string;
-}
-
 interface RefillRapidScanModalProps {
     open: boolean;
     onClose: () => void;
-    poId: number;
     supplierId?: number | null;
     /** All product lines in this PO currently selected for receiving */
     lines: ProductLine[];
@@ -78,8 +71,6 @@ function todayYMD(): string {
 export function RefillRapidScanModal({
     open,
     onClose,
-    poId,
-    supplierId,
     lines,
     onAddSerial,
 }: RefillRapidScanModalProps) {
@@ -153,54 +144,37 @@ export function RefillRapidScanModal({
 
         setIsValidating(true);
         try {
-            // Use first line with capacity as the target porId for validation
-            const targetLine = lines.find(l => l.scannedCount < l.expectedQty) ?? lines[0];
+
 
             const res = await fetch(API_URL, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    action: "validate_scan_serial",
+                    action: "validate_serial",
                     serialNumber: sn,
-                    poId,
-                    porId: targetLine.purchaseOrderProductId || targetLine.porId, // Pass correct purchase_order_product_id to validate correctly
+                    poType: "REFILL",
                 }),
             });
             const json = await res.json();
-
             if (!res.ok) throw new Error(json?.error || "Validation failed");
 
-            // Extract nested data payload returned by the ok() helper
-            const data = json?.data;
-            if (!data) throw new Error("Unexpected empty response payload");
+            const result = json?.data;
 
-            if (data.valid && data.source === "tagged") {
-                // ✅ Auto-allocate to the correct pre-tagged line matching purchaseOrderProductId
-                // Comments: Route allocation dynamically based on the DB matching line.
-                const matchedLine = lines.find(l => String(l.purchaseOrderProductId) === String(data.purchaseOrderProductId));
-                const best = matchedLine || (lines.find(l => l.scannedCount < l.expectedQty) ?? lines[0]);
-                
+            if (result?.status === "REJECTED") {
+                addToLog({ serial: sn, status: "error", productName: "—", message: result.message || "Rejected" });
+                toast.error("Validation failed", { description: result.message || "Serial rejected." });
+                return;
+            }
+
+            if (result?.status === "ACCEPTED") {
+                const best = lines.find(l => l.scannedCount < l.expectedQty) ?? lines[0];
                 onAddSerial(best.porId, sn);
-                addToLog({ serial: sn, status: "tagged", productName: best.productName, message: `Pre-Tagged → ${best.productName}` });
+                addToLog({ serial: sn, status: "asset", productName: best.productName, message: `Asset Found → ${best.productName}` });
                 toast.success(`"${sn}" verified and allocated to ${best.productName}.`);
                 return;
             }
 
-            if (data.valid && data.source === "asset") {
-                const asset = data.asset as AssetInfo & { product_id: number };
-                // ✅ Auto-allocate to the matching product line by product ID
-                // Comments: Route known assets directly to the PO product line matching their product ID.
-                const matchedLine = lines.find(l => Number(l.productId) === Number(asset.product_id));
-                const best = matchedLine || (lines.find(l => l.scannedCount < l.expectedQty) ?? lines[0]);
-                
-                onAddSerial(best.porId, sn);
-                const tare = asset.tare_weight ? `${asset.tare_weight}kg` : "No tare";
-                addToLog({ serial: sn, status: "asset", productName: best.productName, message: `Asset Found (${tare}) → ${best.productName}` });
-                toast.success(`"${sn}" matched as asset — allocated to ${best.productName}.`);
-                return;
-            }
-
-            if (!data.valid && data.requiresRegistration) {
+            if (result?.status === "REQUIRES_REGISTRATION") {
                 // New cylinder — trigger inline registration form
                 const best = lines.find(l => l.scannedCount < l.expectedQty) ?? lines[0];
                 setPendingRegistration({ serial: sn, porId: best.porId, productName: best.productName });
@@ -220,7 +194,7 @@ export function RefillRapidScanModal({
             setIsValidating(false);
             setTimeout(() => inputRef.current?.focus(), 50);
         }
-    }, [inputValue, isValidating, scanLog, lines, poId, onAddSerial]);
+    }, [inputValue, isValidating, scanLog, lines, onAddSerial]);
 
     // Enter key
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -249,12 +223,12 @@ export function RefillRapidScanModal({
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    action: "register_cylinder",
+                    action: "register_serial",
                     serialNumber: pendingRegistration.serial,
                     productId: line?.productId,
                     tareWeight: parseFloat(regTare),
                     expirationDate: regExpiry,
-                    currentSupplierId: supplierId,
+                    currentBranchId: line?.branchId,
                 }),
             });
             const data = await res.json();

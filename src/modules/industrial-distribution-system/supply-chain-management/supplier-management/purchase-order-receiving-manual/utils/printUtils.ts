@@ -21,6 +21,7 @@ type ReceiptData = {
         receivedQtyAtStart: number;
         receivedQtyNow: number;
         unitPrice?: number;
+        discountType?: string;
         discountAmount?: number;
         batchNo?: string;
         lotId?: string;
@@ -139,7 +140,7 @@ export async function generateOfficialSupplierReceiptV5(data: ReceiptData) {
                 sumDiscount += (received * discountAmount);
                 sumNet += net;
 
-                // Batch/Lot/Exp as separate lines in one column
+                // Tare/Exp as separate lines in one column
                 const batchExpLines = [
                     it.batchNo ? `Batch: ${it.batchNo}` : "",
                     it.lotId ? `Lot: ${it.lotId}` : "",
@@ -160,25 +161,27 @@ export async function generateOfficialSupplierReceiptV5(data: ReceiptData) {
                    String(expected),
                    String(received),
                    formatMoney(price),
+                   it.discountType || "—",
                    formatMoney(received * discountAmount),
                    formatMoney(net)
                 ]);
             });
 
             if (tableRows.length === 0) {
-                tableRows.push([{ content: "No items recorded in this receipt summary.", colSpan: 8, styles: { halign: "center", fontStyle: "italic" } }]);
+                tableRows.push([{ content: "No items recorded in this receipt summary.", colSpan: 10, styles: { halign: "center", fontStyle: "italic" } }]);
             }
 
             autoTable(doc, {
                 startY: detailsY + 15,
                 margin: { left: 10, right: 10 },
-                head: [["Barcode", "Product", "Batch/Exp", "UOM", "Order Qty", "Received", "Unit Price", "Disc Amt", "Net Amt"]],
+                head: [["Barcode", "Product", "Tare/Exp", "UOM", "Order Qty", "Received", "Unit Price", "Disc Type", "Disc Amt", "Net Amt"]],
                 body: tableRows,
                 foot: [[
                     { content: "TOTALS", colSpan: 4, styles: { halign: "right", fillColor: [245, 245, 245], fontSize: 7, textColor: [50, 50, 50], fontStyle: "bold" } },
                     { content: String(sumExpected), styles: { halign: "right", fillColor: [245, 245, 245], fontSize: 7, textColor: [50, 50, 50], fontStyle: "bold" } },
                     { content: String(sumReceived), styles: { halign: "right", fillColor: [245, 245, 245], fontSize: 7, textColor: [50, 50, 50], fontStyle: "bold" } },
                     { content: "—", styles: { halign: "right", fillColor: [245, 245, 245], fontSize: 7, textColor: [50, 50, 50], fontStyle: "bold" } },
+                    { content: "—", styles: { halign: "center", fillColor: [245, 245, 245], fontSize: 7, textColor: [50, 50, 50], fontStyle: "bold" } },
                     { content: formatMoney(sumDiscount), styles: { halign: "right", fillColor: [245, 245, 245], fontSize: 7, textColor: [50, 50, 50], fontStyle: "bold" } },
                     { content: formatMoney(sumNet), styles: { halign: "right", fillColor: [245, 245, 245], fontSize: 7, textColor: [50, 50, 50], fontStyle: "bold" } },
                 ]],
@@ -187,15 +190,16 @@ export async function generateOfficialSupplierReceiptV5(data: ReceiptData) {
                 headStyles: { fillColor: [100, 100, 100], textColor: [255, 255, 255], fontSize: 7, fontStyle: "bold", halign: "center" },
                 bodyStyles: { fontSize: 7, textColor: [50, 50, 50] },
                 columnStyles: {
-                    0: { cellWidth: 20 },
+                    0: { cellWidth: 16 },
                     1: { cellWidth: "auto" },
-                    2: { cellWidth: 28, fontSize: 6 },
-                    3: { cellWidth: 12 },
-                    4: { halign: "right", cellWidth: 14 },
-                    5: { halign: "right", cellWidth: 14 },
-                    6: { halign: "right", cellWidth: 18 },
-                    7: { halign: "right", cellWidth: 18 },
-                    8: { halign: "right", cellWidth: 20, fontStyle: "bold" },
+                    2: { cellWidth: 26, fontSize: 6 },
+                    3: { cellWidth: 10 },
+                    4: { halign: "right", cellWidth: 12 },
+                    5: { halign: "right", cellWidth: 12 },
+                    6: { halign: "right", cellWidth: 16 },
+                    7: { halign: "center", cellWidth: 12 },
+                    8: { halign: "right", cellWidth: 16 },
+                    9: { halign: "right", cellWidth: 18, fontStyle: "bold" },
                 },
                 didDrawPage: (data) => {
                     if (data.pageNumber > 1 && config.elements) {
