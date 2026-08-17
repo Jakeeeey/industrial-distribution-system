@@ -793,13 +793,26 @@ export async function POST(req: NextRequest) {
 
                 return ok({ status: "REQUIRES_REGISTRATION" });
             } else {
-                if (caExists && String(ca?.cylinder_status).toUpperCase() === "AVAILABLE" && String(ca?.cylinder_condition).toUpperCase() === "GOOD") {
-                    return ok({ 
-                        status: "ACCEPTED",
-                        tareWeight: ca?.tare_weight || "",
-                        expiryDate: ca?.expiration_date || ""
+                // Refill PO path:
+                // Cylinder must have been dispatched to supplier (WITH_SUPPLIER status)
+                // before it can be scanned back in during refill receiving.
+                if (caExists) {
+                    const caStatus = String(ca?.cylinder_status ?? "").toUpperCase();
+                    if (caStatus === "WITH_SUPPLIER") {
+                        // Valid — cylinder was properly dispatched, now returning
+                        return ok({
+                            status: "ACCEPTED",
+                            tareWeight: ca?.tare_weight || "",
+                            expiryDate: ca?.expiration_date || ""
+                        });
+                    }
+                    // Found in assets but wrong status — reject with explanation
+                    return ok({
+                        status: "REJECTED",
+                        message: `Serial number is currently "${ca?.cylinder_status}". Expected WITH_SUPPLIER. This cylinder may not have been dispatched to the supplier.`
                     });
                 }
+                // Not in cylinder_assets at all — allow draft registration
                 return ok({ status: "REQUIRES_REGISTRATION" });
             }
         }

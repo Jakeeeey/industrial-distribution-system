@@ -700,7 +700,17 @@ export function ReceivingProductsManualProvider({ children, receiverId, receiver
         const poId = selectedPO?.id;
         if (!poId) return setSaveError("Select a PO first.");
 
-        const counts = manualCounts ?? {};
+        const counts = { ...(manualCounts ?? {}) };
+        
+        // Ensure Refill PO serial counts are correctly hydrated into counts, since Refill POs don't use manualCounts UI inputs.
+        if (selectedPO?.isRefill) {
+            Object.entries(serialsByPorId || {}).forEach(([id, serials]) => {
+                if (serials && serials.length > 0) {
+                    counts[id] = serials.length;
+                }
+            });
+        }
+
         if (!Object.keys(counts).length || Object.values(counts).every(c => c <= 0)) {
             const err = "Enter at least 1 count before saving.";
             toast.error(err);

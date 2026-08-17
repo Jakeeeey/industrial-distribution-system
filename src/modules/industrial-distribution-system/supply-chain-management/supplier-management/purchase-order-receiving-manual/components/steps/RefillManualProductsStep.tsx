@@ -27,6 +27,8 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
         verifiedProductIds,
         serialsByPorId,
         setSerialsByPorId,
+        saveReceipt,
+        savingReceipt,
     } = useReceivingProductsManual();
 
     // ✅ Pagination
@@ -114,7 +116,7 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
             // Removed finally block with setLoadingExpected(false) as loadingExpected state was unused - AG 2026-06-26
     }, [porIdsStr]);
 
-    // ✅ Total units captured (sum of serialsByPorId counts)
+    // ✅ Total units captured
     const totalEntered = React.useMemo(() => {
         return filteredItems.reduce((sum, it) => {
             const id = String(it.id);
@@ -144,7 +146,7 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
 
     // ✅ Called by RefillRapidScanModal when a serial is accepted
     // Comments: Supports storing an optional isNew flag to identify newly registered cylinders.
-    const handleAddSerial = (porId: string, serial: string, isNew?: boolean) => {
+    const handleAddSerial = (porId: string, serial: string, isNew?: boolean, tareWeight?: string, expiryDate?: string) => {
         // Prevent duplicate local addition first
         const isDuplicate = serialsByPorId[porId]?.some(s => s.sn === serial);
         if (isDuplicate) return;
@@ -152,7 +154,7 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
         setSerialsByPorId(prev => {
             const existing = prev[porId] || [];
             if (existing.some(s => s.sn === serial)) return prev;
-            const next = [...existing, { sn: serial, tareWeight: "", expiryDate: "", isNew }];
+            const next = [...existing, { sn: serial, tareWeight: tareWeight || "", expiryDate: expiryDate || "", isNew }];
             setManualCounts(c => ({ ...c, [porId]: next.length }));
             return { ...prev, [porId]: next };
         });
@@ -176,19 +178,49 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
         });
     };
 
-    const handleContinueClick = () => {
+    const handleSaveClick = async () => {
         if (totalEntered === 0) {
             toast.error("No items captured", { description: "Please scan cylinders before proceeding." });
             return;
         }
-        onContinue();
+
+        // ✅ FIX: Sync draft serials to the DB before finalizing the receipt
+        // This is required because the backend save_receipt route for serialized items
+        // assumes that draft purchase_order_receiving rows were already created.
+        const poId = selectedPO?.id;
+        if (poId) {
+            for (const it of filteredItems) {
+                const id = String(it.id);
+                const serials = serialsByPorId[id] || [];
+                if (serials.length > 0) {
+                    try {
+                        await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                action: "sync_draft_serials",
+                                poId,
+                                productId: it.productId,
+                                branchId: it.branchId,
+                                // Mark all as unsaved so sync_draft_serials processes them
+                                serials: serials.map(s => ({ ...s, isSaved: false })),
+                            }),
+                        });
+                    } catch (e) {
+                        console.error("Failed to sync draft serials for item:", it.name, e);
+                    }
+                }
+            }
+        }
+
+        await saveReceipt();
     };
 
-    // Comments: Opens the verification modal, tracking both the database ID (activePorId) and client row ID (activeClientRowId)
+    // Comments: Opens the verification modal.
     const openTaggedModal = (it: typeof filteredItems[0]) => {
         const expected = Math.max(0, Number(it.expectedQty || 0) - Number(it.receivedQty || 0));
         setActivePorId(it.purchaseOrderProductId || null);
-        setActiveClientRowId(it.id);
+        setActiveClientRowId(String(it.id));
         setActiveProductName(it.name);
         setActiveExpectedQty(expected);
         setTaggedModalOpen(true);
@@ -373,16 +405,16 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
                     </div>
                 </div>
                 <Button
-                    onClick={handleContinueClick}
-                    disabled={totalEntered === 0}
+                    onClick={handleSaveClick}
+                    disabled={totalEntered === 0 || savingReceipt}
                     className={cn(
                         "h-12 px-10 rounded-xl font-black uppercase tracking-widest text-xs shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]",
-                        totalEntered === 0
+                        totalEntered === 0 || savingReceipt
                             ? "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
                             : "bg-primary hover:bg-primary/90 text-white shadow-primary/20"
                     )}
                 >
-                    Proceed to Final Review <ChevronRight className="ml-2 w-4 h-4" />
+                    {savingReceipt ? "Saving..." : "Save Tagged Quantities"} <ChevronRight className="ml-2 w-4 h-4" />
                 </Button>
             </div>
 

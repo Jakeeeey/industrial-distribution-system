@@ -1669,7 +1669,7 @@ export async function POST(req: NextRequest) {
             if (!receiptNo) return bad("Missing receiptNo.", 400);
 
             // ✅ Check is_posted lock
-            const poCheckUrl = `${base}/items/${PO_COLLECTION}/${poId}?fields=is_posted`;
+            const poCheckUrl = `${base}/items/${PO_COLLECTION}/${poId}?fields=is_posted,is_refill`;
             const poCheckJ = await fetchJson(poCheckUrl) as { data: Record<string, unknown> };
             if (toNum(poCheckJ?.data?.is_posted) === 1 || poCheckJ?.data?.is_posted === true) {
                 return bad("This PO has been fully posted and is now locked. No further changes allowed.", 409);
@@ -1784,10 +1784,13 @@ export async function POST(req: NextRequest) {
             ].filter(Boolean)));
             const productsMap = await fetchProductsMap(base, allProductIds);
             
-            // Execute cylinder registration
+            // ✅ CYLINDER REGISTRATION
+            // registerCylinders handles Refill PO logic natively by checking isRefill internally.
+            // For Normal POs, it will register cylinders.
+            // For Refill POs, it will update status to AVAILABLE and change product_id to full variant.
+            const toPostPorRows: PORRow[] = toPost.map(x => x.rowObj);
             // Pass only the scoped POR rows being posted now, not all porRows for the entire PO.
             // This prevents branch_id mismatches when multiple receipts exist for the same product.
-            const toPostPorRows: PORRow[] = toPost.map(x => x.rowObj);
             await registerCylinders(base, toPostPorRows, targetReceivingItems, productsMap, poId, userId);
 
             return ok({
@@ -1809,7 +1812,7 @@ export async function POST(req: NextRequest) {
             const poId = toNum(body?.poId);
             if (!poId) return bad("Missing poId.", 400);
 
-            const poUrl = `${base}/items/${PO_COLLECTION}/${encodeURIComponent(String(poId))}?fields=purchase_order_id,purchase_order_no,supplier_name,inventory_status,discount_type.*,discount_type.line_per_discount_type.line_id.*,is_posted`;
+            const poUrl = `${base}/items/${PO_COLLECTION}/${encodeURIComponent(String(poId))}?fields=purchase_order_id,purchase_order_no,supplier_name,inventory_status,discount_type.*,discount_type.line_per_discount_type.line_id.*,is_posted,is_refill`;
             const pj_po = await fetchJson(poUrl) as { data: Record<string, unknown> };
             const po = pj_po?.data ?? null;
             if (!po) return bad("PO not found for bulk posting.", 404);
@@ -1912,7 +1915,10 @@ export async function POST(req: NextRequest) {
             ].filter(Boolean)));
             const productsMapAll = await fetchProductsMap(base, allProductIdsAll);
             
-            // Execute cylinder registration
+            // ✅ CYLINDER REGISTRATION
+            // registerCylinders handles Refill PO logic natively by checking isRefill internally.
+            // For Normal POs, it will register cylinders.
+            // For Refill POs, it will update status to AVAILABLE and change product_id to full variant.
             // Pass only the unposted rows being committed now, not all historical POR rows.
             await registerCylinders(base, toPost, targetReceivingItemsAll, productsMapAll, poId, userId);
 
