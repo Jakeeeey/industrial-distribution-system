@@ -614,12 +614,49 @@ export default function CreatePurchaseOrderModule({ encoderId, preparerName, isR
                 setAllProducts(
                     (rawProducts ?? []).map((rp: any) => {
                         const pid = String(rp?.product_id ?? rp?.id ?? "");
+
+                        // Determine if this is an empty variant during a Refill PO
+                        const uom = String(
+                            rp?.unit_of_measurement?.unit_shortcut ??
+                            rp?.unit_of_measurement?.unit_name ??
+                            rp?.uom_name ??
+                            rp?.uom?.unit_name ??
+                            rp?.unit_name ??
+                            ""
+                        ).toUpperCase();
+
+                        const isRefillEmpty = isRefill && uom === "EMPTY";
+
+                        let effectivePidForDiscount = pid;
+                        let effectiveRawProduct = rp;
+
+                        if (isRefillEmpty && rp?.parent_id) {
+                            const parentIdStr = String(rp.parent_id);
+                            const parentRp = (rawProducts ?? []).find((p: any) => String(p?.product_id ?? p?.id ?? "") === parentIdStr);
+                            
+                            if (parentRp) {
+                                effectiveRawProduct = parentRp;
+                                effectivePidForDiscount = parentIdStr;
+                            }
+                        }
+
                         const fixedDiscountTypeId =
-                            discountByProductId.get(pid) ||
+                            discountByProductId.get(effectivePidForDiscount) ||
                             defaultNoDiscountId ||
                             FALLBACK_NO_DISCOUNT_ID;
 
                         const np = normalizeProduct(rp, fixedDiscountTypeId);
+
+                        if (effectiveRawProduct !== rp) {
+                            np.price = Number(
+                                effectiveRawProduct?.cost_per_unit ??
+                                effectiveRawProduct?.cost_price_unit ??
+                                effectiveRawProduct?.priceA ??
+                                effectiveRawProduct?.price_per_unit ??
+                                effectiveRawProduct?.price ??
+                                0
+                            ) || 0;
+                        }
 
                         if (DEBUG_BOX_CONVERSION && debugCount < MAX_DEBUG_LOGS) {
                             debugCount += 1;
@@ -837,30 +874,52 @@ export default function CreatePurchaseOrderModule({ encoderId, preparerName, isR
         return allocations.flatMap((b) => b.items.map((item) => ({ branchName: b.branchName, item })));
     }, [allocations]);
 
-    const grossAmount = React.useMemo(() => {
-        return allItemsFlat.reduce(
-            (sum, x) => sum + Number(x.item.price || 0) * Number(x.item.orderQty || 0),
-            0
-        );
-    }, [allItemsFlat]);
+    const financials = React.useMemo(() => {
+        let totalGross = 0;
+        let totalDiscount = 0;
+        let totalNet = 0;
+        let totalVatExclusive = 0;
+        let totalVatAmount = 0;
+        let totalEwt = 0;
 
-    const discountAmount = React.useMemo(() => {
-        return allItemsFlat.reduce((sum, x) => {
-
+        for (const x of allItemsFlat) {
             const item: any = x.item;
-            const gross = Number(item.price || 0) * Number(item.orderQty || 0);
-
+            const unitPrice = Number(item.price || 0);
+            const orderedQty = Number(item.orderQty || 0);
+            
             const id = String(item.discountTypeId || defaultNoDiscountId || "");
             const dt = id ? discountTypeById.get(id) : undefined;
-
             const pct = Math.max(0, Number(dt?.percent ?? 0));
-            return sum + gross * (pct / 100);
-        }, 0);
-    }, [allItemsFlat, discountTypeById, defaultNoDiscountId]);
 
-    const financials = React.useMemo(() => {
-        return calculateVatExclusiveFromAmounts(grossAmount, discountAmount);
-    }, [grossAmount, discountAmount]);
+            const lineGross = orderedQty * unitPrice;
+            const discAmtTotal = Number((lineGross * (pct / 100)).toFixed(2));
+            const lineNet = lineGross - discAmtTotal;
+
+            const vatExcl = Number((lineNet / 1.12).toFixed(2));
+            const vatAmt = Number((lineNet - vatExcl).toFixed(2));
+            const ewtAmt = Number((vatExcl * 0.01).toFixed(2));
+
+            totalGross += lineGross;
+            totalDiscount += discAmtTotal;
+            totalNet += lineNet;
+            totalVatExclusive += vatExcl;
+            totalVatAmount += vatAmt;
+            totalEwt += ewtAmt;
+        }
+
+        const payableToSupplier = Math.max(0, totalNet - totalEwt);
+
+        return {
+            grossAmount: totalGross,
+            discountAmount: totalDiscount,
+            netAmount: totalNet,
+            vatExclusive: totalVatExclusive,
+            vatAmount: totalVatAmount,
+            ewtGoods: totalEwt,
+            total: totalNet,
+            payableToSupplier,
+        };
+    }, [allItemsFlat, discountTypeById, defaultNoDiscountId]);
 
     const canSave = Boolean(selectedSupplier?.id) && allItemsFlat.length > 0 && !isSaving;
 

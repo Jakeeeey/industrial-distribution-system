@@ -487,10 +487,11 @@ function buildPorIdsByKey(porRows: PORow[]) {
 // buildTagMapsForScopes removed
 
 function isFullyReceived(poId: number, lines: POProductRow[], porRows: PORow[]) {
+    const activeRows = porRows.filter((r) => toNum(r.is_reverted) !== 1 && toNum(r.isPosted) !== 2);
     for (const ln of lines) {
         const expected = toNum(ln.ordered_quantity);
         if (expected <= 0) continue;
-        const received = porRows
+        const received = activeRows
             .filter((r) => toNum(r.product_id) === toNum(ln.product_id) && toNum(r.branch_id) === toNum(ln.branch_id ?? 0))
             .reduce((sum, r) => sum + effectiveReceivedQty(r), 0);
         if (received < expected) return false;
@@ -500,15 +501,16 @@ function isFullyReceived(poId: number, lines: POProductRow[], porRows: PORow[]) 
 
 // Fixed receivingStatusFrom helper for Receipt module compatibility (does not lock reverted status)
 function receivingStatusFrom(poId: number, lines: POProductRow[], porRows: PORow[]): POStatus {
-    const fully = isFullyReceived(poId, lines, porRows);
+    const activeRows = porRows.filter((r) => toNum(r.is_reverted) !== 1 && toNum(r.isPosted) !== 2);
+    const fully = isFullyReceived(poId, lines, activeRows);
     if (fully) {
         // Even if quantities are fully received, if there are unposted/reverted receipts, it's not truly closed
-        const hasUnposted = porRows.some(r => toNum(r.isPosted) === 0 && (toStr(r.receipt_no) || toNum(r.received_quantity) > 0 || toNum(r.is_reverted) === 1));
+        const hasUnposted = activeRows.some(r => toNum(r.isPosted) === 0 && (toStr(r.receipt_no) || toNum(r.received_quantity) > 0));
         if (hasUnposted) return "PARTIAL";
         return "CLOSED";
     }
-    const hasAnyPosted = porRows.some(r => toNum(r.isPosted) === 1);
-    const hasAnyReceipt = porRows.some(r => effectiveReceivedQty(r) > 0 || toStr(r.receipt_no));
+    const hasAnyPosted = activeRows.some(r => toNum(r.isPosted) === 1);
+    const hasAnyReceipt = activeRows.some(r => effectiveReceivedQty(r) > 0 || toStr(r.receipt_no));
     if (hasAnyPosted || hasAnyReceipt) return "PARTIAL";
     return "OPEN";
 }

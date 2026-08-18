@@ -41,11 +41,6 @@ export function ReceiptDetailsStep({ onContinue }: { onContinue: () => void }) {
         setReceiptType,
         receiptDate,
         setReceiptDate,
-        setManualCounts,
-        setMetaDataByPorId,
-        setSerialsByPorId,
-        editingRevertedReceiptNo,
-        setEditingRevertedReceiptNo,
     } = useReceivingProductsManual();
 
     const [dbReceiptTypes, setDbReceiptTypes] = React.useState<{ id: number; type: string; shortcut: string }[]>([]);
@@ -187,60 +182,6 @@ export function ReceiptDetailsStep({ onContinue }: { onContinue: () => void }) {
                                         >
                                             {h.status || (h.isPosted ? "POSTED" : "ACTIVE")}
                                         </Badge>
-                                        {/* ✅ Fix 4: EDIT button for REVERTED receipts only — loads data back into form for correction - AG 2026-07-14 */}
-                                        {h.isReverted && (
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="h-5 px-2 text-[9px] font-black uppercase tracking-widest border border-slate-300 text-slate-600 hover:bg-slate-50 rounded"
-                                                onClick={() => {
-                                                    const nextCounts: Record<string, number> = {};
-                                                    const nextMeta: Record<string, { batchNo?: string; lotNo?: string; lotId?: string; expiryDate?: string }> = {};
-                                                    const nextSerials: Record<string, { sn: string; tareWeight?: string; expiryDate?: string; isNew?: boolean }[]> = {};
-
-                                                    const allocs = selectedPO?.allocations.flatMap(a => a.items) || [];
-                                                    for (const item of Array.isArray(h.items) ? h.items : []) {
-                                                        const matchingAlloc = allocs.find(a => String(a.productId) === String(item.productId) && String(a.branchId) === String(item.branchId));
-                                                        const porId = matchingAlloc ? matchingAlloc.id : String(item?.porId || "");
-                                                        
-                                                        if (!porId) continue;
-                                                        nextCounts[porId] = Number(item?.quantity || 0);
-                                                        nextMeta[porId] = {
-                                                            lotNo: String(item?.lotNo || ""),
-                                                            lotId: String(item?.lotNo || ""),
-                                                            batchNo: String(item?.batchNo || ""),
-                                                            expiryDate: String(item?.expiryDate || ""),
-                                                        };
-
-                                                        const serials = Array.isArray(item?.serials) ? item.serials : [];
-                                                        if (serials.length > 0) {
-                                                            nextSerials[porId] = serials
-                                                                .map((serial: any) => ({
-                                                                    sn: String(serial?.sn || "").toUpperCase(),
-                                                                    tareWeight: String(serial?.tareWeight || ""),
-                                                                    expiryDate: String(serial?.expiryDate || ""),
-                                                                    isNew: true,
-                                                                }))
-                                                                .filter((serial: { sn: string }) => serial.sn);
-                                                            nextCounts[porId] = nextSerials[porId].length;
-                                                        }
-                                                    }
-
-                                                    setReceiptNo(h.receiptNo);
-                                                    setReceiptDate(h.receiptDate || "");
-                                                    setReceiptType(String(h.receiptType || ""));
-                                                    setEditingRevertedReceiptNo(h.receiptNo);
-                                                    setManualCounts(nextCounts);
-                                                    setMetaDataByPorId(nextMeta);
-                                                    setSerialsByPorId(nextSerials);
-                                                    toast.info("Editing Reverted Receipt", {
-                                                        description: `Loaded ${h.receiptNo} for correction. Update quantities and re-submit.`,
-                                                    });
-                                                }}
-                                            >
-                                                <Pencil className="w-2.5 h-2.5 mr-1" /> RESUME
-                                            </Button>
-                                        )}
                                     </div>
                                 </div>
                             ))}
@@ -255,19 +196,10 @@ export function ReceiptDetailsStep({ onContinue }: { onContinue: () => void }) {
                     </div>
 
                     <div className="mt-4 grid gap-4">
-                        {editingRevertedReceiptNo && (
-                            <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-600 rounded-md">
-                                <div className="text-xs font-black uppercase tracking-widest flex items-center">
-                                    <Pencil className="w-3 h-3 mr-1" /> Editing Reverted Receipt
-                                </div>
-                                <div className="text-[11px] mt-1 font-medium">You are correcting receipt <b>{editingRevertedReceiptNo}</b>. The receipt number cannot be changed.</div>
-                            </div>
-                        )}
                         <div className="grid gap-1.5">
                             <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Receipt Number *</Label>
                             <Input 
                                 value={receiptNo} 
-                                disabled={!!editingRevertedReceiptNo}
                                 onChange={(e) => setReceiptNo(e.target.value)} 
                                 placeholder="Enter receipt number" 
                                 className="h-10 text-sm font-bold border-2 rounded-xl focus-visible:border-primary focus-visible:ring-0"

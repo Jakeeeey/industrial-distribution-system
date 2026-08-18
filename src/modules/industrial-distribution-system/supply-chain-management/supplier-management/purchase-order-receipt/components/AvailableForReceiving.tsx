@@ -390,7 +390,7 @@ export function AvailableForReceiving() {
 }
 
 function receivingTabFor(po: { status?: string; inventoryStatus?: number; isRefill?: boolean }): ReceivingListTab {
-    if (Number(po.inventoryStatus) === 6) {
+    if (po.status === "CLOSED") {
         return "received";
     }
     return po.isRefill ? "refill" : "normal";

@@ -147,9 +147,6 @@ type Ctx = {
     setReceiptType: (v: string) => void;
     receiptDate: string;
     setReceiptDate: (v: string) => void;
-    editingRevertedReceiptNo: string | null;
-    setEditingRevertedReceiptNo: (v: string | null) => void;
-
     // ✅ NEW: receipt saved signal (non-breaking)
     receiptSaved: ReceiptSavedInfo | null;
     clearReceiptSaved: () => void;
@@ -255,8 +252,6 @@ export function ReceivingProductsManualProvider({ children, receiverId, receiver
     const [receiptNo, setReceiptNo] = React.useState("");
     const [receiptType, setReceiptType] = React.useState("");
     const [receiptDate, setReceiptDate] = React.useState(todayYMD());
-    const [editingRevertedReceiptNo, setEditingRevertedReceiptNo] = React.useState<string | null>(null);
-
     // ✅ NEW: success signal for UI
     const [receiptSaved, setReceiptSaved] = React.useState<ReceiptSavedInfo | null>(null);
     const clearReceiptSaved = React.useCallback(() => setReceiptSaved(null), []);
@@ -735,7 +730,7 @@ export function ReceivingProductsManualProvider({ children, receiverId, receiver
                     poId,
                     porCounts: counts,
                     porSerials: serialsByPorId,
-                    porMetaData: porMetaData ?? {}
+                    porMetaData: porMetaData ?? {},
                 }),
             });
             const j = await asJson(r);
@@ -826,8 +821,6 @@ export function ReceivingProductsManualProvider({ children, receiverId, receiver
         setReceiptType,
         receiptDate,
         setReceiptDate,
-        editingRevertedReceiptNo,
-        setEditingRevertedReceiptNo,
 
         receiptSaved,
         clearReceiptSaved,

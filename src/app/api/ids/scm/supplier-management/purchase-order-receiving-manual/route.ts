@@ -428,10 +428,11 @@ function buildPorIdsByKey(porRows: PORow[]) {
 }
 
 function isFullyReceived(poId: number, lines: POProductRow[], porRows: PORow[]) {
+    const activeRows = porRows.filter((r) => toNum(r.is_reverted) !== 1 && toNum(r.isPosted) !== 2);
     for (const ln of lines) {
         const expected = toNum(ln.ordered_quantity);
         if (expected <= 0) continue;
-        const received = porRows
+        const received = activeRows
             .filter((r) => toNum(r.product_id) === toNum(ln.product_id) && toNum(r.branch_id) === toNum(ln.branch_id ?? 0))
             .reduce((sum, r) => sum + effectiveReceivedQty(r), 0);
         if (received < expected) return false;
@@ -440,10 +441,11 @@ function isFullyReceived(poId: number, lines: POProductRow[], porRows: PORow[]) 
 }
 
 function receivingStatusFrom(poId: number, lines: POProductRow[], porRows: PORow[]): "OPEN" | "PARTIAL" | "CLOSED" {
-    const fully = isFullyReceived(poId, lines, porRows);
+    const activeRows = porRows.filter((r) => toNum(r.is_reverted) !== 1 && toNum(r.isPosted) !== 2);
+    const fully = isFullyReceived(poId, lines, activeRows);
     if (fully) return "CLOSED";
-    const hasAnyPosted = porRows.some(r => toNum(r.isPosted) === 1);
-    const hasAnyReceipt = porRows.some(r => effectiveReceivedQty(r) > 0 || hasManualReceiptEvidence(r));
+    const hasAnyPosted = activeRows.some(r => toNum(r.isPosted) === 1);
+    const hasAnyReceipt = activeRows.some(r => effectiveReceivedQty(r) > 0 || hasManualReceiptEvidence(r));
     if (hasAnyPosted || hasAnyReceipt) return "PARTIAL";
     return "OPEN";
 }
@@ -864,7 +866,7 @@ export async function POST(req: NextRequest) {
         }
 
         if (action === "sync_draft_serials") {
-            const { poId, productId, branchId, serials } = body;
+            const { poId, productId, branchId, serials, receiptNo } = body;
             if (!poId || !productId || !branchId || !Array.isArray(serials)) return bad("Missing required fields for sync", 400);
 
             const lines = await fetchPOProductsByPOId(base, toNum(poId));
@@ -876,7 +878,11 @@ export async function POST(req: NextRequest) {
                 uPrice = toNum(pj2?.data?.cost_per_unit || 0);
             }
 
-            const existingPorsRes = await fetchJson<{ data: Record<string, unknown>[] }>(`${base}/items/${POR_COLLECTION}?filter[purchase_order_id][_eq]=${encodeURIComponent(String(poId))}&filter[product_id][_eq]=${encodeURIComponent(String(productId))}&filter[branch_id][_eq]=${encodeURIComponent(String(branchId))}&filter[isPosted][_eq]=0&filter[receipt_no][_null]=true&filter[is_reverted][_neq]=1&fields=purchase_order_product_id`).catch(() => null);
+            const receiptFilter = receiptNo 
+                ? `&filter[receipt_no][_eq]=${encodeURIComponent(String(receiptNo))}` 
+                : `&filter[receipt_no][_null]=true`;
+
+            const existingPorsRes = await fetchJson<{ data: Record<string, unknown>[] }>(`${base}/items/${POR_COLLECTION}?filter[purchase_order_id][_eq]=${encodeURIComponent(String(poId))}&filter[product_id][_eq]=${encodeURIComponent(String(productId))}&filter[branch_id][_eq]=${encodeURIComponent(String(branchId))}&filter[isPosted][_eq]=0${receiptFilter}&filter[is_reverted][_neq]=1&fields=purchase_order_product_id`).catch(() => null);
             const draftPorIds = (existingPorsRes?.data || []).map(r => r.purchase_order_product_id);
 
             let extData: Record<string, unknown>[] = [];
@@ -1004,10 +1010,10 @@ export async function POST(req: NextRequest) {
         }
 
         if (action === "save_receipt") {
-            const { poId, porCounts, porMetaData, receiverId } = body;
+            const { poId, porCounts, porMetaData, receiverId, receiptNo: bodyReceiptNo } = body;
             let { porSerials } = body;
             const rollbackTracker: Array<{ execute: () => Promise<void>; undo: () => Promise<void> }> = [];
-            const receiptNo = null; 
+            const receiptNo = bodyReceiptNo || null;
             const thePoId = toNum(poId);
             if (!thePoId) return bad("Missing PO ID");
 
@@ -1344,7 +1350,7 @@ export async function POST(req: NextRequest) {
             const isRefill = Number(po?.is_refill ?? 0) === 1;
             const fully = isFullyReceived(thePoId, fLines, fPors);
             const hasRec = fPors.some(r => effectiveReceivedQty(r) > 0 || hasManualReceiptEvidence(r));
-            const nextStatus = fully ? (isRefill ? 13 : 6) : (hasRec ? 9 : po.inventory_status);
+            const nextStatus = fully ? 6 : (hasRec ? 9 : po.inventory_status);
             const sMap: Record<string, string> = { "1": "Requested", "3": "Approved", "6": "Received", "9": "Partially Received", "13": "For Receiving" };
             const nStatusKey = String(nextStatus);
             const currStatusKey = String(toNum(po.inventory_status));

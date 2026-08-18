@@ -589,7 +589,6 @@ export default function PurchaseOrderReviewPanel(props: {
                                                     <th className="px-3 py-2 font-black uppercase tracking-tight text-muted-foreground border-b border-border">Disc. Type</th>
                                                     <th className="px-3 py-2 font-black uppercase tracking-tight text-muted-foreground text-right border-b border-border">Disc. Amount</th>
                                                     <th className="px-3 py-2 font-black uppercase tracking-tight text-muted-foreground text-right border-b border-border">Net Amount</th>
-                                                    <th className="px-3 py-2 font-black uppercase tracking-tight text-muted-foreground text-right border-b border-border">Action</th>
                                                 </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-border/50">
@@ -610,21 +609,6 @@ export default function PurchaseOrderReviewPanel(props: {
                                                             {fmt.format(l.discountAmount)}
                                                         </td>
                                                         <td className="px-3 py-2 text-right tabular-nums font-black text-foreground border-b border-border/10">{fmt.format(l.net)}</td>
-                                                        <td className="px-3 py-2 text-right border-b border-border/10">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setRemovedKeys(prev => {
-                                                                    const next = new Set(prev);
-                                                                    next.add(l.key);
-                                                                    return next;
-                                                                })}
-                                                                disabled={props.disabled || submitting}
-                                                                className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                                                                title="Remove item"
-                                                            >
-                                                                <Trash2 className="w-4 h-4" />
-                                                            </button>
-                                                        </td>
                                                     </tr>
                                                 ))}
                                                 </tbody>

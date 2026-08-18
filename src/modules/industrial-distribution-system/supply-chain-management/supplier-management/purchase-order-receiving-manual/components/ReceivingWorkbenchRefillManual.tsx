@@ -4,8 +4,11 @@ import * as React from "react";
 import { useReceivingProductsManual } from "../providers/ReceivingProductsManualProvider";
 import { ProductVerificationStep } from "./steps/ProductVerificationStep";
 import { RefillManualProductsStep } from "./steps/RefillManualProductsStep";
+import { RefillReceiptHistoryModal } from "./RefillReceiptHistoryModal";
 
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { History } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Step dot styling for POs
@@ -28,6 +31,7 @@ function StepDot({ active }: { active: boolean }) {
 export function ReceivingWorkbenchRefillManual({ receiverName }: { receiverName?: string }) {
     const { selectedPO, receiptSaved } = useReceivingProductsManual();
     const [step, setStep] = React.useState(0);
+    const [historyModalOpen, setHistoryModalOpen] = React.useState(false);
 
     // Reset to step 0 if PO is deselected
     React.useEffect(() => {
@@ -59,6 +63,8 @@ export function ReceivingWorkbenchRefillManual({ receiverName }: { receiverName?
 
     return (
         <Card className="p-4 h-full flex flex-col overflow-hidden shadow-sm border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950">
+            <RefillReceiptHistoryModal open={historyModalOpen} onClose={() => setHistoryModalOpen(false)} />
+            
             <div className="flex items-start justify-between gap-3 shrink-0 border-b pb-3">
                 <div>
                     <div className="text-base font-black text-slate-900 dark:text-slate-100 flex items-center gap-2 tracking-tight">
@@ -70,9 +76,20 @@ export function ReceivingWorkbenchRefillManual({ receiverName }: { receiverName?
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                    <StepDot active={step === 0} />
-                    <StepDot active={step === 1} />
+                <div className="flex items-center gap-4">
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => setHistoryModalOpen(true)}
+                        className="h-8 text-[9px] font-black uppercase tracking-widest gap-2 text-slate-500 border-slate-200 hover:text-primary hover:bg-primary/5"
+                    >
+                        <History className="w-3.5 h-3.5" />
+                        Receipt History
+                    </Button>
+                    <div className="flex items-center gap-2">
+                        <StepDot active={step === 0} />
+                        <StepDot active={step === 1} />
+                    </div>
                 </div>
             </div>
 

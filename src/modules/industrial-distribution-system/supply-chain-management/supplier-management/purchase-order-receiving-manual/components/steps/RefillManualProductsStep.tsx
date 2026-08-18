@@ -29,6 +29,7 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
         setSerialsByPorId,
         saveReceipt,
         savingReceipt,
+
     } = useReceivingProductsManual();
 
     // ✅ Pagination
@@ -202,6 +203,7 @@ export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: (
                                 poId,
                                 productId: it.productId,
                                 branchId: it.branchId,
+
                                 // Mark all as unsaved so sync_draft_serials processes them
                                 serials: serials.map(s => ({ ...s, isSaved: false })),
                             }),
