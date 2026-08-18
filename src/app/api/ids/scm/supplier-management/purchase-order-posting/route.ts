@@ -869,26 +869,7 @@ async function registerCylinders(
                     });
                 }
                 
-                // Add to purchase_order_serial if not exists
-                if (popId) {
-                    try {
-                        const serialCheck = await fetchJson<{ data?: Array<{ id: number }> }>(
-                            `${base}/items/purchase_order_serial?filter[serial_number][_eq]=${encodeURIComponent(sn)}&filter[purchase_order_product_id][_eq]=${popId}&limit=1`
-                        );
-                        if (!serialCheck?.data?.length) {
-                            await fetchJson(`${base}/items/purchase_order_serial`, {
-                                method: "POST",
-                                body: JSON.stringify({
-                                    serial_number: sn,
-                                    product_id: pid,
-                                    purchase_order_product_id: popId
-                                })
-                            });
-                        }
-                    } catch (err) {
-                        console.error(`[registerCylinders] Error adding serial ${sn} to purchase_order_serial:`, err);
-                    }
-                }
+                // (User requested: Normal PO serials will not get inserted in purchase_order_serial table)
                 
                 successCount++;
             } catch (e) {

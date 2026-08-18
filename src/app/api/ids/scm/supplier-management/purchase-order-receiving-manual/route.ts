@@ -238,7 +238,8 @@ async function fetchApprovedNotReceivedPOs(base: string): Promise<POHeaderRow[]>
         "limit=-1", "sort=-purchase_order_id",
         "fields=purchase_order_id,purchase_order_no,date,date_encoded,approver_id,date_approved,payment_status,inventory_status,date_received,supplier_name,total_amount,price_type,is_refill,is_tagged",
         "filter[_or][0][is_posted][_neq]=1",
-        "filter[_or][1][is_posted][_null]=true"
+        "filter[_or][1][is_posted][_null]=true",
+        "filter[inventory_status][_neq]=6"
     ].join("&");
 
     const allRows: POHeaderRow[] = [];
@@ -440,10 +441,16 @@ function isFullyReceived(poId: number, lines: POProductRow[], porRows: PORow[]) 
     return true;
 }
 
-function receivingStatusFrom(poId: number, lines: POProductRow[], porRows: PORow[]): "OPEN" | "PARTIAL" | "CLOSED" {
+function receivingStatusFrom(po: any, lines: POProductRow[], porRows: PORow[]): "OPEN" | "PARTIAL" | "CLOSED" {
+    if (toNum(po?.inventory_status) === 6) return "CLOSED";
+    
     const activeRows = porRows.filter((r) => toNum(r.is_reverted) !== 1 && toNum(r.isPosted) !== 2);
-    const fully = isFullyReceived(poId, lines, activeRows);
-    if (fully) return "CLOSED";
+    const fully = isFullyReceived(toNum(po?.purchase_order_id), lines, activeRows);
+    
+    // Even if fully received by quantity, if inventory_status is not 6, it is still PARTIAL
+    // This allows the user to continue tagging or adding receipts until amounts are posted.
+    if (fully) return "PARTIAL";
+
     const hasAnyPosted = activeRows.some(r => toNum(r.isPosted) === 1);
     const hasAnyReceipt = activeRows.some(r => effectiveReceivedQty(r) > 0 || hasManualReceiptEvidence(r));
     if (hasAnyPosted || hasAnyReceipt) return "PARTIAL";
@@ -516,7 +523,7 @@ export async function GET() {
             return {
                 id: String(poId), poNumber: toStr(po.purchase_order_no),
                 supplierName: supplierMap.get(toNum(po.supplier_name)) || "—",
-                status: receivingStatusFrom(poId, lines, porRows),
+                status: receivingStatusFrom(po, lines, porRows),
                 inventoryStatus: toNum(po.inventory_status),
                 totalAmount: toNum(po.total_amount), currency: "PHP",
                 itemsCount: new Set(lines.map(l => l.product_id)).size,
@@ -1350,7 +1357,8 @@ export async function POST(req: NextRequest) {
             const isRefill = Number(po?.is_refill ?? 0) === 1;
             const fully = isFullyReceived(thePoId, fLines, fPors);
             const hasRec = fPors.some(r => effectiveReceivedQty(r) > 0 || hasManualReceiptEvidence(r));
-            const nextStatus = fully ? 6 : (hasRec ? 9 : po.inventory_status);
+            const hasUnposted = fPors.some(r => toNum(r.isPosted) === 0 && (toStr(r.receipt_no) || toNum(r.received_quantity) > 0));
+            const nextStatus = (fully && !hasUnposted) ? 6 : (hasRec ? 9 : po.inventory_status);
             const sMap: Record<string, string> = { "1": "Requested", "3": "Approved", "6": "Received", "9": "Partially Received", "13": "For Receiving" };
             const nStatusKey = String(nextStatus);
             const currStatusKey = String(toNum(po.inventory_status));

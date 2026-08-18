@@ -61,9 +61,6 @@ export function AvailableForReceiving() {
         return (poList ?? []).filter((x) => receivingTabFor(x) === "refill").length;
     }, [poList]);
 
-    const receivedCount = React.useMemo(() => {
-        return (poList ?? []).filter((x) => receivingTabFor(x) === "received").length;
-    }, [poList]);
 
     const hasUnsavedProgress = React.useMemo(() => {
         return Object.keys(scannedCountByPorId || {}).length > 0 || editingReceiptId !== null;
@@ -173,18 +170,7 @@ export function AvailableForReceiving() {
                 >
                     Refill POs ({refillCount})
                 </button>
-                <button
-                    type="button"
-                    onClick={() => setActiveTab("received")}
-                    className={cn(
-                        "flex-1 pb-2 text-xs font-bold border-b-2 transition-all duration-200",
-                        activeTab === "received"
-                            ? "border-primary text-primary"
-                            : "border-transparent text-muted-foreground hover:text-foreground"
-                    )}
-                >
-                    Received ({receivedCount})
-                </button>
+
             </div>
 
             <div className="mt-4">
@@ -243,7 +229,7 @@ export function AvailableForReceiving() {
                     </>
                 ) : totalItems === 0 ? (
                     <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                        {activeTab === "received" ? "No received purchase orders found." : "No purchase orders available."}
+                        No purchase orders available.
                     </div>
                 ) : (
                     pageItems.map((po) => {
@@ -390,8 +376,5 @@ export function AvailableForReceiving() {
 }
 
 function receivingTabFor(po: { status?: string; inventoryStatus?: number; isRefill?: boolean }): ReceivingListTab {
-    if (po.status === "CLOSED") {
-        return "received";
-    }
     return po.isRefill ? "refill" : "normal";
 }

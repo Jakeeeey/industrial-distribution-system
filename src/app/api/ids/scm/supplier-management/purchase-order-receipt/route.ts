@@ -233,7 +233,8 @@ async function fetchApprovedNotReceivedPOs(base: string): Promise<POHeaderRow[]>
         "limit=-1", "sort=-purchase_order_id",
         "fields=purchase_order_id,purchase_order_no,date,date_encoded,approver_id,date_approved,payment_status,inventory_status,date_received,supplier_name,total_amount,price_type,is_refill,is_tagged",
         "filter[_or][0][is_posted][_neq]=1",
-        "filter[_or][1][is_posted][_null]=true"
+        "filter[_or][1][is_posted][_null]=true",
+        "filter[inventory_status][_neq]=6"
     ].join("&");
 
     const allRows: POHeaderRow[] = [];
@@ -500,15 +501,16 @@ function isFullyReceived(poId: number, lines: POProductRow[], porRows: PORow[]) 
 }
 
 // Fixed receivingStatusFrom helper for Receipt module compatibility (does not lock reverted status)
-function receivingStatusFrom(poId: number, lines: POProductRow[], porRows: PORow[]): POStatus {
+function receivingStatusFrom(po: any, lines: POProductRow[], porRows: PORow[]): POStatus {
+    if (toNum(po?.inventory_status) === 6) return "CLOSED";
+    
     const activeRows = porRows.filter((r) => toNum(r.is_reverted) !== 1 && toNum(r.isPosted) !== 2);
-    const fully = isFullyReceived(poId, lines, activeRows);
-    if (fully) {
-        // Even if quantities are fully received, if there are unposted/reverted receipts, it's not truly closed
-        const hasUnposted = activeRows.some(r => toNum(r.isPosted) === 0 && (toStr(r.receipt_no) || toNum(r.received_quantity) > 0));
-        if (hasUnposted) return "PARTIAL";
-        return "CLOSED";
-    }
+    const fully = isFullyReceived(toNum(po?.purchase_order_id), lines, activeRows);
+    
+    // Even if fully received by quantity, if inventory_status is not 6, it is still PARTIAL
+    // This allows the user to continue tagging or adding receipts until amounts are posted.
+    if (fully) return "PARTIAL";
+
     const hasAnyPosted = activeRows.some(r => toNum(r.isPosted) === 1);
     const hasAnyReceipt = activeRows.some(r => effectiveReceivedQty(r) > 0 || toStr(r.receipt_no));
     if (hasAnyPosted || hasAnyReceipt) return "PARTIAL";
@@ -632,7 +634,7 @@ export async function GET() {
             return {
                 id: String(poId), poNumber: toStr(po.purchase_order_no),
                 supplierName: supplierMap.get(toNum(po.supplier_name)) || "—",
-                status: receivingStatusFrom(poId, lines, porRows),
+                status: receivingStatusFrom(po, lines, porRows),
                 inventoryStatus: toNum(po.inventory_status),
                 totalAmount: toNum(po.total_amount), currency: "PHP",
                 itemsCount: new Set(lines.map(l => l.product_id)).size,
