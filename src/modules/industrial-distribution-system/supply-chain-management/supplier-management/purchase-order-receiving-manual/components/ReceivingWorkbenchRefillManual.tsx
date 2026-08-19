@@ -28,7 +28,7 @@ function StepDot({ active }: { active: boolean }) {
  * Dedicated workbench view for receiving Refilled POs.
  * Features a cylinder refill theme matching the Normal PO theme.
  */
-export function ReceivingWorkbenchRefillManual({ receiverName }: { receiverName?: string }) {
+export function ReceivingWorkbenchRefillManual({ }: { receiverName?: string }) {
     const { selectedPO, receiptSaved } = useReceivingProductsManual();
     const [step, setStep] = React.useState(0);
     const [historyModalOpen, setHistoryModalOpen] = React.useState(false);

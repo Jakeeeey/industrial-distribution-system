@@ -6,16 +6,12 @@ import * as React from "react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Tag, X, CheckCircle2, AlertCircle, HelpCircle, Plus, Trash2 } from "lucide-react";
+import { Loader2, Tag, X, CheckCircle2, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const API_URL = "/api/ids/scm/supplier-management/purchase-order-receiving-manual";
+// const API_URL = "/api/ids/scm/supplier-management/purchase-order-receiving-manual";
 
-interface TaggedSerial {
-    id: number;
-    serial_number: string;
-    product_id: number;
-}
+
 
 interface TaggedSerialsModalProps {
     open: boolean;
@@ -27,10 +23,9 @@ interface TaggedSerialsModalProps {
     onRemoveSerial?: (serial: string) => void;
 }
 
-export function TaggedSerialsModal({ open, onClose, porId, productName, expectedQty, scannedSerials = [], onRemoveSerial }: TaggedSerialsModalProps) {
+export function TaggedSerialsModal({ open, onClose, productName, scannedSerials = [], onRemoveSerial }: TaggedSerialsModalProps) {
     const [loading, setLoading] = React.useState(false);
-    const [serials, setSerials] = React.useState<TaggedSerial[]>([]);
-    const [error, setError] = React.useState("");
+    const [error] = React.useState("");
 
     // Expected serials logic removed as per user request
     React.useEffect(() => {

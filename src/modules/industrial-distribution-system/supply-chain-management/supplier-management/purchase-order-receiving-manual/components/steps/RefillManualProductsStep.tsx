@@ -19,7 +19,7 @@ import { RefillRapidScanModal } from "../RefillRapidScanModal";
 
 const API_URL = "/api/ids/scm/supplier-management/purchase-order-receiving-manual";
 
-export function RefillManualProductsStep({ onContinue, onBack }: { onContinue: () => void; onBack: () => void }) {
+export function RefillManualProductsStep({ onBack }: { onContinue: () => void; onBack: () => void }) {
     const {
         selectedPO,
         // Removed unused manualCounts to fix lint warning - AG 2026-06-26

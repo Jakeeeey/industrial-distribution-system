@@ -7,7 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { generatePurchaseOrderPdf } from "../utils/generatePoPdf";
-import { Printer, Trash2 } from "lucide-react";
+import { Printer } from "lucide-react";
 
 import {
     Select,

@@ -36,6 +36,7 @@ export function RefillReceiptHistoryModal({ open, onClose }: { open: boolean; on
                             No receipts found for this Refill PO.
                         </div>
                     ) : (
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         history.map((h: any) => (
                             <div key={h.receiptNo || "DRAFT"} className="flex items-center justify-between p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
                                 <div className="flex flex-col gap-1">

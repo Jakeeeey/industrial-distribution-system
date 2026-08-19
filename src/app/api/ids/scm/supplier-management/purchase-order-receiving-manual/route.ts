@@ -441,6 +441,7 @@ function isFullyReceived(poId: number, lines: POProductRow[], porRows: PORow[]) 
     return true;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function receivingStatusFrom(po: any, lines: POProductRow[], porRows: PORow[]): "OPEN" | "PARTIAL" | "CLOSED" {
     if (toNum(po?.inventory_status) === 6) return "CLOSED";
     
@@ -1355,7 +1356,6 @@ export async function POST(req: NextRequest) {
             const fLines = await fetchPOProductsByPOId(base, thePoId), fPors = await fetchPORByPOIds(base, [thePoId]);
             const updatedPorIdsByKey = buildPorIdsByKey(fPors);
 
-            const isRefill = Number(po?.is_refill ?? 0) === 1;
             const fully = isFullyReceived(thePoId, fLines, fPors);
             const hasRec = fPors.some(r => effectiveReceivedQty(r) > 0 || hasManualReceiptEvidence(r));
             const hasUnposted = fPors.some(r => toNum(r.isPosted) === 0 && (toStr(r.receipt_no) || toNum(r.received_quantity) > 0));

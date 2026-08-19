@@ -501,6 +501,7 @@ function isFullyReceived(poId: number, lines: POProductRow[], porRows: PORow[]) 
 }
 
 // Fixed receivingStatusFrom helper for Receipt module compatibility (does not lock reverted status)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function receivingStatusFrom(po: any, lines: POProductRow[], porRows: PORow[]): POStatus {
     if (toNum(po?.inventory_status) === 6) return "CLOSED";
     

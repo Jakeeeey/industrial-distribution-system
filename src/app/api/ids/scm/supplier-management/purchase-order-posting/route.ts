@@ -817,12 +817,6 @@ async function registerCylinders(
             // Only register if the product is serialized
             if (!p || !p.is_serialized) continue;
             
-            // Defense: if por is not found (undefined), fall back to branch_id from popLines.
-            const branchId = por 
-                ? toNum(por.branch_id ?? 0)
-                : toNum(popLines.find(ln => toNum(ln.product_id) === pid)?.branch_id ?? 0);
-            const popId = popIdByProductBranch.get(`${pid}::${branchId}`);
-
             try {
                 // Check if cylinder already exists in assets
                 const assetCheck = await fetchJson<{ data?: Array<{ id: number }> }>(

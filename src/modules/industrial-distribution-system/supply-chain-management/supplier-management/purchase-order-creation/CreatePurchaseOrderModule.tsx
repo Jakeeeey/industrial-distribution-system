@@ -17,7 +17,6 @@ import type {
 import {
     cn,
     deriveUnitsPerBoxFromText,
-    calculateVatExclusiveFromAmounts,
     makePoMeta,
 } from "./utils/calculations";
 
@@ -685,7 +684,7 @@ export default function CreatePurchaseOrderModule({ encoderId, preparerName, isR
         return () => {
             alive = false;
         };
-    }, [selectedSupplier?.id, defaultNoDiscountId]);
+    }, [selectedSupplier?.id, defaultNoDiscountId, isRefill]);
 
     // Sync allocations with selectedBranchIds
     React.useEffect(() => {

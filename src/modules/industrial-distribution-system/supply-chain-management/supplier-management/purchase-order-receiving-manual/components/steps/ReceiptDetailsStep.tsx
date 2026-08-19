@@ -17,7 +17,6 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { useReceivingProductsManual } from "../../providers/ReceivingProductsManualProvider";
-import { Pencil } from "lucide-react";
 
 const RECEIPT_TYPES_FALLBACK = [
     { value: "SI-CHARGE", label: "Charge Sales Invoice [SI-CHARGE]" },
