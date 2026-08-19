@@ -937,7 +937,8 @@ export async function POST(req: NextRequest) {
                     const childPayload: Record<string, unknown> = {
                         purchase_order_receiving_id: newPorId,
                         product_id: toNum(productId),
-                        serial_number: sn
+                        serial_number: sn,
+                        created_at: nowISO()
                     };
                     if (tWeight !== null) childPayload.tare_weight = tWeight;
                     await fetchJson(`${base}/items/purchase_order_receiving_serial`, { method: "POST", body: JSON.stringify(childPayload) }).catch(() => {});
@@ -1390,7 +1391,6 @@ export async function POST(req: NextRequest) {
 
             const patchPO: Record<string, unknown> = { inventory_status: nextStatus };
             if (receiverId) patchPO.receiver_id = receiverId;
-            if (fully) patchPO.date_received = nowISO();
 
             // ✅ Only apply VAT/EWT totals if the PO is an Invoice
             if (poIsInvoice) {
