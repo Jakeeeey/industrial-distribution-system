@@ -57,7 +57,7 @@ interface RefillRapidScanModalProps {
     /** All product lines in this PO currently selected for receiving */
     lines: ProductLine[];
     /** Called when a serial is confirmed for a porId (adds to session) */
-    onAddSerial: (porId: string, serial: string, isNew?: boolean) => void;
+    onAddSerial: (porId: string, serial: string, isNew?: boolean, tareWeight?: string, expiryDate?: string) => void;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -168,7 +168,7 @@ export function RefillRapidScanModal({
 
             if (result?.status === "ACCEPTED") {
                 const best = lines.find(l => l.scannedCount < l.expectedQty) ?? lines[0];
-                onAddSerial(best.porId, sn);
+                onAddSerial(best.porId, sn, false, result.tareWeight, result.expiryDate);
                 addToLog({ serial: sn, status: "asset", productName: best.productName, message: `Asset Found → ${best.productName}` });
                 toast.success(`"${sn}" verified and allocated to ${best.productName}.`);
                 return;
@@ -187,9 +187,10 @@ export function RefillRapidScanModal({
             // Unknown state
             addToLog({ serial: sn, status: "error", productName: "—", message: "Unexpected response" });
         } catch (e) {
-            console.error(e);
-            addToLog({ serial: sn, status: "error", productName: "—", message: (e as Error).message });
-            toast.error("Validation failed. Please retry.");
+            // Show the specific server error message in the toast so users don't need to check the console
+            const errMsg = (e as Error).message || "Validation failed. Please retry.";
+            addToLog({ serial: sn, status: "error", productName: "—", message: errMsg });
+            toast.error("Validation Failed", { description: errMsg });
         } finally {
             setIsValidating(false);
             setTimeout(() => inputRef.current?.focus(), 50);
@@ -234,7 +235,7 @@ export function RefillRapidScanModal({
             const data = await res.json();
             if (!res.ok) throw new Error(data?.error || "Registration failed");
 
-            onAddSerial(pendingRegistration.porId, pendingRegistration.serial, true);
+            onAddSerial(pendingRegistration.porId, pendingRegistration.serial, true, regTare, regExpiry);
             addToLog({
                 serial: pendingRegistration.serial,
                 status: "new",

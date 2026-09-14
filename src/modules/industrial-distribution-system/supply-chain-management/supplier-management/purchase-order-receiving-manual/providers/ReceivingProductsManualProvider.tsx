@@ -147,9 +147,6 @@ type Ctx = {
     setReceiptType: (v: string) => void;
     receiptDate: string;
     setReceiptDate: (v: string) => void;
-    editingRevertedReceiptNo: string | null;
-    setEditingRevertedReceiptNo: (v: string | null) => void;
-
     // ✅ NEW: receipt saved signal (non-breaking)
     receiptSaved: ReceiptSavedInfo | null;
     clearReceiptSaved: () => void;
@@ -255,8 +252,6 @@ export function ReceivingProductsManualProvider({ children, receiverId, receiver
     const [receiptNo, setReceiptNo] = React.useState("");
     const [receiptType, setReceiptType] = React.useState("");
     const [receiptDate, setReceiptDate] = React.useState(todayYMD());
-    const [editingRevertedReceiptNo, setEditingRevertedReceiptNo] = React.useState<string | null>(null);
-
     // ✅ NEW: success signal for UI
     const [receiptSaved, setReceiptSaved] = React.useState<ReceiptSavedInfo | null>(null);
     const clearReceiptSaved = React.useCallback(() => setReceiptSaved(null), []);
@@ -700,7 +695,17 @@ export function ReceivingProductsManualProvider({ children, receiverId, receiver
         const poId = selectedPO?.id;
         if (!poId) return setSaveError("Select a PO first.");
 
-        const counts = manualCounts ?? {};
+        const counts = { ...(manualCounts ?? {}) };
+        
+        // Ensure Refill PO serial counts are correctly hydrated into counts, since Refill POs don't use manualCounts UI inputs.
+        if (selectedPO?.isRefill) {
+            Object.entries(serialsByPorId || {}).forEach(([id, serials]) => {
+                if (serials && serials.length > 0) {
+                    counts[id] = serials.length;
+                }
+            });
+        }
+
         if (!Object.keys(counts).length || Object.values(counts).every(c => c <= 0)) {
             const err = "Enter at least 1 count before saving.";
             toast.error(err);
@@ -725,7 +730,7 @@ export function ReceivingProductsManualProvider({ children, receiverId, receiver
                     poId,
                     porCounts: counts,
                     porSerials: serialsByPorId,
-                    porMetaData: porMetaData ?? {}
+                    porMetaData: porMetaData ?? {},
                 }),
             });
             const j = await asJson(r);
@@ -816,8 +821,6 @@ export function ReceivingProductsManualProvider({ children, receiverId, receiver
         setReceiptType,
         receiptDate,
         setReceiptDate,
-        editingRevertedReceiptNo,
-        setEditingRevertedReceiptNo,
 
         receiptSaved,
         clearReceiptSaved,

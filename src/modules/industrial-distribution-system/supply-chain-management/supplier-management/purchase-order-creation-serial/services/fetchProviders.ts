@@ -29,9 +29,11 @@ async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
         let detail = text;
         try {
             const j = JSON.parse(text);
-            detail = j?.error || j?.details || text;
+            const baseErr = j?.error || "Error";
+            const extraDetails = j?.details ? `\n${j.details}` : "";
+            detail = `${baseErr}${extraDetails}`;
         } catch { /* ignore */ }
-        throw new Error(`${res.status} ${res.statusText} — ${detail}`);
+        throw new Error(detail);
     }
 
     const json = await res.json().catch(() => null);

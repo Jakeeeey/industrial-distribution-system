@@ -233,7 +233,8 @@ async function fetchApprovedNotReceivedPOs(base: string): Promise<POHeaderRow[]>
         "limit=-1", "sort=-purchase_order_id",
         "fields=purchase_order_id,purchase_order_no,date,date_encoded,approver_id,date_approved,payment_status,inventory_status,date_received,supplier_name,total_amount,price_type,is_refill,is_tagged",
         "filter[_or][0][is_posted][_neq]=1",
-        "filter[_or][1][is_posted][_null]=true"
+        "filter[_or][1][is_posted][_null]=true",
+        "filter[inventory_status][_neq]=6"
     ].join("&");
 
     const allRows: POHeaderRow[] = [];
@@ -487,10 +488,11 @@ function buildPorIdsByKey(porRows: PORow[]) {
 // buildTagMapsForScopes removed
 
 function isFullyReceived(poId: number, lines: POProductRow[], porRows: PORow[]) {
+    const activeRows = porRows.filter((r) => toNum(r.is_reverted) !== 1 && toNum(r.isPosted) !== 2);
     for (const ln of lines) {
         const expected = toNum(ln.ordered_quantity);
         if (expected <= 0) continue;
-        const received = porRows
+        const received = activeRows
             .filter((r) => toNum(r.product_id) === toNum(ln.product_id) && toNum(r.branch_id) === toNum(ln.branch_id ?? 0))
             .reduce((sum, r) => sum + effectiveReceivedQty(r), 0);
         if (received < expected) return false;
@@ -499,16 +501,19 @@ function isFullyReceived(poId: number, lines: POProductRow[], porRows: PORow[]) 
 }
 
 // Fixed receivingStatusFrom helper for Receipt module compatibility (does not lock reverted status)
-function receivingStatusFrom(poId: number, lines: POProductRow[], porRows: PORow[]): POStatus {
-    const fully = isFullyReceived(poId, lines, porRows);
-    if (fully) {
-        // Even if quantities are fully received, if there are unposted/reverted receipts, it's not truly closed
-        const hasUnposted = porRows.some(r => toNum(r.isPosted) === 0 && (toStr(r.receipt_no) || toNum(r.received_quantity) > 0 || toNum(r.is_reverted) === 1));
-        if (hasUnposted) return "PARTIAL";
-        return "CLOSED";
-    }
-    const hasAnyPosted = porRows.some(r => toNum(r.isPosted) === 1);
-    const hasAnyReceipt = porRows.some(r => effectiveReceivedQty(r) > 0 || toStr(r.receipt_no));
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function receivingStatusFrom(po: any, lines: POProductRow[], porRows: PORow[]): POStatus {
+    if (toNum(po?.inventory_status) === 6) return "CLOSED";
+    
+    const activeRows = porRows.filter((r) => toNum(r.is_reverted) !== 1 && toNum(r.isPosted) !== 2);
+    const fully = isFullyReceived(toNum(po?.purchase_order_id), lines, activeRows);
+    
+    // Even if fully received by quantity, if inventory_status is not 6, it is still PARTIAL
+    // This allows the user to continue tagging or adding receipts until amounts are posted.
+    if (fully) return "PARTIAL";
+
+    const hasAnyPosted = activeRows.some(r => toNum(r.isPosted) === 1);
+    const hasAnyReceipt = activeRows.some(r => effectiveReceivedQty(r) > 0 || toStr(r.receipt_no));
     if (hasAnyPosted || hasAnyReceipt) return "PARTIAL";
     return "OPEN";
 }
@@ -630,7 +635,7 @@ export async function GET() {
             return {
                 id: String(poId), poNumber: toStr(po.purchase_order_no),
                 supplierName: supplierMap.get(toNum(po.supplier_name)) || "—",
-                status: receivingStatusFrom(poId, lines, porRows),
+                status: receivingStatusFrom(po, lines, porRows),
                 inventoryStatus: toNum(po.inventory_status),
                 totalAmount: toNum(po.total_amount), currency: "PHP",
                 itemsCount: new Set(lines.map(l => l.product_id)).size,

@@ -479,6 +479,29 @@ async function tagSerials(
 
     const inserted = Array.isArray(insertJson?.data) ? insertJson.data.length : serialRows.length;
 
+    // 4.5 Update cylinder_assets status to 'WITH_SUPPLIER' for each tagged serial.
+    // Run in parallel for performance. Non-blocking.
+    await Promise.all(entries.map(async (e) => {
+        const sn = String(e.serial_number).trim().toUpperCase();
+        try {
+            const assetCheck = await directusFetch(
+                `${base}/items/cylinder_assets?limit=1&filter[serial_number][_eq]=${encodeURIComponent(sn)}&filter[is_deleted][_eq]=0&fields=id`
+            );
+            const assetJson = await assetCheck.json().catch(() => ({}));
+            const asset = assetJson?.data?.[0];
+            if (asset?.id) {
+                await directusFetch(`${base}/items/cylinder_assets/${asset.id}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ cylinder_status: 'WITH_SUPPLIER' })
+                });
+            } else {
+                console.warn(`[tagSerials] Serial ${sn} not found in cylinder_assets — WITH_SUPPLIER not set.`);
+            }
+        } catch (err) {
+            console.error(`[tagSerials] Failed to update cylinder_assets for serial ${sn}:`, err);
+        }
+    }));
+
     // 5. Check if all lines are now fully serialized → patch is_tagged = 1
     const lineIds = linesData.map((l) => Number(l.purchase_order_product_id)).filter(Boolean);
     let serialsData: Record<string, unknown>[] = [];
