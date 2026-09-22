@@ -127,7 +127,8 @@ export function RefillRapidScanModal({
     };
 
     const handleScan = React.useCallback(async () => {
-        const sn = inputValue.trim().toUpperCase();
+        // Developer comment: Preserve exact case sensitivity of scanned barcode/serial numbers for precise matching
+        const sn = inputValue.trim();
         setInputValue("");
         if (!sn || isValidating) return;
 

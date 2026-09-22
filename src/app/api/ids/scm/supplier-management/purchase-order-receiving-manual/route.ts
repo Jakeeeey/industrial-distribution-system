@@ -234,12 +234,14 @@ async function fetchApprovedNotReceivedPOs(base: string): Promise<POHeaderRow[]>
 
     if (validSupplierIds.length === 0) return [];
 
+    // Developer comment: Fetch only approved POs eligible for receiving (status 3 = For Receiving, 9 = Partially Received, 12 = En Route).
+    // Excludes rejected (8), pending approval (1), cancelled (7), fully received (6), and posted/for posting (13).
     const baseQs = [
         "limit=-1", "sort=-purchase_order_id",
         "fields=purchase_order_id,purchase_order_no,date,date_encoded,approver_id,date_approved,payment_status,inventory_status,date_received,supplier_name,total_amount,price_type,is_refill,is_tagged",
         "filter[_or][0][is_posted][_neq]=1",
         "filter[_or][1][is_posted][_null]=true",
-        "filter[inventory_status][_neq]=6"
+        "filter[inventory_status][_in]=3,9,12"
     ].join("&");
 
     const allRows: POHeaderRow[] = [];
@@ -1703,7 +1705,8 @@ export async function POST(req: NextRequest) {
 
             const payload: Record<string, unknown> = {
                 product_id: toNum(productId),
-                serial_number: toStr(serialNumber).toUpperCase(),
+                // Developer comment: Preserve exact character casing for serial_number to strictly enforce case-sensitivity
+                serial_number: toStr(serialNumber).trim(),
                 cylinder_status: "WITH_SUPPLIER",
                 cylinder_condition: "GOOD",
                 is_deleted: 0,

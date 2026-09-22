@@ -524,8 +524,8 @@ function buildReceiptSummary(porRows: PORRow[], priceMap?: Map<number, number>, 
     const groups = new Map<string, PORRow[]>();
 
     for (const r of porRows ?? []) {
-        const rn = toStr(r?.receipt_no);
-        if (!rn) continue;
+        // Developer comment: Ensure receiving rows without explicit receipt_no default to "Default Receipt" instead of being omitted from receipt grouping
+        const rn = toStr(r?.receipt_no) || "Default Receipt";
         const arr = groups.get(rn) ?? [];
         arr.push(r);
         groups.set(rn, arr);
@@ -629,18 +629,9 @@ function buildReceiptSummary(porRows: PORRow[], priceMap?: Map<number, number>, 
 }
 
 function receivingStatusFrom(porRows: PORRow[], opts?: { isClosed?: boolean; fullyReceived?: boolean; hasAnyPosted?: boolean }) {
-    // CLOSED only if fully received AND all receipts/rows are posted
-    if (opts?.isClosed) return "CLOSED" as POStatus;
-    // RECEIVED: all items received, receipts exist but not yet posted
-    if (opts?.fullyReceived) return "FOR POSTING" as POStatus;
-    // PARTIAL_POSTED: some receipts posted, some not, NOT fully received
+    // Developer comment: Status of PO in post modules strictly returns PARTIAL_POSTED (if any receipts posted) or FOR POSTING
     if (opts?.hasAnyPosted) return "PARTIAL_POSTED" as POStatus;
-
-    const anyActivity = (porRows ?? []).some((r) => {
-        return effectiveReceivedQty(r) > 0 || hasReceiptEvidence(r);
-    });
-
-    return anyActivity ? "PARTIAL" : "OPEN";
+    return "FOR POSTING" as POStatus;
 }
 
 function latestReceiptInfo(porRows: PORRow[]) {
@@ -870,21 +861,21 @@ export async function GET() {
             const poId = toNum(po?.purchase_order_id);
             if (!poId) continue;
 
-            // We allow is_posted POs in the list (sorted to the bottom) as per user request
+            // Developer comment: Do not show Closed (status 6 or is_posted=1), Rejected (status 8 or 4), or Cancelled (status 7) POs in PO Posting Amounts
+            const invStatus = toNum(po?.inventory_status);
+            if (invStatus === 6 || invStatus === 8 || invStatus === 4 || invStatus === 7) continue;
+            if (toNum(po?.is_posted) === 1 || po?.is_posted === true) continue;
 
             const porRows = porByPo.get(poId) ?? [];
             const lines = linesByPo.get(poId) ?? [];
 
             const fully = isFullyReceived(poId, lines, porRows);
 
-            // hasAnyPosted: true when at least one POR row is already posted
-            // This is the key signal for PARTIAL_POSTED status
+            // hasAnyPosted: true when at least one POR row is already posted (inventory posted)
             const totalAnyPosted = porRows.some((r) => toNum(r?.isPosted) === 1);
-            const isHeaderPostedCheck = toNum(po?.is_posted) === 1;
 
-            // Only show POs where inventory has already been posted (isPosted=1 on at least one receipt)
-            // OR where the PO itself is already financially closed (is_posted=1 on header)
-            if (!totalAnyPosted && !isHeaderPostedCheck) continue;
+            // Only show POs where inventory has already been posted and is ready for amounts posting
+            if (!totalAnyPosted) continue;
 
             const poSupplierId = toNum(po?.supplier_name);
             const supplierName = poSupplierId ? toStr(supplierNamesMap.get(poSupplierId), "—") : "—";
@@ -942,6 +933,8 @@ export async function GET() {
 
             const lr = latestReceiptInfo(porRows);
             const rs = buildReceiptSummary(porRows, porPriceMap, porDiscMap);
+            // Developer comment: Define allPosted derived from receipt summary counts to resolve 'allPosted is not defined' error
+            const allPosted = rs.receiptsCount > 0 && rs.unpostedReceiptsCount === 0;
             
             const isHeaderPosted = toNum(po?.is_posted) === 1;
             const isClosed = isHeaderPosted;
@@ -978,8 +971,8 @@ export async function GET() {
                 status: receivingStatusFrom(porRows, {
                     isClosed,
                     fullyReceived,
-                    // Only flag PARTIAL_POSTED when not fully received
-                    hasAnyPosted: !fully && totalAnyPosted,
+                    // Developer comment: Allow PARTIAL_POSTED status whenever some receipts are posted and some remain unposted (not all posted)
+                    hasAnyPosted: totalAnyPosted && !allPosted,
                 }),
                 totalAmount: listTotal,
                 currency: "PHP",
@@ -1319,7 +1312,8 @@ export async function POST(req: NextRequest) {
                 status: receivingStatusFrom(porRows, {
                     isClosed,
                     fullyReceived,
-                    hasAnyPosted: !fully && hasAnyPosted,
+                    // Developer comment: Allow PARTIAL_POSTED status whenever some receipts are posted and some remain unposted (not all posted)
+                    hasAnyPosted: hasAnyPosted && !allPosted,
                 }),
                 totalAmount: detailTotal,
                 currency: "PHP",

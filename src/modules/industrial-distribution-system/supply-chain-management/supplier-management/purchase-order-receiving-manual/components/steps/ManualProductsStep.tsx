@@ -813,7 +813,8 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
                                                 onKeyDown={(e) => e.key === "Enter" && addSerial()}
                                                 placeholder="Scan/Type..."
                                                 className={cn(
-                                                    "h-12 px-4 rounded-xl font-mono text-sm border-2 transition-all shadow-sm uppercase",
+                                                    // Developer comment: Removed uppercase class to preserve mixed-case character input as typed/scanned
+                                                    "h-12 px-4 rounded-xl font-mono text-sm border-2 transition-all shadow-sm",
                                                     tempSerials.length >= orderedLimit
                                                         ? "border-amber-500/50 bg-amber-50/10 focus-visible:border-amber-500"
                                                         : "border-slate-200 dark:border-slate-800 focus-visible:ring-0 focus-visible:border-primary"
@@ -864,7 +865,7 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
                                     disabled={verifyingSerial || !isPendingValid}
                                     className={cn(
                                         "w-full h-11 rounded-xl font-black uppercase tracking-widest text-[10px] gap-2 shadow-md transition-all active:scale-[0.98]",
-                                        !isPendingValid ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-slate-900 hover:bg-slate-800 text-white"
+                                        !isPendingValid ? "bg-muted text-muted-foreground cursor-not-allowed" : "bg-primary hover:bg-primary/90 text-primary-foreground"
                                     )}
                                 >
                                     <Plus className="h-3.5 w-3.5" />

@@ -1139,37 +1139,39 @@ export async function POST(req: NextRequest) {
             const rejectPatch: Record<string, unknown> = {
                 date_approved: nowStr,
                 approver_id: body?.approver_id ?? body?.approverId ?? null,
-                inventory_status: 8, // 8 = Rejected
-            };
-            if (body?.remarks !== undefined && body?.remarks !== null) {
-                rejectPatch.remark = String(body.remarks);
-            } else if (body?.remark !== undefined && body?.remark !== null) {
-                rejectPatch.remark = String(body.remark);
-            }
-            const url = `${base}/items/${PO_COLLECTION}/${encodeURIComponent(String(poId))}`;
-            await fetchJson(url, { method: "PATCH", body: JSON.stringify(rejectPatch) });
-            return ok({ ok: true, rejected: true });
+            // Developer comment: Setting inventory_status to 8 (Rejected) upon PO rejection per transaction status standard
+            inventory_status: 8, // 8 = Rejected
+        };
+        if (body?.remarks !== undefined && body?.remarks !== null) {
+            rejectPatch.remark = String(body.remarks);
+        } else if (body?.remark !== undefined && body?.remark !== null) {
+            rejectPatch.remark = String(body.remark);
         }
+        const url = `${base}/items/${PO_COLLECTION}/${encodeURIComponent(String(poId))}`;
+        await fetchJson(url, { method: "PATCH", body: JSON.stringify(rejectPatch) });
+        return ok({ ok: true, rejected: true });
+    }
 
-        console.log(`[APPROVAL DEBUG] PO #${poId} approved. Set status to 13 (For Receiving). MarkAsInvoice: ${Boolean(body?.markAsInvoice)}`);
+    // Developer comment: Setting inventory_status to 3 (For Receiving) upon PO approval per transaction status standard
+    console.log(`[APPROVAL DEBUG] PO #${poId} approved. Set status to 3 (For Receiving). MarkAsInvoice: ${Boolean(body?.markAsInvoice)}`);
 
-        const patch: Record<string, unknown> = { 
-            date_approved: (() => {
-                const d = new Date();
-                const datePart = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(d);
-                const timePart = new Intl.DateTimeFormat("en-US", {
-                    timeZone: "Asia/Manila",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    second: "2-digit",
-                    hour12: false
-                }).format(d);
-                return `${datePart} ${timePart}`;
-            })(),
-            receiving_type: Boolean(body?.markAsInvoice) ? 2 : 3, // Persistent flag for "Mark as Invoice"
-            inventory_status: 13, // ✅ For Receiving
-            approver_id: body?.approver_id ?? body?.approverId ?? null, // ✅ Track who approved
-            payment_type: body?.payment_type ?? body?.paymentType ?? null, // ✅ Update payment terms
+    const patch: Record<string, unknown> = { 
+        date_approved: (() => {
+            const d = new Date();
+            const datePart = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(d);
+            const timePart = new Intl.DateTimeFormat("en-US", {
+                timeZone: "Asia/Manila",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+                hour12: false
+            }).format(d);
+            return `${datePart} ${timePart}`;
+        })(),
+        receiving_type: Boolean(body?.markAsInvoice) ? 2 : 3, // Persistent flag for "Mark as Invoice"
+        inventory_status: 3, // ✅ 3 = For Receiving (Moves PO to Receiving Module)
+        approver_id: body?.approver_id ?? body?.approverId ?? null, // ✅ Track who approved
+        payment_type: body?.payment_type ?? body?.paymentType ?? null, // ✅ Update payment terms
 
             // ✅ Expanded financial tracking
             gross_amount: body?.gross_amount !== undefined ? toNum(body.gross_amount) : undefined,
