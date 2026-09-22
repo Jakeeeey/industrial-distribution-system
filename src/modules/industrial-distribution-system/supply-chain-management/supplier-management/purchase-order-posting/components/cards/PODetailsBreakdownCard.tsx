@@ -13,6 +13,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 
 interface PODetailItem {
+    // Developer comment: Optional item / POR identifiers for key rendering and tracking
+    id?: string;
+    porId?: string;
     receivedQty?: number;
     expectedQty?: number;
     unitPrice?: number;
@@ -24,6 +27,8 @@ interface PODetailItem {
     barcode?: string;
     name?: string;
     productId?: string;
+    // Developer comment: List of serial numbers tagged for this allocated receipt item
+    serials?: string[];
 }
 import { money } from "../../utils/format";
 
@@ -106,6 +111,8 @@ export function PODetailsBreakdownCard() {
                                                         <TableRow className="border-border hover:bg-transparent">
                                                             <TableHead className="w-[120px] font-medium h-8 py-1">SKU/Barcode</TableHead>
                                                             <TableHead className="min-w-[150px] font-medium h-8 py-1">Item</TableHead>
+                                                            {/* Developer comment: Tagged Serials column added per user requirement */}
+                                                            <TableHead className="min-w-[140px] font-medium h-8 py-1">Tagged Serials</TableHead>
                                                             <TableHead className="text-right font-medium h-8 py-1">Qty</TableHead>
                                                             <TableHead className="text-right font-medium h-8 py-1">Unit Price</TableHead>
                                                             <TableHead className="text-right font-medium h-8 py-1">Discount</TableHead>
@@ -130,11 +137,26 @@ export function PODetailsBreakdownCard() {
                                                             }
 
                                                             const netTotal = it.netAmount ?? (gross - discountAmt);
+                                                            const serialList = it.serials && it.serials.length > 0 ? it.serials : [];
 
                                                             return (
-                                                                <TableRow key={`${it.productId}-${index}`} className="border-border transition-colors hover:bg-muted/30">
+                                                                <TableRow key={`${it.porId || it.productId || 'item'}-${index}`} className="border-border transition-colors hover:bg-muted/30">
                                                                     <TableCell className="h-8 py-1 align-middle text-muted-foreground">{it.barcode}</TableCell>
                                                                     <TableCell className="h-8 py-1 align-middle font-medium" title={it.name}>{it.name}</TableCell>
+                                                                    {/* Developer comment: Render tagged serial badges or fallback line */}
+                                                                    <TableCell className="h-8 py-1 align-middle">
+                                                                        {serialList.length > 0 ? (
+                                                                            <div className="flex flex-wrap gap-1 max-w-[220px]">
+                                                                                {serialList.map((sn, sIdx) => (
+                                                                                    <Badge key={sIdx} variant="outline" className="text-[10px] py-0 px-1 font-mono bg-muted/40">
+                                                                                        {sn}
+                                                                                    </Badge>
+                                                                                ))}
+                                                                            </div>
+                                                                        ) : (
+                                                                            <span className="text-muted-foreground">—</span>
+                                                                        )}
+                                                                    </TableCell>
                                                                     <TableCell className="h-8 py-1 align-middle text-right">{qty}</TableCell>
                                                                     <TableCell className="h-8 py-1 align-middle text-right">
                                                                         {money(uprice, selectedPO.currency || "PHP")}

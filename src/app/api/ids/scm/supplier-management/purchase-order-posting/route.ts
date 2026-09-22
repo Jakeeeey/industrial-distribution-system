@@ -417,22 +417,21 @@ async function fetchReceivingItems(base: string, filterPorIds?: number[]) {
     // 2. Fetch from purchase_order_receiving_serial
     const qsSerial: string[] = [
         "limit=-1",
-        // Removed expiry_date: column does not exist in purchase_order_receiving_serial.
-        // Requesting it causes Directus to return HTTP 400, which silently empties items2
-        // and causes registerCylinders to return early with zero registrations.
-        "fields=receiving_item_id,purchase_order_receiving_id,product_id,created_at,serial_number,tare_weight",
+        "fields=receiving_item_id,purchase_order_receiving_id,purchase_order_product_id,product_id,created_at,serial_number,tare_weight",
     ];
     if (filterPorIds && filterPorIds.length) {
-        qsSerial.push(`filter[purchase_order_receiving_id][_in]=${encodeURIComponent(filterPorIds.join(","))}`);
+        const idList = encodeURIComponent(filterPorIds.join(","));
+        // Developer comment: Check both purchase_order_receiving_id and purchase_order_product_id columns in purchase_order_receiving_serial table
+        qsSerial.push(`filter[_or][0][purchase_order_receiving_id][_in]=${idList}&filter[_or][1][purchase_order_product_id][_in]=${idList}`);
     }
     const urlSerial = `${base}/items/purchase_order_receiving_serial?${qsSerial.join("&")}`;
     
     let items2: ReceivingItem[] = [];
     try {
-        // Defined RawSerialItem interface to avoid typescript-eslint no-explicit-any error.
         interface RawSerialItem {
             receiving_item_id: unknown;
             purchase_order_receiving_id: unknown;
+            purchase_order_product_id: unknown;
             product_id: unknown;
             serial_number: unknown;
             created_at: unknown;
@@ -443,7 +442,8 @@ async function fetchReceivingItems(base: string, filterPorIds?: number[]) {
         const rawItems = Array.isArray(jSerial?.data) ? jSerial.data : [];
         items2 = rawItems.map(r => ({
             receiving_item_id: toNum(r.receiving_item_id),
-            purchase_order_product_id: toNum(r.purchase_order_receiving_id),
+            // Developer comment: Map purchase_order_product_id fallback to purchase_order_receiving_id or purchase_order_product_id
+            purchase_order_product_id: toNum(r.purchase_order_receiving_id) || toNum(r.purchase_order_product_id),
             product_id: toNum(r.product_id),
             rfid_code: `M-${toStr(r.serial_number)}`,
             created_at: toStr(r.created_at),
@@ -453,7 +453,6 @@ async function fetchReceivingItems(base: string, filterPorIds?: number[]) {
             sourceTable: 'serial' as const
         }));
     } catch (e) {
-        // Handled catch block with unknown type instead of any to satisfy eslint rules.
         console.error("Failed to fetch from purchase_order_receiving_serial:", e instanceof Error ? e.message : String(e));
     }
 
@@ -503,6 +502,19 @@ function groupRfidsByPorId(rows: ReceivingItem[]) {
         const arr = map.get(porId) ?? [];
         const code = toStr(r?.rfid_code);
         if (code) arr.push(code);
+        map.set(porId, arr);
+    }
+    return map;
+}
+
+// Developer comment: Group raw ReceivingItem objects by POR ID to access serial_no fields for UI display
+function groupReceivingItemsByPorId(rows: ReceivingItem[]) {
+    const map = new Map<number, ReceivingItem[]>();
+    for (const r of rows) {
+        const porId = toNum(r?.purchase_order_product_id);
+        if (!porId) continue;
+        const arr = map.get(porId) ?? [];
+        arr.push(r);
         map.set(porId, arr);
     }
     return map;
@@ -626,8 +638,8 @@ function buildReceiptSummary(porRows: PORRow[]) {
     const groups = new Map<string, PORRow[]>();
 
     for (const r of porRows ?? []) {
-        const rn = toStr(r?.receipt_no);
-        if (!rn) continue;
+        // Developer comment: Ensure receiving rows without explicit receipt_no default to "Default Receipt" instead of being omitted from receipt grouping
+        const rn = toStr(r?.receipt_no) || "Default Receipt";
         const arr = groups.get(rn) ?? [];
         arr.push(r);
         groups.set(rn, arr);
@@ -693,18 +705,9 @@ function buildReceiptSummary(porRows: PORRow[]) {
 }
 
 function receivingStatusFrom(porRows: PORRow[], opts?: { isClosed?: boolean; fullyReceived?: boolean; hasAnyPosted?: boolean }) {
-    // CLOSED only if fully received AND all receipts/rows are posted
-    if (opts?.isClosed) return "CLOSED" as POStatus;
-    // RECEIVED: all items received, receipts exist but not yet posted
-    if (opts?.fullyReceived) return "FOR POSTING" as POStatus;
-    // PARTIAL_POSTED: some receipts posted, some not, NOT fully received
+    // Developer comment: Status of PO in post modules strictly returns PARTIAL_POSTED (if any receipts posted) or FOR POSTING
     if (opts?.hasAnyPosted) return "PARTIAL_POSTED" as POStatus;
-
-    const anyActivity = (porRows ?? []).some((r) => {
-        return effectiveReceivedQty(r) > 0 || hasReceiptEvidence(r);
-    });
-
-    return anyActivity ? "PARTIAL" : "OPEN";
+    return "FOR POSTING" as POStatus;
 }
 
 function latestReceiptInfo(porRows: PORRow[]) {
@@ -800,7 +803,8 @@ async function registerCylinders(
         console.log(`[registerCylinders] Running NORMAL PO posting logic for PO ${poId}`);
         // --- NORMAL PO POSTING LOGIC ---
         for (const item of targetItems) {
-            const sn = toStr(item.serial_no).toUpperCase().trim();
+            // Developer comment: Preserve exact character casing for serial numbers saved to cylinder_assets
+            const sn = toStr(item.serial_no).trim();
             if (!sn) continue; // Skip if no serial number is recorded
 
             // Find the POR row to get branch and price
@@ -932,7 +936,8 @@ async function registerCylinders(
 
         // 3. Post / update received serials
         for (const item of targetItems) {
-            const sn = toStr(item.serial_no).toUpperCase().trim();
+            // Developer comment: Preserve exact character casing for serial numbers saved to cylinder_assets
+            const sn = toStr(item.serial_no).trim();
             if (!sn) continue;
 
             const porId = toNum(item.purchase_order_product_id);
@@ -1077,7 +1082,8 @@ type PostingPOItem = {
     expectedQty: number;
     taggedQty: number;
     receivedQty: number;
-    rfids: string[];
+    rfids: unknown[];
+    serials?: string[]; // ✅ Tagged serial numbers for display in Detailed Allocations table
     isReceived: boolean;
     unitPrice: number;
     grossAmount: number;
@@ -1191,20 +1197,19 @@ export async function GET() {
             const poId = toNum(po?.purchase_order_id);
             if (!poId) continue;
 
-            // Skip fully-closed POs (inventory_status=14) or already financially posted POs
+            // Developer comment: Do not show Closed (status 6 or is_posted=1), Rejected (status 8 or 4), or Cancelled (status 7) POs in PO Posting
             const invStatus = toNum(po?.inventory_status);
-            if (invStatus === 14) continue;
+            if (invStatus === 6 || invStatus === 8 || invStatus === 4 || invStatus === 7) continue;
             if (toNum(po?.is_posted) === 1 || po?.is_posted === true) continue;
 
             const porRows = porByPo.get(poId) ?? [];
             const lines = linesByPo.get(poId) ?? [];
 
             const taggingOk = isPartiallyReceivedOrTagged(poId, lines, porRows, rfidsByPorId);
-            // ✅ Check for new statuses (6=Received, 9=Partially Received) AND legacy (12, 13)
-            const eligibleByStatus = invStatus === 6 || invStatus === 9 || invStatus === 12 || invStatus === 13;
+            // ✅ Check for active receiving/posting statuses (3=For Receiving, 9=Partially Received, 12=En Route, 13=For Posting)
+            const eligibleByStatus = invStatus === 3 || invStatus === 9 || invStatus === 12 || invStatus === 13;
             
             // ✅ Also check if there are ANY POR rows with receipt activity
-            // This catches POs whose inventory_status was never updated but DO have received items
             const hasAnyReceipts = porRows.some((r) => 
                 toStr(r?.receipt_no) || toStr(r?.receipt_date) || toStr(r?.received_date) || toNum(r?.received_quantity) > 0
             );
@@ -1277,8 +1282,8 @@ export async function GET() {
                 status: receivingStatusFrom(porRows, {
                     isClosed,
                     fullyReceived,
-                    // Only flag PARTIAL_POSTED when not fully received
-                    hasAnyPosted: !fully && hasAnyPosted,
+                    // Developer comment: Allow PARTIAL_POSTED status whenever some receipts are posted and some remain unposted (not all posted)
+                    hasAnyPosted: hasAnyPosted && !allPosted,
                 }),
                 totalAmount: listTotal,
                 currency: "PHP",
@@ -1328,6 +1333,8 @@ export async function POST(req: NextRequest) {
             const porIds = porRows.map((r: PORRow) => toNum(r?.purchase_order_product_id)).filter(Boolean);
             const receivingItems = porIds.length ? await fetchReceivingItems(base, porIds) : [];
             const rfidsByPorId = groupRfidsByPorId(receivingItems);
+            // Developer comment: Map raw ReceivingItem objects by POR ID to extract exact serial numbers
+            const receivingItemsByPorId = groupReceivingItemsByPorId(receivingItems);
 
             // ✅ Block if PO is already financially posted (locked by Post Amounts)
             if (toNum(po?.is_posted) === 1 || (po as Record<string, unknown>)?.is_posted === true) {
@@ -1428,6 +1435,8 @@ export async function POST(req: NextRequest) {
                     itemWht = Number((rowVatExcl * 0.01).toFixed(2));
                 }
 
+                const recItemsForPor = receivingItemsByPorId.get(porId) ?? [];
+
                 const item: PostingPOItem = {
                     id: String(porId),
                     porId: String(porId),
@@ -1439,6 +1448,8 @@ export async function POST(req: NextRequest) {
                     taggedQty: rfids.length,
                     receivedQty,
                     rfids,
+                    // Developer comment: Extract clean serial numbers (stripping 'M-' prefix if present) for UI display in Detailed Allocations
+                    serials: recItemsForPor.map((x) => toStr(x.serial_no || x.rfid_code).replace(/^M-/, "")).filter(Boolean),
                     isReceived: receivedQty > 0,
                     unitPrice,
                     grossAmount: lineGrossAmt,
@@ -1586,7 +1597,8 @@ export async function POST(req: NextRequest) {
                 status: receivingStatusFrom(porRows, {
                     isClosed,
                     fullyReceived,
-                    hasAnyPosted: !fully && hasAnyPosted,
+                    // Developer comment: Allow PARTIAL_POSTED status whenever some receipts are posted and some remain unposted (not all posted)
+                    hasAnyPosted: hasAnyPosted && !allPosted,
                 }),
                 totalAmount: detailTotal,
                 currency: "PHP",
@@ -1732,22 +1744,17 @@ export async function POST(req: NextRequest) {
             const fully = isFullyReceived(poId, lines, updatedPorRows);
             try {
                 const poUpdate: Record<string, unknown> = { date_received: nowISO() };
-                const amountsPosted = toNum(poCheckJ?.data?.is_posted) === 1 || poCheckJ?.data?.is_posted === true;
-                
+                // Developer comment: In Purchase Order Inventory Posting, completing physical receipt sets inventory_status to 13 (For Posting) if fully received, or 9 (Partially Received) if partial.
+                // Status 6 (Received) is reserved strictly for Purchase Order Posting Amounts.
                 if (fully) {
-                    // Check if ALL inventory receipts are now posted
-                    const allInvPosted = updatedPorRows.every(r => toNum(r.isPosted) === 1);
-                    
-                    if (allInvPosted && amountsPosted) {
-                        poUpdate.inventory_status = 6; // ✅ Fully Received & Fully Posted = Received
-                    } else {
-                        poUpdate.inventory_status = 13; // ✅ Fully Received but pending some posting = For Posting
-                    }
+                    poUpdate.inventory_status = 13; // 13 = For Posting (ready for Posting Amounts)
                 } else {
-                    poUpdate.inventory_status = 9;  // Partially Received
+                    poUpdate.inventory_status = 9;  // 9 = Partially Received
                 }
                 await patchPO(base, poId, poUpdate);
-            } catch {}
+            } catch (err) {
+                console.error(`[POSTING ERROR] Failed to update inventory_status for PO #${poId}:`, err);
+            }
 
             // ✅ CYLINDER REGISTRATION
             // Fetch receiving items and products map for the rows being posted
@@ -1835,22 +1842,17 @@ export async function POST(req: NextRequest) {
             const fully = isFullyReceived(poId, lines, updatedPorRowsAll);
             try {
                 const poUpdate: Record<string, unknown> = { date_received: nowISO() };
-                const amountsPosted = toNum(po?.is_posted) === 1 || po?.is_posted === true;
-
+                // Developer comment: In Purchase Order Inventory Posting, completing physical receipt sets inventory_status to 13 (For Posting) if fully received, or 9 (Partially Received) if partial.
+                // Status 6 (Received) is reserved strictly for Purchase Order Posting Amounts.
                 if (fully) {
-                    // Check if ALL inventory receipts are now posted
-                    const allInvPosted = updatedPorRowsAll.every(r => toNum(r.isPosted) === 1);
-
-                    if (allInvPosted && amountsPosted) {
-                        poUpdate.inventory_status = 6; // ✅ Fully Received & Fully Posted = Received
-                    } else {
-                        poUpdate.inventory_status = 13; // ✅ Fully Received but pending some posting = For Posting
-                    }
+                    poUpdate.inventory_status = 13; // 13 = For Posting (ready for Posting Amounts)
                 } else {
-                    poUpdate.inventory_status = 9;  // Partially Received
+                    poUpdate.inventory_status = 9;  // 9 = Partially Received
                 }
                 await patchPO(base, poId, poUpdate);
-            } catch {}
+            } catch (err) {
+                console.error(`[POSTING ERROR] Failed to update inventory_status in post_all for PO #${poId}:`, err);
+            }
 
             const updatedPorIdsByKeyAll = buildPorIdsByKey(updatedPorRowsAll);
             const popSyncPromisesAll = lines.map(async (ln) => {

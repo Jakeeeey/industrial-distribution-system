@@ -111,7 +111,8 @@ export function PODetailsBreakdownCard() {
                                                         </TableRow>
                                                     </TableHeader>
                                                     <TableBody>
-                                                        {rec.items.map((it: PODetailItem) => {
+                                                        {/* Developer comment: Append item index to key to prevent duplicate key console errors when multiple receipt items share the same productId */}
+                                                        {rec.items.map((it: PODetailItem, index: number) => {
                                                             const uprice = it.unitPrice || 0;
                                                             const qty = it.receivedQty || it.expectedQty || 0;
                                                             const gross = uprice * qty;
@@ -128,7 +129,7 @@ export function PODetailsBreakdownCard() {
                                                             const netTotal = it.netAmount ?? (gross - discountAmt);
 
                                                             return (
-                                                                <TableRow key={it.productId} className="border-border transition-colors hover:bg-muted/30">
+                                                                <TableRow key={`${it.productId || 'item'}-${index}`} className="border-border transition-colors hover:bg-muted/30">
                                                                     <TableCell className="h-8 py-1 align-middle text-muted-foreground">{it.barcode}</TableCell>
                                                                     <TableCell className="h-8 py-1 align-middle font-medium" title={it.name}>{it.name}</TableCell>
                                                                     <TableCell className="h-8 py-1 align-middle text-right">{qty}</TableCell>
