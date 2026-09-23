@@ -44,12 +44,9 @@ export function SelectProductsStep({ onContinue }: { onContinue: () => void }) {
         onContinue();
     };
 
-    if (!selectedPO) return null;
-
-    const draftItems = selectedPO.draftData || [];
-
     // Consolidate draftItems by productId-branchId so multi-serial receiving records appear as one item with aggregate Phys. Tagged quantity
     const consolidatedDraftItems = React.useMemo(() => {
+        const draftItems = selectedPO?.draftData || [];
         const map = new Map<string, { porId: number | string; productId: number; branchId: number; receivedQuantity: number }>();
         draftItems.forEach(d => {
             const key = `${d.productId}-${d.branchId}`;
@@ -66,26 +63,35 @@ export function SelectProductsStep({ onContinue }: { onContinue: () => void }) {
             }
         });
         return Array.from(map.values());
-    }, [draftItems]);
+    }, [selectedPO]);
 
     // Create a mapping to easily find product names and details from allocations
-    const productInfoMap = new Map<string, { name: string, barcode: string, branchName: string }>();
-    selectedPO.allocations.forEach(alloc => {
-        alloc.items.forEach(item => {
-            // item.porId could match draft.porId
-            productInfoMap.set(String(item.porId), {
-                name: item.name,
-                barcode: item.barcode,
-                branchName: alloc.branch.name
-            });
-            // fallback by productId and branchId
-            productInfoMap.set(`${item.productId}-${alloc.branch.id}`, {
-                name: item.name,
-                barcode: item.barcode,
-                branchName: alloc.branch.name
+    const productInfoMap = React.useMemo(() => {
+        const map = new Map<string, { name: string, barcode: string, branchName: string }>();
+        if (!selectedPO?.allocations) return map;
+
+        selectedPO.allocations.forEach(alloc => {
+            alloc.items.forEach(item => {
+                // item.porId could match draft.porId
+                map.set(String(item.porId), {
+                    name: item.name,
+                    barcode: item.barcode,
+                    branchName: alloc.branch.name
+                });
+                // fallback by productId and branchId
+                map.set(`${item.productId}-${alloc.branch.id}`, {
+                    name: item.name,
+                    barcode: item.barcode,
+                    branchName: alloc.branch.name
+                });
             });
         });
-    });
+        return map;
+    }, [selectedPO]);
+
+    if (!selectedPO) return null;
+
+    const draftItems = selectedPO.draftData || [];
 
     return (
         <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">

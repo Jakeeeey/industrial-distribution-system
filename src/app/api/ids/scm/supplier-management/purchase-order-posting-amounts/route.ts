@@ -160,6 +160,7 @@ interface PORRow {
     received_date: string;
     isPosted: number | string;
     is_posted_amounts?: number | string;
+    is_reverted?: number | string | null;
     discounted_amount: number | string;
     vat_amount: number | string;
     withholding_amount: number | string;
@@ -178,7 +179,7 @@ interface ReceivingItem {
 }
 
 const POR_SAFE_FIELDS =
-    "purchase_order_product_id,purchase_order_id,product_id,branch_id,received_quantity,receipt_no,receipt_date,received_date,isPosted,is_posted_amounts,discounted_amount,vat_amount,withholding_amount,total_amount,unit_price";
+    "purchase_order_product_id,purchase_order_id,product_id,branch_id,received_quantity,receipt_no,receipt_date,received_date,isPosted,is_posted_amounts,is_reverted,discounted_amount,vat_amount,withholding_amount,total_amount,unit_price";
 
 // =====================
 // FETCHERS
