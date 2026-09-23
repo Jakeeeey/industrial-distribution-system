@@ -524,8 +524,11 @@ function buildReceiptSummary(porRows: PORRow[], priceMap?: Map<number, number>, 
     const groups = new Map<string, PORRow[]>();
 
     for (const r of porRows ?? []) {
-        // Developer comment: Ensure receiving rows without explicit receipt_no default to "Default Receipt" instead of being omitted from receipt grouping
-        const rn = toStr(r?.receipt_no) || "Default Receipt";
+        // Developer comment: Skip reverted rows or rows without an assigned receipt_no (ghost/empty drafts)
+        if (toNum(r?.is_reverted) === 1) continue;
+        const rn = toStr(r?.receipt_no).trim();
+        if (!rn) continue;
+
         const arr = groups.get(rn) ?? [];
         arr.push(r);
         groups.set(rn, arr);
@@ -615,7 +618,8 @@ function buildReceiptSummary(porRows: PORRow[], priceMap?: Map<number, number>, 
 
     let loosePendingCount = 0;
     for (const r of porRows ?? []) {
-        const rn = toStr(r?.receipt_no);
+        if (toNum(r?.is_reverted) === 1) continue;
+        const rn = toStr(r?.receipt_no).trim();
         if (!rn) {
             if (toNum(r.isPosted) === 0 && toNum(r.received_quantity) > 0) {
                 loosePendingCount = 1;
@@ -642,7 +646,10 @@ function latestReceiptInfo(porRows: PORRow[]) {
     };
 
     for (const r of porRows ?? []) {
-        const rn = toStr(r?.receipt_no);
+        if (toNum(r?.is_reverted) === 1) continue;
+        const rn = toStr(r?.receipt_no).trim();
+        if (!rn) continue;
+
         const rd = toStr(r?.receipt_date);
         const rcd = toStr(r?.received_date);
         const ts = rcd || rd;

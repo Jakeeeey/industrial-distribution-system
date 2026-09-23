@@ -440,6 +440,7 @@ type PoHeaderRow = {
     receiving_type?: number | null;
     user_created?: string | number | { first_name?: string; last_name?: string } | null;
     encoder_id?: string | number | { first_name?: string; last_name?: string } | null;
+    approver_id?: string | number | UserRef | null;
     remark?: string | null;
     remarks?: string | null;
     date_approved?: string | null;
@@ -450,11 +451,17 @@ async function fetchPendingPOs(base: string, statusFilter: string = "pending"): 
         "purchase_order_id",
         "purchase_order_no",
         "date",
+        "date_encoded",
         "supplier_name",
         "total_amount",
         "inventory_status",
         "payment_status",
         "approver_id",
+        "approver_id.user_id",
+        "approver_id.user_fname",
+        "approver_id.user_lname",
+        "approver_id.first_name",
+        "approver_id.last_name",
         "date_approved",
         "receiving_type",
         "remark",
@@ -595,7 +602,7 @@ async function fetchProductSupplierLinks(base: string, productIds: number[]) {
 // DETAIL BUILDER
 // =====================
 async function buildPurchaseOrderDetail(base: string, poId: number) {
-    const fields = encodeURIComponent("*,discount_type.*,discount_type.line_per_discount_type.line_id.*,user_created.first_name,user_created.last_name,encoder_id.user_id,encoder_id.user_fname,encoder_id.user_lname,encoder_id.first_name,encoder_id.last_name");
+    const fields = encodeURIComponent("*,discount_type.*,discount_type.line_per_discount_type.line_id.*,user_created.first_name,user_created.last_name,encoder_id.user_id,encoder_id.user_fname,encoder_id.user_lname,encoder_id.first_name,encoder_id.last_name,approver_id.user_id,approver_id.user_fname,approver_id.user_lname,approver_id.first_name,approver_id.last_name");
     const headerUrl = `${base}/items/${PO_COLLECTION}/${encodeURIComponent(String(poId))}?fields=${fields}`;
     const headerJ = await fetchJson(headerUrl) as { data: Record<string, unknown> };
     const header = (headerJ?.data as Record<string, unknown>) ?? null;
@@ -852,6 +859,38 @@ async function buildPurchaseOrderDetail(base: string, poId: number) {
     
     if (!preparerName) preparerName = "—";
 
+    // Approver info - resolve from approver_id (Object or expanded)
+    let approverName = "—";
+    const approverObj = header?.approver_id as UserRef | undefined;
+    if (typeof approverObj === "object" && approverObj) {
+        approverName = [
+            approverObj.user_fname ?? approverObj.first_name,
+            approverObj.user_lname ?? approverObj.last_name
+        ].filter(Boolean).join(" ");
+    }
+    if (!approverName || approverName === "—") {
+        const approverIdStr = String(header?.approver_id || "");
+        if (approverIdStr && approverIdStr !== "—" && approverIdStr !== "[object Object]") {
+            try {
+                const isNumeric = /^\d+$/.test(approverIdStr);
+                const userUrl = isNumeric
+                    ? `${base}/items/user?filter[user_id][_eq]=${approverIdStr}&fields=user_fname,user_lname`
+                    : `${base}/users/${encodeURIComponent(approverIdStr)}?fields=first_name,last_name`;
+                
+                const userJ = await fetchJson(userUrl) as { data: UserRef | UserRef[] };
+                const u = Array.isArray(userJ?.data) ? userJ.data[0] : userJ?.data;
+                
+                if (u) {
+                    approverName = [
+                        u.user_fname || u.first_name,
+                        u.user_lname || u.last_name
+                    ].filter(Boolean).join(" ");
+                }
+            } catch { /* skip */ }
+        }
+    }
+    if (!approverName) approverName = "—";
+
     return {
         id: String(poId),
         purchase_order_id: poId,
@@ -863,6 +902,8 @@ async function buildPurchaseOrderDetail(base: string, poId: number) {
         remark: (header as Record<string, unknown>)?.remark ? String((header as Record<string, unknown>).remark) : ((header as Record<string, unknown>)?.remarks ? String((header as Record<string, unknown>).remarks) : undefined),
         remarks: (header as Record<string, unknown>)?.remark ? String((header as Record<string, unknown>).remark) : ((header as Record<string, unknown>)?.remarks ? String((header as Record<string, unknown>).remarks) : undefined),
         date_approved: (header as Record<string, unknown>)?.date_approved ? String((header as Record<string, unknown>).date_approved) : undefined,
+        approver_id: header?.approver_id ?? null,
+        approver_name: approverName,
 
         supplierId,
         supplierName,
@@ -1001,15 +1042,18 @@ export async function GET(req: NextRequest) {
         const supplierIds = uniqNums(headers.map((h) => h.supplier_name as string | number | null | undefined));
         const suppliersMap = await fetchSuppliersMapByIds(base, supplierIds);
 
-        // 1) Batch resolve all possible preparers (encoder_id or user_created)
+        // 1) Batch resolve all possible preparers and approvers (encoder_id, user_created, approver_id)
         const allUserIds = new Set<string>();
         for (const h of headers) {
             const eidObj = h.encoder_id as UserRef | undefined;
             const ucidObj = h.user_created as UserRef | undefined;
+            const appObj = h.approver_id as UserRef | undefined;
             const eid = typeof h.encoder_id === "object" && h.encoder_id ? String(eidObj?.user_id || eidObj?.id || "") : String(h.encoder_id || "");
             const ucid = typeof h.user_created === "object" && h.user_created ? String(ucidObj?.id || "") : String(h.user_created || "");
+            const appid = typeof h.approver_id === "object" && h.approver_id ? String(appObj?.user_id || appObj?.id || "") : String(h.approver_id || "");
             if (eid && eid !== "undefined" && eid !== "null" && eid !== "[object Object]") allUserIds.add(eid);
             if (ucid && ucid !== "undefined" && ucid !== "null" && ucid !== "[object Object]") allUserIds.add(ucid);
+            if (appid && appid !== "undefined" && appid !== "null" && appid !== "[object Object]") allUserIds.add(appid);
         }
 
         const userNamesMap = new Map<string, string>();
@@ -1071,6 +1115,19 @@ export async function GET(req: NextRequest) {
                 return "—";
             };
 
+            const getApprover = () => {
+                const app = h.approver_id as UserRef | undefined;
+                if (typeof app === "object" && app) {
+                    return [
+                        app.user_fname ?? app.first_name,
+                        app.user_lname ?? app.last_name
+                    ].filter(Boolean).join(" ") || "—";
+                }
+                const appid = typeof app === "string" || typeof app === "number" ? String(app) : "";
+                if (userNamesMap.has(appid)) return userNamesMap.get(appid);
+                return "—";
+            };
+
             // Filter out POs whose supplier doesn't belong to division 1
             if (sid && !suppliersMap.has(sid)) return null;
 
@@ -1096,6 +1153,8 @@ export async function GET(req: NextRequest) {
                 is_invoice: (Number(h.receiving_type) === 2) || (String(h.is_invoice ?? h.isInvoice).toLowerCase() === "true") || !!(h.is_invoice ?? h.isInvoice),
 
                 preparer_name: getPreparer(),
+                approver_name: getApprover(),
+                approver_id: h.approver_id ?? null,
                 inventory_status: h.inventory_status,
                 remark: h.remark ? String(h.remark) : (h.remarks ? String(h.remarks) : undefined),
                 remarks: h.remark ? String(h.remark) : (h.remarks ? String(h.remarks) : undefined),
