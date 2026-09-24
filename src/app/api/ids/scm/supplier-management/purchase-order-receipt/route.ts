@@ -161,6 +161,7 @@ type POItem = {
     expectedQty: number;
     originalOrderedQty?: number;
     receivedQty: number;
+    taggedQty?: number;
     requiresRfid: boolean;
     serialCount: number;
     isReceived: boolean;
@@ -170,6 +171,7 @@ type POItem = {
     netAmount: number;
     isExtra?: boolean;
 };
+
 
 
 
@@ -739,10 +741,15 @@ export async function POST(req: NextRequest) {
                 const k = keyLine(poId, pid, bid);
                 const p = productsMap.get(pid);
                 const pors = porIdsByKey.get(k) || [];
-                const receivedQty = pors.reduce((sum, id) => sum + effectiveReceivedQty(porRows.find(r => toNum(r.purchase_order_product_id) === id)!), 0);
+                const allMatchingPorRows = pors.map(id => porRows.find(r => toNum(r.purchase_order_product_id) === id)).filter(Boolean) as PORow[];
+                const receivedQty = allMatchingPorRows.reduce((sum, r) => sum + effectiveReceivedQty(r), 0);
+                
+                // Aggregate unreceipted / draft received quantity available for this allocation
+                const openRows = allMatchingPorRows.filter(r => (!toStr(r.receipt_no) || toNum(r.is_reverted) === 1) && toNum(r.received_quantity) > 0);
+                const taggedDraftQty = openRows.reduce((sum, r) => sum + toNum(r.received_quantity), 0);
 
                 // ✅ Original openRow check restored to map reverted receipts correctly in Receipt RFID
-                const openRow = pors.map(id => porRows.find(r => toNum(r.purchase_order_product_id) === id)).find(r => r && (!toStr(r.receipt_no) || toNum(r.is_reverted) === 1));
+                const openRow = openRows[0];
                 const porIdStr = openRow ? String(openRow.purchase_order_product_id) : `${pid}-${bid}`;
 
                 let lineDiscountTypeStr = "No Discount";
@@ -771,7 +778,7 @@ export async function POST(req: NextRequest) {
                 }
 
                 const orderedQty = toNum(ln.ordered_quantity);
-                const otherRows = pors.map(id => porRows.find(r => toNum(r.purchase_order_product_id) === id)).filter(r => r && r.purchase_order_product_id !== openRow?.purchase_order_product_id);
+                const otherRows = allMatchingPorRows.filter(r => r.purchase_order_product_id !== openRow?.purchase_order_product_id);
                 const previousReceivedQty = otherRows.reduce((sum, r) => sum + effectiveReceivedQty(r), 0);
                 const remainingQty = Math.max(0, orderedQty - previousReceivedQty);
 
@@ -785,6 +792,7 @@ export async function POST(req: NextRequest) {
                     uomCount: Number(p?.unit_of_measurement_count) || 1,
                     expectedQty: remainingQty,
                     receivedQty,
+                    taggedQty: taggedDraftQty,
                     requiresRfid: false,
                     serialCount: serialCountMap.get(toNum(openRow?.purchase_order_product_id)) || 0,
                     isReceived: receivedQty >= orderedQty,
@@ -811,10 +819,14 @@ export async function POST(req: NextRequest) {
                 const bid = Number(parts[2]);
                 const p = productsMap.get(pid);
                 const pors = porIdsByKey.get(k) || [];
-                const receivedQty = pors.reduce((sum, id) => sum + effectiveReceivedQty(porRows.find(r => toNum(r.purchase_order_product_id) === id)!), 0);
+                const allMatchingPorRows = pors.map(id => porRows.find(r => toNum(r.purchase_order_product_id) === id)).filter(Boolean) as PORow[];
+                const receivedQty = allMatchingPorRows.reduce((sum, id) => sum + effectiveReceivedQty(id), 0);
                 
+                const openRows = allMatchingPorRows.filter(r => (!toStr(r.receipt_no) || toNum(r.is_reverted) === 1) && toNum(r.received_quantity) > 0);
+                const taggedDraftQty = openRows.reduce((sum, r) => sum + toNum(r.received_quantity), 0);
+
                 // ✅ Original openRow check restored to map reverted receipts correctly in Receipt RFID
-                const openRow = pors.map(id => porRows.find(r => toNum(r.purchase_order_product_id) === id)).find(r => r && (!toStr(r.receipt_no) || toNum(r.is_reverted) === 1));
+                const openRow = openRows[0];
                 const porIdStr = openRow ? String(openRow.purchase_order_product_id) : `${pid}-${bid}`;
 
                 let lineDiscountTypeStr = "No Discount";
@@ -851,6 +863,7 @@ export async function POST(req: NextRequest) {
                     uomCount: Number(p?.unit_of_measurement_count) || 1,
                     expectedQty: 0,
                     receivedQty,
+                    taggedQty: taggedDraftQty,
                     requiresRfid: false,
                     serialCount: serialCountMap.get(toNum(openRow?.purchase_order_product_id)) || 0,
                     isReceived: receivedQty > 0,

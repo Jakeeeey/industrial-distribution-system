@@ -281,7 +281,10 @@ export function ReviewReceiptStep({ receiverName }: { receiverName?: string; onB
     const progress = React.useMemo(() => {
         const allocs = Array.isArray(selectedPO?.allocations) ? selectedPO!.allocations : [];
         const items = allocs.flatMap((a) => (Array.isArray(a?.items) ? a.items : []));
-        const totalTagged = items.reduce((acc, it: ReceivingPOItem) => acc + (Number(it?.taggedQty) || 0), 0);
+        let totalTagged = items.reduce((acc, it: ReceivingPOItem) => acc + (Number(it?.taggedQty) || 0), 0);
+        if (totalTagged === 0 && selectedPO?.draftData) {
+            totalTagged = selectedPO.draftData.reduce((acc, d) => acc + (Number(d.receivedQuantity) || 0), 0);
+        }
         const totalReceived = items.reduce((acc, it: ReceivingPOItem) => acc + (Number(it?.receivedQty) || 0), 0);
         return { totalTagged, totalReceived };
     }, [selectedPO]);
@@ -673,7 +676,16 @@ export function ReviewReceiptStep({ receiverName }: { receiverName?: string; onB
 
                                             // Determine maxQty from draftData or fallback to expected
                                             const draft = selectedPO?.draftData?.find(d => String(d.porId) === porId);
-                                            const maxQty = draft ? Number(draft.receivedQuantity) : expected;
+                                            const matchingDrafts = selectedPO?.draftData?.filter(d =>
+                                                String(d.porId) === porId ||
+                                                (String(d.productId) === String(it.productId))
+                                            );
+                                            const sumDrafts = matchingDrafts && matchingDrafts.length > 0
+                                                ? matchingDrafts.reduce((acc, d) => acc + Number(d.receivedQuantity || 0), 0)
+                                                : 0;
+                                            const maxQty = (it.taggedQty !== undefined && it.taggedQty > 0)
+                                                ? it.taggedQty
+                                                : (sumDrafts > 0 ? sumDrafts : (draft ? Number(draft.receivedQuantity) : expected));
 
                                             const unitP = Number(it.unitPrice || 0);
                                             const discA = Number(it.discountAmount || 0);

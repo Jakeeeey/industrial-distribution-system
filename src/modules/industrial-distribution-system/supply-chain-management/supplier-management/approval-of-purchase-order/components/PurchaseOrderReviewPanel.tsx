@@ -498,8 +498,16 @@ export default function PurchaseOrderReviewPanel(props: {
                         <>
                             {(Number(poAny?.inventory_status) === 8 || Number(poAny?.inventory_status) === 4) && (
                                 <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 space-y-1">
-                                    <div className="flex items-center justify-between">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
                                         <span className="text-xs font-black uppercase tracking-wider text-destructive">Purchase Order Rejected</span>
+                                        <div className="flex items-center gap-3 text-xs text-destructive/80 font-medium">
+                                            {poAny?.approver_name && poAny?.approver_name !== "—" && (
+                                                <span>Rejected by: <strong className="font-bold text-destructive">{String(poAny.approver_name)}</strong></span>
+                                            )}
+                                            {poAny?.date_approved && (
+                                                <span>Date: {String(poAny.date_approved)}</span>
+                                            )}
+                                        </div>
                                     </div>
                                     {(poAny?.remarks || poAny?.remark) && (
                                         <div className="text-sm text-foreground/90 font-medium mt-1">
@@ -511,9 +519,16 @@ export default function PurchaseOrderReviewPanel(props: {
                             )}
                             {(Number(poAny?.inventory_status) === 3 || Number(poAny?.inventory_status) === 13) && (
                                 <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4 space-y-1">
-                                    <div className="flex items-center justify-between">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
                                         <span className="text-xs font-black uppercase tracking-wider text-emerald-700">Purchase Order Approved</span>
-                                        {poAny?.date_approved && <span className="text-xs font-medium text-emerald-700">Date: {String(poAny.date_approved)}</span>}
+                                        <div className="flex items-center gap-3 text-xs text-emerald-700 font-medium">
+                                            {poAny?.approver_name && poAny?.approver_name !== "—" && (
+                                                <span>Approved by: <strong className="font-bold">{String(poAny.approver_name)}</strong></span>
+                                            )}
+                                            {poAny?.date_approved && (
+                                                <span>Date: {String(poAny.date_approved)}</span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             )}
