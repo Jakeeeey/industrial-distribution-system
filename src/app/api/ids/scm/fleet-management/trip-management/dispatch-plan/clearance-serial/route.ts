@@ -661,7 +661,16 @@ export async function POST(request: Request) {
         console.log(`[Clearance POST] Processing ${invoices.length} invoices...`);
 
         // 6. Handle unfulfilled transactions log
-        for (const inv of invoices as { invoiceNo: string; id: number; status: string; invoiceId: number; remarks: string; missingQtys: Record<string, number>; scannedSerials: Record<string, string[]> }[]) {
+        for (const inv of invoices as {
+            invoiceNo: string;
+            id: number;
+            status: string;
+            invoiceId: number;
+            remarks: string;
+            missingQtys: Record<string, number>;
+            scannedSerials: Record<string, string[]>;
+            scannedMissingSerials?: Record<string, string[]>;
+        }[]) {
             console.log(`[Clearance POST] Checking invoice ${inv.invoiceNo} (id: ${inv.id}, status: ${inv.status})`);
             if (inv.status !== 'Fulfilled' && inv.status !== 'Fulfilled with Returns') {
                 console.log(`[Clearance POST]   -> Creating unfulfilled transaction log for invoice ${inv.invoiceNo}`);
@@ -672,11 +681,11 @@ export async function POST(request: Request) {
                 let varianceAmount = 0;
                 const detailLogs: { sales_invoice_detail_id: number; missing_quantity: number; invoice_quantity: number; total_amount: number }[] = [];
                 
-                // Collect IDs from both sources to ensure we create records for items with RFIDs even if missingQty is 0
-                // If Unfulfilled AND Final Confirm, we ensure ALL items are included even if missingQtys is empty
+                // AG-COMMENT: Collect detail IDs from missingQtys, scannedSerials, AND scannedMissingSerials to ensure unfulfilled serial entries are persisted
                 const detailIdsToLog = new Set([
                     ...Object.keys(inv.missingQtys || {}),
                     ...Object.keys(inv.scannedSerials || {}),
+                    ...Object.keys(inv.scannedMissingSerials || {}),
                     ...(!isPreSave && inv.status === 'Unfulfilled' ? originalDetails.map((d) => (d.detail_id || d.id).toString()) : [])
                 ]);
 
@@ -817,8 +826,28 @@ export async function POST(request: Request) {
                     const detailsResult = await poster<{ data: Record<string, unknown>[] | Record<string, unknown> }>('/unfulfilled_sales_transaction_details', finalDetailLogs);
                     const createdDetails = (Array.isArray(detailsResult.data) ? detailsResult.data : [detailsResult.data]) as { id: number; sales_invoice_detail_id: number | { id: number } }[];
 
-                    // Insert Serial mapping
-                    if (inv.scannedSerials && Object.keys(inv.scannedSerials).length > 0) {
+                    // AG-COMMENT: Combine both scannedSerials and scannedMissingSerials so all scanned serial tags are persisted to unfulfilled_sales_transaction_serial
+                    const combinedSerialsMap: Record<string | number, string[]> = {};
+
+                    if (inv.scannedSerials) {
+                        for (const [key, tags] of Object.entries(inv.scannedSerials)) {
+                            if (Array.isArray(tags) && tags.length > 0) {
+                                combinedSerialsMap[key] = [...(combinedSerialsMap[key] || []), ...tags];
+                            }
+                        }
+                    }
+
+                    if (inv.scannedMissingSerials) {
+                        for (const [key, tags] of Object.entries(inv.scannedMissingSerials)) {
+                            if (Array.isArray(tags) && tags.length > 0) {
+                                const existing = combinedSerialsMap[key] || [];
+                                const merged = Array.from(new Set([...existing, ...tags]));
+                                combinedSerialsMap[key] = merged;
+                            }
+                        }
+                    }
+
+                    if (Object.keys(combinedSerialsMap).length > 0) {
                         const serialPayloads: Record<string, unknown>[] = [];
                         console.log(`[Clearance Serial POST]   -> Bulk Saving Serials for Invoice ${inv.invoiceNo}...`);
                         
@@ -829,7 +858,7 @@ export async function POST(request: Request) {
                                 ? createdDetail.sales_invoice_detail_id?.id 
                                 : createdDetail.sales_invoice_detail_id;
                             
-                            const matchedTags = inv.scannedSerials[dbSalesDetailId];
+                            const matchedTags = combinedSerialsMap[dbSalesDetailId || ''] || combinedSerialsMap[String(dbSalesDetailId)];
                             
                             if (matchedTags && Array.isArray(matchedTags)) {
                                 matchedTags.forEach((tag: string) => {
