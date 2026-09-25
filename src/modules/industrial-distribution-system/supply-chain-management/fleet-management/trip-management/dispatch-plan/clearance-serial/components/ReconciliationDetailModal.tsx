@@ -47,7 +47,7 @@ import { Label } from '@/components/ui/label';
 import { InvoiceDetail, ReconciliationRow, SerialMapping } from '../types';
 import { fetchInvoiceDetails } from '../providers/fetchProviders';
 import ScanningModal from './ScanningModal';
-import CylinderTaggingModal from './CylinderTaggingModal';
+import CylinderTaggingModal, { extractSizeKey } from './CylinderTaggingModal';
 
 interface ReconciliationDetailModalProps {
     isOpen: boolean;
@@ -775,7 +775,13 @@ const ReconciliationDetailModal: React.FC<ReconciliationDetailModalProps> = ({
                     allowedProductNames={detail ? detail.lines.map(l => l.product_name) : []}
                     invoiceId={reconciliation.id}
                     onConfirm={(serials, productName) => {
-                        const line = detail?.lines.find(l => l.product_name === productName);
+                        // AG-COMMENT: Match line item by exact product name OR size category key (e.g. 11 KG) to support brand swaps on empty cylinder returns
+                        const line = detail?.lines.find(l => {
+                            if (l.product_name === productName) return true;
+                            const lineKey = extractSizeKey(l.product_name);
+                            const tagKey = extractSizeKey(productName || '');
+                            return lineKey && tagKey && lineKey === tagKey;
+                        });
                         if (line) {
                             setScannedQtys(prev => ({
                                 ...prev,
