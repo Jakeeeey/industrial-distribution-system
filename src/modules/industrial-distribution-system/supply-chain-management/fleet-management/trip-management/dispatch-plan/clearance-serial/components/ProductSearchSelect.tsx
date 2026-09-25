@@ -22,6 +22,32 @@ export interface ProductOption {
     product_id: number;
     product_name: string;
     product_code: string;
+    brand_name?: string;
+    product_brand?: number | { brand_id?: number; brand_name?: string } | null;
+    brand_id?: number | { brand_name?: string; name?: string } | null;
+}
+
+// AG-COMMENT: Helper to extract or resolve brand name for cylinder asset products from vos_database.products
+export function resolveBrandName(opt: ProductOption): string {
+    if (opt.brand_name?.trim()) return opt.brand_name.trim();
+
+    // Check product_brand relation from vos_database.products
+    if (typeof opt.product_brand === 'object' && opt.product_brand !== null) {
+        if (opt.product_brand.brand_name?.trim()) return opt.product_brand.brand_name.trim();
+    }
+
+    // Check brand_id relation fallback
+    if (typeof opt.brand_id === 'object' && opt.brand_id !== null) {
+        if (opt.brand_id.brand_name?.trim()) return opt.brand_id.brand_name.trim();
+        if (opt.brand_id.name?.trim()) return opt.brand_id.name.trim();
+    }
+
+    const parts = opt.product_name.split(/[-_]/);
+    if (parts.length > 1) {
+        const potentialBrand = parts[1].replace(/\(.*\)/, '').trim();
+        if (potentialBrand) return potentialBrand;
+    }
+    return '';
 }
 
 interface ProductSearchSelectProps {
@@ -45,6 +71,10 @@ export function ProductSearchSelect({
         return options.find((opt) => String(opt.product_id) === value);
     }, [options, value]);
 
+    const selectedBrand = React.useMemo(() => {
+        return selectedProduct ? resolveBrandName(selectedProduct) : '';
+    }, [selectedProduct]);
+
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
@@ -58,11 +88,20 @@ export function ProductSearchSelect({
                     )}
                     disabled={disabled}
                 >
-                    <span className="truncate">
-                        {selectedProduct 
-                            ? `${selectedProduct.product_name} (${selectedProduct.product_code})` 
-                            : placeholder
-                        }
+                    <span className="truncate flex items-center gap-1.5">
+                        {selectedProduct ? (
+                            <>
+                                <span className="font-semibold">{selectedProduct.product_name}</span>
+                                {selectedBrand ? (
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-primary/10 text-primary border border-primary/20 uppercase shrink-0">
+                                        {selectedBrand}
+                                    </span>
+                                ) : null}
+                                <span className="text-[10px] text-muted-foreground font-mono shrink-0">({selectedProduct.product_code})</span>
+                            </>
+                        ) : (
+                            placeholder
+                        )}
                     </span>
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
@@ -75,7 +114,8 @@ export function ProductSearchSelect({
                         <CommandGroup>
                             {options.map((opt) => {
                                 const key = String(opt.product_id);
-                                const label = `${opt.product_name} (${opt.product_code})`;
+                                const brandName = resolveBrandName(opt);
+                                const label = `${opt.product_name} ${brandName} ${opt.product_code}`;
                                 return (
                                     <CommandItem
                                         key={key}
@@ -84,16 +124,23 @@ export function ProductSearchSelect({
                                             onValueChange(key);
                                             setOpen(false);
                                         }}
-                                        className="text-xs rounded-md mb-0.5 cursor-pointer"
+                                        className="text-xs rounded-md mb-0.5 cursor-pointer flex items-center justify-between"
                                     >
-                                        <Check
-                                            className={cn(
-                                                "mr-2 h-4.5 w-4.5 text-primary shrink-0",
-                                                value === key ? "opacity-100" : "opacity-0"
+                                        <div className="flex items-center gap-1.5 truncate">
+                                            <Check
+                                                className={cn(
+                                                    "h-4 w-4 text-primary shrink-0",
+                                                    value === key ? "opacity-100" : "opacity-0"
+                                                )}
+                                            />
+                                            <span className="font-medium truncate">{opt.product_name}</span>
+                                            {brandName && (
+                                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-primary/10 text-primary border border-primary/20 uppercase shrink-0">
+                                                    {brandName}
+                                                </span>
                                             )}
-                                        />
-                                        <span className="font-medium">{opt.product_name}</span>
-                                        <span className="ml-1 text-[10px] text-muted-foreground font-mono">({opt.product_code})</span>
+                                        </div>
+                                        <span className="ml-2 text-[10px] text-muted-foreground font-mono shrink-0">({opt.product_code})</span>
                                     </CommandItem>
                                 );
                             })}
