@@ -57,6 +57,14 @@ const statusVariant: Record<
   DRAFT: "outline",
 };
 
+// AG-COMMENT: Safe date formatting helper to handle invalid or missing date values without throwing RangeError
+function safeFormatDate(value: string | number | Date | null | undefined, formatStr: string, fallback = "—"): string {
+  if (!value) return fallback;
+  const date = value instanceof Date ? value : new Date(value);
+  if (isNaN(date.getTime())) return fallback;
+  return format(date, formatStr);
+}
+
 export const getDispatchPlanColumns = (
   onEdit: (plan: DispatchPlanSummary) => void,
 ): ColumnDef<DispatchPlanSummary>[] => [
@@ -126,15 +134,18 @@ export const getDispatchPlanColumns = (
     ),
     meta: { label: "Departure" },
     cell: ({ row }) => {
-      const etod = new Date(row.original.estimatedDispatch);
+      const val = row.original.estimatedDispatch;
+      const dateStr = safeFormatDate(val, "dd MMM yyyy");
+      const timeStr = safeFormatDate(val, "HH:mm", "");
+      if (dateStr === "—") {
+        return <span className="text-xs text-muted-foreground/50 italic">—</span>;
+      }
       return (
         <div>
-          <p className="text-sm text-foreground">
-            {format(etod, "dd MMM yyyy")}
-          </p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {format(etod, "HH:mm")}
-          </p>
+          <p className="text-sm text-foreground">{dateStr}</p>
+          {timeStr && (
+            <p className="text-xs text-muted-foreground mt-0.5">{timeStr}</p>
+          )}
         </div>
       );
     },
@@ -146,15 +157,18 @@ export const getDispatchPlanColumns = (
     ),
     meta: { label: "Arrival" },
     cell: ({ row }) => {
-      const etoa = new Date(row.original.estimatedArrival);
+      const val = row.original.estimatedArrival;
+      const dateStr = safeFormatDate(val, "dd MMM yyyy");
+      const timeStr = safeFormatDate(val, "HH:mm", "");
+      if (dateStr === "—") {
+        return <span className="text-xs text-muted-foreground/50 italic">—</span>;
+      }
       return (
         <div>
-          <p className="text-sm text-foreground">
-            {format(etoa, "dd MMM yyyy")}
-          </p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {format(etoa, "HH:mm")}
-          </p>
+          <p className="text-sm text-foreground">{dateStr}</p>
+          {timeStr && (
+            <p className="text-xs text-muted-foreground mt-0.5">{timeStr}</p>
+          )}
         </div>
       );
     },
