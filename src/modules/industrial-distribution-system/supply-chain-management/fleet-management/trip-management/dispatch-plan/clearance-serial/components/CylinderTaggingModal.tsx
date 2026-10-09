@@ -29,6 +29,16 @@ interface CylinderTaggingModalProps {
     invoiceId?: number;
 }
 
+// AG-COMMENT: Helper to extract size category (e.g. "11 KG", "50 KG", "2.7 KG") from product names
+export function extractSizeKey(name: string): string {
+    if (!name) return '';
+    const match = name.match(/(\d+(?:\.\d+)?\s*KG)/i);
+    if (match) {
+        return match[1].toUpperCase().replace(/\s+/g, ' ');
+    }
+    return name.split(/[-_]/)[0]?.trim().toUpperCase() || '';
+}
+
 const CylinderTaggingModal: React.FC<CylinderTaggingModalProps> = ({
     isOpen,
     onClose,
@@ -61,9 +71,21 @@ const CylinderTaggingModal: React.FC<CylinderTaggingModalProps> = ({
             fetch('/api/ids/scm/fleet-management/trip-management/dispatch-plan/clearance-serial/cylinder-assets/products')
                 .then(res => res.json())
                 .then(data => {
-                    const fetched = data.data || [];
+                    const fetched: { product_id: number; product_name: string; product_code: string; uom_ids?: string }[] = data.data || [];
                     if (allowedProductNames && allowedProductNames.length > 0) {
-                        setProducts(fetched.filter((p: { product_id: number; product_name: string; product_code: string; uom_ids?: string }) => allowedProductNames.includes(p.product_name)));
+                        // AG-COMMENT: Extract size category keys (e.g. "11 KG") from allowed product names
+                        const targetSizeKeys = new Set(
+                            allowedProductNames.map(name => extractSizeKey(name)).filter(Boolean)
+                        );
+
+                        // AG-COMMENT: Filter products to include ALL EMPTY cylinder variants in the same category size (e.g. all 11 KG brands)
+                        const filtered = fetched.filter((p) => {
+                            if (allowedProductNames.includes(p.product_name)) return true;
+                            const pSizeKey = extractSizeKey(p.product_name);
+                            return pSizeKey && targetSizeKeys.has(pSizeKey);
+                        });
+
+                        setProducts(filtered.length > 0 ? filtered : fetched);
                     } else {
                         setProducts(fetched);
                     }
