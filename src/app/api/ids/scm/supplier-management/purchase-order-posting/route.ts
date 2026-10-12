@@ -415,14 +415,15 @@ async function fetchReceivingItems(base: string, filterPorIds?: number[]) {
     }));
 
     // 2. Fetch from purchase_order_receiving_serial
+    // Developer comment: Per table DDL, the foreign key referencing purchase_order_receiving(purchase_order_product_id) is purchase_order_receiving_id.
+    // Do not use or query purchase_order_product_id on purchase_order_receiving_serial.
     const qsSerial: string[] = [
         "limit=-1",
-        "fields=receiving_item_id,purchase_order_receiving_id,purchase_order_product_id,product_id,created_at,serial_number,tare_weight",
+        "fields=receiving_item_id,purchase_order_receiving_id,product_id,created_at,serial_number,tare_weight",
     ];
     if (filterPorIds && filterPorIds.length) {
         const idList = encodeURIComponent(filterPorIds.join(","));
-        // Developer comment: Check both purchase_order_receiving_id and purchase_order_product_id columns in purchase_order_receiving_serial table
-        qsSerial.push(`filter[_or][0][purchase_order_receiving_id][_in]=${idList}&filter[_or][1][purchase_order_product_id][_in]=${idList}`);
+        qsSerial.push(`filter[purchase_order_receiving_id][_in]=${idList}`);
     }
     const urlSerial = `${base}/items/purchase_order_receiving_serial?${qsSerial.join("&")}`;
     
@@ -431,27 +432,37 @@ async function fetchReceivingItems(base: string, filterPorIds?: number[]) {
         interface RawSerialItem {
             receiving_item_id: unknown;
             purchase_order_receiving_id: unknown;
-            purchase_order_product_id: unknown;
             product_id: unknown;
             serial_number: unknown;
             created_at: unknown;
             tare_weight: unknown;
-            expiry_date: unknown;
+            expiry_date?: unknown;
         }
         const jSerial = await fetchJson(urlSerial) as { data: RawSerialItem[] };
         const rawItems = Array.isArray(jSerial?.data) ? jSerial.data : [];
-        items2 = rawItems.map(r => ({
-            receiving_item_id: toNum(r.receiving_item_id),
-            // Developer comment: Map purchase_order_product_id fallback to purchase_order_receiving_id or purchase_order_product_id
-            purchase_order_product_id: toNum(r.purchase_order_receiving_id) || toNum(r.purchase_order_product_id),
-            product_id: toNum(r.product_id),
-            rfid_code: `M-${toStr(r.serial_number)}`,
-            created_at: toStr(r.created_at),
-            serial_no: toStr(r.serial_number),
-            tare_weight: formatTareWeightForCommit(r.tare_weight) || undefined,
-            expiry_date: toStr(r.expiry_date) || undefined,
-            sourceTable: 'serial' as const
-        }));
+        console.log(`[fetchReceivingItems] Fetched ${rawItems.length} rows from purchase_order_receiving_serial for POR IDs:`, filterPorIds);
+        items2 = rawItems.map(r => {
+            // Developer comment: Safely extract numeric parent POR ID from purchase_order_receiving_id (whether direct number or expanded object)
+            const relPorId = typeof r.purchase_order_receiving_id === "object" && r.purchase_order_receiving_id !== null
+                ? (r.purchase_order_receiving_id as Record<string, unknown>).purchase_order_product_id ?? (r.purchase_order_receiving_id as Record<string, unknown>).id
+                : r.purchase_order_receiving_id;
+            const relProdId = typeof r.product_id === "object" && r.product_id !== null
+                ? (r.product_id as Record<string, unknown>).product_id ?? (r.product_id as Record<string, unknown>).id
+                : r.product_id;
+
+            return {
+                receiving_item_id: toNum(r.receiving_item_id),
+                // Developer comment: purchase_order_receiving_id references purchase_order_receiving.purchase_order_product_id
+                purchase_order_product_id: toNum(relPorId),
+                product_id: toNum(relProdId),
+                rfid_code: `M-${toStr(r.serial_number)}`,
+                created_at: toStr(r.created_at),
+                serial_no: toStr(r.serial_number),
+                tare_weight: formatTareWeightForCommit(r.tare_weight) || undefined,
+                expiry_date: toStr(r.expiry_date) || undefined,
+                sourceTable: "serial" as const
+            };
+        });
     } catch (e) {
         console.error("Failed to fetch from purchase_order_receiving_serial:", e instanceof Error ? e.message : String(e));
     }
@@ -762,6 +773,22 @@ async function fetchExpectedSerials(base: string, purchaseOrderProductIds: numbe
     return Array.isArray(j?.data) ? j.data : [];
 }
 
+// Helper to purge serial from cylinder_assets_draft once committed to cylinder_assets master
+async function cleanupDraftSerial(base: string, serialNumber: string) {
+    try {
+        const draftCheck = await fetchJson<{ data?: Array<{ id: number }> }>(
+            `${base}/items/cylinder_assets_draft?filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&fields=id`
+        );
+        if (draftCheck?.data?.length) {
+            for (const draft of draftCheck.data) {
+                await fetchJson(`${base}/items/cylinder_assets_draft/${draft.id}`, { method: "DELETE" }).catch(() => null);
+            }
+        }
+    } catch (e) {
+        console.warn(`[registerCylinders] Non-critical: Failed to cleanup cylinder_assets_draft for ${serialNumber}:`, e);
+    }
+}
+
 // =====================
 // CYLINDER ASSETS REGISTRATION
 // =====================
@@ -776,11 +803,15 @@ async function registerCylinders(
     poId: number,
     userId?: number | null
 ) {
-    if (!receivingItems.length) return;
+    if (!receivingItems.length) {
+        console.log(`[registerCylinders] PO ID ${poId}: No receiving items passed to registerCylinders. Aborting cylinder registration.`);
+        return;
+    }
 
     // Filter receiving items that belong to the posted POR rows
     const porIds = new Set(porRows.map(r => toNum(r.purchase_order_product_id)));
     const targetItems = receivingItems.filter(item => porIds.has(toNum(item.purchase_order_product_id)));
+    console.log(`[registerCylinders] PO ID ${poId}: Received items count = ${receivingItems.length}, matching targetItems for posted POR rows (${Array.from(porIds).join(",")}) = ${targetItems.length}`);
 
     // Fetch PO to determine if it is a Refill PO
     let isRefill = false;
@@ -822,10 +853,28 @@ async function registerCylinders(
             const pid = toNum(item.product_id) || toNum(por?.product_id);
             if (!pid) continue; // Still no product_id — skip
 
-            const p = productsMap.get(pid);
+            let p = productsMap.get(pid);
+            if (!p) {
+                try {
+                    const pj = await fetchJson<{ data: Product }>(
+                        `${base}/items/${PRODUCTS_COLLECTION}/${pid}?fields=product_id,product_name,barcode,product_code,cost_per_unit,is_serialized,parent_id`
+                    );
+                    if (pj?.data) {
+                        p = {
+                            ...pj.data,
+                            product_id: toNum(pj.data.product_id),
+                            is_serialized: !!(pj.data.is_serialized),
+                            parent_id: pj.data.parent_id ? toNum(pj.data.parent_id) : null
+                        } as Product;
+                        productsMap.set(pid, p);
+                    }
+                } catch (err) {
+                    console.error(`[registerCylinders] Failed to fetch product info for pid ${pid}:`, err);
+                }
+            }
             
-            // Only register if the product is serialized
-            if (!p || !p.is_serialized) continue;
+            // Only register if the product is serialized or was tracked in serial items
+            if (p && !p.is_serialized && item.sourceTable !== "serial") continue;
             
             try {
                 // Check if cylinder already exists in assets
@@ -841,7 +890,7 @@ async function registerCylinders(
                         cylinder_status: "AVAILABLE",
                         cylinder_condition: "GOOD",
                         current_branch_id: por ? toNum(por.branch_id) : null,
-                        cost: toNum(p.cost_per_unit),
+                        cost: toNum(p?.cost_per_unit),
                         modified_by: userId || null
                     };
                     if (item.expiry_date) patchPayload.expiration_date = new Date(item.expiry_date).toISOString().split("T")[0];
@@ -860,7 +909,7 @@ async function registerCylinders(
                         cylinder_condition: "GOOD",
                         current_branch_id: por ? toNum(por.branch_id) : null,
                         acquisition_date: nowISO().split("T")[0],
-                        cost: toNum(p.cost_per_unit),
+                        cost: toNum(p?.cost_per_unit),
                         created_by: userId || null,
                         created_date: nowISO()
                     };
@@ -873,6 +922,9 @@ async function registerCylinders(
                     });
                 }
                 
+                // Cleanup from cylinder_assets_draft once promoted to cylinder_assets master
+                await cleanupDraftSerial(base, sn);
+
                 // (User requested: Normal PO serials will not get inserted in purchase_order_serial table)
                 
                 successCount++;
@@ -1024,6 +1076,9 @@ async function registerCylinders(
                     });
                 }
                 
+                // Cleanup from cylinder_assets_draft once promoted to cylinder_assets master
+                await cleanupDraftSerial(base, sn);
+
                 // Add to purchase_order_serial if not exists
                 const k = `${toNum(por?.product_id)}::${toNum(por?.branch_id ?? 0)}`;
                 const popId = popIdByProductBranch.get(k);
