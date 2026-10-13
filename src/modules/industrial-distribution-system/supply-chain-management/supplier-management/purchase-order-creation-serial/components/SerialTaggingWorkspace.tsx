@@ -96,7 +96,8 @@ export function SerialTaggingWorkspace({ po, loading, hook }: SerialTaggingWorks
     if (!po) return null; // Fallback, shouldn't reach here
 
     const isTagged = po.isTagged;
-    const isReadOnly = isTagged || po.inventoryStatus !== 13;
+    // Developer comment: inventory_status=3 (For Receiving) indicates the PO is approved and ready for serial tagging.
+    const isReadOnly = isTagged || po.inventoryStatus !== 3;
 
     return (
         <div className="min-w-0 border border-border rounded-xl bg-background shadow-sm overflow-hidden flex flex-col h-full">
@@ -155,7 +156,7 @@ export function SerialTaggingWorkspace({ po, loading, hook }: SerialTaggingWorks
                         {po.remark && <div className="text-foreground/90 font-medium">Reason: {po.remark}</div>}
                     </div>
                 )}
-                {po.inventoryStatus !== 13 && po.inventoryStatus !== 8 && po.inventoryStatus !== 4 && !isTagged && (
+                {po.inventoryStatus !== 3 && po.inventoryStatus !== 8 && po.inventoryStatus !== 4 && !isTagged && (
                     <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-300 font-medium flex items-center gap-2">
                         <Info className="h-4 w-4 shrink-0" />
                         This PO is not ready for tagging (Status: {po.inventoryStatusLabel || "Pending"}). Serial entry is disabled until approved.

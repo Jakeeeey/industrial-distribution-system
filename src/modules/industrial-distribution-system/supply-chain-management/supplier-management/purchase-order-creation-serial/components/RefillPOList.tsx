@@ -37,7 +37,8 @@ interface RefillPOListProps {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const APPROVED_STATUS = 13;
+// Developer comment: Setting inventory_status=3 (For Receiving) is the standard approved state for POs.
+const APPROVED_STATUS = 3;
 const DEFAULT_PAGE_SIZE = 10;
 
 type FilterStatus = "all" | "ready" | "for_approval" | "tagged" | "rejected";
