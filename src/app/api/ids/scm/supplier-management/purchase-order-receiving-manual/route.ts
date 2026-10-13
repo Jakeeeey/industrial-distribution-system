@@ -901,26 +901,16 @@ export async function POST(req: NextRequest) {
                 extData = existingRows?.data || [];
             }
 
-            for (const sObj of serials) {
-                const sn = String(sObj.sn || "").trim();
-                if (!sn) continue;
-                
-                const existingSerial = extData.find(r => r.serial_number === sn);
-                if (existingSerial) continue;
-
-                let tWeight: number | null = null;
-                if (sObj.tareWeight) {
-                    const tw = parseFloat(String(sObj.tareWeight));
-                    if (!isNaN(tw)) tWeight = tw;
-                }
-                
+            // Comments: Find or create a single parent open draft row in purchase_order_receiving for this product/branch
+            let targetDraftPorId = draftPorIds[0] ? toNum(draftPorIds[0]) : null;
+            if (!targetDraftPorId) {
                 const patchPayload: Record<string, unknown> = { 
                     purchase_order_id: poId,
                     product_id: productId,
                     branch_id: branchId,
-                    received_quantity: 1,
+                    received_quantity: 0,
                     unit_price: uPrice,
-                    total_amount: uPrice,
+                    total_amount: 0,
                     discounted_amount: 0,
                     vat_amount: 0,
                     withholding_amount: 0,
@@ -928,23 +918,41 @@ export async function POST(req: NextRequest) {
                     receipt_no: null,
                     is_reverted: 0
                 };
-                if (tWeight !== null) patchPayload.tare_weight = tWeight;
-                if (sObj.expiryDate) patchPayload.expiry_date = sObj.expiryDate;
-
                 const createdPor = await fetchJson<{ data: { purchase_order_product_id: number } }>(`${base}/items/${POR_COLLECTION}`, {
                     method: "POST", body: JSON.stringify(patchPayload)
-                }).catch((e) => { console.warn("Failed to create parent 1-to-1 row", e); return null; });
-
+                }).catch((e) => { console.warn("Failed to create parent draft row", e); return null; });
                 if (createdPor?.data?.purchase_order_product_id) {
-                    const newPorId = createdPor.data.purchase_order_product_id;
+                    targetDraftPorId = createdPor.data.purchase_order_product_id;
+                }
+            }
+
+            if (targetDraftPorId) {
+                for (const sObj of serials) {
+                    const sn = String(sObj.sn || "").trim();
+                    if (!sn) continue;
+                    
+                    const existingSerial = extData.find(r => r.serial_number === sn);
+                    if (existingSerial) continue;
+
+                    let tWeight: number | null = null;
+                    if (sObj.tareWeight) {
+                        const tw = parseFloat(String(sObj.tareWeight));
+                        if (!isNaN(tw)) tWeight = tw;
+                    }
+
                     const childPayload: Record<string, unknown> = {
-                        purchase_order_receiving_id: newPorId,
+                        purchase_order_receiving_id: targetDraftPorId,
                         product_id: toNum(productId),
                         serial_number: sn,
                         created_at: nowISO()
                     };
                     if (tWeight !== null) childPayload.tare_weight = tWeight;
-                    await fetchJson(`${base}/items/purchase_order_receiving_serial`, { method: "POST", body: JSON.stringify(childPayload) }).catch(() => {});
+                    if (sObj.expiryDate) childPayload.expiry_date = sObj.expiryDate;
+
+                    await fetchJson(`${base}/items/purchase_order_receiving_serial`, {
+                        method: "POST",
+                        body: JSON.stringify(childPayload)
+                    }).catch(() => {});
                 }
             }
 
@@ -1022,7 +1030,8 @@ export async function POST(req: NextRequest) {
 
         if (action === "save_receipt") {
             const { poId, porCounts, porMetaData, receiverId, receiptNo: bodyReceiptNo } = body;
-            let { porSerials } = body;
+            // Extract porSerials as const to satisfy prefer-const lint rule
+            const { porSerials } = body;
             const rollbackTracker: Array<{ execute: () => Promise<void>; undo: () => Promise<void> }> = [];
             const receiptNo = bodyReceiptNo || null;
             const thePoId = toNum(poId);
@@ -1052,76 +1061,91 @@ export async function POST(req: NextRequest) {
             const linksMap = await fetchProductSupplierLinks(base, Array.from(productIdsSet), toNum(po?.supplier_name));
             const productsMap = await fetchProductsMap(base, Array.from(productIdsSet));
 
-            for (const [key, qtyNum] of Object.entries(porCounts)) {
+            // Ensure exactly one open receiving row per product/branch/receipt in purchase_order_receiving
+            // and collapse incoming counts/serials into that target row.
+            const incomingKeys = Object.keys(porCounts);
+            for (const key of incomingKeys) {
+                const qtyNum = porCounts[key];
                 const qty = toNum(qtyNum);
                 if (qty <= 0) continue;
+
+                let pid = 0;
+                let bid = 0;
                 if (String(key).includes("-")) {
                     const [pidStr, bidStr] = key.split("-");
-                    const pid = toNum(pidStr), bid = toNum(bidStr);
-                    const ml = lines.find(l => toNum(l.product_id) === pid && toNum(l.branch_id) === bid);
-                    let uPrice = 0;
-                    if (ml) uPrice = toNum(ml.unit_price);
-                    else {
-                        const pj2 = await fetchJson<{ data: ProductRow }>(`${base}/items/${PRODUCTS_COLLECTION}/${pid}?fields=cost_per_unit`);
-                        uPrice = toNum(pj2?.data?.cost_per_unit || 0);
+                    pid = toNum(pidStr);
+                    bid = toNum(bidStr);
+                } else {
+                    const pr = porRows.find(r => toNum(r.purchase_order_product_id) === toNum(key));
+                    if (pr) {
+                        pid = toNum(pr.product_id);
+                        bid = toNum(pr.branch_id);
                     }
+                }
 
-                    const lineTypeId = linksMap.get(pid)?.discount_type;
-                    let linePct = poDiscountPercent;
-                    let resolvedId = ensureId(lineTypeId);
-                    if (resolvedId) {
-                        const dt = discountMap.get(String(resolvedId));
-                        if (dt) { linePct = dt.pct; }
-                    } else resolvedId = ensureId(dType);
+                if (!pid) continue;
 
-                    const hasIncomingSerials = porSerials?.[key] && Array.isArray(porSerials[key]) && porSerials[key].length > 0;
-                    const isSerialized = !!(productsMap.get(pid)?.is_serialized) || hasIncomingSerials;
+                const ml = lines.find(l => toNum(l.product_id) === pid && toNum(l.branch_id) === bid);
+                let uPrice = 0;
+                if (ml) uPrice = toNum(ml.unit_price);
+                else {
+                    const pj2 = await fetchJson<{ data: ProductRow }>(`${base}/items/${PRODUCTS_COLLECTION}/${pid}?fields=cost_per_unit`);
+                    uPrice = toNum(pj2?.data?.cost_per_unit || 0);
+                }
 
-                    if (isSerialized) {
-                        const draftPorsRes = await fetchJson<{ data: Record<string, unknown>[] }>(`${base}/items/${POR_COLLECTION}?filter[purchase_order_id][_eq]=${encodeURIComponent(String(thePoId))}&filter[product_id][_eq]=${encodeURIComponent(String(pid))}&filter[branch_id][_eq]=${encodeURIComponent(String(bid))}&filter[isPosted][_eq]=0&filter[receipt_no][_null]=true&filter[is_reverted][_neq]=1&fields=purchase_order_product_id`).catch(() => null);
-                        const draftPors = draftPorsRes?.data || [];
-                        
-                        const draftPorIds = draftPors.map(d => String(d.purchase_order_product_id));
-                        let draftSerials: Array<{ receiving_item_id: number; serial_number: string; purchase_order_receiving_id: unknown }> = [];
-                        if (draftPorIds.length > 0) {
-                            const dsUrl = `${base}/items/purchase_order_receiving_serial?limit=-1&filter[purchase_order_receiving_id][_in]=${draftPorIds.join(',')}&fields=receiving_item_id,serial_number,purchase_order_receiving_id`;
-                            const dsRes = await fetchJson<{ data: Array<{ receiving_item_id: number; serial_number: string; purchase_order_receiving_id: unknown }> }>(dsUrl).catch(() => null);
-                            draftSerials = dsRes?.data || [];
-                        }
+                const lineTypeId = linksMap.get(pid)?.discount_type;
+                let linePct = poDiscountPercent;
+                let resolvedId = ensureId(lineTypeId);
+                if (resolvedId) {
+                    const dt = discountMap.get(String(resolvedId));
+                    if (dt) { linePct = dt.pct; }
+                } else resolvedId = ensureId(dType);
 
-                        const incomingSerials = Array.isArray(porSerials?.[key]) ? porSerials[key] : [];
-                        
-                        for (const draftPor of draftPors) {
-                            const dId = String(draftPor.purchase_order_product_id);
-                            porCounts[dId] = 1;
-                            if (porMetaData?.[key]) porMetaData[dId] = porMetaData[key];
+                // Fetch or create single open receiving row for this (product, branch, receipt)
+                const ensured = await ensureOpenReceivingRow({
+                    base,
+                    poId: thePoId,
+                    productId: pid,
+                    branchId: bid,
+                    unitPrice: uPrice,
+                    discountTypeId: resolvedId,
+                    discountPercent: linePct,
+                    receiptNo
+                });
 
-                            const dbSerialRow = draftSerials.find(ds => {
-                                const relId = typeof ds.purchase_order_receiving_id === 'object' && ds.purchase_order_receiving_id !== null
-                                    ? ((ds.purchase_order_receiving_id as Record<string, unknown>).id ?? (ds.purchase_order_receiving_id as Record<string, unknown>).purchase_order_product_id)
-                                    : ds.purchase_order_receiving_id;
-                                return String(relId) === dId;
-                            });
+                const ensuredPorIdStr = String(ensured.porId);
+                porCounts[ensuredPorIdStr] = qty;
+                if (key !== ensuredPorIdStr) {
+                    delete porCounts[key];
+                    if (porMetaData?.[key]) {
+                        porMetaData[ensuredPorIdStr] = porMetaData[key];
+                        delete porMetaData[key];
+                    }
+                    if (porSerials?.[key]) {
+                        porSerials[ensuredPorIdStr] = porSerials[key];
+                        delete porSerials[key];
+                    }
+                }
 
-                            if (dbSerialRow) {
-                                const incSerial = incomingSerials.find((s: Record<string, unknown>) => s.sn === dbSerialRow.serial_number);
-                                if (incSerial) {
-                                    if (!porSerials) porSerials = {};
-                                    porSerials[dId] = [incSerial];
-                                }
+                // Clean up any other empty/orphaned unposted draft rows for this product/branch (where receipt_no IS NULL and not the target row)
+                try {
+                    const orphanDraftsRes = await fetchJson<{ data: Record<string, unknown>[] }>(
+                        `${base}/items/${POR_COLLECTION}?filter[purchase_order_id][_eq]=${encodeURIComponent(String(thePoId))}&filter[product_id][_eq]=${encodeURIComponent(String(pid))}&filter[branch_id][_eq]=${encodeURIComponent(String(bid))}&filter[isPosted][_eq]=0&filter[receipt_no][_null]=true&filter[purchase_order_product_id][_neq]=${ensured.porId}&fields=purchase_order_product_id`
+                    ).catch(() => null);
+                    const orphanIds = (orphanDraftsRes?.data || []).map(r => toNum(r.purchase_order_product_id)).filter(Boolean);
+                    if (orphanIds.length > 0) {
+                        for (const oId of orphanIds) {
+                            // Check if orphan row has serials attached; if none, delete to prevent "Receipt: Pending" ghost cards
+                            const childCheck = await fetchJson<{ data: Array<{ receiving_item_id: number }> }>(
+                                `${base}/items/purchase_order_receiving_serial?filter[purchase_order_receiving_id][_eq]=${oId}&limit=1`
+                            ).catch(() => null);
+                            if (!childCheck?.data?.length) {
+                                await fetchJson(`${base}/items/${POR_COLLECTION}/${oId}`, { method: "DELETE" }).catch(() => null);
                             }
                         }
-                        
-                        delete porCounts[key];
-                        if (porMetaData?.[key]) delete porMetaData[key];
-                        if (porSerials?.[key]) delete porSerials[key];
-                    } else {
-                        const ensured = await ensureOpenReceivingRow({ base, poId: thePoId, productId: pid, branchId: bid, unitPrice: uPrice, discountTypeId: resolvedId, discountPercent: linePct, receiptNo });
-                        porCounts[String(ensured.porId)] = qty;
-                        delete porCounts[key];
-                        if (porMetaData?.[key]) { porMetaData[String(ensured.porId)] = porMetaData[key]; delete porMetaData[key]; }
-                        if (porSerials?.[key]) { porSerials[String(ensured.porId)] = porSerials[key]; delete porSerials[key]; }
                     }
+                } catch {
+                    // Non-blocking cleanup
                 }
             }
             const meta = (porMetaData && typeof porMetaData === "object") ? porMetaData : {};
@@ -1241,7 +1265,7 @@ export async function POST(req: NextRequest) {
                 });
 
                 // ✅ Optimal Diffing Strategy: Calculate exact Inserts, Updates, and Deletes using the unique serial_number to prevent ID burn and ensure minimal database churn.
-                if (!isSerialized) {
+                if (isSerialized) {
                     const serials = Array.isArray(porSerials?.[targetPorId]) ? porSerials[targetPorId] : [];
 
                     const incomingMap = new Map<string, unknown>();
