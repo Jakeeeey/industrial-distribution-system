@@ -121,11 +121,13 @@ async function fetchBranchesMap(base: string, ids: number[]) {
 
 async function getPOList(base: string, statusFilter: string = "ready") {
     // Step 1: Fetch refill POs filtered by tab status to optimize load time
+    // Developer comment: Refill POs are approved to inventory_status=3 (For Receiving). 
+    // They are ready for tagging if status is 3 and is_tagged != 1.
     let statusQuery = "&filter[inventory_status][_nin]=7";
     if (statusFilter === "ready") {
-        statusQuery = "&filter[inventory_status][_eq]=13&filter[is_tagged][_neq]=1";
+        statusQuery = "&filter[inventory_status][_eq]=3&filter[is_tagged][_neq]=1";
     } else if (statusFilter === "for_approval" || statusFilter === "pending") {
-        statusQuery = "&filter[inventory_status][_nin]=13,8,4,7&filter[is_tagged][_neq]=1";
+        statusQuery = "&filter[inventory_status][_nin]=3,8,4,7&filter[is_tagged][_neq]=1";
     } else if (statusFilter === "tagged") {
         statusQuery = "&filter[inventory_status][_nin]=7&filter[is_tagged][_eq]=1";
     } else if (statusFilter === "rejected") {
@@ -607,7 +609,7 @@ export async function POST(req: NextRequest) {
 
         const { poId, entries } = parsed.data;
 
-        // Verify the PO exists and has inventory_status=13 (approved for tagging)
+        // Verify the PO exists and has inventory_status=3 (approved / For Receiving)
         const poCheckRes = await directusFetch(
             `${base}/items/purchase_order/${poId}?fields=purchase_order_id,inventory_status,is_refill`
         );
@@ -619,9 +621,10 @@ export async function POST(req: NextRequest) {
         if (Number(poData.is_refill) !== 1) {
             return NextResponse.json({ error: "This PO is not a refill PO." }, { status: 400 });
         }
-        if (Number(poData.inventory_status) !== 13) {
+        // Developer comment: Setting inventory_status=3 (For Receiving) is the standard approved state for POs.
+        if (Number(poData.inventory_status) !== 3) {
             return NextResponse.json(
-                { error: "PO is not approved for serial tagging (inventory_status must be 13)." },
+                { error: "PO is not approved for serial tagging (inventory_status must be 3)." },
                 { status: 400 }
             );
         }

@@ -11,7 +11,7 @@ export type SerialTaggingPOListItem = {
     poNumber: string;
     supplierName: string;
     date: string;                   // ISO date string YYYY-MM-DD
-    inventoryStatus: number;        // 13 = approved for tagging; others = pending
+    inventoryStatus: number;        // 3 = approved for tagging (For Receiving); others = pending
     inventoryStatusLabel: string;   // display label from transaction_status table
     isTagged: boolean;              // true = purchase_order.is_tagged = 1
     totalLines: number;             // count of purchase_order_products rows

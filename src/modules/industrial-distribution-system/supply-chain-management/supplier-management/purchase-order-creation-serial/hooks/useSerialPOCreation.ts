@@ -2,7 +2,7 @@
 // Purpose: State orchestrator for the Cylinder Refill Serial Tagging module.
 // Revised: Removed all PO creation logic. Now manages PO list selection + serial tagging state.
 //
-// Phase 1 — PO List: user selects an approved refill PO (inventory_status=13).
+// Phase 1 — PO List: user selects an approved refill PO (inventory_status=3).
 // Phase 2 — Tagging Workspace: user enters draft serials, submits, DB is updated.
 
 "use client";
