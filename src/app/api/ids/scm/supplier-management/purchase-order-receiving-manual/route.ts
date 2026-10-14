@@ -336,18 +336,20 @@ async function fetchReceivingSerialsMap(base: string, porIds: number[]) {
             map.set(porId, list);
         }
 
-        const serialUrl = `${base}/items/purchase_order_receiving_serial?limit=-1&filter[purchase_order_receiving_id][_in]=${idList}&fields=purchase_order_receiving_id,serial_number,tare_weight,purchase_order_receiving_id.expiry_date,purchase_order_receiving_id.tare_weight`;
+        // Developer comments:
+        // Request direct expiry_date from purchase_order_receiving_serial as well as parent fallback
+        const serialUrl = `${base}/items/purchase_order_receiving_serial?limit=-1&filter[purchase_order_receiving_id][_in]=${idList}&fields=purchase_order_receiving_id,serial_number,tare_weight,expiry_date,purchase_order_receiving_id.expiry_date,purchase_order_receiving_id.tare_weight`;
         const serials = await fetchJson<{ data: Array<Record<string, unknown>> }>(serialUrl).catch(() => ({ data: [] }));
         for (const item of serials?.data ?? []) {
             let porId = 0;
             let parentTareWeight = "";
-            let expiryDate = "";
+            let expiryDate = toStr(item.expiry_date);
 
             if (typeof item.purchase_order_receiving_id === 'object' && item.purchase_order_receiving_id !== null) {
                 const parent = item.purchase_order_receiving_id as Record<string, unknown>;
                 porId = toNum(parent.id ?? parent.purchase_order_product_id);
                 parentTareWeight = toStr(parent.tare_weight);
-                expiryDate = toStr(parent.expiry_date);
+                if (!expiryDate) expiryDate = toStr(parent.expiry_date);
             } else {
                 porId = toNum(item.purchase_order_receiving_id);
             }
@@ -1264,7 +1266,11 @@ export async function POST(req: NextRequest) {
                     undo: async () => { await fetchJson(`${base}/items/${POR_COLLECTION}/${targetPorId}`, { method: "PATCH", body: JSON.stringify({ receipt_no: pr?.receipt_no, received_quantity: pr?.received_quantity, isPosted: pr?.isPosted, is_reverted: pr?.is_reverted ?? 0 }) }); }
                 });
 
-                // ✅ Optimal Diffing Strategy: Calculate exact Inserts, Updates, and Deletes using the unique serial_number to prevent ID burn and ensure minimal database churn.
+                // Developer comment: Support partial receiving split for both serialized and non-serialized items.
+                // If the user receives a partial quantity of tagged serials or non-serialized items,
+                // the receipt row (targetPorId) receives exactly the requested quantity and receipt_no.
+                // An open remainder row (receipt_no: null, isPosted: 0) is created to hold the unreceipted balance
+                // and any remaining tagged serials are reassigned to this open remainder row.
                 if (isSerialized) {
                     const serials = Array.isArray(porSerials?.[targetPorId]) ? porSerials[targetPorId] : [];
 
@@ -1297,10 +1303,6 @@ export async function POST(req: NextRequest) {
                         }
                     }
 
-                    const toDeleteIds: number[] = [];
-                    const toPost: Record<string, unknown>[] = [];
-                    const toPatch: { id: number, payload: Record<string, unknown> }[] = [];
-
                     // 2.5 Guard against stealing serials from other receipts
                     for (const row of existingRows) {
                         const existingPor = row.purchase_order_receiving_id;
@@ -1314,19 +1316,76 @@ export async function POST(req: NextRequest) {
                         }
                     }
 
-                    // 3. Identify Deletes (serial exists in DB under THIS receipt, but no longer in incoming array)
+                    // 3. Partition existing serials attached to targetPorId:
+                    // - selectedRows: matched in incomingMap for this receipt
+                    // - remainderRows: attached to targetPorId in DB, but omitted from this receipt (to be split into remainder draft)
+                    const remainderRows: typeof existingRows = [];
                     for (const row of existingRows) {
                         const existingPor = row.purchase_order_receiving_id;
                         const existingPorId = typeof existingPor === 'object' ? existingPor?.purchase_order_product_id : existingPor;
                         if (Number(existingPorId) === Number(targetPorId) && !incomingMap.has(row.serial_number)) {
-                            toDeleteIds.push(row.receiving_item_id);
+                            remainderRows.push(row);
+                        }
+                    }
+
+                    // Developer comment: If there are remainder serials, split them into a new open draft row (receipt_no: null).
+                    // Do NOT delete them. This guarantees that Phys. Tagged reflects remaining serials for the next receipt.
+                    if (remainderRows.length > 0) {
+                        const remQty = remainderRows.length;
+                        const remGross = uPrice * remQty;
+                        const remDisc = Number((remGross * (linePct / 100)).toFixed(2));
+                        const remNet = remGross - remDisc;
+                        const remVatExcl = Number((remNet / 1.12).toFixed(2));
+                        const remVat = Number((remNet - remVatExcl).toFixed(2));
+                        const remEwt = Number((remVatExcl * 0.01).toFixed(2));
+
+                        const remainderPayload: Record<string, unknown> = {
+                            purchase_order_id: thePoId,
+                            product_id: pId,
+                            branch_id: toNum(pr?.branch_id),
+                            received_quantity: remQty,
+                            unit_price: uPrice,
+                            discount_type: dtId || null,
+                            discounted_amount: remDisc,
+                            vat_amount: remVat,
+                            withholding_amount: remEwt,
+                            total_amount: Number(remGross.toFixed(2)),
+                            isPosted: 0,
+                            is_reverted: 0,
+                            receipt_no: null,
+                            receipt_date: null,
+                            received_date: null,
+                            receiving_method: "SERIAL"
+                        };
+
+                        const createdRemRes = await fetchJson<{ data: { purchase_order_product_id: number } }>(`${base}/items/${POR_COLLECTION}`, {
+                            method: "POST",
+                            body: JSON.stringify(remainderPayload)
+                        }).catch((e) => {
+                            console.error("[save_receipt] Failed to create remainder draft row:", e);
+                            return null;
+                        });
+
+                        const remainderPorId = toNum(createdRemRes?.data?.purchase_order_product_id);
+                        if (remainderPorId > 0) {
+                            for (const remRow of remainderRows) {
+                                await fetchJson(`${base}/items/purchase_order_receiving_serial/${remRow.receiving_item_id}`, {
+                                    method: "PATCH",
+                                    body: JSON.stringify({ purchase_order_receiving_id: remainderPorId })
+                                }).catch((e) => {
+                                    console.error(`[save_receipt] Failed to reassign serial ${remRow.serial_number} to remainder draft:`, e);
+                                });
+                            }
                         }
                     }
 
                     const pObj = productsMap.get(pId);
                     const effectiveProductId = (pObj?.parent_id && toNum(pObj.parent_id) > 0) ? toNum(pObj.parent_id) : Number(pId);
 
-                    // 2. Identify Inserts and Updates
+                    const toPost: Record<string, unknown>[] = [];
+                    const toPatch: { id: number, payload: Record<string, unknown> }[] = [];
+
+                    // 4. Identify Inserts and Updates for incoming serials on targetPorId
                     for (const [snStr, sObj] of incomingMap.entries()) {
                         const existing = existingRows.find(r => r.serial_number === snStr);
 
@@ -1355,17 +1414,10 @@ export async function POST(req: NextRequest) {
                         }
                     }
 
-                    // 3. Queue the Database Operations
-                    if (toDeleteIds.length > 0) {
+                    // 5. Queue the Database Operations for serials
+                    for (const patchOp of toPatch) {
                         rollbackTracker.push({
-                            execute: async () => { await fetchJson(`${base}/items/purchase_order_receiving_serial`, { method: "DELETE", body: JSON.stringify(toDeleteIds) }).catch(() => { }); },
-                            undo: async () => { }
-                        });
-                    }
-
-                    for (const patch of toPatch) {
-                        rollbackTracker.push({
-                            execute: async () => { await fetchJson(`${base}/items/purchase_order_receiving_serial/${patch.id}`, { method: "PATCH", body: JSON.stringify(patch.payload) }); },
+                            execute: async () => { await fetchJson(`${base}/items/purchase_order_receiving_serial/${patchOp.id}`, { method: "PATCH", body: JSON.stringify(patchOp.payload) }); },
                             undo: async () => { }
                         });
                     }
@@ -1374,6 +1426,46 @@ export async function POST(req: NextRequest) {
                         rollbackTracker.push({
                             execute: async () => { await fetchJson(`${base}/items/purchase_order_receiving_serial`, { method: "POST", body: JSON.stringify(post) }); },
                             undo: async () => { await fetchJson(`${base}/items/purchase_order_receiving_serial?filter[serial_number][_eq]=${encodeURIComponent(post.serial_number as string)}`, { method: "DELETE" }).catch(() => { }); }
+                        });
+                    }
+                } else {
+                    // Developer comment: Handle partial receiving split for non-serialized items.
+                    // If the draft row had more quantity previously tagged than the quantity being received now,
+                    // create a remainder draft row with the difference.
+                    const priorQty = toNum(pr?.received_quantity);
+                    if (priorQty > newQty) {
+                        const remQty = priorQty - newQty;
+                        const remGross = uPrice * remQty;
+                        const remDisc = Number((remGross * (linePct / 100)).toFixed(2));
+                        const remNet = remGross - remDisc;
+                        const remVatExcl = Number((remNet / 1.12).toFixed(2));
+                        const remVat = Number((remNet - remVatExcl).toFixed(2));
+                        const remEwt = Number((remVatExcl * 0.01).toFixed(2));
+
+                        const remainderPayload: Record<string, unknown> = {
+                            purchase_order_id: thePoId,
+                            product_id: pId,
+                            branch_id: toNum(pr?.branch_id),
+                            received_quantity: remQty,
+                            unit_price: uPrice,
+                            discount_type: dtId || null,
+                            discounted_amount: remDisc,
+                            vat_amount: remVat,
+                            withholding_amount: remEwt,
+                            total_amount: Number(remGross.toFixed(2)),
+                            isPosted: 0,
+                            is_reverted: 0,
+                            receipt_no: null,
+                            receipt_date: null,
+                            received_date: null,
+                            receiving_method: pr?.receiving_method || null
+                        };
+
+                        await fetchJson(`${base}/items/${POR_COLLECTION}`, {
+                            method: "POST",
+                            body: JSON.stringify(remainderPayload)
+                        }).catch((e) => {
+                            console.error("[save_receipt] Failed to create non-serialized remainder draft row:", e);
                         });
                     }
                 }
