@@ -11,16 +11,7 @@ import { useReceivingProductsManual, ReceivingPOItem, ReceiptSavedInfo } from ".
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ReceiptPreviewModal } from "../ReceiptPreviewModal";
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+
 
 const formatPHP = (val: number) =>
     new Intl.NumberFormat("en-PH", {
@@ -43,7 +34,6 @@ export function ReviewReceiptStep({ onBack, receiverName }: { onBack: () => void
     const [clientSaveError, setClientSaveError] = React.useState("");
     const [expiryDates, setExpiryDates] = React.useState<Record<string, string>>({});
     const [previewOpen, setPreviewOpen] = React.useState(false);
-    const [isPartialModalOpen, setIsPartialModalOpen] = React.useState(false);
     const [reviewPage, setReviewPage] = React.useState(1);
     const [showErrors, setShowErrors] = React.useState(false);
 
@@ -117,18 +107,6 @@ export function ReviewReceiptStep({ onBack, receiverName }: { onBack: () => void
         });
     }, [selectedPO]);
 
-    const executeSave = async () => {
-        const metaData: Record<string, { lotNo: string; batchNo?: string; expiryDate: string }> = {};
-        Object.keys(expiryDates).forEach(id => {
-            metaData[id] = { 
-                lotNo: "", 
-                batchNo: "",
-                expiryDate: expiryDates[id] || "" 
-            };
-        });
-        await saveReceipt(metaData);
-        setIsPartialModalOpen(false);
-    };
 
     const handleSaveReceipt = React.useCallback(async () => {
         const status = (selectedPO?.status || "").toUpperCase();
@@ -167,18 +145,7 @@ export function ReviewReceiptStep({ onBack, receiverName }: { onBack: () => void
 
         setClientSaveError("");
 
-        // ✅ Check if Incomplete
-        const isPartial = allItems.some((it: ReceivingPOItem) => {
-            const porId = String(it.id);
-            const count = safeCounts[porId] ?? 0;
-            const expected = Number(it.expectedQty || 0);
-            return count < expected;
-        });
-
-        if (isPartial) {
-            setIsPartialModalOpen(true);
-            return;
-        }
+        // ✅ Removed Partial Receipt Check
 
         const metaData: Record<string, { lotNo: string; batchNo?: string; expiryDate: string }> = {};
         Object.keys(expiryDates).forEach(id => {
@@ -445,24 +412,7 @@ export function ReviewReceiptStep({ onBack, receiverName }: { onBack: () => void
 
                     {/* ✅ Modal moved to top-level render; no duplicate needed here - AG 2026-07-14 */}
 
-                    {/* ✅ Partial Receipt Confirmation Modal */}
-                    <AlertDialog open={isPartialModalOpen} onOpenChange={setIsPartialModalOpen}>
-                        <AlertDialogContent>
-                            <AlertDialogHeader>
-                                <AlertDialogTitle>Incomplete Receiving</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                    The receiving of this PO is incomplete. To proceed is to make this PO a partial receipt.
-                                    Do you want to continue?
-                                </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={executeSave} className="bg-indigo-600 hover:bg-indigo-700">
-                                    Proceed as Partial
-                                </AlertDialogAction>
-                            </AlertDialogFooter>
-                        </AlertDialogContent>
-                    </AlertDialog>
+
                 </>
             )}
         </div>

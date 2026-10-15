@@ -37,7 +37,7 @@ export const useSerialTaggingStore = create<SerialTaggingStore>()(
                 const lineDrafts = poDrafts[lineId] || [];
                 
                 // Avoid duplicates in draft (saved duplicates are checked in the hook)
-                if (lineDrafts.some((s) => s.serial_number.toUpperCase() === serial_number.toUpperCase())) {
+                if (lineDrafts.some((s) => s.serial_number === serial_number)) {
                     return state;
                 }
                 

@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Trash2 } from "lucide-react";
-import { createCylinderAssetsBulk } from "../providers/fetchProvider";
+// AG-COMMENT: Changed import to createCylinderAssetsDraftBulk to register serials into cylinder_assets_draft first
+import { createCylinderAssetsDraftBulk } from "../providers/fetchProvider";
 import { toast } from "sonner";
 import type { CylinderAssetUpsertPayload } from "../types";
 
@@ -150,8 +151,9 @@ export function RegisterCylinderAssetModal(props: Props) {
                 };
             });
 
-            await createCylinderAssetsBulk(payloads);
-            toast.success(`${serials.length} cylinder assets registered.`);
+            // AG-COMMENT: Save serial payloads into cylinder_assets_draft table prior to document commit
+            await createCylinderAssetsDraftBulk(payloads);
+            toast.success(`${serials.length} cylinder assets registered to draft.`);
             onSuccess(serials);
             onOpenChange(false);
         } catch (error) {

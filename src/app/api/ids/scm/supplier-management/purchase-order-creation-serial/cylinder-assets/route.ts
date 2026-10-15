@@ -51,8 +51,11 @@ export async function GET(req: NextRequest) {
 
         const data = json?.data || [];
 
-        if (data.length > 0) {
-            const asset = data[0];
+        const targetSerial = serialNumber.trim();
+        const exactMatch = data.find((a: Record<string, unknown>) => String(a.serial_number).trim() === targetSerial);
+
+        if (exactMatch) {
+            const asset = exactMatch;
             return NextResponse.json({ 
                 exists: true, 
                 asset: {

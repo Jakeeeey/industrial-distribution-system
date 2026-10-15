@@ -7,7 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { generatePurchaseOrderPdf } from "../utils/generatePoPdf";
-import { Printer, Trash2 } from "lucide-react";
+import { Printer } from "lucide-react";
 
 import {
     Select,
@@ -498,8 +498,16 @@ export default function PurchaseOrderReviewPanel(props: {
                         <>
                             {(Number(poAny?.inventory_status) === 8 || Number(poAny?.inventory_status) === 4) && (
                                 <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 space-y-1">
-                                    <div className="flex items-center justify-between">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
                                         <span className="text-xs font-black uppercase tracking-wider text-destructive">Purchase Order Rejected</span>
+                                        <div className="flex items-center gap-3 text-xs text-destructive/80 font-medium">
+                                            {poAny?.approver_name && poAny?.approver_name !== "—" && (
+                                                <span>Rejected by: <strong className="font-bold text-destructive">{String(poAny.approver_name)}</strong></span>
+                                            )}
+                                            {poAny?.date_approved && (
+                                                <span>Date: {String(poAny.date_approved)}</span>
+                                            )}
+                                        </div>
                                     </div>
                                     {(poAny?.remarks || poAny?.remark) && (
                                         <div className="text-sm text-foreground/90 font-medium mt-1">
@@ -511,9 +519,16 @@ export default function PurchaseOrderReviewPanel(props: {
                             )}
                             {(Number(poAny?.inventory_status) === 3 || Number(poAny?.inventory_status) === 13) && (
                                 <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4 space-y-1">
-                                    <div className="flex items-center justify-between">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
                                         <span className="text-xs font-black uppercase tracking-wider text-emerald-700">Purchase Order Approved</span>
-                                        {poAny?.date_approved && <span className="text-xs font-medium text-emerald-700">Date: {String(poAny.date_approved)}</span>}
+                                        <div className="flex items-center gap-3 text-xs text-emerald-700 font-medium">
+                                            {poAny?.approver_name && poAny?.approver_name !== "—" && (
+                                                <span>Approved by: <strong className="font-bold">{String(poAny.approver_name)}</strong></span>
+                                            )}
+                                            {poAny?.date_approved && (
+                                                <span>Date: {String(poAny.date_approved)}</span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -589,7 +604,6 @@ export default function PurchaseOrderReviewPanel(props: {
                                                     <th className="px-3 py-2 font-black uppercase tracking-tight text-muted-foreground border-b border-border">Disc. Type</th>
                                                     <th className="px-3 py-2 font-black uppercase tracking-tight text-muted-foreground text-right border-b border-border">Disc. Amount</th>
                                                     <th className="px-3 py-2 font-black uppercase tracking-tight text-muted-foreground text-right border-b border-border">Net Amount</th>
-                                                    <th className="px-3 py-2 font-black uppercase tracking-tight text-muted-foreground text-right border-b border-border">Action</th>
                                                 </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-border/50">
@@ -610,21 +624,6 @@ export default function PurchaseOrderReviewPanel(props: {
                                                             {fmt.format(l.discountAmount)}
                                                         </td>
                                                         <td className="px-3 py-2 text-right tabular-nums font-black text-foreground border-b border-border/10">{fmt.format(l.net)}</td>
-                                                        <td className="px-3 py-2 text-right border-b border-border/10">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setRemovedKeys(prev => {
-                                                                    const next = new Set(prev);
-                                                                    next.add(l.key);
-                                                                    return next;
-                                                                })}
-                                                                disabled={props.disabled || submitting}
-                                                                className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                                                                title="Remove item"
-                                                            >
-                                                                <Trash2 className="w-4 h-4" />
-                                                            </button>
-                                                        </td>
                                                     </tr>
                                                 ))}
                                                 </tbody>

@@ -17,9 +17,8 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { useReceivingProductsManual } from "../../providers/ReceivingProductsManualProvider";
-import { Pencil } from "lucide-react";
 
-const RECEIPT_TYPES = [
+const RECEIPT_TYPES_FALLBACK = [
     { value: "SI-CHARGE", label: "Charge Sales Invoice [SI-CHARGE]" },
     { value: "SI-CASH", label: "Cash Sales Invoice [SI-CASH]" },
     { value: "DR", label: "Delivery Receipt [DR]" },
@@ -41,16 +40,25 @@ export function ReceiptDetailsStep({ onContinue }: { onContinue: () => void }) {
         setReceiptType,
         receiptDate,
         setReceiptDate,
-        setManualCounts,
-        setMetaDataByPorId,
-        setSerialsByPorId,
-        // ✅ Fix 4: Need setReceiptNo and setReceiptDate for EDIT action from reverted history - AG 2026-07-14
     } = useReceivingProductsManual();
+
+    const [dbReceiptTypes, setDbReceiptTypes] = React.useState<{ id: number; type: string; shortcut: string }[]>([]);
+
+    React.useEffect(() => {
+        fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "fetch_receipt_types" })
+        })
+        .then(r => r.json())
+        .then(j => { if (Array.isArray(j?.data)) setDbReceiptTypes(j.data); })
+        .catch(e => console.error("Failed to load receipt types:", e));
+    }, []);
 
     // ✅ Fix 4: Helper to map receipt status to badge styles - AG 2026-07-14
     const receiptStatusBadgeClasses = (status?: string) => {
         const s = String(status || "ACTIVE").toUpperCase();
-        if (s === "REVERTED") return "bg-red-100 text-red-700 border border-red-300 font-black";
+        if (s === "REVERTED") return "bg-slate-100 text-slate-600 border border-slate-300 font-black";
         if (s === "POSTED") return "bg-primary/10 text-primary border border-primary/30 font-black";
         return "bg-amber-50 text-amber-700 border border-amber-200 font-black"; // ACTIVE = unposted
     };
@@ -152,7 +160,7 @@ export function ReceiptDetailsStep({ onContinue }: { onContinue: () => void }) {
                                     className="flex items-center justify-between gap-3 text-[10px] border-b border-primary/10 pb-2 last:border-0 last:pb-0"
                                 >
                                     <div className="flex flex-col">
-                                        <span className={cn("font-mono font-black", h.isReverted ? "text-red-500 line-through" : "text-primary")}>
+                                        <span className={cn("font-mono font-black", h.isReverted ? "text-slate-400 line-through" : "text-primary")}>
                                             {h.receiptNo}
                                         </span>
                                         <span className="text-[9px] font-bold text-slate-500">
@@ -173,56 +181,6 @@ export function ReceiptDetailsStep({ onContinue }: { onContinue: () => void }) {
                                         >
                                             {h.status || (h.isPosted ? "POSTED" : "ACTIVE")}
                                         </Badge>
-                                        {/* ✅ Fix 4: EDIT button for REVERTED receipts only — loads data back into form for correction - AG 2026-07-14 */}
-                                        {h.isReverted && (
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="h-5 px-2 text-[9px] font-black uppercase tracking-widest border border-red-300 text-red-600 hover:bg-red-50 rounded"
-                                                onClick={() => {
-                                                    const nextCounts: Record<string, number> = {};
-                                                    const nextMeta: Record<string, { batchNo?: string; lotNo?: string; lotId?: string; expiryDate?: string }> = {};
-                                                    const nextSerials: Record<string, { sn: string; tareWeight?: string; expiryDate?: string; isNew?: boolean }[]> = {};
-
-                                                    for (const item of Array.isArray(h.items) ? h.items : []) {
-                                                        const porId = String(item?.porId || "");
-                                                        if (!porId) continue;
-                                                        nextCounts[porId] = Number(item?.quantity || 0);
-                                                        nextMeta[porId] = {
-                                                            lotNo: String(item?.lotNo || ""),
-                                                            lotId: String(item?.lotNo || ""),
-                                                            batchNo: String(item?.batchNo || ""),
-                                                            expiryDate: String(item?.expiryDate || ""),
-                                                        };
-
-                                                        const serials = Array.isArray(item?.serials) ? item.serials : [];
-                                                        if (serials.length > 0) {
-                                                            nextSerials[porId] = serials
-                                                                .map((serial: any) => ({
-                                                                    sn: String(serial?.sn || "").toUpperCase(),
-                                                                    tareWeight: String(serial?.tareWeight || ""),
-                                                                    expiryDate: String(serial?.expiryDate || ""),
-                                                                    isNew: true,
-                                                                }))
-                                                                .filter((serial: { sn: string }) => serial.sn);
-                                                            nextCounts[porId] = nextSerials[porId].length;
-                                                        }
-                                                    }
-
-                                                    setReceiptNo(h.receiptNo);
-                                                    setReceiptDate(h.receiptDate || "");
-                                                    setReceiptType("");
-                                                    setManualCounts(nextCounts);
-                                                    setMetaDataByPorId(nextMeta);
-                                                    setSerialsByPorId(nextSerials);
-                                                    toast.info("Editing Reverted Receipt", {
-                                                        description: `Loaded ${h.receiptNo} for correction. Update quantities and re-submit.`,
-                                                    });
-                                                }}
-                                            >
-                                                <Pencil className="w-2.5 h-2.5 mr-1" /> EDIT
-                                            </Button>
-                                        )}
                                     </div>
                                 </div>
                             ))}
@@ -254,11 +212,19 @@ export function ReceiptDetailsStep({ onContinue }: { onContinue: () => void }) {
                                     <SelectValue placeholder="Select type..." />
                                 </SelectTrigger>
                                 <SelectContent className="rounded-xl border-2 shadow-xl">
-                                    {RECEIPT_TYPES.map((t) => (
-                                        <SelectItem key={t.value} value={t.value} className="text-xs font-bold py-2.5">
-                                            {t.label}
-                                        </SelectItem>
-                                    ))}
+                                    {dbReceiptTypes.length > 0 ? (
+                                        dbReceiptTypes.map((t) => (
+                                            <SelectItem key={t.id} value={String(t.id)} className="text-xs font-bold py-2.5">
+                                                {t.type} [{t.shortcut}]
+                                            </SelectItem>
+                                        ))
+                                    ) : (
+                                        RECEIPT_TYPES_FALLBACK.map((t) => (
+                                            <SelectItem key={t.value} value={t.value} className="text-xs font-bold py-2.5">
+                                                {t.label}
+                                            </SelectItem>
+                                        ))
+                                    )}
                                 </SelectContent>
                             </Select>
                         </div>

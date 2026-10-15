@@ -33,7 +33,7 @@ function statusLabel(status: string) {
 }
 
 export function PostingPODetail() {
-    const { selectedPO, postError, successMsg, clearSuccess, postAllReceipts, posting } =
+    const { selectedPO, postError, successMsg, clearSuccess, postAllReceipts, forcePostReceipts, posting } =
         usePostingOfPo();
 
     if (!selectedPO) {
@@ -52,8 +52,9 @@ export function PostingPODetail() {
 
     const status = String(selectedPO.status || "").toUpperCase();
     const isClosed = status === "CLOSED";
+    // Developer comment: In Post Amounts, unposted receipts are those where inventory is posted (isPosted === 1) but amounts are NOT yet posted (is_posted_amounts !== 1)
     const unposted = isClosed ? [] : (selectedPO.receipts ?? []).filter(
-        (r) => Number(r.isPosted) === 1 || r.isPosted === true
+        (r) => (Number(r.isPosted) === 1 || r.isPosted === true) && Number(r.is_posted_amounts) !== 1
     );
 
     // Show "Post All" when:
@@ -67,6 +68,8 @@ export function PostingPODetail() {
         status === "PARTIAL" ||
         status === "PARTIAL_POSTED"
     );
+
+    const showForcePost = !isClosed && selectedPO.pendingInventoryReceiptsCount === 0;
 
     // Info banner for partial-posted POs: clarify they can keep posting as more is received
     const isPartialPosted = status === "PARTIAL_POSTED";
@@ -87,6 +90,18 @@ export function PostingPODetail() {
                 </div>
 
                 <div className="shrink-0 flex items-center gap-2">
+                    {showForcePost && (
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            disabled={posting}
+                            onClick={() => forcePostReceipts(String(selectedPO.id))}
+                            className="font-black uppercase text-[10px] h-8 rounded-lg shadow-sm"
+                        >
+                            {posting ? "Posting..." : "Force Post"}
+                        </Button>
+                    )}
                     {showPostAll && (
                         <Button
                             type="button"

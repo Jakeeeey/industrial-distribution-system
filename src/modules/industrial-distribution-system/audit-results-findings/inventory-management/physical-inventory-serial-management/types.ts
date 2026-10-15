@@ -156,6 +156,8 @@ export type CylinderAssetRow = {
     created_date: string | null;
     modified_by: number | null;
     modified_date: string | null;
+    // AG-COMMENT: Indicates if this asset row was retrieved from cylinder_assets_draft awaiting document commit
+    isDraft?: boolean;
 };
 
 export type CylinderAssetUpsertPayload = {

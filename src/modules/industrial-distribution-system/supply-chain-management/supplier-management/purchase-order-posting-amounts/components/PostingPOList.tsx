@@ -6,9 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { RefreshCw, FileCheck2, ChevronRight, ChevronLeft, CircleDollarSign } from "lucide-react";
+import { RefreshCw, FileCheck2, ChevronRight, ChevronLeft } from "lucide-react";
 import { usePostingOfPo } from "../providers/PostingOfPoProvider";
-import { money } from "../utils/format";
 
 function statusBadge(status: string) {
     const s = String(status || "").toUpperCase();
@@ -238,35 +237,6 @@ export function PostingPOList() {
                                             </span>
                                         </div>
 
-                                        <div className="mt-3 border-t border-border/50 pt-3">
-                                            <div className="space-y-1.5">
-                                                <div className="flex items-center gap-1.5 text-[9px] font-black text-muted-foreground uppercase tracking-wider">
-                                                    <CircleDollarSign className="h-3 w-3 text-blue-500" />
-                                                    Amount Status
-                                                </div>
-                                                <div className="flex flex-col gap-0.5 pl-4.5">
-                                                    <div className="text-[10px] flex justify-between gap-2">
-                                                        <span className="text-muted-foreground uppercase text-[9px]">Posted:</span>
-                                                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                                                            {po.status === "CLOSED" ? money(po.postedAmount || 0, po.currency || "PHP") : "—"}
-                                                        </span>
-                                                    </div>
-                                                    <div className="text-[10px] flex justify-between gap-2">
-                                                        <span className="text-muted-foreground uppercase text-[9px]">For Posting:</span>
-                                                        <span className="font-bold text-primary">
-                                                            {po.status === "CLOSED" ? "—" : money(po.unpostedAmount || 0, po.currency || "PHP")}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {po.status === "PARTIAL_POSTED" && (
-                                            <div className="mt-2 text-[9px] font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1">
-                                                <div className="h-1 w-1 rounded-full bg-current animate-pulse" />
-                                                PARTIALLY POSTED — AWAITING RECEIVING
-                                            </div>
-                                        )}
                                     </div>
 
                                     <div className="absolute right-0 top-1/2 -translate-y-1/2">

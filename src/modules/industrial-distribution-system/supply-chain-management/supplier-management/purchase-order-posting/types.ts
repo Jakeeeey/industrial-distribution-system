@@ -45,8 +45,9 @@ export type POItem = {
     discountLabel?: string;
 };
 
-export type POBranchAllocation = {
+export type POAllocation = {
     branch: Branch;
+    receiptNo: string;
     items: POItem[];
 };
 
@@ -66,7 +67,7 @@ export type PurchaseOrder = {
     status: POStatus;
     totalAmount: number;
     currency: "PHP" | "USD";
-    allocations: POBranchAllocation[];
+    allocations: POAllocation[];
     receipts: PostingReceipt[];
     createdAt: string;
 

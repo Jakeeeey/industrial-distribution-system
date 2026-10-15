@@ -220,13 +220,6 @@ export function PostingPOList() {
                                                 {po.unpostedReceiptsCount} UNPOSTED
                                             </span>
                                         </div>
-
-                                        {po.status === "PARTIAL_POSTED" && (
-                                            <div className="mt-2 text-[9px] font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1">
-                                                <div className="h-1 w-1 rounded-full bg-current animate-pulse" />
-                                                PARTIALLY POSTED — AWAITING RECEIVING
-                                            </div>
-                                        )}
                                     </div>
 
                                     <div className="flex items-center h-9 self-center">

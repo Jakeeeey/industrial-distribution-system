@@ -15,8 +15,15 @@ function getDirectusBase(): string {
     return directusUrl.replace(/\/$/, "");
 }
 
-async function directusFetch<T>(url: string, init?: RequestInit): Promise<T> {
-    const res = await fetch(url, init);
+async function directusFetch<T>(url: string, token?: string, init?: RequestInit): Promise<T> {
+    const headers: Record<string, string> = {
+        Accept: "application/json",
+        ...(init?.headers as Record<string, string>),
+    };
+    if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+    }
+    const res = await fetch(url, { ...init, headers });
     if (!res.ok) {
         throw new Error(`Directus fetch failed: ${res.statusText}`);
     }
@@ -138,13 +145,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
             const DIRECTUS_URL = getDirectusBase();
 
             const branchData = await directusFetch<{ data: { id: number }[] }>(
-                `${DIRECTUS_URL}/items/branches?filter[branch_name][_eq]=${encodeURIComponent(branchName)}&fields=id`
+                `${DIRECTUS_URL}/items/branches?filter[branch_name][_eq]=${encodeURIComponent(branchName)}&fields=id`,
+                token
             );
             const branchId = branchData.data?.[0]?.id;
 
             if (branchId) {
                 const phData = await directusFetch<{ data: PhDetail[] }>(
-                    `${DIRECTUS_URL}/items/physical_inventory_details?filter[ph_id][branch_id][_eq]=${branchId}&filter[ph_id][isCancelled][_eq]=0&filter[ph_id][isComitted][_eq]=1&fields=ph_id.id,ph_id.ph_no,ph_id.date_encoded,product_id.product_id,product_id.parent_id,product_id.unit_of_measurement.unit_name,product_id.unit_of_measurement_count,system_count,physical_count&limit=-1`
+                    `${DIRECTUS_URL}/items/physical_inventory_details?filter[ph_id][branch_id][_eq]=${branchId}&filter[ph_id][isCancelled][_eq]=0&filter[ph_id][isComitted][_eq]=1&fields=ph_id.id,ph_id.ph_no,ph_id.date_encoded,product_id.product_id,product_id.parent_id,product_id.unit_of_measurement.unit_name,product_id.unit_of_measurement_count,system_count,physical_count&limit=-1`,
+                    token
                 );
                 const phDetails = phData.data || [];
 
@@ -215,8 +224,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
                 const rawStr = String(row.ts).trim();
 
                 // Spring Boot returns timestamps as PH local time (UTC+8) with NO timezone suffix.
-                // Node.js parses bare datetime strings as UTC, making them appear 8 hours too late.
-                // We detect this: if there's no 'Z', no '+' offset, and no timezone info, treat as PH local (UTC+8).
+                // Node.js parses bare datetime strings as UTC.
+                // To convert PH local time (UTC+8) to true UTC ms, subtract 8 hours (8 * 60 * 60 * 1000).
                 let rowTime: number;
                 if (typeof row.ts === 'number') {
                     // Already a Unix ms timestamp — use directly
@@ -225,8 +234,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
                     // Has timezone info — parse directly
                     rowTime = new Date(rawStr).getTime();
                 } else {
-                    // No timezone info → assume PH local time (UTC+8) → add 8 hours to get true UTC
-                    rowTime = new Date(rawStr).getTime() + (8 * 60 * 60 * 1000);
+                    // AG-COMMENT: Fixed timezone offset calculation: PH local time (UTC+8) to UTC requires subtracting 8 hours
+                    rowTime = new Date(rawStr).getTime() - (8 * 60 * 60 * 1000);
                 }
 
                 if (isNaN(rowTime)) return true;
@@ -235,14 +244,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
             if (validMovements.length === 0) continue;
 
-            // Helper: parse PH local timestamp (no TZ) to true UTC ms
+            // AG-COMMENT: Helper to parse PH local timestamp (no TZ) to true UTC ms by subtracting 8 hours
             const toUtcMs = (ts: string | number | undefined): number => {
                 if (!ts) return 0;
                 if (typeof ts === 'number') return ts;
                 const s = String(ts).trim();
                 const raw = new Date(s).getTime();
                 if (s.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(s)) return raw;
-                return raw + (8 * 60 * 60 * 1000); // PH UTC+8 → UTC
+                return raw - (8 * 60 * 60 * 1000); // PH UTC+8 → UTC
             };
 
             validMovements.sort((a, b) => toUtcMs(a.ts) - toUtcMs(b.ts));

@@ -52,7 +52,8 @@ export function receivedItemSerials(
 
             const receiptSerials = Array.isArray(receiptItem?.serials) ? receiptItem.serials : [];
             for (const serial of receiptSerials) {
-                const sn = String(serial?.sn || "").trim().toUpperCase();
+                // Developer comment: Preserve exact character casing for serial numbers to strictly enforce case-sensitivity
+                const sn = String(serial?.sn || "").trim();
                 if (!sn) continue;
                 serials.push({
                     sn,
