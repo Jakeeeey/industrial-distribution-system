@@ -205,6 +205,7 @@ interface PORow {
     unit_price?: string | number;
     discount_type?: string | number | null;
     receipt_type?: string | number | null;
+    receiving_method?: string | null;
 }
 
 interface POProductRow {
@@ -298,7 +299,7 @@ async function fetchPORByPOIds(base: string, poIds: number[]) {
     if (!poIds.length) return [] as PORow[];
     const rows: PORow[] = [];
     for (const ids of chunk(Array.from(new Set(poIds)), 250)) {
-        const url = `${base}/items/${POR_COLLECTION}?limit=-1&filter[purchase_order_id][_in]=${encodeURIComponent(ids.join(","))}&fields=purchase_order_product_id,purchase_order_id,product_id,branch_id,received_quantity,receipt_no,receipt_date,received_date,isPosted,is_reverted,lot_id,batch_no,expiry_date,unit_price,discount_type`;
+        const url = `${base}/items/${POR_COLLECTION}?limit=-1&filter[purchase_order_id][_in]=${encodeURIComponent(ids.join(","))}&fields=purchase_order_product_id,purchase_order_id,product_id,branch_id,received_quantity,receipt_no,receipt_date,received_date,isPosted,is_reverted,lot_id,batch_no,expiry_date,unit_price,discount_type,receiving_method`;
         const j = await fetchJson<{ data: PORow[] }>(url);
         rows.push(...(j?.data ?? []));
     }
