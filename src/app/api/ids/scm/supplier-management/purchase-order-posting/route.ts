@@ -419,7 +419,7 @@ async function fetchReceivingItems(base: string, filterPorIds?: number[]) {
     // Do not use or query purchase_order_product_id on purchase_order_receiving_serial.
     const qsSerial: string[] = [
         "limit=-1",
-        "fields=receiving_item_id,purchase_order_receiving_id,product_id,created_at,serial_number,tare_weight",
+        "fields=receiving_item_id,purchase_order_receiving_id,product_id,created_at,serial_number,tare_weight,expiry_date",
     ];
     if (filterPorIds && filterPorIds.length) {
         const idList = encodeURIComponent(filterPorIds.join(","));
@@ -883,6 +883,22 @@ async function registerCylinders(
                 );
                 const asset = assetCheck?.data?.[0];
 
+                // Check cylinder_assets_draft for any values not yet attached to item
+                let effectiveExpiry = item.expiry_date;
+                let effectiveTare = item.tare_weight;
+                try {
+                    const draftCheck = await fetchJson<{ data?: Array<{ expiration_date?: string; tare_weight?: unknown }> }>(
+                        `${base}/items/cylinder_assets_draft?filter[serial_number][_eq]=${encodeURIComponent(sn)}&fields=expiration_date,tare_weight&limit=1`
+                    );
+                    const draftItem = draftCheck?.data?.[0];
+                    if (draftItem) {
+                        if (!effectiveExpiry && draftItem.expiration_date) effectiveExpiry = draftItem.expiration_date;
+                        if (effectiveTare == null && draftItem.tare_weight != null) effectiveTare = formatTareWeightForCommit(draftItem.tare_weight) || undefined;
+                    }
+                } catch {
+                    // Non-blocking fallback
+                }
+
                 if (asset?.id) {
                     console.log(`[registerCylinders] Updating received serial ${sn} (ID: ${asset.id}) in cylinder_assets to product_id: ${pid}, status: AVAILABLE`);
                     const patchPayload: Record<string, unknown> = {
@@ -893,8 +909,8 @@ async function registerCylinders(
                         cost: toNum(p?.cost_per_unit),
                         modified_by: userId || null
                     };
-                    if (item.expiry_date) patchPayload.expiration_date = new Date(item.expiry_date).toISOString().split("T")[0];
-                    if (item.tare_weight != null) patchPayload.tare_weight = formatTareWeightForCommit(item.tare_weight);
+                    if (effectiveExpiry) patchPayload.expiration_date = new Date(effectiveExpiry).toISOString().split("T")[0];
+                    if (effectiveTare != null) patchPayload.tare_weight = formatTareWeightForCommit(effectiveTare);
 
                     await fetchJson(`${base}/items/cylinder_assets/${asset.id}`, {
                         method: "PATCH",
@@ -913,8 +929,8 @@ async function registerCylinders(
                         created_by: userId || null,
                         created_date: nowISO()
                     };
-                    if (item.expiry_date) postPayload.expiration_date = new Date(item.expiry_date).toISOString().split("T")[0];
-                    if (item.tare_weight != null) postPayload.tare_weight = formatTareWeightForCommit(item.tare_weight);
+                    if (effectiveExpiry) postPayload.expiration_date = new Date(effectiveExpiry).toISOString().split("T")[0];
+                    if (effectiveTare != null) postPayload.tare_weight = formatTareWeightForCommit(effectiveTare);
 
                     await fetchJson(`${base}/items/cylinder_assets`, {
                         method: "POST",
@@ -1036,6 +1052,22 @@ async function registerCylinders(
                 );
                 const asset = assetCheck?.data?.[0];
 
+                // Check cylinder_assets_draft for any values not yet attached to item
+                let effectiveExpiry = item.expiry_date;
+                let effectiveTare = item.tare_weight;
+                try {
+                    const draftCheck = await fetchJson<{ data?: Array<{ expiration_date?: string; tare_weight?: unknown }> }>(
+                        `${base}/items/cylinder_assets_draft?filter[serial_number][_eq]=${encodeURIComponent(sn)}&fields=expiration_date,tare_weight&limit=1`
+                    );
+                    const draftItem = draftCheck?.data?.[0];
+                    if (draftItem) {
+                        if (!effectiveExpiry && draftItem.expiration_date) effectiveExpiry = draftItem.expiration_date;
+                        if (effectiveTare == null && draftItem.tare_weight != null) effectiveTare = formatTareWeightForCommit(draftItem.tare_weight) || undefined;
+                    }
+                } catch {
+                    // Non-blocking fallback
+                }
+
                 if (asset?.id) {
                     console.log(`[registerCylinders] Updating received serial ${sn} (ID: ${asset.id}) in cylinder_assets to product_id: ${resolvedProductId}, status: AVAILABLE`);
                     // Update existing cylinder
@@ -1046,8 +1078,8 @@ async function registerCylinders(
                         cost: toNum(p?.cost_per_unit),
                         modified_by: userId || null
                     };
-                    if (item.expiry_date) patchPayload.expiration_date = new Date(item.expiry_date).toISOString().split("T")[0];
-                    if (item.tare_weight != null) patchPayload.tare_weight = formatTareWeightForCommit(item.tare_weight);
+                    if (effectiveExpiry) patchPayload.expiration_date = new Date(effectiveExpiry).toISOString().split("T")[0];
+                    if (effectiveTare != null) patchPayload.tare_weight = formatTareWeightForCommit(effectiveTare);
 
                     await fetchJson(`${base}/items/cylinder_assets/${asset.id}`, {
                         method: "PATCH",
@@ -1067,8 +1099,8 @@ async function registerCylinders(
                         created_by: userId || null,
                         created_date: nowISO()
                     };
-                    if (item.expiry_date) postPayload.expiration_date = new Date(item.expiry_date).toISOString().split("T")[0];
-                    if (item.tare_weight != null) postPayload.tare_weight = formatTareWeightForCommit(item.tare_weight);
+                    if (effectiveExpiry) postPayload.expiration_date = new Date(effectiveExpiry).toISOString().split("T")[0];
+                    if (effectiveTare != null) postPayload.tare_weight = formatTareWeightForCommit(effectiveTare);
 
                     await fetchJson(`${base}/items/cylinder_assets`, {
                         method: "POST",

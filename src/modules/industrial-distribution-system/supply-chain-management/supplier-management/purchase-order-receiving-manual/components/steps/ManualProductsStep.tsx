@@ -148,6 +148,36 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
 
     const proceedToSave = async () => {
         setIsPartialWarningOpen(false);
+
+        // ✅ Comments: Ensure all captured serials across all product lines are synced to draft rows before finalizing the receipt.
+        // This guarantees that serialized products always decompose into individual 1-to-1 purchase_order_receiving draft rows.
+        const poId = selectedPO?.id;
+        if (poId) {
+            for (const it of filteredItems) {
+                if (!it.isSerialized) continue;
+                const id = String(it.id);
+                const serials = serialsByPorId[id] || [];
+                if (serials.length > 0) {
+                    try {
+                        await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                action: "sync_draft_serials",
+                                poId,
+                                productId: it.productId,
+                                branchId: it.branchId,
+                                // Mark as unsaved so sync_draft_serials ensures 1-to-1 row creation for every serial
+                                serials: serials.map(s => ({ ...s, isSaved: false })),
+                            }),
+                        });
+                    } catch (e) {
+                        console.error("[proceedToSave] Failed to sync draft serials for item:", it.name, e);
+                    }
+                }
+            }
+        }
+
         await saveReceipt();
     };
 

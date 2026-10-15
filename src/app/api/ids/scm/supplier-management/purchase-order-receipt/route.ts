@@ -1172,12 +1172,25 @@ export async function POST(req: NextRequest) {
                 }
 
                 // Split logic: If original quantity is greater than the new requested quantity,
-                // we create a new open row for the remainder.
+                // we create a new open row for the remainder and reassign the remaining serials.
+                // Developer comments:
+                // When an item is partially received into a receipt (newQty < originalQty),
+                // the remainder units are split into a new draft row (receipt_no: null).
+                // If serials are attached in purchase_order_receiving_serial, only the first newQty
+                // serials stay attached to this receipt row (realPorId). The remaining serials
+                // are reassigned to the new remainder POR row so they remain available for subsequent receipts.
                 const originalQty = toNum(pr.received_quantity);
                 if (originalQty > newQty) {
                     const remainder = originalQty - newQty;
-                    // Create an open row for the remainder
-                    await fetchJson(`${base}/items/${POR_COLLECTION}`, {
+                    const remGross = uPrice * remainder;
+                    const remDisc = Number((remGross * (linePct / 100)).toFixed(2));
+                    const remNet = remGross - remDisc;
+                    const remVatExcl = poIsInvoice ? Number((remNet / 1.12).toFixed(2)) : remNet;
+                    const remVat = poIsInvoice ? Number((remNet - remVatExcl).toFixed(2)) : 0;
+                    const remEwt = poIsInvoice ? Number((remVatExcl * 0.01).toFixed(2)) : 0;
+
+                    // Developer comment: Include all required financial fields per Directus & DDL constraints (discounted_amount is NOT NULL).
+                    const remainderRes = await fetchJson<{ data: { purchase_order_product_id: number } }>(`${base}/items/${POR_COLLECTION}`, {
                         method: "POST",
                         body: JSON.stringify({
                             purchase_order_id: poId,
@@ -1185,13 +1198,46 @@ export async function POST(req: NextRequest) {
                             branch_id: toNum(pr.branch_id),
                             unit_price: uPrice,
                             discount_type: dtId || null,
+                            discounted_amount: remDisc,
+                            vat_amount: remVat,
+                            withholding_amount: remEwt,
+                            total_amount: Number(remGross.toFixed(2)),
                             received_quantity: remainder,
                             receipt_no: null,
                             isPosted: 0,
                             is_reverted: 0,
                             receiving_method: "SERIAL"
                         })
-                    }).catch(() => { });
+                    }).catch((e) => {
+                        console.error("[save_receipt] Failed to create remainder draft POR row:", e);
+                        return null;
+                    });
+
+                    const remainderPorId = toNum(remainderRes?.data?.purchase_order_product_id);
+
+                    // Reassign the remaining serials in purchase_order_receiving_serial to remainderPorId
+                    if (remainderPorId > 0) {
+                        try {
+                            const childSerialsUrl = `${base}/items/purchase_order_receiving_serial?filter[purchase_order_receiving_id][_eq]=${realPorId}&sort=receiving_item_id&fields=receiving_item_id,serial_number`;
+                            const childRes = await fetchJson<{ data: Array<{ receiving_item_id: number; serial_number: string }> }>(childSerialsUrl).catch(() => null);
+                            const childList = childRes?.data || [];
+
+                            if (childList.length > newQty) {
+                                // Keep the first newQty serials on realPorId; move the rest to remainderPorId
+                                const serialsToMove = childList.slice(newQty);
+                                for (const s of serialsToMove) {
+                                    await fetchJson(`${base}/items/purchase_order_receiving_serial/${s.receiving_item_id}`, {
+                                        method: "PATCH",
+                                        body: JSON.stringify({ purchase_order_receiving_id: remainderPorId })
+                                    }).catch((err) => {
+                                        console.error(`[save_receipt] Failed to reassign serial ${s.serial_number} to remainderPorId ${remainderPorId}:`, err);
+                                    });
+                                }
+                            }
+                        } catch (serialSplitErr) {
+                            console.error("[save_receipt] Error partitioning serials during partial receipt split:", serialSplitErr);
+                        }
+                    }
                 }
 
                 const lineGross = uPrice * newQty;
