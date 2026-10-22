@@ -1,0 +1,32 @@
+name: CD Pipeline
+
+on:
+  push:
+    branches: [master]
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy to Production IDS
+    runs-on: self-hosted 
+    timeout-minutes: 30
+    env:
+      NODE_OPTIONS: --max-old-space-size=8192
+
+    steps:
+      - name: Pull Code, Build, and Restart
+        run: |
+          set -e
+          cd /home/vertex/industrial-distribution-system
+          git fetch --all
+          git reset --hard origin/master
+          node --version
+          npm --version
+          npm ci
+          npm run build
+          pm2 restart "industrial-distribution-system" || PORT=5000 pm2 start npm --name "industrial-distribution-system" -- start
+   
+

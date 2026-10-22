@@ -48,3 +48,4 @@ lint.log
 # personal implementation plan for modules & test
 zdocs/
 ztest/
+/zmine
