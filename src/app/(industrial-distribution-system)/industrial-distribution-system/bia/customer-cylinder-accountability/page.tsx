@@ -3,4 +3,7 @@
 // Alias Route: Re-exports standard Customer Cylinder Accountability Report page
 // ==============================================================================
 
-export { default, dynamic, runtime } from "@/app/(industrial-distribution-system)/ids/bia/customer-cylinder-accountability/page";
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+export { default } from "@/app/(industrial-distribution-system)/ids/bia/customer-cylinder-accountability/page";
