@@ -139,7 +139,7 @@ export function exportAccountabilityToPdf(
     alternateRowStyles: {
       fillColor: [248, 250, 252],
     },
-    didDrawPage: (data) => {
+    didDrawPage: () => {
       // Footer page numbering
       const str = `Page ${doc.internal.pages.length - 1}`;
       doc.setFontSize(8);

@@ -35,6 +35,29 @@ function getDirectusConfig() {
   return { url: /^https?:\/\//i.test(url) ? url : `http://${url}`, token };
 }
 
+type DirectusListResponse<T> = { data?: T[] };
+
+type BranchRow = {
+  id: number;
+  branch_name: string | null;
+  branch_code: string | null;
+  isActive: number | string | boolean | null;
+};
+
+type CustomerRow = {
+  customer_code: string;
+  customer_name: string | null;
+  store_name: string | null;
+};
+
+/** Reads a Directus list endpoint; returns an empty array when the request fails. */
+async function fetchRows<T>(url: string, headers: Record<string, string>): Promise<T[]> {
+  const res = await fetch(url, { headers, cache: "no-store" }).catch(() => null);
+  if (!res || !res.ok) return [];
+  const json = (await res.json()) as DirectusListResponse<T>;
+  return json.data ?? [];
+}
+
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const forceRefresh = req.nextUrl.searchParams.get("refresh") === "true";
   const now = Date.now();
@@ -54,28 +77,26 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   try {
     // 1. Fetch active branches (isActive = 1)
-    const branchRes = await fetch(
+    const branchRows = await fetchRows<BranchRow>(
       `${directusBase}/items/branches?fields=id,branch_name,branch_code,isActive&filter[isActive][_eq]=1&limit=-1`,
-      { headers, cache: "no-store" }
-    ).catch(() => null);
+      headers
+    );
 
-    const branchData = branchRes && branchRes.ok ? await branchRes.json() : { data: [] };
-    const branches = (branchData.data || [])
-      .filter((b: any) => b.isActive === 1 || b.isActive === "1" || b.isActive === true)
-      .map((b: any) => ({
+    const branches = branchRows
+      .filter((b) => b.isActive === 1 || b.isActive === "1" || b.isActive === true)
+      .map((b) => ({
         id: Number(b.id),
         name: b.branch_name || `Branch #${b.id}`,
         code: b.branch_code || `BR-${b.id}`,
       }));
 
     // 2. Fetch active customers
-    const custRes = await fetch(
+    const customerRows = await fetchRows<CustomerRow>(
       `${directusBase}/items/customer?fields=customer_code,customer_name,store_name&limit=-1`,
-      { headers, cache: "no-store" }
-    ).catch(() => null);
+      headers
+    );
 
-    const custData = custRes && custRes.ok ? await custRes.json() : { data: [] };
-    const customers = (custData.data || []).map((c: any) => ({
+    const customers = customerRows.map((c) => ({
       code: c.customer_code,
       name: c.customer_name || `Customer ${c.customer_code}`,
       storeName: c.store_name || undefined,
@@ -100,7 +121,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         "X-Cache-Status": "MISS",
       },
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("[AccountabilityLookups] Failed to retrieve lookups:", error);
     // Return empty fallback instead of failing
     return NextResponse.json(

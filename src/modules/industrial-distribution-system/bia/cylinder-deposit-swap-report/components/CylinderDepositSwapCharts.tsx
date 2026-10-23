@@ -165,7 +165,7 @@ export function CylinderDepositSwapCharts() {
                   }}
                   itemStyle={{ color: "hsl(var(--popover-foreground))" }}
                   labelStyle={{ color: "hsl(var(--popover-foreground))", fontWeight: 600 }}
-                  formatter={(val: any, name: any) => [`${val} units`, name]}
+                  formatter={(val, name) => [`${val} units`, name]}
                 />
               </PieChart>
             </ResponsiveContainer>

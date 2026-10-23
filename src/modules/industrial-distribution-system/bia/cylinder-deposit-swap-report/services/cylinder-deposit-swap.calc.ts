@@ -7,7 +7,6 @@
 import type {
   CustomerCylinderReportRow,
   CustomerProductCylinderRow,
-  CylinderDepositSwapKPISummary,
   CylinderProductDistributionPoint,
 } from "../types/cylinder-deposit-swap.types";
 

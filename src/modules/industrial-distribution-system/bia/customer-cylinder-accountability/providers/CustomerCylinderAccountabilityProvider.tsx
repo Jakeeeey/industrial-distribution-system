@@ -120,7 +120,7 @@ export function CustomerCylinderAccountabilityProvider({
         setIsLookupsLoading(true);
         const data = await fetchAccountabilityLookups();
         if (mounted) setLookups(data);
-      } catch (err: any) {
+      } catch (err) {
         console.error("[AccountabilityProvider] Failed to fetch lookups:", err);
       } finally {
         if (mounted) setIsLookupsLoading(false);
@@ -139,9 +139,9 @@ export function CustomerCylinderAccountabilityProvider({
       const res = await fetchCustomerAccountabilityReport(filters);
       setReportData(res);
       setCurrentPage(1); // Reset to first page
-    } catch (err: any) {
+    } catch (err) {
       console.error("[AccountabilityProvider] Failed to load report:", err);
-      setError(err?.message || "Failed to load customer cylinder accountability report.");
+      setError(err instanceof Error && err.message ? err.message : "Failed to load customer cylinder accountability report.");
     } finally {
       setIsLoading(false);
     }
@@ -166,7 +166,7 @@ export function CustomerCylinderAccountabilityProvider({
           endDate: filters.endDate,
         });
         if (mounted) setCustomerDetail(detail);
-      } catch (err: any) {
+      } catch (err) {
         console.error("[AccountabilityProvider] Failed to load customer detail:", err);
       } finally {
         if (mounted) setIsDetailLoading(false);

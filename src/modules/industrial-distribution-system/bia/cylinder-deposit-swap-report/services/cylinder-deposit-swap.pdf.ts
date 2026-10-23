@@ -136,9 +136,10 @@ export function exportCylinderDepositSwapToPdf(
     margin: { top: 140, left: 40, right: 40, bottom: 40 },
   });
 
-  // Calculate total pages for all pages
-  if (typeof (doc as any).putTotalPages === "function") {
-    (doc as any).putTotalPages("{total_pages_count_string}");
+  // Calculate total pages for all pages (added by jspdf-autotable at runtime)
+  const pagedDoc = doc as typeof doc & { putTotalPages?: (token: string) => void };
+  if (typeof pagedDoc.putTotalPages === "function") {
+    pagedDoc.putTotalPages("{total_pages_count_string}");
   }
 
   const dateStamp = new Date().toISOString().split("T")[0];

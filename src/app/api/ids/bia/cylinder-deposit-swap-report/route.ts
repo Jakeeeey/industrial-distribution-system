@@ -72,6 +72,76 @@ function getDirectusHeaders(token: string): Record<string, string> {
   return headers;
 }
 
+type DirectusListResponse<T> = { data?: T[] };
+
+// Directus rows for the collections read by this report. Field lists mirror the
+// `fields=` projection on each query.
+type CustomerRow = {
+  customer_code: string;
+  customer_name: string;
+  store_name: string | null;
+  contact_number: string | null;
+  brgy: string | null;
+  city: string | null;
+  province: string | null;
+};
+
+type ProductRow = {
+  product_id: number;
+  product_code: string | null;
+  product_name: string | null;
+  description: string | null;
+  product_weight: number | null;
+};
+
+type BranchRow = { id: number; branch_name: string | null; branch_code: string | null };
+
+type CylinderAssetRow = {
+  id: number;
+  serial_number: string | null;
+  product_id: number | string | { product_id?: number } | null;
+  cylinder_status: string | null;
+  cylinder_condition: string | null;
+  current_customer_code: string | null;
+  current_branch_id: number | null;
+  modified_date: string | null;
+  created_date: string | null;
+};
+
+type SalesOrderDetailSerialRow = {
+  id: number;
+  sales_order_id: number | null;
+  delivery_date: string | null;
+  product_id: number | string | null;
+  product_name: string | null;
+  serial_number: string | null;
+  customer_code: string | null;
+  customer_name: string | null;
+  branch_id: number | null;
+  dispatch_plan_id: number | null;
+  created_date: string | null;
+};
+
+type CustomerMemoRow = {
+  id: number;
+  memo_number: string | null;
+  customer_code: string | null;
+  created_at: string | null;
+  amount: number | string | null;
+  status: string | null;
+  remarks: string | null;
+};
+
+/**
+ * Reads a Directus list payload. A null response (request rejected by the
+ * caller's catch) yields an empty list, matching the pre-existing fallback.
+ */
+async function parseRows<T>(res: Response | null): Promise<T[]> {
+  if (!res || !res.ok) return [];
+  const json = (await res.json()) as DirectusListResponse<T>;
+  return json.data ?? [];
+}
+
 /**
  * Main GET handler supporting both aggregated reporting and granular customer drill-down.
  */
@@ -106,11 +176,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // Note: The customer table does not have a branch_id column; branches are linked via assets and transactions.
     const custQuery = `${directusBase}/items/customer?fields=customer_code,customer_name,store_name,contact_number,brgy,city,province&limit=-1`;
     const customersRes = await fetch(custQuery, { headers, cache: "no-store" });
-    const customersData = customersRes.ok ? await customersRes.json() : { data: [] };
-    const rawCustomers: any[] = customersData.data || [];
+    const rawCustomers = await parseRows<CustomerRow>(customersRes);
 
     // Map customers by normalized code for instant O(1) matching
-    const customerMap = new Map<string, any>();
+    const customerMap = new Map<string, CustomerRow>();
     rawCustomers.forEach((c) => {
       customerMap.set(normalizeCode(c.customer_code), c);
     });
@@ -120,9 +189,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       `${directusBase}/items/products?fields=product_id,product_code,product_name,description,product_weight&limit=-1`,
       { headers, cache: "no-store" }
     );
-    const prodsData = prodRes.ok ? await prodRes.json() : { data: [] };
-    const rawProducts: any[] = prodsData.data || [];
-    const productsMap = new Map<number, any>();
+    const rawProducts = await parseRows<ProductRow>(prodRes);
+    const productsMap = new Map<number, ProductRow>();
     rawProducts.forEach((p) => productsMap.set(p.product_id, p));
 
     // 3. Fetch Branches master (collection name is `branches` plural)
@@ -130,12 +198,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       headers,
       cache: "no-store",
     });
-    const branchData = branchRes.ok ? await branchRes.json() : { data: [] };
+    const branchRows = await parseRows<BranchRow>(branchRes);
     const branchMap = new Map<number, string>();
-    (branchData.data || []).forEach((b: any) => branchMap.set(b.id, b.branch_name));
+    branchRows.forEach((b) => {
+      if (b.branch_name) branchMap.set(b.id, b.branch_name);
+    });
 
     // 4. Fetch Active Cylinder Assets assigned to customers
-    const assetFilter: any = {
+    const assetFilter: Record<string, unknown> = {
       current_customer_code: { _nnull: true },
       is_deleted: { _neq: 1 },
     };
@@ -148,11 +218,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     )}&fields=id,serial_number,product_id,cylinder_status,cylinder_condition,current_customer_code,current_branch_id,modified_date,created_date&limit=-1`;
 
     const assetsRes = await fetch(assetQuery, { headers, cache: "no-store" });
-    const assetsData = assetsRes.ok ? await assetsRes.json() : { data: [] };
-    const rawAssets: any[] = assetsData.data || [];
+    const rawAssets = await parseRows<CylinderAssetRow>(assetsRes);
 
     // 5. Fetch Sales Order Details Serial (Verified customer delivery movements)
-    const sodsFilter: any = {};
+    const sodsFilter: Record<string, unknown> = {};
     if (filters.branchId) sodsFilter.branch_id = { _eq: filters.branchId };
     if (filters.productId) sodsFilter.product_id = { _eq: filters.productId };
 
@@ -161,8 +230,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }fields=id,sales_order_id,delivery_date,product_id,product_name,serial_number,customer_code,customer_name,branch_id,dispatch_plan_id,created_date&limit=-1`;
 
     const sodsRes = await fetch(sodsQuery, { headers, cache: "no-store" }).catch(() => null);
-    const sodsData = sodsRes && sodsRes.ok ? await sodsRes.json() : { data: [] };
-    const rawSods: any[] = sodsData.data || [];
+    const rawSods = await parseRows<SalesOrderDetailSerialRow>(sodsRes);
 
     // Filter SODS by period if dates are specified
     const startDateMs = new Date(filters.startDate).getTime();
@@ -190,7 +258,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     let idleWarningCount = 0;
     let idleCriticalCount = 0;
     let underMaintenanceCount = 0;
-    let unavailableLostCount = 0;
 
     // Bucket physical assets by customer and product
     const customerProductMap = new Map<string, Map<number, CustomerProductCylinderRow>>();
@@ -248,8 +315,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
       const prodInfo = productsMap.get(prodId) || {
         product_id: prodId,
-        product_code: `P-${prodId}`,
-        product_name: `Product ${prodId}`,
+        product_code: null,
+        product_name: null,
+        description: null,
         product_weight: null,
       };
 
@@ -287,7 +355,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       if (cond === "DAMAGED" || cond === "FOR_REPAIR" || cond === "SCRAP" || stat === "DAMAGED") {
         underMaintenanceCount += 1;
       } else if (stat === "LOST" || stat === "RETIRED") {
-        unavailableLostCount += 1;
+        // LOST/RETIRED units count toward no lifecycle bucket; they are excluded from circulating and idle
       } else if (daysSince <= 30) {
         circulatingCount += 1;
         pRow.circulatingQty += 1;
@@ -453,13 +521,15 @@ async function handleCustomerDetailDrillDown(
       `${directusBase}/items/customer?fields=customer_code,customer_name,store_name,contact_number,brgy,city,province&limit=-1`,
       { headers, cache: "no-store" }
     );
-    const custJson = custRes.ok ? await custRes.json() : { data: [] };
-    const allCustomers: any[] = custJson.data || [];
-    const cust = allCustomers.find((c) => normalizeCode(c.customer_code) === cleanKey) || {
+    const allCustomers = await parseRows<CustomerRow>(custRes);
+    const cust: CustomerRow = allCustomers.find((c) => normalizeCode(c.customer_code) === cleanKey) || {
       customer_code: customerCode,
       customer_name: "Customer " + customerCode,
       store_name: null,
       contact_number: null,
+      brgy: null,
+      city: null,
+      province: null,
     };
 
     const address = [cust.brgy, cust.city, cust.province].filter(Boolean).join(", ") || null;
@@ -469,17 +539,17 @@ async function handleCustomerDetailDrillDown(
       headers,
       cache: "no-store",
     });
-    const branchData = branchRes.ok ? await branchRes.json() : { data: [] };
     const branchMap = new Map<number, string>();
-    (branchData.data || []).forEach((b: any) => branchMap.set(b.id, b.branch_name));
+    (await parseRows<BranchRow>(branchRes)).forEach((b) => {
+      if (b.branch_name) branchMap.set(b.id, b.branch_name);
+    });
 
     // Fetch Active Serials with this Customer from cylinder_assets (excluding non-existent ownership column)
     const assetRes = await fetch(
       `${directusBase}/items/cylinder_assets?fields=id,serial_number,product_id,cylinder_status,cylinder_condition,current_customer_code,current_branch_id,modified_date,created_date&limit=-1`,
       { headers, cache: "no-store" }
     );
-    const assetJson = assetRes.ok ? await assetRes.json() : { data: [] };
-    const allAssets: any[] = assetJson.data || [];
+    const allAssets = await parseRows<CylinderAssetRow>(assetRes);
     const matchedAssets = allAssets.filter((a) => normalizeCode(a.current_customer_code) === cleanKey);
 
     // Fetch Products catalog for descriptions
@@ -487,9 +557,8 @@ async function handleCustomerDetailDrillDown(
       headers,
       cache: "no-store",
     });
-    const prodsJson = prodRes.ok ? await prodRes.json() : { data: [] };
     const productsMap = new Map<number, string>();
-    (prodsJson.data || []).forEach((p: any) => {
+    (await parseRows<ProductRow>(prodRes)).forEach((p) => {
       const label = p.description?.trim() ? p.description : (p.product_name || `Product ${p.product_id}`);
       productsMap.set(p.product_id, label);
     });
@@ -497,9 +566,9 @@ async function handleCustomerDetailDrillDown(
     const now = new Date();
     let branchName = "Main Branch";
 
-    const activeSerials: CustomerSerialAssetDetail[] = matchedAssets.map((s: any) => {
+    const activeSerials: CustomerSerialAssetDetail[] = matchedAssets.map((s) => {
       const pId = typeof s.product_id === "object" ? s.product_id?.product_id : Number(s.product_id);
-      const prodName = productsMap.get(pId) || `Product ${pId}`;
+      const prodName = productsMap.get(pId ?? 0) || `Product ${pId}`;
       const mod = s.modified_date || s.created_date;
       const days = mod ? Math.floor((now.getTime() - new Date(mod).getTime()) / (1000 * 60 * 60 * 24)) : 14;
 
@@ -508,11 +577,11 @@ async function handleCustomerDetailDrillDown(
       }
 
       return {
-        serialNumber: s.serial_number,
+        serialNumber: s.serial_number ?? "",
         productName: prodName,
         cylinderStatus: s.cylinder_status || "WITH_CUSTOMER",
         cylinderCondition: s.cylinder_condition || "GOOD",
-        ownership: s.ownership || "COMPANY",
+        ownership: "COMPANY",
         daysWithCustomer: days,
         deployedDate: s.created_date ? s.created_date.split("T")[0] : null,
         lastMovementDate: s.modified_date ? s.modified_date.split("T")[0] : null,
@@ -525,11 +594,10 @@ async function handleCustomerDetailDrillDown(
       { headers, cache: "no-store" }
     ).catch(() => null);
 
-    const memoJson = memoRes && memoRes.ok ? await memoRes.json() : { data: [] };
-    const allMemos: any[] = memoJson.data || [];
+    const allMemos = await parseRows<CustomerMemoRow>(memoRes);
     const matchedMemos = allMemos.filter((m) => normalizeCode(m.customer_code) === cleanKey);
 
-    const financialDeposits: MatchedFinancialDeposit[] = matchedMemos.map((m: any) => ({
+    const financialDeposits: MatchedFinancialDeposit[] = matchedMemos.map((m) => ({
       id: m.id,
       recordType: "CUSTOMER_MEMO",
       referenceNumber: m.memo_number || `CM-${m.id}`,
@@ -558,8 +626,7 @@ async function handleCustomerDetailDrillDown(
       { headers, cache: "no-store" }
     ).catch(() => null);
 
-    const sodsJson = sodsRes && sodsRes.ok ? await sodsRes.json() : { data: [] };
-    const allSods: any[] = sodsJson.data || [];
+    const allSods = await parseRows<SalesOrderDetailSerialRow>(sodsRes);
     const matchedSods = allSods.filter((s) => normalizeCode(s.customer_code) === cleanKey);
 
     const movementHistory: CustomerAuditTransactionItem[] = [];
@@ -574,7 +641,7 @@ async function handleCustomerDetailDrillDown(
         referenceNo: s.sales_order_id ? `SO-${s.sales_order_id}` : `DISP-${s.dispatch_plan_id || s.id}`,
         productName: s.product_name || "LPG Cylinder",
         quantity: 1,
-        serialNumbers: [s.serial_number],
+        serialNumbers: [s.serial_number ?? ""],
         notes: `Sales Order Delivery to customer via Dispatch #${s.dispatch_plan_id || "Direct"}`,
       });
     });

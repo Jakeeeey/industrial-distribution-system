@@ -10,16 +10,13 @@ import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronRight,
-  ChevronDown,
   Search,
-  FileSpreadsheet,
   Layers,
   ArrowRightCircle,
   Package,
 } from "lucide-react";
 import { useCylinderDepositSwapReport } from "../hooks/useCylinderDepositSwapReport";
 import { filterReportRows } from "../services/cylinder-deposit-swap.calc";
-import type { CustomerCylinderReportRow } from "../types/cylinder-deposit-swap.types";
 
 export function CylinderDepositSwapTable() {
   const {
@@ -59,10 +56,11 @@ export function CylinderDepositSwapTable() {
     setExpandedCodes(new Set());
   };
 
-  const filteredRows = React.useMemo(() => {
-    if (!report?.rows) return [];
-    return filterReportRows(report.rows, searchQuery);
-  }, [report?.rows, searchQuery]);
+  const reportRows = report?.rows;
+  const filteredRows = React.useMemo(
+    () => (reportRows ? filterReportRows(reportRows, searchQuery) : []),
+    [reportRows, searchQuery]
+  );
 
   // Paginated rows
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));

@@ -72,6 +72,101 @@ function getDirectusHeaders(token: string): Record<string, string> {
   return headers;
 }
 
+type DirectusListResponse<T> = { data?: T[] };
+
+// Directus rows for the collections read by this report. Field lists mirror the
+// `fields=` projection on each query.
+type CustomerRow = {
+  customer_code: string;
+  customer_name: string;
+  store_name: string | null;
+  contact_number: string | null;
+  brgy: string | null;
+  city: string | null;
+  province: string | null;
+};
+
+type BranchRow = { id: number; branch_name: string | null; branch_code: string | null };
+
+type CylinderAssetRow = {
+  id: number;
+  serial_number: string | null;
+  product_id: number | string | { product_id?: number } | null;
+  cylinder_status: string | null;
+  cylinder_condition: string | null;
+  current_customer_code: string | null;
+  current_branch_id: number | null;
+  created_date: string | null;
+  modified_date: string | null;
+};
+
+type PosTransactionRow = {
+  transaction_id: string;
+  invoice_no: string | null;
+  transaction_type: string | null;
+  status: string | null;
+  void_status: string | null;
+  created_at: string | null;
+};
+
+type PosTransactionItemRow = {
+  item_id: number;
+  transaction_id: string;
+  product_id: number | string | null;
+  qty: number | string | null;
+};
+
+type SalesInvoiceRow = {
+  invoice_id: number;
+  invoice_no: string | null;
+  customer_code: string | null;
+  invoice_date: string | null;
+  branch_id: number | null;
+};
+
+type SalesOrderRow = {
+  order_id: number;
+  order_no: string | null;
+  customer_code: string | null;
+  delivery_date: string | null;
+  order_date: string | null;
+  order_status: string | null;
+  branch_id: number | null;
+};
+
+type SalesOrderDetailRow = {
+  detail_id: number;
+  order_id: number;
+  product_id: number | string | null;
+  served_quantity: number | string | null;
+};
+
+type SalesReturnRow = {
+  return_id: number;
+  return_number: string | null;
+  customer_code: string | null;
+  return_date: string | null;
+};
+
+type ProductRow = {
+  product_id: number;
+  product_name: string | null;
+  description: string | null;
+};
+
+/** Reads a Directus list endpoint; returns an empty array when the request fails. */
+async function fetchRows<T>(url: string, headers: Record<string, string>): Promise<T[]> {
+  const res = await fetch(url, { headers, cache: "no-store" }).catch(() => null);
+  if (!res || !res.ok) return [];
+  const json = (await res.json()) as DirectusListResponse<T>;
+  return json.data ?? [];
+}
+
+/** Narrows a caught value to a displayable message without using `any`. */
+function getErrorMessage(error: unknown): string | undefined {
+  return error instanceof Error ? error.message : undefined;
+}
+
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const { searchParams } = req.nextUrl;
   const { url: directusBase, token } = getDirectusConfig();
@@ -95,38 +190,33 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     endDate: searchParams.get("endDate") || defaultEndDate,
     branchId: searchParams.get("branchId") || "ALL",
     customerCode: searchParams.get("customerCode") || undefined,
-    ownership: (searchParams.get("ownership") as any) || "ALL",
+    ownership: (searchParams.get("ownership") as CustomerAccountabilityFilters["ownership"]) || "ALL",
   };
 
   try {
     // 1. Fetch Customers master
     const custQuery = `${directusBase}/items/customer?fields=customer_code,customer_name,store_name,contact_number,brgy,city,province&limit=-1`;
-    const custRes = await fetch(custQuery, { headers, cache: "no-store" }).catch(() => null);
-    const custJson = custRes && custRes.ok ? await custRes.json() : { data: [] };
-    const rawCustomers: any[] = custJson.data || [];
+    const rawCustomers = await fetchRows<CustomerRow>(custQuery, headers);
 
-    const customerMap = new Map<string, any>();
+    const customerMap = new Map<string, CustomerRow>();
     rawCustomers.forEach((c) => {
       customerMap.set(normalizeCode(c.customer_code), c);
     });
 
     // 2. Fetch Branches
-    const branchRes = await fetch(`${directusBase}/items/branches?fields=id,branch_name,branch_code&limit=-1`, {
-      headers,
-      cache: "no-store",
-    }).catch(() => null);
-    const branchJson = branchRes && branchRes.ok ? await branchRes.json() : { data: [] };
+    const branchRows = await fetchRows<BranchRow>(
+      `${directusBase}/items/branches?fields=id,branch_name,branch_code&limit=-1`,
+      headers
+    );
     const branchMap = new Map<number, string>();
-    (branchJson.data || []).forEach((b: any) => branchMap.set(Number(b.id), b.branch_name));
+    branchRows.forEach((b) => branchMap.set(Number(b.id), b.branch_name ?? ""));
 
     // 3. Fetch Active Physical Cylinder Assets
     const assetQuery = `${directusBase}/items/cylinder_assets?fields=id,serial_number,product_id,cylinder_status,cylinder_condition,current_customer_code,current_branch_id,created_date,modified_date&filter[current_customer_code][_nnull]=true&filter[is_deleted][_neq]=1&limit=-1`;
-    const assetRes = await fetch(assetQuery, { headers, cache: "no-store" }).catch(() => null);
-    const assetJson = assetRes && assetRes.ok ? await assetRes.json() : { data: [] };
-    const rawAssets: any[] = assetJson.data || [];
+    const rawAssets = await fetchRows<CylinderAssetRow>(assetQuery, headers);
 
     // Bucket active serials and count physical opening/closing custody by customer
-    const customerCustodyMap = new Map<string, any[]>();
+    const customerCustodyMap = new Map<string, CylinderAssetRow[]>();
     rawAssets.forEach((a) => {
       const cleanKey = normalizeCode(a.current_customer_code);
       if (!cleanKey) return;
@@ -138,15 +228,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     // 4. Fetch POS Transactions with items (for counter deposits and swaps)
     const posTxQuery = `${directusBase}/items/pos_transactions?fields=transaction_id,invoice_no,transaction_type,status,void_status,created_at&filter[status][_eq]=COMPLETED&filter[void_status][_eq]=ACTIVE&limit=-1`;
-    const posTxRes = await fetch(posTxQuery, { headers, cache: "no-store" }).catch(() => null);
-    const posTxJson: any = posTxRes && posTxRes.ok ? await posTxRes.json() : { data: [] };
-    const rawPosTx: any[] = posTxJson.data || [];
+    const rawPosTx = await fetchRows<PosTransactionRow>(posTxQuery, headers);
 
     // Fetch POS Transaction Items
     const posItemsQuery = `${directusBase}/items/pos_transaction_items?fields=item_id,transaction_id,product_id,qty&limit=-1`;
-    const posItemsRes = await fetch(posItemsQuery, { headers, cache: "no-store" }).catch(() => null);
-    const posItemsJson = posItemsRes && posItemsRes.ok ? await posItemsRes.json() : { data: [] };
-    const rawPosItems: any[] = posItemsJson.data || [];
+    const rawPosItems = await fetchRows<PosTransactionItemRow>(posItemsQuery, headers);
 
     const posItemsMap = new Map<string, number>();
     rawPosItems.forEach((pi) => {
@@ -155,10 +241,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     // 5. Fetch Sales Invoices for customer resolution
     const siQuery = `${directusBase}/items/sales_invoice?fields=invoice_id,invoice_no,customer_code,invoice_date,branch_id&limit=-1`;
-    const siRes = await fetch(siQuery, { headers, cache: "no-store" }).catch(() => null);
-    const siJson = siRes && siRes.ok ? await siRes.json() : { data: [] };
-    const invoiceToCustomerMap = new Map<string, { customerCode: string; branchId?: number }>();
-    (siJson.data || []).forEach((si: any) => {
+    const rawInvoices = await fetchRows<SalesInvoiceRow>(siQuery, headers);
+    const invoiceToCustomerMap = new Map<string, { customerCode: string | null; branchId: number | null }>();
+    rawInvoices.forEach((si) => {
       if (si.invoice_no) {
         invoiceToCustomerMap.set(si.invoice_no.trim(), {
           customerCode: si.customer_code,
@@ -194,15 +279,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     // 6. Fetch Sales Orders (Delivered served_quantity for swaps/refills)
     const sodQuery = `${directusBase}/items/sales_order_details?fields=detail_id,order_id,product_id,served_quantity&limit=-1`;
-    const sodRes = await fetch(sodQuery, { headers, cache: "no-store" }).catch(() => null);
-    const sodJson = sodRes && sodRes.ok ? await sodRes.json() : { data: [] };
-    const rawSod: any[] = sodJson.data || [];
+    const rawSod = await fetchRows<SalesOrderDetailRow>(sodQuery, headers);
 
     const soQuery = `${directusBase}/items/sales_order?fields=order_id,order_no,customer_code,delivery_date,order_date,order_status,branch_id&limit=-1`;
-    const soRes = await fetch(soQuery, { headers, cache: "no-store" }).catch(() => null);
-    const soJson = soRes && soRes.ok ? await soRes.json() : { data: [] };
-    const soMap = new Map<number, any>();
-    (soJson.data || []).forEach((so: any) => soMap.set(Number(so.order_id), so));
+    const rawOrders = await fetchRows<SalesOrderRow>(soQuery, headers);
+    const soMap = new Map<number, SalesOrderRow>();
+    rawOrders.forEach((so) => soMap.set(Number(so.order_id), so));
 
     const customerSwapsMap = new Map<string, { qty: number; lastDate: string; ref: string }>();
     rawSod.forEach((sod) => {
@@ -210,7 +292,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       if (!order || !order.customer_code) return;
       if (order.order_status !== "Delivered" && order.order_status !== "Fulfilled") return;
 
-      const delivDate = order.delivery_date || order.order_date;
+      const delivDate = order.delivery_date || order.order_date || "";
       const delivTime = delivDate ? new Date(delivDate).getTime() : 0;
       if (delivTime < startMs || delivTime > endMs) return;
 
@@ -299,10 +381,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     };
 
     return NextResponse.json(response);
-  } catch (error: any) {
+  } catch (error) {
     console.error("[AccountabilityBFF] Error generating report:", error);
     return NextResponse.json(
-      { error: "Failed to generate Customer Cylinder Accountability Report", details: error?.message },
+      { error: "Failed to generate Customer Cylinder Accountability Report", details: getErrorMessage(error) },
       { status: 500 }
     );
   }
@@ -326,37 +408,35 @@ async function handleCustomerDetailDrillDown(
 
   try {
     // 1. Fetch Customer Master Profile
-    const custRes = await fetch(
+    const allCust = await fetchRows<CustomerRow>(
       `${directusBase}/items/customer?fields=customer_code,customer_name,store_name,contact_number,brgy,city,province&limit=-1`,
-      { headers, cache: "no-store" }
-    ).catch(() => null);
-    const custJson = custRes && custRes.ok ? await custRes.json() : { data: [] };
-    const allCust: any[] = custJson.data || [];
-    const cust = allCust.find((c) => normalizeCode(c.customer_code) === cleanKey) || {
+      headers
+    );
+    const cust: CustomerRow = allCust.find((c) => normalizeCode(c.customer_code) === cleanKey) || {
       customer_code: customerCode,
       customer_name: "Customer " + customerCode,
       store_name: null,
       contact_number: null,
+      brgy: null,
+      city: null,
+      province: null,
     };
 
     const address = [cust.brgy, cust.city, cust.province].filter(Boolean).join(", ") || null;
 
     // 2. Fetch Branches Directory for accurate branch name resolution
-    const branchRes = await fetch(`${directusBase}/items/branches?fields=id,branch_name,branch_code&limit=-1`, {
-      headers,
-      cache: "no-store",
-    }).catch(() => null);
-    const branchJson = branchRes && branchRes.ok ? await branchRes.json() : { data: [] };
+    const branchRows = await fetchRows<BranchRow>(
+      `${directusBase}/items/branches?fields=id,branch_name,branch_code&limit=-1`,
+      headers
+    );
     const branchMap = new Map<number, string>();
-    (branchJson.data || []).forEach((b: any) => branchMap.set(Number(b.id), b.branch_name));
+    branchRows.forEach((b) => branchMap.set(Number(b.id), b.branch_name ?? ""));
 
     // 3. Fetch Active Physical Serials for this Customer
-    const assetRes = await fetch(
+    const allAssets = await fetchRows<CylinderAssetRow>(
       `${directusBase}/items/cylinder_assets?fields=id,serial_number,product_id,cylinder_status,cylinder_condition,current_customer_code,current_branch_id,created_date,modified_date&filter[is_deleted][_neq]=1&limit=-1`,
-      { headers, cache: "no-store" }
-    ).catch(() => null);
-    const assetJson = assetRes && assetRes.ok ? await assetRes.json() : { data: [] };
-    const allAssets: any[] = assetJson.data || [];
+      headers
+    );
     const matchedAssets = allAssets.filter((a) => normalizeCode(a.current_customer_code) === cleanKey);
 
     // Resolve customer's real branch from active assets or profile
@@ -364,25 +444,24 @@ async function handleCustomerDetailDrillDown(
     const branchName = branchId ? branchMap.get(branchId) || `Branch #${branchId}` : "Main Branch";
 
     // 4. Fetch Products catalog for labels
-    const prodRes = await fetch(`${directusBase}/items/products?fields=product_id,product_name,description&limit=-1`, {
-      headers,
-      cache: "no-store",
-    }).catch(() => null);
-    const prodsJson = prodRes && prodRes.ok ? await prodRes.json() : { data: [] };
+    const productRows = await fetchRows<ProductRow>(
+      `${directusBase}/items/products?fields=product_id,product_name,description&limit=-1`,
+      headers
+    );
     const productsMap = new Map<number, string>();
-    (prodsJson.data || []).forEach((p: any) => {
+    productRows.forEach((p) => {
       productsMap.set(p.product_id, p.description || p.product_name || `Product ${p.product_id}`);
     });
 
     const now = new Date();
-    const activeSerials = matchedAssets.map((s: any) => {
+    const activeSerials = matchedAssets.map((s) => {
       const pId = typeof s.product_id === "object" ? s.product_id?.product_id : Number(s.product_id);
-      const prodName = productsMap.get(pId) || `Product ${pId}`;
+      const prodName = productsMap.get(pId ?? 0) || `Product ${pId}`;
       const mod = s.modified_date || s.created_date;
       const days = mod ? Math.floor((now.getTime() - new Date(mod).getTime()) / (1000 * 60 * 60 * 24)) : 14;
 
       return {
-        serialNumber: s.serial_number,
+        serialNumber: s.serial_number ?? "",
         productName: prodName,
         condition: s.cylinder_condition || "GOOD",
         daysWithCustomer: days,
@@ -391,25 +470,21 @@ async function handleCustomerDetailDrillDown(
     });
 
     // 5. Fetch REAL Sales Orders for this customer (Delivered Refills/Swaps)
-    const soRes = await fetch(
+    const customerOrders = await fetchRows<SalesOrderRow>(
       `${directusBase}/items/sales_order?fields=order_id,order_no,customer_code,delivery_date,order_date,order_status&filter[customer_code][_eq]=${encodeURIComponent(cust.customer_code)}&limit=-1`,
-      { headers, cache: "no-store" }
-    ).catch(() => null);
-    const soJson = soRes && soRes.ok ? await soRes.json() : { data: [] };
-    const customerOrders: any[] = soJson.data || [];
+      headers
+    );
 
     const orderIds = customerOrders.map((o) => o.order_id);
-    let customerOrderDetails: any[] = [];
+    let customerOrderDetails: SalesOrderDetailRow[] = [];
     if (orderIds.length > 0) {
-      const sodRes = await fetch(
+      customerOrderDetails = await fetchRows<SalesOrderDetailRow>(
         `${directusBase}/items/sales_order_details?fields=detail_id,order_id,product_id,served_quantity&filter[order_id][_in]=${orderIds.join(",")}&limit=-1`,
-        { headers, cache: "no-store" }
-      ).catch(() => null);
-      const sodJson = sodRes && sodRes.ok ? await sodRes.json() : { data: [] };
-      customerOrderDetails = sodJson.data || [];
+        headers
+      );
     }
 
-    const orderDetailsByOrderId = new Map<number, any[]>();
+    const orderDetailsByOrderId = new Map<number, SalesOrderDetailRow[]>();
     customerOrderDetails.forEach((d) => {
       const oid = Number(d.order_id);
       if (!orderDetailsByOrderId.has(oid)) orderDetailsByOrderId.set(oid, []);
@@ -417,34 +492,29 @@ async function handleCustomerDetailDrillDown(
     });
 
     // 6. Fetch REAL POS Deposits for this customer via Sales Invoices
-    const siRes = await fetch(
+    const customerInvoices = await fetchRows<SalesInvoiceRow>(
       `${directusBase}/items/sales_invoice?fields=invoice_id,invoice_no,customer_code,invoice_date&filter[customer_code][_eq]=${encodeURIComponent(cust.customer_code)}&limit=-1`,
-      { headers, cache: "no-store" }
-    ).catch(() => null);
-    const siJson = siRes && siRes.ok ? await siRes.json() : { data: [] };
-    const customerInvoices: any[] = siJson.data || [];
+      headers
+    );
     const customerInvoiceNos = new Set<string>(customerInvoices.map((i) => (i.invoice_no || "").trim().toLowerCase()));
 
-    const posTxRes = await fetch(
+    const allPosDeposits = await fetchRows<PosTransactionRow>(
       `${directusBase}/items/pos_transactions?fields=transaction_id,invoice_no,transaction_type,status,void_status,created_at&filter[status][_eq]=COMPLETED&filter[void_status][_eq]=ACTIVE&filter[transaction_type][_eq]=deposit&limit=-1`,
-      { headers, cache: "no-store" }
-    ).catch(() => null);
-    const posTxJson = posTxRes && posTxRes.ok ? await posTxRes.json() : { data: [] };
-    const allPosDeposits: any[] = posTxJson.data || [];
+      headers
+    );
 
     const matchedPosDeposits = allPosDeposits.filter((pt) =>
       pt.invoice_no && customerInvoiceNos.has(pt.invoice_no.trim().toLowerCase())
     );
 
     const posTxIds = matchedPosDeposits.map((pt) => pt.transaction_id);
-    let posItems: any[] = [];
+    let posItems: PosTransactionItemRow[] = [];
     if (posTxIds.length > 0) {
-      const piRes = await fetch(
+      const rawPosItems = await fetchRows<PosTransactionItemRow>(
         `${directusBase}/items/pos_transaction_items?fields=item_id,transaction_id,product_id,qty&limit=-1`,
-        { headers, cache: "no-store" }
-      ).catch(() => null);
-      const piJson = piRes && piRes.ok ? await piRes.json() : { data: [] };
-      posItems = (piJson.data || []).filter((pi: any) => posTxIds.includes(pi.transaction_id));
+        headers
+      );
+      posItems = rawPosItems.filter((pi) => posTxIds.includes(pi.transaction_id));
     }
     const posItemsMap = new Map<string, number>();
     posItems.forEach((pi) => {
@@ -452,12 +522,10 @@ async function handleCustomerDetailDrillDown(
     });
 
     // 7. Fetch REAL Sales Returns (Pull-outs)
-    const srRes = await fetch(
+    const customerReturns = await fetchRows<SalesReturnRow>(
       `${directusBase}/items/sales_return?fields=return_id,return_number,customer_code,return_date&filter[customer_code][_eq]=${encodeURIComponent(cust.customer_code)}&limit=-1`,
-      { headers, cache: "no-store" }
-    ).catch(() => null);
-    const srJson = srRes && srRes.ok ? await srRes.json() : { data: [] };
-    const customerReturns: any[] = srJson.data || [];
+      headers
+    );
 
     // 8. Assemble Real Chronological Transaction Records
     const rawTransactions: AccountabilityTransactionRecord[] = [];
@@ -582,10 +650,10 @@ async function handleCustomerDetailDrillDown(
     };
 
     return NextResponse.json(detail);
-  } catch (error: any) {
+  } catch (error) {
     console.error("[AccountabilityBFF] Detail drilldown failed:", error);
     return NextResponse.json(
-      { error: "Failed to load customer detail", details: error?.message },
+      { error: "Failed to load customer detail", details: getErrorMessage(error) },
       { status: 500 }
     );
   }

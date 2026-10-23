@@ -187,7 +187,7 @@ export function CylinderTransactionDrawer() {
                     {activeTab === "serials" && (
                       <div className="space-y-3">
                         <p className="text-xs text-muted-foreground">
-                          Physical cylinders currently registered in this customer's active custody.
+                          Physical cylinders currently registered in this customer&#39;s active custody.
                         </p>
                         {customerDetail?.activeSerials.length === 0 ? (
                           <div className="rounded-lg border border-dashed p-8 text-center text-xs text-muted-foreground">

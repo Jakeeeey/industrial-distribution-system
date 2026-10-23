@@ -21,7 +21,6 @@ import {
   Building2,
   CheckCircle2,
   AlertTriangle,
-  FileText,
   Clock,
   ArrowUpRight,
   Repeat,
@@ -52,10 +51,11 @@ export function AccountabilityDrawer() {
   }, [selectedCustomerCode, closeCustomerDetail]);
 
   // Count exceptions
-  const exceptionRecords = React.useMemo(() => {
-    if (!customerDetail?.transactions) return [];
-    return customerDetail.transactions.filter((t) => t.hasException);
-  }, [customerDetail?.transactions]);
+  const transactions = customerDetail?.transactions;
+  const exceptionRecords = React.useMemo(
+    () => (transactions ? transactions.filter((t) => t.hasException) : []),
+    [transactions]
+  );
 
   return (
     <AnimatePresence>
@@ -280,7 +280,7 @@ export function AccountabilityDrawer() {
                 <div className="space-y-2">
                   {!customerDetail?.activeSerialsInCustody || customerDetail.activeSerialsInCustody.length === 0 ? (
                     <div className="py-12 text-center text-xs text-muted-foreground">
-                      No active serialized cylinder assets currently registered in this customer's custody.
+                      No active serialized cylinder assets currently registered in this customer&#39;s custody.
                     </div>
                   ) : (
                     customerDetail.activeSerialsInCustody.map((serial, idx) => (
