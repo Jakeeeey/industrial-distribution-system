@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useBranchOperationalPerformanceReport } from "../hooks/useBranchOperationalPerformanceReport";
 import { ReportTablePagination } from "./ReportTablePagination";
 import type { IncidentRecord } from "../types/branch-operational-performance.types";
@@ -153,11 +154,24 @@ export function BranchOperationalResultsTable() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-xs text-muted-foreground">
-                    Loading branch operational exceptions...
-                  </TableCell>
-                </TableRow>
+                Array.from({ length: 6 }).map((_, idx) => (
+                  <TableRow key={idx} className="text-xs">
+                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                    <TableCell className="space-y-1">
+                      <Skeleton className="h-3.5 w-28" />
+                      <Skeleton className="h-2.5 w-36" />
+                    </TableCell>
+                    <TableCell className="space-y-1">
+                      <Skeleton className="h-3.5 w-32" />
+                      <Skeleton className="h-2.5 w-16" />
+                    </TableCell>
+                    <TableCell><Skeleton className="h-5 w-24 rounded-full" /></TableCell>
+                    <TableCell className="text-right"><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+                    <TableCell className="text-center"><Skeleton className="h-5 w-24 rounded-full mx-auto" /></TableCell>
+                    <TableCell className="text-center"><Skeleton className="h-5 w-20 rounded-full mx-auto" /></TableCell>
+                    <TableCell className="text-right"><Skeleton className="h-7 w-12 rounded ml-auto" /></TableCell>
+                  </TableRow>
+                ))
               ) : paginatedRows.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-8 text-xs text-muted-foreground">

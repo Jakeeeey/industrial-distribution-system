@@ -6,9 +6,8 @@
 "use client";
 
 import * as React from "react";
-import { Download, FileSpreadsheet, RefreshCw, ShieldCheck } from "lucide-react";
+import { Download, FileSpreadsheet, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,9 +48,6 @@ export function BranchOperationalReportHeader() {
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
             Branch Operational Performance Report
           </h1>
-          <Badge variant="outline" className="hidden sm:inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/30">
-            <ShieldCheck className="h-3.5 w-3.5" /> Verified Cutoff
-          </Badge>
         </div>
         <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
           Consolidated operational audit of branch sales, cylinder recovery, trip costs, and exception tracking.

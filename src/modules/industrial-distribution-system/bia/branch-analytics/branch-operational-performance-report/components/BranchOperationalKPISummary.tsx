@@ -15,14 +15,27 @@ import { useBranchOperationalPerformanceReport } from "../hooks/useBranchOperati
 export function BranchOperationalKPISummary() {
   const { report, isLoading } = useBranchOperationalPerformanceReport();
 
-  if (isLoading && !report) {
+  if (isLoading) {
+    const skeletonAccents = [
+      "border-t-emerald-500",
+      "border-t-blue-500",
+      "border-t-amber-500",
+      "border-t-indigo-500",
+      "border-t-rose-500",
+    ];
+
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5">
-        {Array.from({ length: 5 }).map((_, idx) => (
-          <Card key={idx} className="p-3.5 shadow-xs">
-            <Skeleton className="h-3.5 w-24 mb-1.5" />
-            <Skeleton className="h-6 w-32 mb-1" />
-            <Skeleton className="h-3 w-40" />
+        {skeletonAccents.map((borderTop, idx) => (
+          <Card key={idx} className={`p-3.5 shadow-xs border-t-2 ${borderTop} bg-card`}>
+            <div className="flex items-start justify-between gap-2">
+              <div className="space-y-1.5 w-full">
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-6 w-28" />
+                <Skeleton className="h-2.5 w-36" />
+              </div>
+              <Skeleton className="h-7 w-7 rounded-lg shrink-0" />
+            </div>
           </Card>
         ))}
       </div>

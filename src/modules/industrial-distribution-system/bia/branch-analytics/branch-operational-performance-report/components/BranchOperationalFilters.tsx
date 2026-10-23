@@ -81,9 +81,6 @@ export function BranchOperationalFilters() {
             <Filter className="h-4 w-4 text-primary" />
             <span>Operational Filters</span>
           </div>
-          <div className="text-xs text-muted-foreground">
-            Searchable branch, custodian, and cutoff parameters
-          </div>
         </div>
 
         {/* Tier 1: Branch Scope & Custodian Selection (Wide columns) */}
@@ -212,9 +209,7 @@ export function BranchOperationalFilters() {
               * Start date must precede or equal end date.
             </span>
           ) : (
-            <span className="text-xs text-muted-foreground">
-              Applied filters apply consistently across all operational metrics.
-            </span>
+            <div />
           )}
 
           <div className="flex items-center gap-2">

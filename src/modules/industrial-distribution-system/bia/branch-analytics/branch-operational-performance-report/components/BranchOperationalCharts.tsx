@@ -23,6 +23,7 @@ import {
   Cell,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useBranchOperationalPerformanceReport } from "../hooks/useBranchOperationalPerformanceReport";
 
 const PIE_COLORS = [
@@ -151,7 +152,83 @@ function CustomPieTooltip({ active, payload }: CustomTooltipProps) {
 }
 
 export function BranchOperationalCharts() {
-  const { report } = useBranchOperationalPerformanceReport();
+  const { report, isLoading } = useBranchOperationalPerformanceReport();
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Skeleton Chart 1 - Trends */}
+        <Card className="border shadow-xs bg-card border-t-2 border-t-teal-500">
+          <CardHeader className="p-4 pb-2 space-y-1">
+            <Skeleton className="h-4 w-52" />
+            <Skeleton className="h-3 w-72" />
+          </CardHeader>
+          <CardContent className="p-4 pt-1">
+            <div className="h-64 w-full flex flex-col justify-end gap-3 pb-2 pt-4">
+              <Skeleton className="h-full w-full rounded-md" />
+              <div className="flex items-center justify-center gap-6 pt-1">
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-3 w-28" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Skeleton Chart 2 - Cost & Revenue */}
+        <Card className="border shadow-xs bg-card border-t-2 border-t-blue-500">
+          <CardHeader className="p-4 pb-2 space-y-1">
+            <Skeleton className="h-4 w-56" />
+            <Skeleton className="h-3 w-80" />
+          </CardHeader>
+          <CardContent className="p-4 pt-1">
+            <div className="h-64 w-full flex flex-col justify-end gap-3 pb-2 pt-4">
+              <Skeleton className="h-full w-full rounded-md" />
+              <div className="flex items-center justify-center gap-6 pt-1">
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-3 w-28" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Skeleton Chart 3 - Incident Distribution */}
+        <Card className="border shadow-xs bg-card border-t-2 border-t-amber-500">
+          <CardHeader className="p-4 pb-2 space-y-1">
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-3 w-64" />
+          </CardHeader>
+          <CardContent className="p-4 pt-1">
+            <div className="h-64 w-full flex flex-col items-center justify-center gap-4">
+              <Skeleton className="h-36 w-36 rounded-full" />
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-3 w-20" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Skeleton Chart 4 - Custody Status */}
+        <Card className="border shadow-xs bg-card border-t-2 border-t-violet-500">
+          <CardHeader className="p-4 pb-2 space-y-1">
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-3 w-64" />
+          </CardHeader>
+          <CardContent className="p-4 pt-1">
+            <div className="h-64 w-full flex flex-col items-center justify-center gap-4">
+              <Skeleton className="h-36 w-36 rounded-full" />
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-3 w-20" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const volumeTrends = report?.charts?.volumeTrends ?? [];
   const costRevenueTrends = report?.charts?.costRevenueTrends ?? [];
