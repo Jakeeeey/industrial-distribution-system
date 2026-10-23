@@ -181,7 +181,7 @@ export function CylinderCirculationCharts() {
       <Card className="border shadow-2xs hover:shadow-xs transition-all duration-200 bg-card hover:border-primary/30 py-0 gap-0">
         <CardHeader className="p-4 pb-2">
           <CardTitle className="text-base font-semibold flex items-center justify-between">
-            <span>Lifecycle Stage Activity & Dwell</span>
+            <span>Stage Activity & Dwell</span>
             <span className="text-[11px] font-normal text-muted-foreground px-2 py-0.5 rounded bg-muted">
               Volume vs Dwell
             </span>

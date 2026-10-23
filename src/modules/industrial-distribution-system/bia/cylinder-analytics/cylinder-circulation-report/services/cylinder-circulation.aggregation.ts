@@ -230,11 +230,6 @@ export function computeCirculationReport(
         }
       }
 
-      if (stageVolumeCounter[stage]) {
-        stageVolumeCounter[stage].count++;
-        stageVolumeCounter[stage].totalDays += dwellDays;
-      }
-
       enrichedHistory.push({
         ts: cur.ts,
         productId: cur.product_id,
@@ -263,20 +258,6 @@ export function computeCirculationReport(
     const lastEvent = enrichedHistory.length > 0 ? enrichedHistory[enrichedHistory.length - 1] : null;
     const lastEventTimestamp = lastEvent?.ts || asset.modified_date || asset.created_date || nowIso;
     const daysInCurrentStatus = calculateDaysDifference(lastEventTimestamp, cutoffTimestamp);
-
-    // If no movements occurred yet, attribute initial baseline dwell to stage counter
-    if (enrichedHistory.length === 0) {
-      let baselineStage = "Warehouse";
-      if (asset.cylinder_status === "WITH_CUSTOMER") baselineStage = "Customer Site";
-      else if (asset.cylinder_status === "LOADED" || asset.cylinder_status === "IN_TRANSIT")
-        baselineStage = "In Transit";
-      else if (asset.cylinder_status === "WITH_SUPPLIER") baselineStage = "Supplier Refill";
-
-      if (stageVolumeCounter[baselineStage]) {
-        stageVolumeCounter[baselineStage].count++;
-        stageVolumeCounter[baselineStage].totalDays += daysInCurrentStatus;
-      }
-    }
 
     // Break Rule 3: Stalled transit (> 3 days in transit with no receive)
     if (
@@ -340,6 +321,28 @@ export function computeCirculationReport(
       detectedBreak !== filters.circulationStatus
     ) {
       continue;
+    }
+
+    // Tally stage volume and dwell ONLY for cylinders that passed all filters
+    if (enrichedHistory.length > 0) {
+      for (const move of enrichedHistory) {
+        const stage = move.stageName || "Warehouse";
+        if (stageVolumeCounter[stage]) {
+          stageVolumeCounter[stage].count++;
+          stageVolumeCounter[stage].totalDays += move.dwellDays || 0;
+        }
+      }
+    } else {
+      let baselineStage = "Warehouse";
+      if (asset.cylinder_status === "WITH_CUSTOMER") baselineStage = "Customer Site";
+      else if (asset.cylinder_status === "LOADED" || asset.cylinder_status === "IN_TRANSIT")
+        baselineStage = "In Transit";
+      else if (asset.cylinder_status === "WITH_SUPPLIER") baselineStage = "Supplier Refill";
+
+      if (stageVolumeCounter[baselineStage]) {
+        stageVolumeCounter[baselineStage].count++;
+        stageVolumeCounter[baselineStage].totalDays += daysInCurrentStatus;
+      }
     }
 
     resultItems.push({
