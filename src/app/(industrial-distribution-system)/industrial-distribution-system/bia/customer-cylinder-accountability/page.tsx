@@ -6,4 +6,4 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export { default } from "@/app/(industrial-distribution-system)/ids/bia/customer-cylinder-accountability/page";
+export { default } from "@/app/(industrial-distribution-system)/ids/scm/cylinder-asset-management/customer-cylinder-accountability-report/page";
