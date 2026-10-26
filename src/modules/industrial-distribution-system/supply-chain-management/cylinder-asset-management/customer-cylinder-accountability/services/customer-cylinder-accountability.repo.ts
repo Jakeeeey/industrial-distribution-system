@@ -16,7 +16,7 @@ import type {
   AccountabilityLookupOptions,
 } from "../types/customer-cylinder-accountability.types";
 
-const BFF_BASE_URL = "/api/ids/bia/customer-cylinder-accountability";
+const BFF_BASE_URL = "/api/ids/scm/cylinder-asset-management/customer-cylinder-accountability";
 
 /**
  * Builds URL search parameters from filters object, omitting empty/undefined fields.

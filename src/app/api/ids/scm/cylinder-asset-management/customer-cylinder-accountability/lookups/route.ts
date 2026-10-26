@@ -1,4 +1,4 @@
-// src/app/api/ids/bia/customer-cylinder-accountability/lookups/route.ts
+// src/app/api/ids/scm/cylinder-asset-management/customer-cylinder-accountability/lookups/route.ts
 // ==============================================================================
 // BFF Lookup Route for Customer Cylinder Accountability Report (VoSync BIA Subsystem)
 // Retrieves branches, customers, and ownership categories with in-memory TTL caching.
@@ -9,7 +9,7 @@
 // ==============================================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import type { AccountabilityLookupOptions } from "@/modules/industrial-distribution-system/bia/customer-cylinder-accountability/types/customer-cylinder-accountability.types";
+import type { AccountabilityLookupOptions } from "@/modules/industrial-distribution-system/supply-chain-management/cylinder-asset-management/customer-cylinder-accountability/types/customer-cylinder-accountability.types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

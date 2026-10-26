@@ -1,4 +1,4 @@
-// src/app/(industrial-distribution-system)/ids/bia/customer-cylinder-accountability/page.tsx
+// src/app/(industrial-distribution-system)/ids/scm/cylinder-asset-management/customer-cylinder-accountability-report/page.tsx
 // ==============================================================================
 // Page Entry Point: Customer Cylinder Accountability Report (VoSync BIA Subsystem)
 // Matches IDS App Router standards with breadcrumbs, NavUser, and responsive shell.
@@ -19,7 +19,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { NavUser } from "@/components/shared/app-sidebar/nav-user";
-import CustomerCylinderAccountabilityModule from "@/modules/industrial-distribution-system/bia/customer-cylinder-accountability/CustomerCylinderAccountabilityModule";
+import CustomerCylinderAccountabilityModule from "@/modules/industrial-distribution-system/supply-chain-management/cylinder-asset-management/customer-cylinder-accountability/CustomerCylinderAccountabilityModule";
 import { cookies } from "next/headers";
 
 export const runtime = "nodejs";

@@ -1,4 +1,4 @@
-// src/app/api/ids/bia/customer-cylinder-accountability/route.ts
+// src/app/api/ids/scm/cylinder-asset-management/customer-cylinder-accountability/route.ts
 // ==============================================================================
 // BFF API Route for Customer Cylinder Accountability Report (VoSync BIA Subsystem)
 // Reconciles physical cylinder custody balances, deposits, and swaps across:
@@ -22,11 +22,11 @@ import type {
   CustomerAccountabilityDetailResponse,
   CustomerAccountabilityRow,
   AccountabilityTransactionRecord,
-} from "@/modules/industrial-distribution-system/bia/customer-cylinder-accountability/types/customer-cylinder-accountability.types";
+} from "@/modules/industrial-distribution-system/supply-chain-management/cylinder-asset-management/customer-cylinder-accountability/types/customer-cylinder-accountability.types";
 import {
   calculateAccountabilityKPIs,
   reconcileCustomerTransactionLedger,
-} from "@/modules/industrial-distribution-system/bia/customer-cylinder-accountability/services/customer-cylinder-accountability.calc";
+} from "@/modules/industrial-distribution-system/supply-chain-management/cylinder-asset-management/customer-cylinder-accountability/services/customer-cylinder-accountability.calc";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
