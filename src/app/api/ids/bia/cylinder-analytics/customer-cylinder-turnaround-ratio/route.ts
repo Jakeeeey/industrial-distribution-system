@@ -1,19 +1,15 @@
 // src/app/api/ids/bia/cylinder-analytics/customer-cylinder-turnaround-ratio/route.ts
 // ──────────────────────────────────────────────────────────────────────────────
 // Next.js BFF API Route for Customer Cylinder Turnaround Ratio (CTR) Module.
-// Provides lookups, report calculation, and workflow transition management.
+// Provides lookups and report calculation.
 // ──────────────────────────────────────────────────────────────────────────────
 
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import {
-  CustomerCylinderTurnaroundFilterSchema,
-  TurnaroundWorkflowActionSchema,
-} from "@/modules/industrial-distribution-system/bia/cylinder-analytics/customer-cylinder-turnaround-ratio/types/customer-cylinder-turnaround.schema";
+import { CustomerCylinderTurnaroundFilterSchema } from "@/modules/industrial-distribution-system/bia/cylinder-analytics/customer-cylinder-turnaround-ratio/types/customer-cylinder-turnaround.schema";
 import {
   fetchCustomerCylinderTurnaroundReport,
   fetchCustomerCylinderTurnaroundLookups,
-  executeTurnaroundWorkflowAction,
 } from "@/modules/industrial-distribution-system/bia/cylinder-analytics/customer-cylinder-turnaround-ratio/services/customer-cylinder-turnaround.service";
 
 export const runtime = "nodejs";
@@ -56,18 +52,5 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     return NextResponse.json({ success: false, error: message }, { status: 500 });
-  }
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const parsedAction = TurnaroundWorkflowActionSchema.parse(body);
-
-    const result = await executeTurnaroundWorkflowAction(parsedAction);
-    return NextResponse.json({ success: true, data: result });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Workflow Action Failed";
-    return NextResponse.json({ success: false, error: message }, { status: 400 });
   }
 }

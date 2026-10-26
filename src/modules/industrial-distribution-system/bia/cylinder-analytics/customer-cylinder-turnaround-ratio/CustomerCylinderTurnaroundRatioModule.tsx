@@ -1,7 +1,7 @@
 // CustomerCylinderTurnaroundRatioModule.tsx
 // ──────────────────────────────────────────────────────────────────────────────
 // Root layout module for Customer Cylinder Turnaround Ratio under BIA Cylinder Analytics.
-// Assembles Header, Searchable Filters, KPI Cards, Recharts Analytics, Table, Drawer, and Modal.
+// Assembles Header, Searchable Filters, KPI Cards, Recharts Analytics, Table, and Drawer.
 // ──────────────────────────────────────────────────────────────────────────────
 
 "use client";
@@ -14,7 +14,6 @@ import { CustomerCylinderTurnaroundKPICards } from "./components/CustomerCylinde
 import { CustomerCylinderTurnaroundCharts } from "./components/CustomerCylinderTurnaroundCharts";
 import { CustomerCylinderTurnaroundTable } from "./components/CustomerCylinderTurnaroundTable";
 import { CustomerCylinderTurnaroundDrawer } from "./components/CustomerCylinderTurnaroundDrawer";
-import { CustomerCylinderTurnaroundWorkflowModal } from "./components/CustomerCylinderTurnaroundWorkflowModal";
 
 function CustomerCylinderTurnaroundContent() {
   return (
@@ -25,7 +24,6 @@ function CustomerCylinderTurnaroundContent() {
       <CustomerCylinderTurnaroundCharts />
       <CustomerCylinderTurnaroundTable />
       <CustomerCylinderTurnaroundDrawer />
-      <CustomerCylinderTurnaroundWorkflowModal />
     </div>
   );
 }

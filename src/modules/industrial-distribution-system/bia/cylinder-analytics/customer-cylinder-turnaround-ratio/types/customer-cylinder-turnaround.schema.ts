@@ -38,15 +38,3 @@ export const CustomerCylinderTurnaroundFilterSchema = z.object({
 export type CustomerCylinderTurnaroundFilterInput = z.infer<
   typeof CustomerCylinderTurnaroundFilterSchema
 >;
-
-export const TurnaroundWorkflowActionSchema = z.object({
-  assessmentNo: z.string().optional(),
-  targetStatus: z.enum(["DRAFT", "FOR_REVIEW", "APPROVED", "LOCKED"]),
-  userRole: z.enum(["Sales", "Inventory", "Finance", "Management", "Administrator"]),
-  userName: z.string().default("System User"),
-  reason: z.string().min(3, "A valid reason is required for status updates"),
-});
-
-export type TurnaroundWorkflowActionInput = z.infer<
-  typeof TurnaroundWorkflowActionSchema
->;

@@ -43,17 +43,6 @@ interface TurnaroundContextValue {
   selectedItem: CustomerCylinderTurnaroundItem | null;
   setSelectedItem: (item: CustomerCylinderTurnaroundItem | null) => void;
 
-  // Workflow Dialog
-  isWorkflowModalOpen: boolean;
-  setIsWorkflowModalOpen: (open: boolean) => void;
-  pendingTargetStatus: AssessmentStatus | null;
-  setPendingTargetStatus: (st: AssessmentStatus | null) => void;
-  submitWorkflowAction: (
-    targetStatus: AssessmentStatus,
-    role: string,
-    reason: string
-  ) => Promise<boolean>;
-
   // Actions
   refreshReport: () => Promise<void>;
   exportToCsv: () => void;
@@ -95,8 +84,6 @@ export function CustomerCylinderTurnaroundProvider({
   const [yearsLookup, setYearsLookup] = React.useState<number[]>([2026, 2025, 2024]);
 
   const [selectedItem, setSelectedItem] = React.useState<CustomerCylinderTurnaroundItem | null>(null);
-  const [isWorkflowModalOpen, setIsWorkflowModalOpen] = React.useState<boolean>(false);
-  const [pendingTargetStatus, setPendingTargetStatus] = React.useState<AssessmentStatus | null>(null);
 
   const setFilter = <K extends keyof CustomerCylinderTurnaroundFilterInput>(
     key: K,
@@ -165,41 +152,6 @@ export function CustomerCylinderTurnaroundProvider({
   React.useEffect(() => {
     refreshReport();
   }, [refreshReport]);
-
-  // Submit workflow transition action
-  const submitWorkflowAction = React.useCallback(
-    async (
-      targetStatus: AssessmentStatus,
-      role: string,
-      reason: string
-    ): Promise<boolean> => {
-      try {
-        const res = await fetch("/api/ids/bia/cylinder-analytics/customer-cylinder-turnaround-ratio", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            assessmentNo,
-            targetStatus,
-            userRole: role,
-            userName: "Current User",
-            reason,
-          }),
-        });
-        const json = await res.json();
-        if (json.success && json.data?.log) {
-          setStatus(targetStatus);
-          setAuditLogs((prev) => [json.data.log, ...prev]);
-          setIsWorkflowModalOpen(false);
-          setPendingTargetStatus(null);
-          return true;
-        }
-        return false;
-      } catch {
-        return false;
-      }
-    },
-    [assessmentNo]
-  );
 
   // CSV Export utility
   const exportToCsv = React.useCallback(() => {
@@ -272,11 +224,6 @@ export function CustomerCylinderTurnaroundProvider({
       yearsLookup,
       selectedItem,
       setSelectedItem,
-      isWorkflowModalOpen,
-      setIsWorkflowModalOpen,
-      pendingTargetStatus,
-      setPendingTargetStatus,
-      submitWorkflowAction,
       refreshReport,
       exportToCsv,
     }),
@@ -293,9 +240,6 @@ export function CustomerCylinderTurnaroundProvider({
       branchesLookup,
       yearsLookup,
       selectedItem,
-      isWorkflowModalOpen,
-      pendingTargetStatus,
-      submitWorkflowAction,
       refreshReport,
       exportToCsv,
     ]

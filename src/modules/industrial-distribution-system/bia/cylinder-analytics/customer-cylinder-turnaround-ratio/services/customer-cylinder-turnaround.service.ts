@@ -299,20 +299,28 @@ export async function fetchCustomerCylinderTurnaroundReport(
 
   // Aggregate live Cylinder Base per customer code from cylinder_assets
   const customerBaseMap = new Map<string, number>();
-  const customerBranchMap = new Map<string, number>();
+  const customerBranchMap = new Map<
+    string,
+    { id: number; code: string; name: string }
+  >();
 
   for (const cyl of liveCylinders) {
     if (!cyl.current_customer_code) continue;
     const code = cyl.current_customer_code.trim();
     customerBaseMap.set(code, (customerBaseMap.get(code) || 0) + 1);
 
-    if (cyl.current_branch_id) {
+    if (cyl.current_branch_id && !customerBranchMap.has(code)) {
       const bId =
         typeof cyl.current_branch_id === "object"
           ? cyl.current_branch_id.id
           : Number(cyl.current_branch_id);
-      if (bId && !customerBranchMap.has(code)) {
-        customerBranchMap.set(code, bId);
+      const b = branchMap.get(bId);
+      if (b) {
+        customerBranchMap.set(code, {
+          id: b.id,
+          code: b.branch_code,
+          name: b.branch_name,
+        });
       }
     }
   }
@@ -341,6 +349,17 @@ export async function fetchCustomerCylinderTurnaroundReport(
     const invoiceMetaMap = new Map<number, DirectusSalesInvoiceRow>();
     for (const inv of liveInvoices) {
       invoiceMetaMap.set(inv.invoice_id, inv);
+      // Map branch from invoice if available
+      if (inv.customer_code && inv.branch_id && !customerBranchMap.has(inv.customer_code.trim())) {
+        const b = branchMap.get(inv.branch_id);
+        if (b) {
+          customerBranchMap.set(inv.customer_code.trim(), {
+            id: b.id,
+            code: b.branch_code,
+            name: b.branch_name,
+          });
+        }
+      }
     }
 
     for (const det of details) {
@@ -379,6 +398,19 @@ export async function fetchCustomerCylinderTurnaroundReport(
   for (const m of springMovements) {
     if (!m.customer_code) continue;
     const code = m.customer_code.trim();
+
+    // Map branch directly from v_serial_movements (e.g. branch_id = 196, branch_name = 'WAREHOUSE - INDUSTRIAL')
+    if (m.branch_id && m.branch_name) {
+      const existing = customerBranchMap.get(code);
+      if (!existing || existing.name === "Dagupan Central Plant") {
+        const b = branchMap.get(m.branch_id);
+        customerBranchMap.set(code, {
+          id: m.branch_id,
+          code: b?.branch_code || `BR-${m.branch_id}`,
+          name: m.branch_name,
+        });
+      }
+    }
 
     // Check movement date within period
     if (m.ts) {
@@ -426,9 +458,11 @@ export async function fetchCustomerCylinderTurnaroundReport(
     const base = customerBaseMap.get(code) || 0;
     const turnover = customerTurnoverMap.get(code) || { roQty: 0, depositQty: 0, eligible11kgQty: 0, docs: [] };
 
-    // Determine customer branch
-    const branchId = customerBranchMap.get(code) || 1;
-    const branch = branchMap.get(branchId);
+    // Determine customer branch dynamically from movements, invoices, or cylinder records
+    const resolvedBranch = customerBranchMap.get(code);
+    const branchId = resolvedBranch?.id || 0;
+    const branchCode = resolvedBranch?.code || "—";
+    const branchName = resolvedBranch?.name || "Unassigned / Walk-in";
 
     // Include if holding cylinders, or has turnover in period, or specifically filtered
     if (base > 0 || turnover.roQty > 0 || turnover.depositQty > 0 || (filters.customerCode && filters.customerCode === code)) {
@@ -439,8 +473,8 @@ export async function fetchCustomerCylinderTurnaroundReport(
         storeName: c.store_name || "",
         contactNumber: c.contact_number || "",
         branchId,
-        branchCode: branch?.branch_code || "DAG",
-        branchName: branch?.branch_name || "Dagupan Central Plant",
+        branchCode,
+        branchName,
         cylinderBase: base,
         repeatOrderQty: turnover.roQty,
         depositCylinderQty: turnover.depositQty,
