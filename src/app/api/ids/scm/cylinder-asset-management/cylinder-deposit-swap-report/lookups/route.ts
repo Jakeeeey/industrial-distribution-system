@@ -1,4 +1,4 @@
-// src/app/api/ids/bia/cylinder-deposit-swap-report/lookups/route.ts
+// src\app\api\ids\scm\cylinder-asset-management\cylinder-deposit-swap-report\lookups/route.ts
 // ==============================================================================
 // BFF Lookup Route for Cylinder Deposit and Swap Report.
 // Retrieves filter metadata from Directus with server-side caching:
@@ -13,7 +13,7 @@
 // ==============================================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import type { CylinderDepositSwapLookupOptions } from "@/modules/industrial-distribution-system/bia/cylinder-deposit-swap-report/types/cylinder-deposit-swap.types";
+import type { CylinderDepositSwapLookupOptions } from "@/modules/industrial-distribution-system/supply-chain-management/cylinder-asset-management/cylinder-deposit-swap-report/types/cylinder-deposit-swap.types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

@@ -1,4 +1,4 @@
-// src/app/(industrial-distribution-system)/ids/bia/cylinder-deposit-swap-report/page.tsx
+// src/app/(industrial-distribution-system)/ids/scm/cylinder-asset-management/cylinder-deposit-swap-report/page.tsx
 // ==============================================================================
 // Page Entry Point: Cylinder Deposit and Swap Report (BIA Subsystem)
 // Matches IDS App Router standards with breadcrumbs, NavUser, and responsive shell.
@@ -16,7 +16,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { NavUser } from "@/components/shared/app-sidebar/nav-user";
-import CylinderDepositSwapReportModule from "@/modules/industrial-distribution-system/bia/cylinder-deposit-swap-report/CylinderDepositSwapReportModule";
+import CylinderDepositSwapReportModule from "@/modules/industrial-distribution-system/supply-chain-management/cylinder-asset-management/cylinder-deposit-swap-report/CylinderDepositSwapReportModule";
 import { cookies } from "next/headers";
 
 export const runtime = "nodejs";

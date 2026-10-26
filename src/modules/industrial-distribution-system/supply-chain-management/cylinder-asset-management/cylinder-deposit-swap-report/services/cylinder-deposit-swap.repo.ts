@@ -10,8 +10,8 @@ import type {
   CylinderDepositSwapReportResponse,
   CustomerDepositSwapDetailResponse,
 } from "../types/cylinder-deposit-swap.types";
-
-const BFF_BASE_URL = "/api/ids/bia/cylinder-deposit-swap-report";
+// src\app\api\ids\scm\cylinder-asset-management\cylinder-deposit-swap-report\route.ts
+const BFF_BASE_URL = "/api/ids/scm/cylinder-asset-management/cylinder-deposit-swap-report";
 
 /**
  * Builds URL search parameters from filters object, omitting undefined/empty values.

@@ -1,4 +1,5 @@
-// src/app/api/ids/bia/cylinder-deposit-swap-report/route.ts
+ 
+//src\app\api\ids\scm\cylinder-asset-management\cylinder-deposit-swap-report\route.ts
 // ==============================================================================
 // BFF API Route for Cylinder Deposit and Swap Report (BIA Subsystem)
 // Interacts with Directus collections:
@@ -29,7 +30,7 @@ import type {
   CustomerSerialAssetDetail,
   MatchedFinancialDeposit,
   CustomerAuditTransactionItem,
-} from "@/modules/industrial-distribution-system/bia/cylinder-deposit-swap-report/types/cylinder-deposit-swap.types";
+} from "@/modules/industrial-distribution-system/supply-chain-management/cylinder-asset-management/cylinder-deposit-swap-report/types/cylinder-deposit-swap.types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -225,9 +226,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     if (filters.branchId) sodsFilter.branch_id = { _eq: filters.branchId };
     if (filters.productId) sodsFilter.product_id = { _eq: filters.productId };
 
-    const sodsQuery = `${directusBase}/items/sales_order_details_serial?${
-      Object.keys(sodsFilter).length > 0 ? `filter=${encodeURIComponent(JSON.stringify(sodsFilter))}&` : ""
-    }fields=id,sales_order_id,delivery_date,product_id,product_name,serial_number,customer_code,customer_name,branch_id,dispatch_plan_id,created_date&limit=-1`;
+    const sodsQuery = `${directusBase}/items/sales_order_details_serial?${Object.keys(sodsFilter).length > 0 ? `filter=${encodeURIComponent(JSON.stringify(sodsFilter))}&` : ""
+      }fields=id,sales_order_id,delivery_date,product_id,product_name,serial_number,customer_code,customer_name,branch_id,dispatch_plan_id,created_date&limit=-1`;
 
     const sodsRes = await fetch(sodsQuery, { headers, cache: "no-store" }).catch(() => null);
     const rawSods = await parseRows<SalesOrderDetailSerialRow>(sodsRes);

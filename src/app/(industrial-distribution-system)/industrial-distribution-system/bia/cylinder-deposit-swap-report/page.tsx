@@ -4,4 +4,4 @@
 // Re-exports the primary page for full backwards-compatibility with legacy routes.
 // ==============================================================================
 
-export { default } from "../../../ids/bia/cylinder-deposit-swap-report/page";
+export { default } from "../../../ids/scm/cylinder-asset-management/cylinder-deposit-and-swap-report/page";
