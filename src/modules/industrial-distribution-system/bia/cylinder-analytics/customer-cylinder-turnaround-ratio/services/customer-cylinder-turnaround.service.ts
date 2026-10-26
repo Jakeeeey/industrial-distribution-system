@@ -21,7 +21,6 @@ import {
 } from "./customer-cylinder-turnaround.aggregation";
 import type {
   CustomerCylinderTurnaroundFilterInput,
-  TurnaroundWorkflowActionInput,
 } from "../types/customer-cylinder-turnaround.schema";
 import type {
   CustomerCylinderTurnaroundReportResponse,
@@ -537,31 +536,4 @@ export async function fetchCustomerCylinderTurnaroundLookups(): Promise<Customer
     products,
     years,
   };
-}
-
-/**
- * Handles workflow status transitions with immutable audit logs
- */
-export async function executeTurnaroundWorkflowAction(
-  action: TurnaroundWorkflowActionInput
-): Promise<{ success: boolean; log: CustomerCylinderTurnaroundAuditLog }> {
-  const newLog: CustomerCylinderTurnaroundAuditLog = {
-    id: `LOG-${Date.now()}`,
-    assessmentId: action.assessmentNo || "CTR-CURRENT",
-    actionType:
-      action.targetStatus === "APPROVED"
-        ? "APPROVE"
-        : action.targetStatus === "LOCKED"
-        ? "LOCK"
-        : "STATUS_CHANGE",
-    changedBy: `${action.userName} (${action.userRole})`,
-    changedRole: action.userRole,
-    changedAt: new Date().toISOString(),
-    reasonForChange: action.reason,
-    fieldChanged: "status",
-    newValue: action.targetStatus,
-  };
-
-  inMemoryAuditLogs.unshift(newLog);
-  return { success: true, log: newLog };
 }
