@@ -247,9 +247,7 @@ export function SalesPerformanceCharts() {
                   <PieChart>
                     <Pie
                       data={charts.gasDistribution}
-                      dataKey={(entry: { kgSold: number; percentage: number }) =>
-                        entry.kgSold > 0 ? entry.kgSold : entry.percentage
-                      }
+                      dataKey="kgSold"
                       nameKey="gasType"
                       cx="50%"
                       cy="50%"

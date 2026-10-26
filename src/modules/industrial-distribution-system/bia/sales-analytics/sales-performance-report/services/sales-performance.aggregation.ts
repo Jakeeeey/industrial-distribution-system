@@ -454,10 +454,10 @@ export function aggregateSalesPerformanceReport(
     };
   });
 
-  // 7. Compute Charts: Gas Distribution (kg sold & revenue by gas/product category)
+  // 7. Compute Charts: Gas Distribution (strictly gas volume in kilograms)
   const gasMap = new Map<string, { kg: number; net: number }>();
   for (const r of filteredRecords) {
-    if (r.kgSold <= 0 && r.netSales <= 0) continue;
+    if (r.kgSold <= 0) continue;
     const key = r.productName || "Other Industrial Gas";
     const entry = gasMap.get(key) || { kg: 0, net: 0 };
     entry.kg += r.kgSold;
@@ -466,18 +466,12 @@ export function aggregateSalesPerformanceReport(
   }
 
   const totalGasKg = Array.from(gasMap.values()).reduce((sum, v) => sum + v.kg, 0);
-  const totalGasNet = Array.from(gasMap.values()).reduce((sum, v) => sum + v.net, 0);
 
   const gasDistribution: GasDistributionPoint[] = Array.from(gasMap.entries())
-    .sort((a, b) => (totalGasKg > 0 ? b[1].kg - a[1].kg : b[1].net - a[1].net))
+    .sort((a, b) => b[1].kg - a[1].kg)
     .slice(0, 8)
     .map(([gasType, val], index) => {
-      let pct = 0;
-      if (totalGasKg > 0) {
-        pct = Math.round((val.kg / totalGasKg) * 1000) / 10;
-      } else if (totalGasNet > 0) {
-        pct = Math.round((val.net / totalGasNet) * 1000) / 10;
-      }
+      const pct = totalGasKg > 0 ? Math.round((val.kg / totalGasKg) * 1000) / 10 : 0;
       return {
         gasType,
         kgSold: Math.round(val.kg * 100) / 100,

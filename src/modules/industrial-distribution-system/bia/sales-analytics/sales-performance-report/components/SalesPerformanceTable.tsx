@@ -27,7 +27,6 @@ import {
 } from "lucide-react";
 import { useSalesPerformance } from "../providers/SalesPerformanceProvider";
 import { SalesPerformancePagination } from "./SalesPerformancePagination";
-import type { SalesPerformanceRecord } from "../types/sales-performance.types";
 
 export function SalesPerformanceTable() {
   const { report, filters, setFilter, setSelectedRecord, isLoading } = useSalesPerformance();
