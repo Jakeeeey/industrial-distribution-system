@@ -65,9 +65,6 @@ function buildHeaderUserFromToken(token: string | null | undefined) {
 export default async function Page() {
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value ?? null;
-  const payload = token ? decodeJwtPayload(token) : null;
-  const approverId = Number(payload?.sub) || undefined;
-
   const headerUser = buildHeaderUserFromToken(token);
 
   return (

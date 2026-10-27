@@ -3,7 +3,7 @@
 // Visual Analytics Component (Recharts)
 // - Chart 1: Profitability Tier Distribution (Net Sales vs Contribution)
 // - Chart 2: Cost Component Breakdown (Donut)
-// Light & Dark theme compatible using theme CSS variables.
+// Features full Light & Dark mode contrast-compliant custom tooltips.
 //
 // Dev-Rule: Always leave behind comments on all changes and development of workflows
 // for efficient long-term coding.
@@ -24,8 +24,46 @@ import {
   PieChart,
   Pie,
   Cell,
+  type TooltipProps,
 } from "recharts";
 import { BarChart3, PieChart as PieIcon } from "lucide-react";
+
+/**
+ * Custom high-contrast theme-aware tooltip for Recharts (works across light/dark themes)
+ */
+function CustomChartTooltip({
+  active,
+  payload,
+  label,
+}: TooltipProps<number, string>) {
+  if (!active || !payload || !payload.length) return null;
+
+  return (
+    <div className="rounded-lg border border-border bg-popover/95 px-3 py-2 shadow-lg backdrop-blur-md text-popover-foreground text-xs space-y-1.5 min-w-[140px] z-50">
+      {label && (
+        <div className="font-semibold text-foreground pb-1 border-b border-border/50 text-[11px]">
+          {label}
+        </div>
+      )}
+      <div className="space-y-1">
+        {payload.map((item, idx) => (
+          <div key={idx} className="flex items-center justify-between gap-3">
+            <span className="flex items-center gap-1.5 text-muted-foreground text-[11px]">
+              <span
+                className="h-2 w-2 rounded-full shrink-0"
+                style={{ backgroundColor: item.color || item.fill }}
+              />
+              <span>{item.name}:</span>
+            </span>
+            <span className="font-semibold text-foreground text-[11px]">
+              ₱{Number(item.value ?? 0).toLocaleString()}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function CustomerProfitabilityCharts() {
   const { data, isLoading } = useCustomerProfitability();
@@ -75,17 +113,8 @@ export function CustomerProfitabilityCharts() {
                 tickFormatter={(val) => `₱${(val / 1000).toFixed(0)}k`}
               />
               <Tooltip
-                contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  borderColor: "hsl(var(--border))",
-                  borderRadius: "8px",
-                  fontSize: "11px",
-                  color: "hsl(var(--foreground))",
-                }}
-                formatter={(val) => [
-                  `₱${Number(val).toLocaleString()}`,
-                  undefined,
-                ]}
+                content={<CustomChartTooltip />}
+                cursor={{ fill: "hsl(var(--muted)/0.25)", radius: 6 }}
               />
               <Legend
                 wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }}
@@ -139,19 +168,7 @@ export function CustomerProfitabilityCharts() {
                   />
                 ))}
               </Pie>
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  borderColor: "hsl(var(--border))",
-                  borderRadius: "8px",
-                  fontSize: "11px",
-                  color: "hsl(var(--foreground))",
-                }}
-                formatter={(val) => [
-                  `₱${Number(val).toLocaleString()}`,
-                  undefined,
-                ]}
-              />
+              <Tooltip content={<CustomChartTooltip />} />
               <Legend
                 layout="horizontal"
                 verticalAlign="bottom"

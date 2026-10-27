@@ -310,6 +310,7 @@ export interface CustomerDrilldownDetails {
  */
 export interface CustomerProfitabilityReportResponse {
   rows: CustomerProfitabilityRow[];
+  allRows?: CustomerProfitabilityRow[];
   kpis: ProfitabilityKPISummary;
   charts: ProfitabilityChartsData;
   totalRows: number;

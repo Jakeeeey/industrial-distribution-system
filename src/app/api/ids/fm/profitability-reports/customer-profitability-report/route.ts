@@ -38,7 +38,20 @@ export async function GET(request: NextRequest) {
           { status: 400 }
         );
       }
-      const drilldown = await fetchCustomerProfitabilityDrilldown(customerCode);
+      const rawBranch = searchParams.get("branchId");
+      const branchId: number | "all" | undefined =
+        rawBranch === "all" ? "all" : rawBranch ? Number(rawBranch) : undefined;
+
+      const drilldownFilters: {
+        startDate?: string;
+        endDate?: string;
+        branchId?: number | "all";
+      } = {
+        startDate: searchParams.get("startDate") || undefined,
+        endDate: searchParams.get("endDate") || undefined,
+        branchId,
+      };
+      const drilldown = await fetchCustomerProfitabilityDrilldown(customerCode, drilldownFilters);
       return NextResponse.json({ success: true, data: drilldown });
     }
 

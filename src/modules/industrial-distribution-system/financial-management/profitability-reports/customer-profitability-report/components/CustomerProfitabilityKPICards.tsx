@@ -33,7 +33,8 @@ export function CustomerProfitabilityKPICards() {
   }
 
   const { kpis } = data;
-  const isLoss = kpis.totalContributionMargin < 0;
+  const isGrossLoss = kpis.totalGrossMargin < 0;
+  const isContributionLoss = kpis.totalContributionMargin < 0;
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -59,15 +60,27 @@ export function CustomerProfitabilityKPICards() {
       <div className="p-4 rounded-xl border border-border bg-card/60 backdrop-blur-sm shadow-sm flex flex-col justify-between hover:border-primary/40 transition-colors">
         <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
           <span>Total Gross Margin</span>
-          <div className="p-1.5 rounded-md bg-emerald-500/10 text-emerald-500">
+          <div
+            className={`p-1.5 rounded-md ${
+              isGrossLoss ? "bg-red-500/10 text-red-500" : "bg-emerald-500/10 text-emerald-500"
+            }`}
+          >
             <Percent className="h-4 w-4" />
           </div>
         </div>
         <div className="mt-2">
-          <div className="text-2xl font-bold tracking-tight text-foreground">
+          <div
+            className={`text-2xl font-bold tracking-tight ${
+              isGrossLoss ? "text-red-600 dark:text-red-400" : "text-foreground"
+            }`}
+          >
             ₱{kpis.totalGrossMargin.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">
+          <div
+            className={`text-xs font-medium mt-0.5 ${
+              isGrossLoss ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"
+            }`}
+          >
             {kpis.averageGrossMarginPercent}% Avg Gross Margin
           </div>
         </div>
@@ -77,12 +90,20 @@ export function CustomerProfitabilityKPICards() {
       <div className="p-4 rounded-xl border border-border bg-card/60 backdrop-blur-sm shadow-sm flex flex-col justify-between hover:border-primary/40 transition-colors">
         <div className="flex items-center justify-between text-muted-foreground text-xs font-medium">
           <span>Net Contribution Margin</span>
-          <div className={`p-1.5 rounded-md ${isLoss ? "bg-red-500/10 text-red-500" : "bg-primary/10 text-primary"}`}>
+          <div
+            className={`p-1.5 rounded-md ${
+              isContributionLoss ? "bg-red-500/10 text-red-500" : "bg-primary/10 text-primary"
+            }`}
+          >
             <TrendingUp className="h-4 w-4" />
           </div>
         </div>
         <div className="mt-2">
-          <div className={`text-2xl font-bold tracking-tight ${isLoss ? "text-red-600 dark:text-red-400" : "text-foreground"}`}>
+          <div
+            className={`text-2xl font-bold tracking-tight ${
+              isContributionLoss ? "text-red-600 dark:text-red-400" : "text-foreground"
+            }`}
+          >
             ₱{kpis.totalContributionMargin.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className="text-xs text-muted-foreground mt-0.5">

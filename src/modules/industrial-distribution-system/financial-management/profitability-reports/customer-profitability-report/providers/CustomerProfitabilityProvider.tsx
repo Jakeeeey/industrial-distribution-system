@@ -12,8 +12,6 @@
 import * as React from "react";
 import type {
   CustomerProfitabilityRow,
-  ProfitabilityKPISummary,
-  ProfitabilityChartsData,
   CustomerProfitabilityReportResponse,
   CustomerDrilldownDetails,
   ProfitabilityTier,
@@ -129,6 +127,15 @@ export function CustomerProfitabilityProvider({
   const [branchId, setBranchId] = React.useState<number | "all">("all");
   const [tier, setTier] = React.useState<ProfitabilityTier | "all">("all");
   const [searchQuery, setSearchQuery] = React.useState<string>("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = React.useState<string>("");
+
+  // Debounce search query changes by 350ms
+  React.useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 350);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
 
   // Pagination & Sorting
   const [page, setPage] = React.useState<number>(1);
@@ -174,7 +181,7 @@ export function CustomerProfitabilityProvider({
     loadLookups();
   }, []);
 
-  // Fetch Main Report
+  // Fetch Main Report (fetches all rows for the period/branch/search; pagination is handled instantly in memory)
   const fetchReport = React.useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -183,11 +190,8 @@ export function CustomerProfitabilityProvider({
         datePreset,
         branchId: String(branchId),
         tier,
-        searchQuery,
-        page: String(page),
-        pageSize: String(pageSize),
-        sortBy,
-        sortOrder,
+        searchQuery: debouncedSearchQuery,
+        pageSize: "-1",
       });
       if (startDate) params.set("startDate", startDate);
       if (endDate) params.set("endDate", endDate);
@@ -208,11 +212,44 @@ export function CustomerProfitabilityProvider({
     } finally {
       setIsLoading(false);
     }
-  }, [startDate, endDate, datePreset, branchId, tier, searchQuery, page, pageSize, sortBy, sortOrder]);
+  }, [startDate, endDate, datePreset, branchId, tier, debouncedSearchQuery]);
 
   React.useEffect(() => {
     fetchReport();
   }, [fetchReport]);
+
+  // Client-side sorting and pagination: 0ms instant response without network latency or reloads
+  const sortedAndPaginatedData = React.useMemo(() => {
+    if (!data) return null;
+    const all = data.allRows || data.rows || [];
+
+    // Sort in memory
+    const sorted = [...all].sort((a, b) => {
+      const key = sortBy as keyof CustomerProfitabilityRow;
+      const valA = a[key];
+      const valB = b[key];
+      if (typeof valA === "number" && typeof valB === "number") {
+        return sortOrder === "asc" ? valA - valB : valB - valA;
+      }
+      const strA = String(valA ?? "");
+      const strB = String(valB ?? "");
+      return sortOrder === "asc" ? strA.localeCompare(strB) : strB.localeCompare(strA);
+    });
+
+    const totalRows = sorted.length;
+    const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
+    const startIdx = (page - 1) * pageSize;
+    const pageRows = sorted.slice(startIdx, startIdx + pageSize);
+
+    return {
+      ...data,
+      rows: pageRows,
+      totalRows,
+      totalPages,
+      page,
+      pageSize,
+    };
+  }, [data, page, pageSize, sortBy, sortOrder]);
 
   const handleSort = (column: string) => {
     if (sortBy === column) {
@@ -228,10 +265,16 @@ export function CustomerProfitabilityProvider({
     setSelectedCustomerCode(customerCode);
     setIsDrilldownLoading(true);
     try {
+      const params = new URLSearchParams({
+        mode: "drilldown",
+        customerCode,
+      });
+      if (startDate) params.set("startDate", startDate);
+      if (endDate) params.set("endDate", endDate);
+      if (branchId !== "all") params.set("branchId", String(branchId));
+
       const res = await fetch(
-        `/api/ids/fm/profitability-reports/customer-profitability-report?mode=drilldown&customerCode=${encodeURIComponent(
-          customerCode
-        )}`
+        `/api/ids/fm/profitability-reports/customer-profitability-report?${params.toString()}`
       );
       if (res.ok) {
         const json = await res.json();
@@ -275,7 +318,7 @@ export function CustomerProfitabilityProvider({
   };
 
   const value: CustomerProfitabilityContextValue = {
-    data,
+    data: sortedAndPaginatedData,
     isLoading,
     error,
     startDate,

@@ -70,12 +70,10 @@ export function aggregateCustomerProfitabilityReport(
     invoiceDetails,
     products,
     branches,
-    dispatchPlans,
     dispatchInvoices,
     dispatchBudgets,
     cylinderAssets,
     salesReturns,
-    salesReturnDetails,
   } = source;
 
   // 1. Index product catalog for fast cost and weight lookup
@@ -216,26 +214,16 @@ export function aggregateCustomerProfitabilityReport(
   // 8. Aggregate Rows for Each Customer
   const rows: CustomerProfitabilityRow[] = [];
 
-  console.log("[Aggregation Diagnostics]", {
-    totalCustomersInDb: customers.length,
-    validInvoicesCount: validInvoices.length,
-    rawInvoicesCount: invoices.length,
-    dateRange: { startDate: filters.startDate, endDate: filters.endDate },
-    branchFilter: filters.branchId,
-  });
-
   customers.forEach((cust) => {
     const customerInvoices = invoicesByCustomer.get(cust.customer_code) || [];
     const customerReturns = returnsByCustomer.get(cust.customer_code) || [];
     const customerIncidents = cylinderIncidentsByCustomer.get(cust.customer_code) || [];
 
-    // If there are no invoices and account is inactive, skip
-    const isCustomerActive = isFlagActive(cust.isActive);
+    // Only include accounts that have transaction activity in the filtered period
     if (
       customerInvoices.length === 0 &&
       customerReturns.length === 0 &&
-      customerIncidents.length === 0 &&
-      !isCustomerActive
+      customerIncidents.length === 0
     ) {
       return;
     }
@@ -324,7 +312,7 @@ export function aggregateCustomerProfitabilityReport(
     const firstInvoiceBranchId = customerInvoices[0]?.branch_id ?? null;
     const branchName =
       (firstInvoiceBranchId ? branchMap.get(firstInvoiceBranchId)?.branch_name : null) ||
-      "Head Office";
+      "—";
 
     rows.push({
       customerId: cust.id,
@@ -355,7 +343,7 @@ export function aggregateCustomerProfitabilityReport(
   });
 
   // 9. Apply Filter: Tier & Search Query
-  let filteredRows = rows.filter((r) => {
+  const filteredRows = rows.filter((r) => {
     if (filters.tier !== "all" && r.tier !== filters.tier) {
       return false;
     }
@@ -530,16 +518,20 @@ export function aggregateCustomerProfitabilityReport(
     ],
   };
 
-  // 13. Pagination
+  // 13. Pagination (supports limit=-1 or returns all rows if pageSize is -1)
   const totalRows = filteredRows.length;
+  const isAll = filters.pageSize === -1;
   const page = filters.page || 1;
-  const pageSize = filters.pageSize || 10;
-  const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
-  const startIndex = (page - 1) * pageSize;
-  const paginatedRows = filteredRows.slice(startIndex, startIndex + pageSize);
+  const pageSize = isAll ? totalRows : filters.pageSize || 10;
+  const totalPages = Math.max(1, Math.ceil(totalRows / (pageSize || 1)));
+  const startIndex = isAll ? 0 : (page - 1) * pageSize;
+  const paginatedRows = isAll
+    ? filteredRows
+    : filteredRows.slice(startIndex, startIndex + pageSize);
 
   return {
     rows: paginatedRows,
+    allRows: filteredRows,
     kpis,
     charts,
     totalRows,
@@ -558,15 +550,48 @@ export function aggregateCustomerProfitabilityReport(
  */
 export function buildCustomerDrilldown(
   customerCode: string,
-  source: AggregationSourceData
+  source: AggregationSourceData,
+  filters?: { startDate?: string; endDate?: string; branchId?: number | "all" }
 ): CustomerDrilldownDetails | null {
   const cust = source.customers.find((c) => c.customer_code === customerCode);
   if (!cust) return null;
 
+  const isFlagActive = (val: unknown): boolean => {
+    if (val === 1 || val === true || val === "1") return true;
+    if (typeof val === "object" && val !== null) {
+      const obj = val as { data?: number | number[] };
+      if (obj.data === 1 || (Array.isArray(obj.data) && obj.data[0] === 1)) return true;
+    }
+    return false;
+  };
+
   // Invoice Details
-  const customerInvoices = source.invoices.filter(
-    (inv) => inv.customer_code === customerCode && inv.isPosted
-  );
+  const customerInvoices = source.invoices.filter((inv) => {
+    if (inv.customer_code !== customerCode) return false;
+    const isPosted =
+      isFlagActive(inv.isPosted) ||
+      inv.transaction_status === "Posted" ||
+      inv.transaction_status === "Completed" ||
+      inv.transaction_status === "Cleared" ||
+      inv.transaction_status === "En Route" ||
+      inv.transaction_status === "Delivered";
+    const isReplaced = isFlagActive(inv.isReplaced);
+    if (!isPosted || isReplaced) return false;
+
+    // Filter by date range if provided
+    if (inv.invoice_date) {
+      const invDate = String(inv.invoice_date).substring(0, 10);
+      if (filters?.startDate && invDate < filters.startDate) return false;
+      if (filters?.endDate && invDate > filters.endDate) return false;
+    }
+
+    // Filter by branch if provided
+    if (filters?.branchId && filters.branchId !== "all" && inv.branch_id !== filters.branchId) {
+      return false;
+    }
+
+    return true;
+  });
 
   const productMap = new Map<number, RawProduct>();
   source.products.forEach((p) => productMap.set(p.product_id, p));

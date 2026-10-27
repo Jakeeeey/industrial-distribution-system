@@ -113,6 +113,31 @@ export async function fetchProfitabilityLookups() {
 export async function fetchCustomerProfitabilityReport(
   filters: CustomerProfitabilityFilterInput
 ): Promise<CustomerProfitabilityReportResponse> {
+  // Build query filters for heavy collections to optimize network and database payload
+  const invoiceFilterParams: string[] = [];
+  if (filters.startDate) {
+    invoiceFilterParams.push(`filter[invoice_date][_gte]=${encodeURIComponent(filters.startDate)}`);
+  }
+  if (filters.endDate) {
+    invoiceFilterParams.push(`filter[invoice_date][_lte]=${encodeURIComponent(filters.endDate)}`);
+  }
+  if (filters.branchId && filters.branchId !== "all") {
+    invoiceFilterParams.push(`filter[branch_id][_eq]=${filters.branchId}`);
+  }
+  const invoiceFilterQuery = invoiceFilterParams.length > 0 ? `&${invoiceFilterParams.join("&")}` : "";
+
+  const returnFilterParams: string[] = [];
+  if (filters.startDate) {
+    returnFilterParams.push(`filter[return_date][_gte]=${encodeURIComponent(filters.startDate)}`);
+  }
+  if (filters.endDate) {
+    returnFilterParams.push(`filter[return_date][_lte]=${encodeURIComponent(filters.endDate)}`);
+  }
+  if (filters.branchId && filters.branchId !== "all") {
+    returnFilterParams.push(`filter[branch_id][_eq]=${filters.branchId}`);
+  }
+  const returnFilterQuery = returnFilterParams.length > 0 ? `&${returnFilterParams.join("&")}` : "";
+
   // Concurrently fetch all source collections
   const [
     customers,
@@ -131,7 +156,7 @@ export async function fetchCustomerProfitabilityReport(
       "items/customer?fields=id,customer_code,customer_name,store_name,city,province,isActive&limit=-1"
     ),
     fetchDirectusCollection<RawSalesInvoice>(
-      "items/sales_invoice?fields=invoice_id,invoice_no,order_id,customer_code,salesman_id,branch_id,invoice_date,gross_amount,discount_amount,vat_amount,net_amount,total_amount,transaction_status,isPosted,isReplaced&limit=-1"
+      `items/sales_invoice?fields=invoice_id,invoice_no,order_id,customer_code,salesman_id,branch_id,invoice_date,gross_amount,discount_amount,vat_amount,net_amount,total_amount,transaction_status,isPosted,isReplaced&limit=-1${invoiceFilterQuery}`
     ),
     fetchDirectusCollection<RawSalesInvoiceDetail>(
       "items/sales_invoice_details?fields=detail_id,invoice_no,product_id,quantity,unit_price,total_amount&limit=-1"
@@ -155,28 +180,14 @@ export async function fetchCustomerProfitabilityReport(
       "items/cylinder_assets?fields=id,product_id,serial_number,cylinder_status,cylinder_condition,current_branch_id,current_customer_code,cost,is_deleted&limit=-1"
     ),
     fetchDirectusCollection<RawSalesReturn>(
-      "items/sales_return?fields=return_id,return_number,customer_code,branch_id,return_date,total_amount,isPosted,isReceived&limit=-1"
+      `items/sales_return?fields=return_id,return_number,customer_code,branch_id,return_date,total_amount,isPosted,isReceived&limit=-1${returnFilterQuery}`
     ),
     fetchDirectusCollection<RawSalesReturnDetail>(
       "items/sales_return_details?fields=detail_id,return_no,product_id,quantity,unit_price,total_amount&limit=-1"
     ),
   ]);
 
-  console.log("[Profitability Service Diagnostics]", {
-    customersCount: customers.length,
-    invoicesCount: invoices.length,
-    sampleInvoice: invoices[0] ? {
-      invoice_id: invoices[0].invoice_id,
-      customer_code: invoices[0].customer_code,
-      invoice_date: invoices[0].invoice_date,
-      isPosted: invoices[0].isPosted,
-      transaction_status: invoices[0].transaction_status,
-      branch_id: invoices[0].branch_id,
-    } : null,
-    invoiceDetailsCount: invoiceDetails.length,
-    productsCount: products.length,
-    branchesCount: branches.length,
-  });
+  // Aggregate customer rows from the fetched collections
 
   const sourceData: AggregationSourceData = {
     customers,
@@ -196,11 +207,26 @@ export async function fetchCustomerProfitabilityReport(
 }
 
 /**
- * Fetch drilldown for a specific customer
+ * Fetch drilldown for a specific customer with active reporting period and branch filters applied
  */
 export async function fetchCustomerProfitabilityDrilldown(
-  customerCode: string
+  customerCode: string,
+  filters?: { startDate?: string; endDate?: string; branchId?: number | "all" }
 ): Promise<CustomerDrilldownDetails | null> {
+  const invoiceFilterParams: string[] = [
+    `filter[customer_code][_eq]=${encodeURIComponent(customerCode)}`,
+  ];
+  if (filters?.startDate) {
+    invoiceFilterParams.push(`filter[invoice_date][_gte]=${encodeURIComponent(filters.startDate)}`);
+  }
+  if (filters?.endDate) {
+    invoiceFilterParams.push(`filter[invoice_date][_lte]=${encodeURIComponent(filters.endDate)}`);
+  }
+  if (filters?.branchId && filters.branchId !== "all") {
+    invoiceFilterParams.push(`filter[branch_id][_eq]=${filters.branchId}`);
+  }
+  const invoiceFilterQuery = invoiceFilterParams.join("&");
+
   const [
     customers,
     invoices,
@@ -218,7 +244,7 @@ export async function fetchCustomerProfitabilityDrilldown(
       `items/customer?filter[customer_code][_eq]=${encodeURIComponent(customerCode)}&limit=1`
     ),
     fetchDirectusCollection<RawSalesInvoice>(
-      `items/sales_invoice?filter[customer_code][_eq]=${encodeURIComponent(customerCode)}&limit=-1`
+      `items/sales_invoice?${invoiceFilterQuery}&limit=-1`
     ),
     fetchDirectusCollection<RawSalesInvoiceDetail>(
       "items/sales_invoice_details?fields=detail_id,invoice_no,product_id,quantity,unit_price,total_amount&limit=-1"
@@ -239,17 +265,21 @@ export async function fetchCustomerProfitabilityDrilldown(
     fetchDirectusCollection<RawSalesReturnDetail>("items/sales_return_details?fields=detail_id,return_no,product_id,quantity,unit_price,total_amount&limit=-1"),
   ]);
 
-  return buildCustomerDrilldown(customerCode, {
-    customers,
-    invoices,
-    invoiceDetails,
-    products,
-    branches,
-    dispatchPlans,
-    dispatchInvoices,
-    dispatchBudgets,
-    cylinderAssets,
-    salesReturns,
-    salesReturnDetails,
-  });
+  return buildCustomerDrilldown(
+    customerCode,
+    {
+      customers,
+      invoices,
+      invoiceDetails,
+      products,
+      branches,
+      dispatchPlans,
+      dispatchInvoices,
+      dispatchBudgets,
+      cylinderAssets,
+      salesReturns,
+      salesReturnDetails,
+    },
+    filters
+  );
 }
