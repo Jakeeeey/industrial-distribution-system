@@ -1,0 +1,116 @@
+// src/modules/industrial-distribution-system/supply-chain-management/inventory-management/reports/cylinder-stock-report/components/searchable-select.tsx
+// ==============================================================================
+// Searchable Select Component for Cylinder Stock Report
+// Complies with VoSync development standards:
+// - Comprehensive comments left behind for maintainability
+// - Clean popover combobox with instant typeahead search filtering
+// ==============================================================================
+
+"use client";
+
+import * as React from "react";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+
+export interface SearchableOption {
+  value: string;
+  label: string;
+}
+
+export interface SearchableSelectProps {
+  options: SearchableOption[];
+  value?: string;
+  onValueChange: (value: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  className?: string;
+}
+
+export function SearchableSelect({
+  options,
+  value,
+  onValueChange,
+  placeholder = "Select option...",
+  disabled = false,
+  className,
+}: SearchableSelectProps) {
+  const [open, setOpen] = React.useState(false);
+
+  // Find the label for the current value
+  const selectedLabel = React.useMemo(() => {
+    return options.find((opt) => opt.value === value)?.label;
+  }, [options, value]);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className={cn(
+            "w-full justify-between h-9 text-xs bg-background font-normal",
+            !value && "text-muted-foreground",
+            className
+          )}
+          disabled={disabled}
+        >
+          <span className="truncate">{selectedLabel || placeholder}</span>
+          <ChevronsUpDown className="ml-1.5 h-3.5 w-3.5 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[220px] p-0"
+        align="start"
+        onWheel={(e) => e.stopPropagation()}
+      >
+        <Command>
+          <CommandInput
+            placeholder={`Search ${placeholder.toLowerCase()}...`}
+            className="h-8 text-xs"
+          />
+          <CommandList onWheel={(e) => e.stopPropagation()} className="max-h-[260px] overflow-y-auto">
+            <CommandEmpty className="py-2 text-center text-xs text-muted-foreground">
+              No results found.
+            </CommandEmpty>
+            <CommandGroup>
+              {options.map((opt) => (
+                <CommandItem
+                  key={opt.value}
+                  value={opt.label}
+                  onSelect={() => {
+                    onValueChange(opt.value);
+                    setOpen(false);
+                  }}
+                  className="text-xs py-1.5"
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-3.5 w-3.5 shrink-0",
+                      value === opt.value ? "opacity-100 text-primary" : "opacity-0"
+                    )}
+                  />
+                  <span className="truncate">{opt.label}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
