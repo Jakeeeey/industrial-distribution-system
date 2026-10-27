@@ -17,10 +17,7 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import {
-  FileText,
-  Calendar,
   Clock,
   MapPin,
   CheckCircle2,
@@ -30,7 +27,6 @@ import {
   FileQuestion,
   History,
   Scale,
-  ArrowRightCircle,
 } from "lucide-react";
 import type { CylinderInspectionRecord, MovementTracePoint } from "../types/cylinder-inspection-hydrotest.types";
 

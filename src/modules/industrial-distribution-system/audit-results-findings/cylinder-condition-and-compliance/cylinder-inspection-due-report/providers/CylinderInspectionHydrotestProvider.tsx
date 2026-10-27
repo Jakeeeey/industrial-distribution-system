@@ -135,7 +135,7 @@ export function CylinderInspectionHydrotestProvider({ children }: { children: Re
   }, [criteriaKey]);
 
   // Zero-latency in-memory pagination: instant page transitions without loading spinners
-  const allRows = report?.rows || [];
+  const allRows = React.useMemo(() => report?.rows || [], [report?.rows]);
   const totalCount = report?.totalCount ?? allRows.length;
 
   const paginatedRows = React.useMemo(() => {

@@ -17,7 +17,6 @@ import type {
   RawUnit,
   RawBranch,
   RawCustomer,
-  RawSerialMovement,
   CylinderInspectionLookupsResponse,
   CylinderInspectionReportResponse,
   MovementTracePoint,

@@ -19,18 +19,19 @@ interface HeaderProps {
 export function CylinderInspectionHydrotestHeader({ onOpenPrintPreview }: HeaderProps) {
   const { report, isLoading, refresh } = useCylinderInspection();
 
+  const reportingCutoff = report?.reportingCutoff;
   const formattedCutoff = React.useMemo(() => {
-    if (!report?.reportingCutoff) return "—";
+    if (!reportingCutoff) return "—";
     try {
-      const d = new Date(report.reportingCutoff);
+      const d = new Date(reportingCutoff);
       return new Intl.DateTimeFormat("en-PH", {
         dateStyle: "medium",
         timeStyle: "short",
       }).format(d);
     } catch {
-      return report.reportingCutoff;
+      return reportingCutoff;
     }
-  }, [report?.reportingCutoff]);
+  }, [reportingCutoff]);
 
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-4">
