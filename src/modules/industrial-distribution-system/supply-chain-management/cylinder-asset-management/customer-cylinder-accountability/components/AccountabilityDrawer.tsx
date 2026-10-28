@@ -19,8 +19,6 @@ import {
   Cylinder,
   History,
   Building2,
-  CheckCircle2,
-  AlertTriangle,
   Clock,
   ArrowUpRight,
   Repeat,
@@ -37,7 +35,7 @@ export function AccountabilityDrawer() {
     closeCustomerDetail,
   } = useCustomerCylinderAccountability();
 
-  const [activeTab, setActiveTab] = React.useState<"ledger" | "serials" | "exceptions">("ledger");
+  const [activeTab, setActiveTab] = React.useState<"ledger" | "serials" >("ledger");
 
   // Escape key handler
   React.useEffect(() => {
@@ -50,12 +48,7 @@ export function AccountabilityDrawer() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedCustomerCode, closeCustomerDetail]);
 
-  // Count exceptions
-  const transactions = customerDetail?.transactions;
-  const exceptionRecords = React.useMemo(
-    () => (transactions ? transactions.filter((t) => t.hasException) : []),
-    [transactions]
-  );
+ 
 
   return (
     <AnimatePresence>
@@ -103,9 +96,6 @@ export function AccountabilityDrawer() {
                 <h2 className="text-lg font-bold text-foreground">
                   {customerDetail?.customerName || "Loading customer ledger..."}
                 </h2>
-                {customerDetail?.storeName && (
-                  <p className="text-xs text-muted-foreground">Store: {customerDetail.storeName}</p>
-                )}
               </div>
 
               <button
@@ -117,32 +107,46 @@ export function AccountabilityDrawer() {
               </button>
             </div>
 
-            {/* ── Custody Balance Quick Strip ─────────────────────────────── */}
+            {/* ── Custody Balance Quick Strip (SNET Spec v1.0 §10, §11) ─── */}
+            {/* AG-COMMENT: 4 core custody metrics: Opening, Current Held, Limit, Variance */}
             <div className="grid grid-cols-2 gap-3 border-b px-5 py-3 bg-muted/10 sm:grid-cols-4 text-xs">
               <div>
-                <span className="text-muted-foreground block text-[11px]">Opening Base</span>
+                <span className="text-muted-foreground block text-[11px]">Opening</span>
                 <span className="font-mono text-base font-bold text-foreground">
                   {customerDetail ? customerDetail.openingBase.toLocaleString() : "—"}
                 </span>
               </div>
               <div>
-                <span className="text-muted-foreground block text-[11px]">Active Physical Serials</span>
-                <span className="font-mono text-base font-bold text-primary">
-                  {customerDetail ? customerDetail.activeSerialsInCustody.length.toLocaleString() : "—"}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted-foreground block text-[11px]">Reconciled Closing Base</span>
+                <span className="text-muted-foreground block text-[11px]">Current Held (=)</span>
                 <span className="font-mono text-base font-bold text-indigo-600 dark:text-indigo-400">
                   {customerDetail ? customerDetail.closingBase.toLocaleString() : "—"}
                 </span>
               </div>
               <div>
-                <span className="text-muted-foreground block text-[11px]">Audit Exceptions</span>
-                <span className={`font-mono text-base font-bold ${exceptionRecords.length > 0 ? "text-amber-600" : "text-emerald-600"}`}>
-                  {exceptionRecords.length}
+                <span className="text-muted-foreground block text-[11px]">Authorized Limit</span>
+                <span className="font-mono text-base font-bold text-foreground">
+                  {customerDetail ? customerDetail.authorizedLimit.toLocaleString() : "—"}
                 </span>
               </div>
+              <div>
+                <span className="text-muted-foreground block text-[11px]">Variance</span>
+                {customerDetail ? (
+                  <span
+                    className={`font-mono text-base font-bold ${
+                      customerDetail.variance > 0
+                        ? "text-amber-600 dark:text-amber-400"
+                        : "text-emerald-600 dark:text-emerald-400"
+                    }`}
+                  >
+                    {customerDetail.variance > 0
+                      ? `+${customerDetail.variance}`
+                      : customerDetail.variance}
+                  </span>
+                ) : (
+                  <span className="font-mono text-base font-bold text-muted-foreground">—</span>
+                )}
+              </div>
+              
             </div>
 
             {/* ── Navigation Tabs ────────────────────────────────────────── */}
@@ -173,18 +177,7 @@ export function AccountabilityDrawer() {
                 <span>Physical Custody Serials ({customerDetail?.activeSerialsInCustody?.length ?? 0})</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => setActiveTab("exceptions")}
-                className={`py-3 flex items-center gap-1.5 border-b-2 transition ${
-                  activeTab === "exceptions"
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <AlertTriangle className="h-3.5 w-3.5" />
-                <span>Exceptions ({exceptionRecords.length})</span>
-              </button>
+            
             </div>
 
             {/* ── Drawer Body Content ────────────────────────────────────── */}
@@ -199,8 +192,13 @@ export function AccountabilityDrawer() {
                 /* ── Tab 1: Chronological Ledger ───────────────────────────── */
                 <div className="space-y-3">
                   {!customerDetail?.transactions || customerDetail.transactions.length === 0 ? (
-                    <div className="py-12 text-center text-xs text-muted-foreground">
-                      No verified cylinder transactions found for this customer within the period.
+                    <div className="py-12 text-center text-xs text-muted-foreground space-y-1.5 px-4">
+                      <p className="font-medium text-foreground">
+                        No verified cylinder transactions found for this customer within the selected period.
+                      </p>
+                      <p className="text-[11px] text-muted-foreground max-w-md mx-auto">
+                        All physical custody serials ({customerDetail?.activeSerialsInCustody?.length ?? 0}) were issued in prior periods. Adjust the <strong>Period Start</strong> filter in the top bar (e.g. to June 2026) to view previous onboarding issuances and refill movements.
+                      </p>
                     </div>
                   ) : (
                     customerDetail.transactions.map((tx) => (
@@ -219,9 +217,7 @@ export function AccountabilityDrawer() {
                               <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
                                 {tx.sourceModule}: {tx.sourceHeaderId}
                               </span>
-                              <span className="text-[10px] uppercase font-bold text-muted-foreground">
-                                Ref: {tx.referenceNo || "Direct"}
-                              </span>
+                              
                             </div>
                             <div className="font-semibold text-foreground text-sm">
                               {tx.productName}
@@ -264,18 +260,12 @@ export function AccountabilityDrawer() {
                           </div>
                         )}
 
-                        {/* Anomaly note */}
-                        {tx.hasException && (
-                          <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-amber-500/10 p-2 text-[11px] font-medium text-amber-700 dark:text-amber-300">
-                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                            <span>{tx.exceptionReason}</span>
-                          </div>
-                        )}
+                      
                       </div>
                     ))
                   )}
                 </div>
-              ) : activeTab === "serials" ? (
+              ) : (
                 /* ── Tab 2: Physical Serial Custody ────────────────────────── */
                 <div className="space-y-2">
                   {!customerDetail?.activeSerialsInCustody || customerDetail.activeSerialsInCustody.length === 0 ? (
@@ -321,36 +311,7 @@ export function AccountabilityDrawer() {
                     ))
                   )}
                 </div>
-              ) : (
-                /* ── Tab 3: Exceptions ─────────────────────────────────────── */
-                <div className="space-y-3">
-                  {exceptionRecords.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 text-center">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 mb-2">
-                        <CheckCircle2 className="h-5 w-5" />
-                      </div>
-                      <h4 className="text-xs font-bold text-foreground">Zero Exceptions Detected</h4>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        All transaction movements and custody records for this customer are verified and balanced.
-                      </p>
-                    </div>
-                  ) : (
-                    exceptionRecords.map((ex) => (
-                      <div key={ex.id} className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="font-mono font-bold text-foreground">{ex.transactionDate}</span>
-                          <span className="rounded bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300">
-                            Exception: {ex.sourceModule} {ex.sourceHeaderId}
-                          </span>
-                        </div>
-                        <p className="mt-2 text-xs font-medium text-amber-800 dark:text-amber-200">
-                          {ex.exceptionReason}
-                        </p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
+              ) }
             </div>
           </motion.div>
         </motion.div>

@@ -21,11 +21,11 @@ export function AccountabilityFilters() {
 
   const [localSearch, setLocalSearch] = React.useState(filters.searchQuery || "");
 
-  // Debounced search sync
+  // AG-COMMENT: Instantaneous in-memory search sync (filters already loaded dataset without requesting server)
   React.useEffect(() => {
     const timer = setTimeout(() => {
       setFilters({ searchQuery: localSearch });
-    }, 280);
+    }, 150);
     return () => clearTimeout(timer);
   }, [localSearch, setFilters]);
 
@@ -58,7 +58,7 @@ export function AccountabilityFilters() {
               type="text"
               value={localSearch}
               onChange={(e) => setLocalSearch(e.target.value)}
-              placeholder="Search by code, customer name, or store..."
+              placeholder="Search by customer name, code, or site..."
               className="w-full rounded-lg border bg-background py-2 pl-9 pr-8 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             />
             {localSearch && (

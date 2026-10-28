@@ -1,7 +1,7 @@
 // src/modules/industrial-distribution-system/bia/customer-cylinder-accountability/components/AccountabilityHeader.tsx
 // ==============================================================================
 // Header & Action Bar for Customer Cylinder Accountability Report
-// Features: Module branding, Refresh trigger, Excel and PDF export dispatchers.
+// Features: Module branding, Refresh trigger, Excel export dispatcher.
 //
 // Complies with VoSync Design System standards:
 // - Modern typography & subtle micro-animations
@@ -12,11 +12,12 @@
 "use client";
 
 import * as React from "react";
-import { FileSpreadsheet, FileText, RefreshCw, ShieldCheck } from "lucide-react";
+import { FileSpreadsheet, RefreshCw, ShieldCheck } from "lucide-react";
 import { useCustomerCylinderAccountability } from "../hooks/useCustomerCylinderAccountability";
 
 export function AccountabilityHeader() {
-  const { refresh, exportExcel, exportPdf, isLoading, reportData } = useCustomerCylinderAccountability();
+  // AG-COMMENT: exportPdf removed per user requirement; only retaining Excel export
+  const { refresh, exportExcel, isLoading, reportData } = useCustomerCylinderAccountability();
 
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b pb-5">
@@ -52,27 +53,16 @@ export function AccountabilityHeader() {
         </button>
 
         {/* Export to Excel */}
+        {/* AG-COMMENT: Sole export option retained - generates multi-sheet Excel workbook */}
         <button
           type="button"
           onClick={exportExcel}
           disabled={isLoading || !reportData?.rows?.length}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-500/20 dark:text-emerald-400 disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3.5 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-500/20 dark:text-emerald-400 disabled:opacity-50"
           title="Download report as multi-tab Excel workbook"
         >
           <FileSpreadsheet className="h-3.5 w-3.5" />
           <span>Export Excel</span>
-        </button>
-
-        {/* Export to PDF */}
-        <button
-          type="button"
-          onClick={exportPdf}
-          disabled={isLoading || !reportData?.rows?.length}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-xs transition hover:bg-primary/90 disabled:opacity-50"
-          title="Download report as print-ready PDF audit document"
-        >
-          <FileText className="h-3.5 w-3.5" />
-          <span>Export PDF</span>
         </button>
       </div>
     </div>
