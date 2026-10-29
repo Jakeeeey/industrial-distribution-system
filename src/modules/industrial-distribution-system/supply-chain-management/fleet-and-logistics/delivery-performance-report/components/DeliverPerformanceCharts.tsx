@@ -2,9 +2,9 @@
 // ==============================================================================
 // Delivery Performance Report - Graphics & Charts
 // Visualizes:
-// 1. Fulfillment Trends (Clean spaced bars with custom tooltip)
+// 1. Fulfillment Trends (Clean spaced bars with custom tooltip, cursor={false} to remove gray hover shine)
 // 2. Fulfillment Ratio (Modern Donut with centered success metric)
-// 3. Driver Performance & Reliability (Bar Chart / Graph with fulfillment & failure breakdown)
+// 3. Driver Performance & Reliability (Bar Chart / Graph with cursor={false})
 // ==============================================================================
 
 "use client";
@@ -197,7 +197,7 @@ export function DeliverPerformanceCharts() {
 
   return (
     <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-      {/* 1. Fulfillment Trends (Grouped stacked bars) */}
+      {/* 1. Fulfillment Trends (cursor={false} removes gray shine on hover) */}
       <Card className="lg:col-span-2 shadow-xs border-border">
         <CardHeader className="py-2.5 px-3 border-b border-border/50">
           <CardTitle className="text-xs sm:text-sm font-semibold text-foreground flex items-center gap-1.5">
@@ -232,7 +232,8 @@ export function DeliverPerformanceCharts() {
                     tickLine={false}
                     allowDecimals={false}
                   />
-                  <Tooltip content={<TrendsCustomTooltip />} />
+                  {/* cursor={false} eliminates gray shine overlay on hover */}
+                  <Tooltip content={<TrendsCustomTooltip />} cursor={false} />
                   <Legend
                     wrapperStyle={{ fontSize: "11px", paddingTop: "6px" }}
                     iconType="circle"
@@ -307,7 +308,7 @@ export function DeliverPerformanceCharts() {
         </CardContent>
       </Card>
 
-      {/* 3. Driver Performance & Reliability - Visual Chart / Graph */}
+      {/* 3. Driver Performance & Reliability (cursor={false} removes gray shine on hover) */}
       {topDrivers.length > 0 && (
         <Card className="lg:col-span-3 shadow-xs border-border">
           <CardHeader className="py-2.5 px-3 border-b border-border/50">
@@ -346,7 +347,8 @@ export function DeliverPerformanceCharts() {
                     tickLine={false}
                     allowDecimals={false}
                   />
-                  <Tooltip content={<DriverChartTooltip />} />
+                  {/* cursor={false} eliminates gray shine overlay on hover */}
+                  <Tooltip content={<DriverChartTooltip />} cursor={false} />
                   <Legend
                     wrapperStyle={{ fontSize: "11px", paddingTop: "6px" }}
                     iconType="circle"

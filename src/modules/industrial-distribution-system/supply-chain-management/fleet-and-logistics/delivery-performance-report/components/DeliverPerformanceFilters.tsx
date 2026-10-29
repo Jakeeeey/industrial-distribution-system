@@ -1,13 +1,12 @@
 // src/modules/industrial-distribution-system/supply-chain-management/fleet-and-logistics/delivery-performance-report/components/DeliverPerformanceFilters.tsx
 // ==============================================================================
 // Delivery Performance Report - Filters Bar
-// Features: Searchbar upfront, period presets with SearchableSelect,
-// inline conditional date inputs (no gaps or disjointed rows), and SearchableSelect across all filters.
+// Optimized with debounced search input (350ms) to prevent unnecessary fetch bursts.
 // ==============================================================================
 
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { Search, RotateCcw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -25,6 +24,26 @@ const periodOptions = [
 export function DeliverPerformanceFilters() {
   const { filters, updateFilter, periodPreset, setPeriodPreset, resetFilters, lookups, loading } =
     useDeliverPerformance();
+
+  // Local debounced search state
+  const [localSearch, setLocalSearch] = useState<string>(filters.search || "");
+  const [prevSearch, setPrevSearch] = useState(filters.search);
+
+  // Sync state during render when filters.search changes externally (e.g., reset)
+  if (filters.search !== prevSearch) {
+    setPrevSearch(filters.search);
+    setLocalSearch(filters.search || "");
+  }
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (localSearch !== (filters.search || "")) {
+        updateFilter("search", localSearch);
+      }
+    }, 350);
+
+    return () => clearTimeout(handler);
+  }, [localSearch, filters.search, updateFilter]);
 
   // Branch options
   const branchOptions = useMemo(() => {
@@ -62,7 +81,7 @@ export function DeliverPerformanceFilters() {
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-border bg-card/60 p-2 sm:p-2.5 shadow-xs">
       <div className="flex flex-wrap items-end gap-2 w-full">
-        {/* 1. Search Bar - at the start of the row */}
+        {/* 1. Search Bar with Debounce */}
         <div className="flex flex-col gap-1 min-w-[200px] flex-1 max-w-sm">
           <label className="text-[11px] font-medium text-muted-foreground">Search</label>
           <div className="relative">
@@ -70,8 +89,8 @@ export function DeliverPerformanceFilters() {
             <Input
               type="text"
               placeholder="Search waybill, customer, driver..."
-              value={filters.search || ""}
-              onChange={(e) => updateFilter("search", e.target.value)}
+              value={localSearch}
+              onChange={(e) => setLocalSearch(e.target.value)}
               disabled={loading}
               className="h-8 pl-8 text-xs bg-background"
             />
@@ -91,7 +110,7 @@ export function DeliverPerformanceFilters() {
           />
         </div>
 
-        {/* 3. Inline Conditional Date Pickers (directly next to Period without gaps) */}
+        {/* 3. Inline Conditional Date Pickers */}
         {periodPreset === "custom" && (
           <>
             <div className="flex flex-col gap-1 w-[130px]">

@@ -1,13 +1,13 @@
 // src/modules/industrial-distribution-system/supply-chain-management/fleet-and-logistics/delivery-performance-report/providers/DeliverPerformanceProvider.tsx
 // ==============================================================================
 // Delivery Performance Report - React Context Provider
-// Manages filters, date range presets (Today, This Week, This Month, This Year, Custom),
-// active report data, loading states, drawer state, and exports.
+// Manages filters, date range presets, active report data, loading states,
+// with AbortController for in-flight query cancellation to prevent race conditions.
 // ==============================================================================
 
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import type {
   DeliverPerformanceResponse,
   DeliverPerformanceLookups,
@@ -63,7 +63,7 @@ function getDateRangeForPreset(preset: DatePeriodPreset): { startDate: string; e
       return { startDate: endDate, endDate };
     case "this_week": {
       const day = now.getDay();
-      const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Monday as first day
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
       const monday = new Date(now);
       monday.setDate(diff);
       return { startDate: formatIso(monday), endDate };
@@ -102,6 +102,9 @@ export function DeliverPerformanceProvider({ children }: { children: React.React
   const [error, setError] = useState<string | null>(null);
   const [selectedRecord, setSelectedRecord] = useState<DeliveryRecordItem | null>(null);
 
+  // Ref to hold the current in-flight AbortController
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   // 1. Fetch lookups on mount
   useEffect(() => {
     let isMounted = true;
@@ -123,8 +126,16 @@ export function DeliverPerformanceProvider({ children }: { children: React.React
     };
   }, []);
 
-  // 2. Fetch report data whenever filters change
+  // 2. Fetch report data whenever filters change, with AbortController
   const fetchReport = useCallback(async () => {
+    // Abort previous in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setLoading(true);
     setError(null);
     try {
@@ -139,7 +150,10 @@ export function DeliverPerformanceProvider({ children }: { children: React.React
       if (filters.page) q.set("page", String(filters.page));
       if (filters.pageSize) q.set("pageSize", String(filters.pageSize));
 
-      const res = await fetch(`/api/ids/scm/fleet-and-logistics/delivery-performance-report?${q.toString()}`);
+      const res = await fetch(`/api/ids/scm/fleet-and-logistics/delivery-performance-report?${q.toString()}`, {
+        signal: controller.signal,
+      });
+
       if (!res.ok) {
         throw new Error(`Report API error: ${res.statusText}`);
       }
@@ -150,22 +164,33 @@ export function DeliverPerformanceProvider({ children }: { children: React.React
         throw new Error(json.error || "Failed to generate report");
       }
     } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        // Request was aborted due to new filter change - ignore
+        return;
+      }
       const msg = err instanceof Error ? err.message : String(err);
       setError(msg);
     } finally {
-      setLoading(false);
+      if (abortControllerRef.current === controller) {
+        setLoading(false);
+      }
     }
   }, [filters]);
 
   useEffect(() => {
     fetchReport();
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [fetchReport]);
 
   const updateFilter = useCallback((key: keyof DeliverPerformanceFilterInput, val: unknown) => {
     setFilters((prev) => ({
       ...prev,
       [key]: val,
-      page: key === "page" ? (val as number) : 1, // Reset page on filter changes
+      page: key === "page" ? (val as number) : 1,
     }));
   }, []);
 

@@ -1,8 +1,10 @@
 // src/modules/industrial-distribution-system/supply-chain-management/fleet-and-logistics/delivery-performance-report/services/deliver-performance.repo.ts
 // ==============================================================================
 // Delivery Performance Report - Repository Layer
-// Fetches records from Directus ERP collections with parameter sanitization
-// and chunking for queries with large foreign-key lists.
+// Optimized with:
+// 1. In-memory caching for lookups (5-minute TTL) to avoid redundant Directus requests.
+// 2. Focused field projections to minimize payload size over the wire.
+// 3. Array chunking to safely query large invoice ID sets.
 // ==============================================================================
 
 const DIRECTUS_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "";
@@ -68,10 +70,27 @@ async function fetchDirectusCollection<T>(
   }
 }
 
+// In-Memory Lookup Cache with 5-minute TTL
+interface LookupCacheData {
+  branches: Array<{ id: number; branch_code: string; branch_name: string }>;
+  customers: Array<{ customer_code: string; customer_name: string; store_name: string }>;
+  drivers: Array<{ user_id: number; name: string }>;
+  statuses: readonly ["Fulfilled", "Fulfilled With Concerns", "Fulfilled With Returns", "Not Fulfilled"];
+  timestamp: number;
+}
+
+let cachedLookups: LookupCacheData | null = null;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 /**
- * Lookups for filter selectors
+ * Lookups for filter selectors (Cached)
  */
 export async function repoFetchLookups() {
+  const now = Date.now();
+  if (cachedLookups && now - cachedLookups.timestamp < CACHE_TTL_MS) {
+    return cachedLookups;
+  }
+
   const [branches, customers, users] = await Promise.all([
     fetchDirectusCollection<{ id: number; branch_code: string; branch_name: string }>(
       "branches",
@@ -87,7 +106,7 @@ export async function repoFetchLookups() {
     ),
   ]);
 
-  return {
+  cachedLookups = {
     branches,
     customers,
     drivers: users.map((u) => ({
@@ -100,7 +119,10 @@ export async function repoFetchLookups() {
       "Fulfilled With Returns",
       "Not Fulfilled",
     ] as const,
+    timestamp: now,
   };
+
+  return cachedLookups;
 }
 
 /**
@@ -232,4 +254,3 @@ export async function repoFetchInvoiceDetails(invoiceIds: number[]) {
 
   return results.flat();
 }
-

@@ -19,7 +19,7 @@ import {
 import { useDeliverPerformance } from "../providers/DeliverPerformanceProvider";
 
 export function DeliverPerformancePagination() {
-  const { report, filters, updateFilter, loading } = useDeliverPerformance();
+  const { report, updateFilter, loading } = useDeliverPerformance();
   const pagination = report?.pagination;
 
   if (!pagination || pagination.totalRecords === 0) return null;
