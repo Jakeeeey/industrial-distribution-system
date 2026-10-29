@@ -503,26 +503,38 @@ export function ExceptionsPanel(): React.ReactElement | null {
   const [flatPage, setFlatPage] = React.useState(0);
   const [flatPageSize, setFlatPageSize] = React.useState<number>(25);
 
-  if (!report || report.exceptions.length === 0) return null;
+  // AG-WORKFLOW: Use static fallback to avoid re-allocation when exceptions are undefined
+  const exceptions = React.useMemo(() => report?.exceptions ?? [], [report?.exceptions]);
 
   // Global KPI calculations across all exceptions
-  const totalFindings = report.exceptions.length;
-  const totalInvolvedAmount = report.exceptions.reduce(
-    (sum, item) => sum + Math.abs(item.amount ?? 0),
-    0
+  const totalFindings = exceptions.length;
+  const totalInvolvedAmount = React.useMemo(
+    () =>
+      exceptions.reduce(
+        (sum, item) => sum + Math.abs(item.amount ?? 0),
+        0
+      ),
+    [exceptions]
   );
-  const criticalCount = report.exceptions.filter(
-    (e) => e.severity === "critical"
-  ).length;
-  const warningCount = report.exceptions.filter(
-    (e) => e.severity === "warning"
-  ).length;
-  const infoCount = report.exceptions.filter((e) => e.severity === "info").length;
+  const criticalCount = React.useMemo(
+    () => exceptions.filter((e) => e.severity === "critical").length,
+    [exceptions]
+  );
+  const warningCount = React.useMemo(
+    () => exceptions.filter((e) => e.severity === "warning").length,
+    [exceptions]
+  );
+  const infoCount = React.useMemo(
+    () => exceptions.filter((e) => e.severity === "info").length,
+    [exceptions]
+  );
 
   // Filter exceptions based on search keyword and severity selection
+  // AG-WORKFLOW: Hooks must be called unconditionally on every render
   const filteredExceptions = React.useMemo(() => {
+    if (exceptions.length === 0) return [];
     const term = searchTerm.trim().toLowerCase();
-    return report.exceptions.filter((item) => {
+    return exceptions.filter((item) => {
       if (severityFilter !== "all" && item.severity !== severityFilter) {
         return false;
       }
@@ -545,7 +557,7 @@ export function ExceptionsPanel(): React.ReactElement | null {
         matchTitle
       );
     });
-  }, [report.exceptions, searchTerm, severityFilter]);
+  }, [exceptions, searchTerm, severityFilter]);
 
   // AG-WORKFLOW: Reset flat pagination when search filter or severity changes
   React.useEffect(() => {
@@ -553,7 +565,9 @@ export function ExceptionsPanel(): React.ReactElement | null {
   }, [searchTerm, severityFilter, flatPageSize]);
 
   // Group filtered exceptions by code
+  // AG-WORKFLOW: Hooks must be called unconditionally on every render
   const groups = React.useMemo(() => {
+    if (filteredExceptions.length === 0) return [];
     const grouped = new Map<ExceptionCode, ReportException[]>();
     for (const item of filteredExceptions) {
       const bucket = grouped.get(item.code);
@@ -568,6 +582,9 @@ export function ExceptionsPanel(): React.ReactElement | null {
         SEVERITY_ORDER[a[1][0].severity] - SEVERITY_ORDER[b[1][0].severity]
     );
   }, [filteredExceptions]);
+
+  // AG-WORKFLOW: Safe early return after all React Hooks have executed to adhere to Rules of Hooks
+  if (!report || report.exceptions.length === 0) return null;
 
   // Flat table pagination slices
   const flatPageCount = Math.max(Math.ceil(filteredExceptions.length / flatPageSize), 1);

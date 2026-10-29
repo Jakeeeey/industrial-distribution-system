@@ -9,8 +9,8 @@ import type {
   AppliedFilterContext,
   CustomerIncentiveReportResponse,
 } from "../types/customer-incentive.types";
-import { CLAIM_STATUS_LABELS, DEFAULT_ELIGIBLE_SIZE_KG } from "../types/customer-incentive.types";
-import { eligibleSizeLabel, resolveSizeKg, round2 } from "./customer-incentive.helpers";
+import { CLAIM_STATUS_LABELS } from "../types/customer-incentive.types";
+import { eligibleSizeLabel, round2 } from "./customer-incentive.helpers";
 
 export type ReportExportCell = string | number | null;
 

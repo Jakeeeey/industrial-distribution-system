@@ -25,7 +25,7 @@ import {
   type CustomerClaimMoney,
   type EvidenceAccumulator,
 } from "./customer-incentive.calc";
-import { dateOnly, resolveSizeKg } from "./customer-incentive.helpers";
+import { dateOnly } from "./customer-incentive.helpers";
 import {
   fetchCustomerIncentiveSources,
   type CustomerIncentiveRepoOptions,

@@ -43,7 +43,7 @@ import type { ReportLookupKind } from "../hooks/useIncentiveFilterOptions";
 import {
   getPeriodPreset,
   isSameSelection,
-  resolveSizeKg,
+
   type ReportPeriodPreset,
 } from "../services/customer-incentive.helpers";
 import {
