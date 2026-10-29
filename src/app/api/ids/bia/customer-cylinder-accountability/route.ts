@@ -4,4 +4,9 @@
 // Re-exports canonical implementation from SCM cylinder-asset-management to ensure single source of truth.
 // ==============================================================================
 
-export { GET, dynamic, runtime } from "@/app/api/ids/scm/cylinder-asset-management/customer-cylinder-accountability/route";
+// AG-WORKFLOW: Next.js / Turbopack requires route segment configs (dynamic, runtime)
+// to be statically defined directly in the file, not re-exported.
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+export { GET } from "@/app/api/ids/scm/cylinder-asset-management/customer-cylinder-accountability/route";
