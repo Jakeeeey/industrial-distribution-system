@@ -29,11 +29,14 @@ export function exportAccountabilityToExcel(
     ["Report Generated At (UTC+8)", report.generatedAt],
     [],
     ["METRIC", "QUANTITY"],
-    ["Total Opening Cylinder Base", report.kpis.totalOpeningBase],
-    ["Period Cylinder Deposits Issued (+)", report.kpis.totalPeriodDeposits],
+    ["Total Opening Holdings", report.kpis.totalOpeningBase],
+    ["Period Cylinder Issues (+)", report.kpis.totalPeriodDeposits],
     ["Period Cylinder Swaps Circulated", report.kpis.totalPeriodSwaps],
-    ["Period Cylinder Pull-Outs / Returns (-)", report.kpis.totalPeriodPullOuts],
-    ["Total Closing / Running Cylinder Base", report.kpis.totalClosingBase],
+    ["Period Cylinder Returns (-)", report.kpis.totalPeriodPullOuts],
+    ["Total Current Held (=)", report.kpis.totalClosingBase],
+    ["Total Authorized Fleet Quota", report.kpis.totalAuthorizedLimit],
+    ["Net Fleet Holding Variance", report.kpis.totalVariance],
+    ["Accounts Exceeding Authorized Quota", report.kpis.overLimitCount],
     ["Active Customer Accounts", report.kpis.activeCustomerAccounts],
     ["Verified Source Records", report.kpis.totalVerifiedRecords],
     ["Audit Exceptions / Unreconciled Flags", report.kpis.totalExceptions],
@@ -43,19 +46,19 @@ export function exportAccountabilityToExcel(
   summarySheet["!cols"] = [{ wch: 45 }, { wch: 25 }];
   XLSX.utils.book_append_sheet(workbook, summarySheet, "Executive Summary");
 
-  // ── Sheet 2: Customer Ledger Master Grid ───────────────────────────────────
+  // ── Sheet 2: Customer Ledger Master Grid (SNET Spec v1.0 §11) ──────────────
   const customerHeaders = [
     "Customer Code",
     "Customer Name",
-    "Store Name",
-    "Branch",
+    "Site",
     "Ownership",
-    "Opening Base",
-    "Deposit Qty (+)",
-    "Swap Qty",
-    "Net Swap Change",
-    "Pull-Out Qty (-)",
-    "Running / Closing Base",
+    "Opening",
+    "Issued (+)",
+    "Swaps Circulated",
+    "Returned (-)",
+    "Held (=)",
+    "Authorized Limit",
+    "Variance",
     "Last Transaction Date",
     "Last Reference No",
     "Verified Records",
@@ -65,15 +68,15 @@ export function exportAccountabilityToExcel(
   const customerData = report.rows.map((row) => [
     row.customerCode,
     row.customerName,
-    row.storeName || "—",
-    row.branchName,
+    row.siteName || row.branchName,
     row.ownership,
-    row.openingBase,
-    row.periodDeposits,
+    row.opening ?? row.openingBase,
+    row.issued ?? row.periodDeposits,
     row.periodSwaps,
-    row.periodNetSwapChange,
-    row.periodPullOuts,
-    row.closingBase,
+    row.returned ?? row.periodPullOuts,
+    row.held ?? row.closingBase,
+    row.authorizedLimit,
+    row.variance,
     row.lastTransactionDate || "—",
     row.lastReferenceNo || "—",
     row.verifiedTransactionsCount,
@@ -84,15 +87,15 @@ export function exportAccountabilityToExcel(
   customerSheet["!cols"] = [
     { wch: 16 }, // Code
     { wch: 30 }, // Name
-    { wch: 25 }, // Store
-    { wch: 20 }, // Branch
+    { wch: 20 }, // Site
     { wch: 14 }, // Ownership
-    { wch: 14 }, // Opening Base
-    { wch: 15 }, // Deposits
-    { wch: 14 }, // Swaps
-    { wch: 16 }, // Net Swap
-    { wch: 15 }, // Pull-outs
-    { wch: 20 }, // Closing Base
+    { wch: 14 }, // Opening
+    { wch: 15 }, // Issued
+    { wch: 16 }, // Swaps
+    { wch: 15 }, // Returned
+    { wch: 16 }, // Held
+    { wch: 16 }, // Limit
+    { wch: 14 }, // Variance
     { wch: 22 }, // Last Date
     { wch: 22 }, // Reference No
     { wch: 16 }, // Verified Records

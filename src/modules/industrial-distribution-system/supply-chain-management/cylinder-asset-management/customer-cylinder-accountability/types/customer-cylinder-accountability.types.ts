@@ -44,7 +44,7 @@ export interface AccountabilityTransactionRecord {
   transactionDate: string; // YYYY-MM-DD
   customerCode: string;
   customerName: string;
-  sourceModule: "POS" | "SALES_ORDER" | "SALES_RETURN" | "DISPATCH";
+  sourceModule: "POS" | "SALES_ORDER" | "SALES_RETURN" | "DISPATCH" | "WIWO";
   sourceHeaderId: string; // Document Number / Invoice / Order No
   sourceDetailId?: number | string;
   sourceStatus: "COMPLETED" | "DELIVERED" | "POSTED" | "VOIDED" | "CANCELLED";
@@ -67,6 +67,8 @@ export interface AccountabilityTransactionRecord {
 
 /**
  * Customer master summary row displayed in the primary report grid.
+ * Conforms to SNET Spec v1.0 §11 Wireframe columns:
+ * Customer, Site, Opening, Issued, Returned, Held, Limit, Variance.
  */
 export interface CustomerAccountabilityRow {
   customerCode: string;
@@ -75,29 +77,57 @@ export interface CustomerAccountabilityRow {
   contactNumber?: string | null;
   branchId: number | null;
   branchName: string;
+  // AG-COMMENT: SNET Spec §11 column "Site" alias
+  siteName?: string;
   ownership: CylinderOwnership;
-  openingBase: number; // Custody count at start of period cutoff
-  periodDeposits: number; // Total deposit cylinders received (+Base)
-  periodSwaps: number; // Total swap cylinders circulated
+
+  // Primary Reconciliation Ledger Metrics (§4 & §11)
+  openingBase: number; // Custody count at start of period cutoff (Spec: Opening)
+  opening?: number; // Alias for openingBase
+  periodDeposits: number; // Total deposit cylinders received (+Base) (Spec: Issued)
+  issued?: number; // Alias for periodDeposits
+  periodSwaps: number; // Total swap cylinders circulated (1-to-1 exchanges, net 0)
   periodNetSwapChange: number; // Delta from unbalanced swaps (+/- Base)
-  periodPullOuts: number; // Total cylinders returned / pulled out (-Base)
-  closingBase: number; // Custody balance as of reporting cutoff
+  periodPullOuts: number; // Total cylinders returned / pulled out (-Base) (Spec: Returned)
+  returned?: number; // Alias for periodPullOuts
+  closingBase: number; // Custody balance as of reporting cutoff (Spec: Held)
   runningBase: number; // Synonymous with closing balance as of cutoff
+  held?: number; // Alias for closingBase
+
+  // AG-COMMENT: SNET Spec §7 & §11 Authorized Quota & Variance definitions
+  // Variance = Current Held - Authorized Limit (positive variance = over-limit risk)
+  authorizedLimit: number;
+  variance: number;
+
+  // AG-COMMENT: SNET Spec §7 Turnaround & Commercial Incentive outputs
+  // Turns per year, months per turn, customer grade, incentive rate, and total incentive
+  turnsPerYear?: number;
+  monthsPerTurn?: number;
+  customerGrade?: "A" | "B" | "C" | "STANDARD";
+  incentiveRate?: number; // e.g. ₱ per cylinder or incentive percentage
+  totalIncentive?: number; // Accrued incentive rebate calculation
+
   lastTransactionDate: string | null;
   lastReferenceNo?: string | null;
   verifiedTransactionsCount: number;
   exceptionCount: number;
+  auditStatus?: "RECONCILED" | "REVIEW_REQUIRED";
 }
 
 /**
  * Overall KPI summary statistics across all qualifying customer accounts.
+ * Conforms to SNET Spec §7 & §11 including limit and variance totals.
  */
 export interface AccountabilityKPISummary {
   totalOpeningBase: number;
-  totalPeriodDeposits: number;
+  totalPeriodDeposits: number; // Total Issued (+)
   totalPeriodSwaps: number;
-  totalPeriodPullOuts: number;
-  totalClosingBase: number;
+  totalPeriodPullOuts: number; // Total Returned (-)
+  totalClosingBase: number; // Total Current Held (=)
+  // AG-COMMENT: SNET Spec additions for fleet risk oversight
+  totalAuthorizedLimit: number;
+  totalVariance: number;
+  overLimitCount: number; // Number of customer accounts holding cylinders above authorized quota
   activeCustomerAccounts: number;
   totalVerifiedRecords: number;
   totalExceptions: number;
@@ -132,9 +162,18 @@ export interface CustomerAccountabilityDetailResponse {
   contactNumber: string | null;
   address: string | null;
   branchName: string;
+  siteName?: string; // SNET Spec §11 alias
   ownership: CylinderOwnership;
   openingBase: number;
   closingBase: number;
+  // AG-COMMENT: SNET Spec §7 & §11 drilldown fields
+  authorizedLimit: number;
+  variance: number;
+  turnsPerYear?: number;
+  monthsPerTurn?: number;
+  customerGrade?: "A" | "B" | "C" | "STANDARD";
+  incentiveRate?: number;
+  totalIncentive?: number;
   transactions: AccountabilityTransactionRecord[];
   activeSerialsInCustody: Array<{
     serialNumber: string;
