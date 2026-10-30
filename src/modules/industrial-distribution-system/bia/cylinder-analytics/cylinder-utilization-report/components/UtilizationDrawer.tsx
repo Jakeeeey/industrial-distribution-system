@@ -69,6 +69,17 @@ export function UtilizationDrawer() {
   const assets = detail?.assets ?? [];
   const exceptionCount = assets.filter((asset) => asset.isException).length;
 
+  // AG-COMMENT: Retrieves bucket counts for the drawer tabs from detail response or initial selection cache
+  const getBucketCount = (bucket: UtilizationBucket | null): number => {
+    if (detail?.bucketCounts) {
+      return bucket ? (detail.bucketCounts[bucket] ?? 0) : detail.bucketCounts.ALL;
+    }
+    if (selection?.counts) {
+      return bucket ? (selection.counts[bucket] ?? 0) : selection.counts.ALL;
+    }
+    return 0;
+  };
+
   return (
     <AnimatePresence>
       {selection && (
@@ -97,7 +108,7 @@ export function UtilizationDrawer() {
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 28, stiffness: 280, mass: 0.8 }}
-            className="relative z-10 flex h-full w-full max-w-2xl flex-col border-l bg-background shadow-2xl"
+            className="relative z-10 flex h-full w-full max-w-3xl flex-col border-l bg-background shadow-2xl"
           >
             {/* ── Header ───────────────────────────────────────────────── */}
             <div className="space-y-1 border-b bg-muted/20 p-5">
@@ -132,18 +143,28 @@ export function UtilizationDrawer() {
             <div className="flex gap-1 overflow-x-auto border-b px-4 py-2 text-[11px] font-semibold">
               {BUCKET_TABS.map((bucket) => {
                 const active = selectedBucket === bucket;
+                const count = getBucketCount(bucket);
                 return (
                   <button
                     key={bucket ?? "ALL"}
                     type="button"
                     onClick={() => filterDetailByBucket(bucket)}
-                    className={`whitespace-nowrap rounded-md border px-2.5 py-1.5 transition ${
+                    className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 py-1.5 transition ${
                       active
                         ? "border-primary bg-primary/10 text-primary"
                         : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
                     }`}
                   >
-                    {bucket ? BUCKET_LABELS[bucket] : "All buckets"}
+                    <span>{bucket ? BUCKET_LABELS[bucket] : "All"}</span>
+                    <span
+                      className={`rounded-full px-1.5 py-0.5 text-[10px] font-mono font-bold leading-none ${
+                        active
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {formatCount(count)}
+                    </span>
                   </button>
                 );
               })}
@@ -229,7 +250,7 @@ function AssetCard({ asset }: { asset: CylinderUtilizationAssetRecord }) {
         {/* Labelled "Since activity", not "Idle": a circulating cylinder also has a
             dormancy span, and calling it idle would contradict its own badge. */}
         <Field label="Since activity" value={asset.idleDays === null ? "—" : `${asset.idleDays}d`} mono />
-        <Field label="Customer" value={asset.customerCode || "In yard"} />
+        <Field label="Customer" value={asset.customerCode || "—"} />
       </div>
 
       <div className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -287,12 +308,16 @@ function AssetCard({ asset }: { asset: CylinderUtilizationAssetRecord }) {
                       }`}
                     >
                       <div className="min-w-0">
-                        <div className="font-mono font-semibold text-foreground">
-                          {doc.documentNo}
-                          {doc.documentDate && <span className="text-muted-foreground"> · {doc.documentDate}</span>}
+                        <div className="text-xs font-semibold text-foreground">
+                          {doc.sourceModule === "METERED_SITE" ? (
+                            <span className="font-medium">{doc.documentNo}</span>
+                          ) : (
+                            <span className="font-mono">{doc.documentNo}</span>
+                          )}
+                          {doc.documentDate && <span className="font-normal text-muted-foreground"> · {doc.documentDate}</span>}
                         </div>
                         <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                          {doc.sourceModule.replace(/_/g, " ")} · {doc.documentStatus || "no status"}
+                          {doc.sourceModule === "METERED_SITE" ? "Metered Site Installation" : doc.sourceModule.replace(/_/g, " ")} · {doc.documentStatus || "no status"}
                           {doc.customerCode ? ` · ${doc.customerCode}` : ""}
                         </div>
                         {doc.note && <div className="mt-0.5 text-[10px] text-muted-foreground italic">{doc.note}</div>}

@@ -51,13 +51,14 @@ export const KNOWN_STATUSES: readonly string[] = [
 ];
 
 /** Human labels for the legend, table badges and exports. */
+// AG-COMMENT: Intuitive, plain-language labels that business users immediately understand
 export const BUCKET_LABELS: Record<UtilizationBucket, string> = {
   CIRCULATING: "Circulating",
   AVAILABLE: "Available",
   IDLE: "Idle",
-  MAINTENANCE: "Maintenance",
-  UNAVAILABLE: "Unavailable",
-  UNCLASSIFIED: "Unclassified",
+  MAINTENANCE: "For Repair",
+  UNAVAILABLE: "Scrap",
+  UNCLASSIFIED: "Needs Review",
 };
 
 /** Buckets that belong in the utilization denominator. */

@@ -19,6 +19,9 @@
 
 import * as React from "react";
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   ChevronLeft,
   ChevronRight,
   Eye,
@@ -29,7 +32,11 @@ import {
 import { useCylinderUtilizationReport } from "../hooks/useCylinderUtilizationReport";
 import { formatCount, formatPercent } from "../services";
 import { resolveUtilizationClass } from "./BucketBadge";
-import type { CylinderUtilizationRow, UtilizationBucket } from "../types/cylinder-utilization-report.types";
+import type {
+  CylinderUtilizationRow,
+  UtilizationBucket,
+  UtilizationSortField,
+} from "../types/cylinder-utilization-report.types";
 
 export function UtilizationTable() {
   const {
@@ -43,6 +50,9 @@ export function UtilizationTable() {
     setPageSize,
     resetFilters,
     openDetail,
+    sortField,
+    sortDirection,
+    handleSort,
   } = useCylinderUtilizationReport();
 
   const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
@@ -83,7 +93,7 @@ export function UtilizationTable() {
         </div>
         <h3 className="text-base font-bold text-foreground">No cylinder fleet in scope</h3>
         <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-          No serialized cylinder assets matched the selected branch, cylinder size and reporting period.
+          No serialized cylinder assets matched the selected branch, product and reporting period.
         </p>
         <button
           type="button"
@@ -103,7 +113,7 @@ export function UtilizationTable() {
         <div className="flex items-center gap-2">
           <Layers className="h-4 w-4 text-primary" />
           <span className="text-xs font-semibold text-foreground">
-            Fleet Utilization by Branch and Size ({formatCount(totalRows)} groupings)
+            Fleet Utilization by Branch and Product ({formatCount(totalRows)} groupings)
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -128,17 +138,99 @@ export function UtilizationTable() {
         <table className="w-full text-left text-xs">
           <thead className="border-b bg-muted/40 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             <tr>
-              <th className="px-4 py-3">Branch</th>
-              <th className="px-3 py-3">Cylinder Size</th>
-              <th className="px-3 py-3 text-right">Fleet</th>
-              <th className="px-3 py-3 text-right">Eligible</th>
-              <th className="px-3 py-3 text-right">Circulating</th>
-              <th className="px-3 py-3 text-right">Available</th>
-              <th className="px-3 py-3 text-right">Idle</th>
-              <th className="px-3 py-3 text-right">Maintenance</th>
-              <th className="px-3 py-3 text-right">Unavailable</th>
-              <th className="px-3 py-3 text-center">Utilization</th>
-              <th className="px-4 py-3 text-right">Actions</th>
+              <SortableTh
+                field="branchName"
+                label="Branch"
+                title="Branch location where cylinders are assigned. Click to sort by branch name."
+                align="left"
+                currentSortField={sortField}
+                currentSortDirection={sortDirection}
+                onSort={handleSort}
+              />
+              <SortableTh
+                field="sizeLabel"
+                label="Product"
+                title="Serialized cylinder product description. Click to sort by product description."
+                align="left"
+                currentSortField={sortField}
+                currentSortDirection={sortDirection}
+                onSort={handleSort}
+              />
+              <SortableTh
+                field="fleet"
+                label="Total"
+                title="Total registered cylinder assets in this grouping. Click to sort."
+                align="right"
+                currentSortField={sortField}
+                currentSortDirection={sortDirection}
+                onSort={handleSort}
+              />
+              <SortableTh
+                field="eligibleFleet"
+                label="Active"
+                title="Active working cylinders (Total minus Scrap and Needs Review). Click to sort."
+                align="right"
+                currentSortField={sortField}
+                currentSortDirection={sortDirection}
+                onSort={handleSort}
+              />
+              <SortableTh
+                field="circulating"
+                label="Circulating"
+                title="Cylinders currently deployed with customers or loaded for delivery. Click to sort."
+                align="right"
+                currentSortField={sortField}
+                currentSortDirection={sortDirection}
+                onSort={handleSort}
+              />
+              <SortableTh
+                field="available"
+                label="Available"
+                title="Usable cylinders available in stock ready for deployment. Click to sort."
+                align="right"
+                currentSortField={sortField}
+                currentSortDirection={sortDirection}
+                onSort={handleSort}
+              />
+              <SortableTh
+                field="idle"
+                label="Idle"
+                title="Dormant cylinders in stock with no movement for more than 30 days. Click to sort."
+                align="right"
+                currentSortField={sortField}
+                currentSortDirection={sortDirection}
+                onSort={handleSort}
+              />
+              <SortableTh
+                field="maintenance"
+                label="For Repair"
+                title="Cylinders in stock tagged under repair or maintenance. Click to sort."
+                align="right"
+                currentSortField={sortField}
+                currentSortDirection={sortDirection}
+                onSort={handleSort}
+              />
+              <SortableTh
+                field="unavailable"
+                label="Scrap"
+                title="Unavailable cylinders permanently out of service (Status LOST/RETIRED or Condition SCRAP). Click to sort."
+                align="right"
+                currentSortField={sortField}
+                currentSortDirection={sortDirection}
+                onSort={handleSort}
+              />
+              <SortableTh
+                field="utilization"
+                label="Utilization"
+                title="Utilization Rate: Circulating ÷ Active × 100. Click to sort."
+                align="center"
+                currentSortField={sortField}
+                currentSortDirection={sortDirection}
+                onSort={handleSort}
+              />
+              <th className="px-4 py-3 text-right" title="Actions and cylinder-level drill down">
+                Actions
+              </th>
             </tr>
           </thead>
 
@@ -213,9 +305,9 @@ export function UtilizationTable() {
                           openDetail(row, "UNCLASSIFIED");
                         }}
                         className="mt-0.5 block w-full text-right font-mono text-[10px] font-semibold text-destructive underline-offset-2 hover:underline"
-                        title="Statuses missing or outside the source ENUM domain (spec §8)"
+                        title="Needs Review: Status missing or outside valid system options (Data Exception)"
                       >
-                        {formatCount(row.unclassified)} unclassified
+                        {formatCount(row.unclassified)} Needs Review
                       </button>
                     )}
                   </td>
@@ -322,5 +414,59 @@ function BucketButton({
     >
       {formatCount(count)}
     </button>
+  );
+}
+
+/**
+ * Sortable table header cell with hover state, directional indicator and accessibility title.
+ */
+function SortableTh({
+  field,
+  label,
+  title,
+  align = "left",
+  currentSortField,
+  currentSortDirection,
+  onSort,
+}: {
+  field: UtilizationSortField;
+  label: string;
+  title: string;
+  align?: "left" | "right" | "center";
+  currentSortField: UtilizationSortField;
+  currentSortDirection: "asc" | "desc";
+  onSort: (field: UtilizationSortField) => void;
+}) {
+  const isActive = currentSortField === field;
+  const justifyClass =
+    align === "right" ? "justify-end" : align === "center" ? "justify-center" : "justify-start";
+
+  return (
+    <th
+      title={title}
+      className={`px-3 py-3 select-none ${field === "branchName" ? "pl-4" : ""} ${
+        align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left"
+      }`}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(field)}
+        title={title}
+        className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider transition-colors hover:text-foreground cursor-pointer ${justifyClass} ${
+          isActive ? "text-primary font-bold" : "text-muted-foreground"
+        }`}
+      >
+        <span>{label}</span>
+        {isActive ? (
+          currentSortDirection === "asc" ? (
+            <ArrowUp className="h-3 w-3 text-primary shrink-0" />
+          ) : (
+            <ArrowDown className="h-3 w-3 text-primary shrink-0" />
+          )
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-40 shrink-0 hover:opacity-100" />
+        )}
+      </button>
+    </th>
   );
 }

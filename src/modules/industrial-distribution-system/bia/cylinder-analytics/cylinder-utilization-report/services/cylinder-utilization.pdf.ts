@@ -78,14 +78,14 @@ export function exportUtilizationToPdf(
   // ── Utilization Grid ───────────────────────────────────────────────────────
   const tableHeaders = [
     "Branch",
-    "Cylinder Size",
-    "Fleet",
-    "Eligible",
+    "Product",
+    "Total",
+    "Active",
     "Circulating",
     "Available",
     "Idle",
-    "Maint.",
-    "Unavail.",
+    "For Repair",
+    "Scrap",
     "Except.",
     "Utilization",
     "Avg Idle",
@@ -166,7 +166,7 @@ export function exportUtilizationToPdf(
       `Utilization = circulating eligible cylinders / eligible fleet x 100. ` +
         `Idle threshold ${rules.idleThresholdDays} days. ` +
         `Circulating: ${rules.circulatingStatuses.join(", ")}. ` +
-        `Yard: ${rules.yardStatuses.join(", ")}. ` +
+        `Stock: ${rules.yardStatuses.join(", ")}. ` +
         `Maintenance: status ${rules.maintenanceStatuses.join(", ")} or condition ${rules.maintenanceConditions.join(", ")}. ` +
         `Unavailable: status ${rules.unavailableStatuses.join(", ")} or condition ${rules.unavailableConditions.join(", ")}. ` +
         `Unclassified assets are excluded from the denominator and reported separately.`,

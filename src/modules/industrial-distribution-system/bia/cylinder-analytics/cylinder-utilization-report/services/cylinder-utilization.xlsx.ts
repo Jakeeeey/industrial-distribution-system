@@ -44,14 +44,14 @@ export function exportUtilizationToExcel(
     ["Circulating", kpis.circulating],
     ["Available", kpis.available],
     ["Idle", kpis.idle],
-    ["Maintenance", kpis.maintenance],
+    ["For Repair", kpis.maintenance],
     ["Unavailable (lost / retired / scrapped)", kpis.unavailable],
     ["Unclassified data exceptions", kpis.unclassified],
     ["Utilization %", formatPercent(kpis.utilization)],
     ["Idle Rate %", formatPercent(kpis.idleRate)],
     ["Maintenance Rate %", formatPercent(kpis.maintenanceRate)],
     ["Branches Reported", kpis.branchesReported],
-    ["Cylinder Sizes Reported", kpis.sizesReported],
+    ["Products Reported", kpis.sizesReported],
     ["Verified Movements Considered", kpis.movementsConsidered],
     ["Linked Reversals Excluded", kpis.reversalsExcluded],
     [],
@@ -59,10 +59,10 @@ export function exportUtilizationToExcel(
     ["Utilization formula", "circulating eligible cylinders / eligible fleet x 100"],
     ["Idle threshold (days)", rules.idleThresholdDays],
     ["Circulating statuses", rules.circulatingStatuses.join(", ")],
-    ["Yard statuses", rules.yardStatuses.join(", ")],
+    ["In-stock statuses", rules.yardStatuses.join(", ")],
     ["Maintenance statuses", rules.maintenanceStatuses.join(", ")],
     ["Maintenance conditions", rules.maintenanceConditions.join(", ")],
-    ["Unavailable statuses", rules.unavailableStatuses.join(", ")],
+    ["Scrap statuses", rules.unavailableStatuses.join(", ")],
     ["Unavailable conditions", rules.unavailableConditions.join(", ")],
     ["Last-activity basis", rules.activityBasis.join(" | ")],
     [],
@@ -77,14 +77,14 @@ export function exportUtilizationToExcel(
   // ── Sheet 2: Branch × Size Utilization Grid ────────────────────────────────
   const gridHeaders = [
     "Branch",
-    "Cylinder Size",
-    "Fleet",
-    "Eligible Fleet",
+    "Product",
+    "Total",
+    "Active",
     "Circulating",
     "Available",
     "Idle",
     "Maintenance",
-    "Unavailable",
+    "Scrap",
     "Exceptions",
     "Utilization %",
     "Idle Rate %",
@@ -127,7 +127,7 @@ export function exportUtilizationToExcel(
 
   // ── Sheet 3: Missing / Out-of-Domain Status Exceptions ─────────────────────
   const exceptionRows = rows.filter((row) => row.unclassified > 0);
-  const exceptionHeaders = ["Branch", "Cylinder Size", "Unclassified Assets", "Fleet", "Utilization %"];
+  const exceptionHeaders = ["Branch", "Product", "Unclassified Assets", "Fleet", "Utilization %"];
 
   const exceptionSheet = XLSX.utils.aoa_to_sheet([
     exceptionHeaders,
