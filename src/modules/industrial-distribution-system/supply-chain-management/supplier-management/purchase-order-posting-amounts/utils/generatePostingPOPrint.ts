@@ -150,6 +150,8 @@ export async function generatePostingPOPrint(data: PrintData): Promise<jsPDF> {
                 String(i + 1),
                 item.barcode || "—",
                 item.name || "—",
+                // Developer comment: Include measurement unit (UOM) in print tables
+                item.uom || "—",
                 String(qty),
                 safeMoney(uprice, po.currency || "PHP"),
                 discountDisplay.replace(/₱/g, "PHP "),
@@ -160,7 +162,7 @@ export async function generatePostingPOPrint(data: PrintData): Promise<jsPDF> {
         autoTable(doc, {
             startY: y,
             margin: { left: margin, right: margin },
-            head: [['#', 'SKU/Barcode', 'Product Name', 'Qty', 'Unit Price', 'Discount', 'Net Total']],
+            head: [['#', 'SKU/Barcode', 'Product Name', 'UOM', 'Qty', 'Unit Price', 'Discount', 'Net Total']],
             body: rows,
             styles: { fontSize: 7, cellPadding: 2, textColor: [0, 0, 0], lineColor: [220, 220, 220] },
             headStyles: { fillColor: [40, 40, 40], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7, halign: 'center' },
