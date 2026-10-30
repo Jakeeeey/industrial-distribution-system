@@ -2,11 +2,12 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // Visual indicator badge for Customer Cylinder Turnaround Ratio (CTR) grades.
 // Styled for high contrast in both dark and light modes.
+// Includes UNMONITORED grade for accounts holding base cylinders without transactions.
 // ──────────────────────────────────────────────────────────────────────────────
 
 import * as React from "react";
 import { Badge } from "@/components/ui/badge";
-import { Zap, Gauge, Award, AlertTriangle, HelpCircle } from "lucide-react";
+import { Zap, Gauge, Award, AlertTriangle, HelpCircle, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CTRGrade } from "../types/customer-cylinder-turnaround.types";
 
@@ -68,6 +69,19 @@ export function CTRGradeBadge({ grade, className, showIcon = true }: CTRGradeBad
         >
           {showIcon && <AlertTriangle className="h-3.5 w-3.5 text-rose-500" />}
           <span>Sub-standard (&gt;8 mos)</span>
+        </Badge>
+      );
+    case "UNMONITORED":
+      return (
+        <Badge
+          variant="outline"
+          className={cn(
+            "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30 font-medium gap-1.5 px-2 py-0.5",
+            className
+          )}
+        >
+          {showIcon && <Clock className="h-3.5 w-3.5 text-amber-500" />}
+          <span>Unmonitored Holding</span>
         </Badge>
       );
     case "BASE_ZERO":
