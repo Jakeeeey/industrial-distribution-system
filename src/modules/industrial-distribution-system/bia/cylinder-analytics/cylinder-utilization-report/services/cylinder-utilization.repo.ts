@@ -24,7 +24,8 @@ import type {
 const BFF_BASE_URL = "/api/ids/bia/cylinder-analytics/cylinder-utilization-report";
 
 /** Persistent client cache key; versioned so a contract change invalidates it. */
-const LOOKUPS_STORAGE_KEY = "vos_ids_bia_cylinder_utilization_lookups_v1";
+// AG-COMMENT: Bumped to v2 to invalidate cached lookups and reflect products.description updates
+const LOOKUPS_STORAGE_KEY = "vos_ids_bia_cylinder_utilization_lookups_v2";
 const LOOKUPS_CACHE_MS = 24 * 60 * 60 * 1000;
 
 /** Builds the query string, omitting selectors that mean "no scoping". */

@@ -92,20 +92,27 @@ export function SmoothSearchableSelect({
                 No matching option found.
               </CommandEmpty>
               <CommandGroup>
-                {options.map((option) => (
-                  <CommandItem
-                    key={option.value}
-                    value={option.label}
-                    onSelect={() => {
-                      onValueChange(option.value);
-                      setOpen(false);
-                    }}
-                    className="flex cursor-pointer items-center justify-between rounded-md py-2 text-xs transition-colors"
-                  >
-                    <span className="truncate">{option.label}</span>
-                    {value === option.value && <Check className="ml-2 h-4 w-4 shrink-0 text-primary" />}
-                  </CommandItem>
-                ))}
+                {options.map((option) => {
+                  // AG-COMMENT: Map CommandItem value uniquely using label + ID so products with identical descriptions
+                  // are never triggered together by cmdk, while searching by description still works cleanly.
+                  const uniqueSearchVal = `${option.label} #${option.value}`;
+                  const isSelected = value === option.value;
+                  return (
+                    <CommandItem
+                      key={option.value}
+                      value={uniqueSearchVal}
+                      keywords={[option.label, option.value]}
+                      onSelect={() => {
+                        onValueChange(option.value);
+                        setOpen(false);
+                      }}
+                      className="flex cursor-pointer items-center justify-between rounded-md py-2 text-xs transition-colors"
+                    >
+                      <span className="truncate">{option.label}</span>
+                      {isSelected && <Check className="ml-2 h-4 w-4 shrink-0 text-primary" />}
+                    </CommandItem>
+                  );
+                })}
               </CommandGroup>
             </CommandList>
           </Command>

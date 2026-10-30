@@ -37,15 +37,24 @@ export function UtilizationHeader() {
               Cylinder Utilization Report
             </h1>
             <p className="text-xs text-muted-foreground sm:text-sm">
-              Fleet usage by branch and cylinder size, with dormant assets identified as of the reporting cutoff.
+              Fleet usage by branch and product, with dormant assets identified as of the reporting cutoff.
             </p>
           </div>
         </div>
 
-        {/* Cutoff is labelled explicitly: the reading is point-in-time, not a historical snapshot. */}
+        {/* AG-COMMENT: Explicitly displays the active reporting period alongside the cutoff */}
         {reportData && (
-          <p className="text-[11px] font-medium text-muted-foreground">
-            Measured as at{" "}
+          <p className="text-[11px] font-medium text-muted-foreground flex flex-wrap items-center gap-1.5">
+            <span>Period:</span>
+            <span className="font-mono font-semibold text-foreground">
+              {reportData.filters.startDate}
+            </span>
+            <span>to</span>
+            <span className="font-mono font-semibold text-foreground">
+              {reportData.filters.endDate}
+            </span>
+            <span className="text-muted-foreground/40">·</span>
+            <span>Cutoff:</span>
             <span className="font-mono font-bold text-foreground">
               {formatCutoffLabel(reportData.reportingCutoff)}
             </span>

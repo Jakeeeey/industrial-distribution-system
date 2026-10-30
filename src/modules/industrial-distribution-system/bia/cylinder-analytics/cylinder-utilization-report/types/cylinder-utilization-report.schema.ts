@@ -15,7 +15,8 @@
 import { z } from "zod";
 
 /** A branch or size selector: a positive integer id, or empty/"ALL" for no scoping. */
-const idOrAll = z.union([z.coerce.number().int().positive(), z.literal(""), z.literal("ALL")]);
+// AG-COMMENT: Supports single positive integer, ALL, NONE, or comma-separated list of IDs for multi-select
+const idOrAll = z.union([z.coerce.number().int().positive(), z.literal(""), z.literal("ALL"), z.literal("NONE"), z.string()]);
 
 /**
  * A real calendar date in YYYY-MM-DD form.
