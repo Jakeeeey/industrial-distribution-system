@@ -15,7 +15,9 @@ export function ProductVerificationStep({ onContinue }: { onContinue: () => void
         selectedPO,
         verifiedProductIds,
         toggleProductVerification,
-        removeExtraProductLocally
+        removeExtraProductLocally,
+        manualCounts,
+        serialsByPorId
     } = useReceivingProductsManual();
 
     const [isAddModalOpen, setIsAddModalOpen] = React.useState(false);
@@ -80,19 +82,30 @@ export function ProductVerificationStep({ onContinue }: { onContinue: () => void
                             <TableRow className="hover:bg-transparent border-slate-200">
                                 <TableHead className="text-[9px] h-9 font-black uppercase tracking-widest text-slate-500 px-4">Product / SKU</TableHead>
                                 <TableHead className="text-[9px] h-9 font-black uppercase tracking-widest text-center w-24 text-slate-500">Ordered</TableHead>
+                                {/* Developer comment: Add Received Qty column to track accumulated verified/scanned count per line item */}
+                                <TableHead className="text-[9px] h-9 font-black uppercase tracking-widest text-center w-28 text-slate-500">Received Qty</TableHead>
                                 <TableHead className="text-[9px] h-9 font-black uppercase tracking-widest text-center w-32 text-slate-500">Action</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {allItems.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={3} className="h-48 text-center text-slate-400 italic text-xs font-bold">
+                                    <TableCell colSpan={4} className="h-48 text-center text-slate-400 italic text-xs font-bold">
                                         No items found. Click &quot;Add Extra&quot; to begin.
                                     </TableCell>
                                 </TableRow>
                             ) : (
                                 allItems.map((item) => {
                                     const isVerified = verifiedProductIds.includes(item.productId);
+                                    // Developer comment: Dynamically calculate current intake count from active serials, manual counts, or purchase_order_receiving baseline
+                                    const itemId = String(item.id);
+                                    const serializedCount = serialsByPorId?.[itemId]?.length;
+                                    const manualCount = manualCounts?.[itemId];
+                                    const currentReceived = serializedCount !== undefined
+                                        ? serializedCount
+                                        : (manualCount !== undefined ? Number(manualCount) : Number(item.receivedQty || 0));
+                                    const expectedQty = Number(item.expectedQty || 0);
+
                                     return (
                                         <TableRow key={item.id} className={cn(
                                             "transition-colors border-slate-100 dark:border-slate-900 group",
@@ -109,6 +122,18 @@ export function ProductVerificationStep({ onContinue }: { onContinue: () => void
                                             </TableCell>
                                             <TableCell className="text-center font-black text-xs text-slate-600">
                                                 {item.expectedQty}
+                                            </TableCell>
+                                            <TableCell className="text-center font-black text-xs">
+                                                <span className={cn(
+                                                    "font-mono font-bold text-xs",
+                                                    currentReceived > 0 && currentReceived >= expectedQty
+                                                        ? "text-emerald-600 dark:text-emerald-400"
+                                                        : currentReceived > 0
+                                                            ? "text-amber-600 dark:text-amber-400"
+                                                            : "text-slate-500 dark:text-slate-400"
+                                                )}>
+                                                    {currentReceived} / {expectedQty}
+                                                </span>
                                             </TableCell>
                                             <TableCell className="py-2 px-2">
                                                 <div className="flex items-center justify-center gap-1.5">

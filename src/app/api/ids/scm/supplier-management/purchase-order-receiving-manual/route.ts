@@ -795,15 +795,20 @@ export async function POST(req: NextRequest) {
                     return ok({ status: "REJECTED", message: "Serial Number is already on hand." });
                 }
 
+                // Developer comment: In Normal PO receiving, duplicate serial numbers from cylinder_assets must be rejected.
+                // New cylinders being received cannot reuse an existing serial number from the cylinder asset master DB.
                 if (caExists) {
-                    if (String(ca?.cylinder_status).toUpperCase() === "AVAILABLE" && String(ca?.cylinder_condition).toUpperCase() === "GOOD") {
-                        return ok({ 
-                            status: "ACCEPTED",
+                    return ok({ 
+                        status: "REJECTED", 
+                        message: `Serial Number "${serialNumber}" already exists in the Cylinder Asset master database and cannot be received as a new asset.`,
+                        asset: {
+                            id: ca?.id,
+                            status: ca?.cylinder_status,
+                            condition: ca?.cylinder_condition,
                             tareWeight: ca?.tare_weight || "",
-                            expiryDate: ca?.expiration_date || ""
-                        });
-                    }
-                    return ok({ status: "REJECTED", message: "Serial Number exists but is unavailable." });
+                            expirationDate: ca?.expiration_date || ""
+                        }
+                    });
                 }
 
                 return ok({ status: "REQUIRES_REGISTRATION" });

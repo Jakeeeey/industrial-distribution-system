@@ -321,7 +321,18 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
             const result = j?.data;
 
             if (result?.status === "REJECTED") {
-                toast.error("Serial Rejected", { description: result.message });
+                // Developer comment: If serial is already registered in cylinder_assets master, trigger Blocked Serial popup modal
+                if (result.asset) {
+                    setBlockedAssetSerial({
+                        sn: val,
+                        assetId: result.asset.id,
+                        status: result.asset.status,
+                        condition: result.asset.condition
+                    });
+                    setIsBlockedSerialOpen(true);
+                } else {
+                    toast.error("Serial Rejected", { description: result.message });
+                }
                 return;
             }
 
@@ -394,12 +405,24 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
         }, 0);
     };
 
+    // Developer comment: Support removing both unsaved and saved draft serials to prevent hard-lock
     const removeSerial = async (index: number) => {
         const serialToRemove = tempSerials[index];
+        if (!serialToRemove) return;
         
-        // Clean up draft registration if it was purely a new item this session
-        if (serialToRemove.isNew && !serialToRemove.isSaved) {
-            try {
+        try {
+            // Delete presaved serial from purchase_order_receiving_serial if present
+            await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "delete_presaved_serial",
+                    serialNumber: serialToRemove.sn
+                })
+            }).catch(() => null);
+
+            // Clean up draft registration if it was a new item
+            if (serialToRemove.isNew) {
                 await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -407,13 +430,20 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
                         action: "deregister_serial",
                         serialNumber: serialToRemove.sn
                     })
-                });
-            } catch (e) {
-                console.error("Failed to deregister serial", e);
+                }).catch(() => null);
             }
+        } catch (e) {
+            console.error("Failed to delete serial record:", e);
         }
 
-        setTempSerials(tempSerials.filter((_, i) => i !== index));
+        const remaining = tempSerials.filter((_, i) => i !== index);
+        setTempSerials(remaining);
+
+        // Synchronize parent state immediately so committed count reflects deletion
+        if (activePorId) {
+            setSerialsByPorId(prev => ({ ...prev, [activePorId]: remaining }));
+            setManualCounts(prev => ({ ...prev, [activePorId]: remaining.length }));
+        }
     };
 
     // ✅ FIX: Made async to persist serials to DB via presave_serial on commit
@@ -442,7 +472,7 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
             
             toast.success("Progress Saved", { description: `${finalSerials.length} serials committed.` });
 
-            // 2. ✅ FIX: Persist ONLY the newly scanned serials atomically to DB via sync_draft_serials
+            // 2. ✅ Persist ONLY the newly scanned serials atomically to DB via sync_draft_serials
             const poId = selectedPO?.id;
             const productId = activeItem?.productId;
             const branchId = activeItem?.branchId;
@@ -450,17 +480,25 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
             if (poId && productId && branchId) {
                 const newlyAdded = finalSerials.filter(s => !s.isSaved);
                 if (newlyAdded.length > 0) {
-                    fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            action: "sync_draft_serials",
-                            poId,
-                            productId,
-                            branchId,
-                            serials: newlyAdded,
-                        }),
-                    }).catch(e => console.warn("[sync_draft_serials] Non-blocking failure:", e));
+                    try {
+                        const syncRes = await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                action: "sync_draft_serials",
+                                poId,
+                                productId,
+                                branchId,
+                                serials: newlyAdded,
+                            }),
+                        });
+                        const syncData = await syncRes.json();
+                        if (syncData?.error) {
+                            toast.error("Sync Notice", { description: syncData.error });
+                        }
+                    } catch (e) {
+                        console.warn("[sync_draft_serials] Sync warning:", e);
+                    }
                 }
             }
         }
@@ -911,16 +949,16 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
                                     <Button
                                         variant="link"
                                         onClick={async () => {
-                                            const toDelete = tempSerials.filter(s => !s.isSaved).map(s => s.sn);
-                                            if (toDelete.length > 0) {
+                                            // Developer comment: Clear all serials for this line and purge draft rows to resolve locked state
+                                            const allSns = tempSerials.map(s => s.sn);
+                                            if (allSns.length > 0) {
                                                 try {
                                                     await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
                                                         method: "POST",
                                                         headers: { "Content-Type": "application/json" },
-                                                        body: JSON.stringify({ action: "delete_presaved_serials", serialNumbers: toDelete }),
+                                                        body: JSON.stringify({ action: "delete_presaved_serials", serialNumbers: allSns }),
                                                     });
-                                                    // Also deregister from draft to prevent ghost records
-                                                    toDelete.forEach(sn => {
+                                                    allSns.forEach(sn => {
                                                         fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
                                                             method: "POST",
                                                             headers: { "Content-Type": "application/json" },
@@ -931,12 +969,16 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
                                                     console.error("Failed to bulk clear serials", e);
                                                 }
                                             }
-                                            setTempSerials(prev => prev.filter(s => s.isSaved));
-                                            toast.info("Cleared all unsaved serials");
+                                            setTempSerials([]);
+                                            if (activePorId) {
+                                                setSerialsByPorId(prev => ({ ...prev, [activePorId]: [] }));
+                                                setManualCounts(prev => ({ ...prev, [activePorId]: 0 }));
+                                            }
+                                            toast.info("Cleared all serials for this product line");
                                         }}
                                         className="h-auto p-0 text-[10px] font-black uppercase tracking-widest text-red-500 hover:text-red-600"
                                     >
-                                        Clear Unsaved
+                                        Clear All Serials
                                     </Button>
                                 )}
                             </div>
@@ -978,16 +1020,16 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
                                                             {item.expiryDate || "-"}
                                                         </TableCell>
                                                         <TableCell className="py-2 px-2 text-center">
-                                                            {!item.isSaved && (
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="icon"
-                                                                    className="h-8 w-8 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all opacity-0 group-hover:opacity-100"
-                                                                    onClick={() => removeSerial(idx)}
-                                                                >
-                                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                                </Button>
-                                                            )}
+                                                            {/* Developer comment: Always allow deleting serials from the registration table to prevent hard-lock error states */}
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-8 w-8 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all opacity-0 group-hover:opacity-100"
+                                                                onClick={() => removeSerial(idx)}
+                                                                title="Remove serial"
+                                                            >
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                            </Button>
                                                         </TableCell>
                                                     </TableRow>
                                                 ))
