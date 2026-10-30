@@ -3,6 +3,9 @@ import * as React from "react";
 import { AppSidebar } from "./_components/app-sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
+// AppSidebar reads the auth cookie, so every route beneath it must render per-request.
+export const dynamic = "force-dynamic";
+
 export default function IdsLayout({ children }: { children: React.ReactNode }) {
     return (
         <SidebarProvider>

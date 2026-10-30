@@ -21,11 +21,11 @@ export function AccountabilityFilters() {
 
   const [localSearch, setLocalSearch] = React.useState(filters.searchQuery || "");
 
-  // Debounced search sync
+  // AG-COMMENT: Instantaneous in-memory search sync (filters already loaded dataset without requesting server)
   React.useEffect(() => {
     const timer = setTimeout(() => {
       setFilters({ searchQuery: localSearch });
-    }, 280);
+    }, 150);
     return () => clearTimeout(timer);
   }, [localSearch, setFilters]);
 
@@ -34,15 +34,25 @@ export function AccountabilityFilters() {
     setLocalSearch(filters.searchQuery || "");
   }, [filters.searchQuery]);
 
+  // AG-COMMENT: Strictly filter dropdown options to Industrial Division branches (division_id = 1).
+  const INDUSTRIAL_BRANCH_IDS = React.useMemo(() => new Set(["196", "197", "278", "279", "280"]), []);
+
   // Branch options for SmoothSearchableSelect
   const branchOptions = React.useMemo(() => {
     const allOpt = { value: "ALL", label: "All Active Branches" };
-    const branchOpts = lookups.branches.map((b) => ({
-      value: String(b.id),
-      label: b.name,
-    }));
+    const branchOpts = lookups.branches
+      .filter((b: { id: number | string; division_id?: number | string | null }) => {
+        if (b.division_id != null && (b.division_id as unknown) !== "") {
+          return Number(b.division_id) === 1 && INDUSTRIAL_BRANCH_IDS.has(String(b.id));
+        }
+        return INDUSTRIAL_BRANCH_IDS.has(String(b.id));
+      })
+      .map((b) => ({
+        value: String(b.id),
+        label: b.name,
+      }));
     return [allOpt, ...branchOpts];
-  }, [lookups.branches]);
+  }, [lookups.branches, INDUSTRIAL_BRANCH_IDS]);
 
   return (
     <div className="rounded-xl border bg-card p-4 shadow-2xs">
@@ -58,7 +68,7 @@ export function AccountabilityFilters() {
               type="text"
               value={localSearch}
               onChange={(e) => setLocalSearch(e.target.value)}
-              placeholder="Search by code, customer name, or store..."
+              placeholder="Search by customer name, code, or site..."
               className="w-full rounded-lg border bg-background py-2 pl-9 pr-8 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             />
             {localSearch && (

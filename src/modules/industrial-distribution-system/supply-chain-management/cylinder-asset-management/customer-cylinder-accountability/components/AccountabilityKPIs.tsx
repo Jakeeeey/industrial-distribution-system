@@ -18,7 +18,6 @@ import {
   Repeat,
   ArrowDownLeft,
   Scale,
-  AlertTriangle,
 } from "lucide-react";
 import { useCustomerCylinderAccountability } from "../hooks/useCustomerCylinderAccountability";
 
@@ -26,9 +25,11 @@ export function AccountabilityKPIs() {
   const { reportData, isLoading } = useCustomerCylinderAccountability();
   const kpis = reportData?.kpis;
 
+  // AG-COMMENT: 5 custody reconciliation KPI cards: Opening, Issued (+), Swaps, Returned (-), and Current Held (=).
+  // Quota & Variance Risk card removed per user request.
   const cards = [
     {
-      title: "Opening Deployed Base",
+      title: "Opening Holdings",
       value: kpis ? kpis.totalOpeningBase.toLocaleString() : "0",
       description: "Physical cylinders in customer custody at period start",
       icon: Cylinder,
@@ -38,7 +39,7 @@ export function AccountabilityKPIs() {
       bg: "bg-slate-500/10",
     },
     {
-      title: "Period Deposits (+)",
+      title: "Period Issued (+)",
       value: kpis ? `+${kpis.totalPeriodDeposits.toLocaleString()}` : "+0",
       description: "New cylinder issuances expanding custody base",
       icon: ArrowUpRight,
@@ -48,9 +49,9 @@ export function AccountabilityKPIs() {
       bg: "bg-emerald-500/10",
     },
     {
-      title: "Period Swaps Circulated",
+      title: "Period Swaps",
       value: kpis ? kpis.totalPeriodSwaps.toLocaleString() : "0",
-      description: "1-to-1 cylinder refill exchanges completed",
+      description: "1-to-1 cylinder refill exchanges (Net 0 custody change)",
       icon: Repeat,
       badge: "Circulation",
       color: "text-primary",
@@ -58,17 +59,17 @@ export function AccountabilityKPIs() {
       bg: "bg-primary/10",
     },
     {
-      title: "Period Pull-Outs (-)",
+      title: "Period Returned (-)",
       value: kpis ? `-${kpis.totalPeriodPullOuts.toLocaleString()}` : "-0",
-      description: "Cylinders retrieved or returned from customer",
+      description: "Cylinders retrieved, de-tagged, or returned by customers",
       icon: ArrowDownLeft,
-      badge: "De-tagging",
+      badge: "Outbound",
       color: "text-rose-600 dark:text-rose-400",
       border: "border-rose-500/20",
       bg: "bg-rose-500/10",
     },
     {
-      title: "Closing / Running Base (=)",
+      title: "Current Held (=)",
       value: kpis ? kpis.totalClosingBase.toLocaleString() : "0",
       description: "Accumulated physical custody balance as of cutoff",
       icon: Scale,
@@ -77,26 +78,25 @@ export function AccountabilityKPIs() {
       border: "border-indigo-500/20",
       bg: "bg-indigo-500/10",
     },
-    {
-      title: "Data Exceptions",
-      value: kpis ? kpis.totalExceptions.toLocaleString() : "0",
-      description: "Unverified records or negative custody anomalies",
-      icon: AlertTriangle,
-      badge: kpis && kpis.totalExceptions > 0 ? "Requires Review" : "All Clear",
-      color: kpis && kpis.totalExceptions > 0 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400",
-      border: kpis && kpis.totalExceptions > 0 ? "border-amber-500/20" : "border-emerald-500/20",
-      bg: kpis && kpis.totalExceptions > 0 ? "bg-amber-500/10" : "bg-emerald-500/10",
-    },
   ];
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        {Array.from({ length: 6 }).map((_, idx) => (
-          <div key={idx} className="h-28 rounded-xl border bg-card p-4 animate-pulse">
-            <div className="h-3 w-20 rounded-sm bg-muted mb-3" />
-            <div className="h-6 w-16 rounded-sm bg-muted mb-2" />
-            <div className="h-2.5 w-full rounded-sm bg-muted" />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        {Array.from({ length: 5 }).map((_, idx) => (
+          <div key={idx} className="min-h-[8.5rem] flex flex-col justify-between rounded-xl border bg-card p-4 animate-pulse">
+            <div className="flex items-start justify-between">
+              <div className="h-3 w-20 rounded-sm bg-muted" />
+              <div className="h-7 w-7 rounded-lg bg-muted" />
+            </div>
+            <div className="my-2 flex items-baseline justify-between gap-1.5">
+              <div className="h-6 w-16 rounded-sm bg-muted" />
+              <div className="h-4 w-12 rounded-sm bg-muted" />
+            </div>
+            <div className="space-y-1">
+              <div className="h-2.5 w-full rounded-sm bg-muted" />
+              <div className="h-2.5 w-3/4 rounded-sm bg-muted" />
+            </div>
           </div>
         ))}
       </div>
@@ -104,7 +104,7 @@ export function AccountabilityKPIs() {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
       {cards.map((card, i) => {
         const Icon = card.icon;
         return (
@@ -121,20 +121,22 @@ export function AccountabilityKPIs() {
               </div>
             </div>
 
-            <div className="my-2">
+            <div className="my-2 flex items-baseline justify-between gap-1.5">
               <div className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
                 {card.value}
               </div>
-            </div>
-
-            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-              <span className="truncate pr-1" title={card.description}>
-                {card.description}
-              </span>
-              <span className={`shrink-0 rounded-md border px-1.5 py-0.2 font-semibold text-[10px] ${card.border} ${card.bg} ${card.color}`}>
+              <span className={`shrink-0 rounded-md border px-1.5 py-0.5 font-semibold text-[10px] ${card.border} ${card.bg} ${card.color}`}>
                 {card.badge}
               </span>
             </div>
+
+            {/* AG-COMMENT: Allow KPI description to wrap over 2 lines without truncation */}
+            <p
+              className="text-[11px] text-muted-foreground leading-snug line-clamp-2 min-h-[2.25rem]"
+              title={card.description}
+            >
+              {card.description}
+            </p>
           </div>
         );
       })}

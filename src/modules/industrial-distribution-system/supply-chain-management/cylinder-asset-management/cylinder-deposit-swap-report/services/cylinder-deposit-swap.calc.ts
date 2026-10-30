@@ -5,6 +5,7 @@
 // ==============================================================================
 
 import type {
+  CylinderOwnership,
   CustomerCylinderReportRow,
   CustomerProductCylinderRow,
   CylinderProductDistributionPoint,
@@ -28,8 +29,20 @@ export function calculateClosingBase(
  */
 export function recalculateCustomerTotals(
   products: CustomerProductCylinderRow[]
-): Omit<CustomerCylinderReportRow, "customerCode" | "customerName" | "storeName" | "branchId" | "branchName" | "contactNumber" | "customerAddress" | "products" | "lastTransactionDate"> {
-  return products.reduce(
+): Pick<
+  CustomerCylinderReportRow,
+  | "totalOpeningBase"
+  | "totalDepositsDelivered"
+  | "totalSwapsInbound"
+  | "totalSwapsOutbound"
+  | "totalDepositsPulledOut"
+  | "totalNetVariance"
+  | "totalClosingBase"
+  | "depositQty"
+  | "swapQty"
+  | "runningBase"
+> {
+  const totals = products.reduce(
     (acc, p) => ({
       totalOpeningBase: acc.totalOpeningBase + p.openingBase,
       totalDepositsDelivered: acc.totalDepositsDelivered + p.depositsDelivered,
@@ -49,23 +62,41 @@ export function recalculateCustomerTotals(
       totalClosingBase: 0,
     }
   );
+
+  return {
+    ...totals,
+    depositQty: totals.totalDepositsDelivered,
+    swapQty: totals.totalSwapsInbound,
+    runningBase: totals.totalClosingBase,
+  };
 }
 
 /**
- * Filters report rows by text query (matches customer code, customer name, store name, or product name).
+ * Filters report rows by text query (matches customer code, customer name, store name, reference, or product name)
+ * and optional ownership filter.
  */
 export function filterReportRows(
   rows: CustomerCylinderReportRow[],
-  searchQuery: string
+  searchQuery: string,
+  ownership?: CylinderOwnership | "ALL"
 ): CustomerCylinderReportRow[] {
-  const query = searchQuery.trim().toLowerCase();
-  if (!query) return rows;
+  let result = rows;
 
-  return rows.filter((row) => {
+  // 1. Filter by ownership if specified
+  if (ownership && ownership !== "ALL") {
+    result = result.filter((r) => r.ownership === ownership);
+  }
+
+  const query = searchQuery.trim().toLowerCase();
+  if (!query) return result;
+
+  return result.filter((row) => {
     const matchesCustomer =
       row.customerCode.toLowerCase().includes(query) ||
       row.customerName.toLowerCase().includes(query) ||
       (row.storeName && row.storeName.toLowerCase().includes(query)) ||
+      (row.siteName && row.siteName.toLowerCase().includes(query)) ||
+      (row.reference && row.reference.toLowerCase().includes(query)) ||
       (row.branchName && row.branchName.toLowerCase().includes(query));
 
     if (matchesCustomer) return true;

@@ -25,7 +25,6 @@ import {
   fetchCustomerAccountabilityDetail,
 } from "../services/customer-cylinder-accountability.repo";
 import { exportAccountabilityToExcel } from "../services/customer-cylinder-accountability.xlsx";
-import { exportAccountabilityToPdf } from "../services/customer-cylinder-accountability.pdf";
 import { filterAccountabilityRows } from "../services/customer-cylinder-accountability.calc";
 
 interface CustomerAccountabilityContextValue {
@@ -57,8 +56,8 @@ interface CustomerAccountabilityContextValue {
   setPageSize: (size: number) => void;
 
   // Export Actions
+  // AG-COMMENT: Excel is the sole retained export dispatcher per user requirement
   exportExcel: () => void;
-  exportPdf: () => void;
 }
 
 const CustomerAccountabilityContext = React.createContext<CustomerAccountabilityContextValue | null>(null);
@@ -216,11 +215,6 @@ export function CustomerCylinderAccountabilityProvider({
     exportAccountabilityToExcel(reportData);
   }, [reportData]);
 
-  const exportPdf = React.useCallback(() => {
-    if (!reportData) return;
-    exportAccountabilityToPdf(reportData);
-  }, [reportData]);
-
   const value: CustomerAccountabilityContextValue = {
     filters,
     setFilters,
@@ -242,7 +236,6 @@ export function CustomerCylinderAccountabilityProvider({
     setCurrentPage,
     setPageSize,
     exportExcel,
-    exportPdf,
   };
 
   return (

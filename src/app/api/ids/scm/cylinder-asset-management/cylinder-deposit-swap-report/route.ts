@@ -1,25 +1,30 @@
- 
-//src\app\api\ids\scm\cylinder-asset-management\cylinder-deposit-swap-report\route.ts
+// src/app/api/ids/scm/cylinder-asset-management/cylinder-deposit-swap-report/route.ts
 // ==============================================================================
-// BFF API Route for Cylinder Deposit and Swap Report (BIA Subsystem)
-// Interacts with Directus collections:
-// - cylinder_assets: Authoritative physical custody and serial tracking
-// - customer: Customer profile and master address information
-// - branches: Branch directory and names
-// - products: Product weights, codes, and capacities
-// - sales_order_details_serial: Live delivery & swap transaction movements
-// - lpg_customer_site_cylinders: On-site metered installations
+// BFF API Route for Cylinder Deposit and Swap Report (SCM Subsystem)
+// Reconciles physical cylinder custody balances, deposits, and swaps across:
+// - cylinder_assets: Physical custody tracking & active serial numbers
+// - customer + branches: Profile master & branch directories
+// - products: Product catalog, capacities, weights, and descriptions
+// - pos_transactions + pos_transaction_items: Counter cylinder deposits
+// - sales_order + sales_order_details: Delivered repeat orders & routine 1:1 refill swaps
+// - sales_return: Verified customer pull-outs & returns
+// - lpg_customer_lpg_sites: Customer on-site manifold installations
+// - lpg_customer_site_cylinders: Physical cylinders actively held at customer sites
+// - lpg_wiwo_headers: Authoritative Weigh-In / Weigh-Out swap & deposit transactions
 // - customers_memo: Cash security deposit guarantee ledger records
 //
-// Complies with Vertex ERP standards:
-// - Mutually exclusive lifecycle classification
+// Complies with Vertex ERP & VoSync standards:
+// - Physical quantity segregation from cash guarantee values
 // - Pure read-only aggregation (no operational mutations)
-// - Branch-level access enforcement
+// - Normalized customer code matching reconciling whitespace & collation differences
+// - Strict alignment with Doc §7 & §11 proposed columns:
+//   Customer, Date, Deposit Qty, Swap Qty, Ownership, Running Base, Reference
 // - Full comments left behind for long-term maintainability
 // ==============================================================================
 
 import { NextRequest, NextResponse } from "next/server";
 import type {
+  CylinderOwnership,
   CylinderDepositSwapFilters,
   CylinderDepositSwapReportResponse,
   CustomerCylinderReportRow,
@@ -42,6 +47,16 @@ export const dynamic = "force-dynamic";
  */
 function normalizeCode(code?: string | null): string {
   return (code || "").replace(/\s+/g, "").toUpperCase();
+}
+
+/**
+ * Returns current Manila Time formatted string (UTC+8).
+ */
+function getManilaDateTime(): string {
+  const now = new Date();
+  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+  const manilaTime = new Date(utc + 3600000 * 8);
+  return manilaTime.toISOString().replace("T", " ").substring(0, 19);
 }
 
 /**
@@ -75,8 +90,6 @@ function getDirectusHeaders(token: string): Record<string, string> {
 
 type DirectusListResponse<T> = { data?: T[] };
 
-// Directus rows for the collections read by this report. Field lists mirror the
-// `fields=` projection on each query.
 type CustomerRow = {
   customer_code: string;
   customer_name: string;
@@ -93,6 +106,7 @@ type ProductRow = {
   product_name: string | null;
   description: string | null;
   product_weight: number | null;
+  is_serialized?: number | boolean | string | null;
 };
 
 type BranchRow = { id: number; branch_name: string | null; branch_code: string | null };
@@ -109,18 +123,87 @@ type CylinderAssetRow = {
   created_date: string | null;
 };
 
-type SalesOrderDetailSerialRow = {
-  id: number;
-  sales_order_id: number | null;
-  delivery_date: string | null;
-  product_id: number | string | null;
-  product_name: string | null;
-  serial_number: string | null;
+type SalesOrderRow = {
+  order_id: number;
+  order_no: string | null;
   customer_code: string | null;
-  customer_name: string | null;
+  delivery_date: string | null;
+  order_date: string | null;
+  order_status: string | null;
   branch_id: number | null;
-  dispatch_plan_id: number | null;
-  created_date: string | null;
+  remarks?: string | null;
+};
+
+type SalesOrderDetailRow = {
+  detail_id: number;
+  order_id: number;
+  product_id: number | string | null;
+  served_quantity?: number | string | null;
+  allocated_quantity?: number | string | null;
+  ordered_quantity?: number | string | null;
+};
+
+type PosTransactionRow = {
+  transaction_id: string;
+  invoice_no: string | null;
+  transaction_type: string | null;
+  status: string | null;
+  void_status: string | null;
+  created_at: string | null;
+};
+
+type PosTransactionItemRow = {
+  item_id: number;
+  transaction_id: string;
+  product_id: number | string | null;
+  qty: number | string | null;
+};
+
+type SalesInvoiceRow = {
+  invoice_id: number;
+  invoice_no: string | null;
+  customer_code: string | null;
+  invoice_date: string | null;
+  branch_id: number | null;
+};
+
+type LpgCustomerSiteRow = {
+  id: number;
+  customer_code: string | null;
+  site_name: string | null;
+  site_address: string | null;
+  is_active: number | boolean | null;
+};
+
+type LpgCustomerSiteCylinderRow = {
+  id: number;
+  lpg_site_id: number | null;
+  customer_code: string | null;
+  cylinder_asset_id: number | null;
+  installed_date: string | null;
+  removed_date: string | null;
+  site_cylinder_status: string | null;
+};
+
+type LpgWiwoHeaderRow = {
+  id: number;
+  wiwo_no: string | null;
+  lpg_site_id: number | null;
+  customer_code: string | null;
+  transaction_date: string | null;
+  wiwo_type: string | null;
+  total_returned_cylinders: number | string | null;
+  total_deployed_cylinders: number | string | null;
+  wiwo_status: string | null;
+  sales_invoice_no: string | null;
+  remarks: string | null;
+};
+
+type SalesReturnRow = {
+  return_id: number;
+  return_number: string | null;
+  customer_code: string | null;
+  return_date: string | null;
 };
 
 type CustomerMemoRow = {
@@ -134,13 +217,48 @@ type CustomerMemoRow = {
 };
 
 /**
- * Reads a Directus list payload. A null response (request rejected by the
- * caller's catch) yields an empty list, matching the pre-existing fallback.
+ * AG-COMMENT: Helper to determine if a line item represents a true physical cylinder asset deposit/issuance
+ * (which increases customer custody: Issued (+)) vs. a routine gas commodity refill exchange (1-to-1 swap, net zero custody change).
+ * In industrial distribution, gas refills (even if serialized) are routine swaps that do NOT increase held custody.
+ * Only explicit cylinder deposit purchases, onboarding packages, or container deposit fees increase custody.
  */
-async function parseRows<T>(res: Response | null): Promise<T[]> {
-  if (!res || !res.ok) return [];
-  const json = (await res.json()) as DirectusListResponse<T>;
-  return json.data ?? [];
+function isCylinderIssuanceProduct(product: ProductRow | undefined, orderRemarks?: string | null): boolean {
+  if (!product && !orderRemarks) return false;
+  const remarksText = (orderRemarks ?? "").toLowerCase();
+  if (remarksText.includes("initial cylinder onboarding") || remarksText.includes("new cylinder deployment")) {
+    return true;
+  }
+  if (!product) return false;
+  const text = `${product.product_name ?? ""} ${product.description ?? ""}`.toLowerCase();
+  // Any refill, gas content, exchange, or commodity delivery is a SWAP (zero net custody change)
+  if (text.includes("refill") || text.includes("content") || text.includes("exchange") || text.includes("gas only")) {
+    return false;
+  }
+  // True deposit lines or container asset acquisition packages
+  if (
+    text.includes("deposit") ||
+    text.includes("cylinder package") ||
+    text.includes("new cylinder") ||
+    text.includes("initial package") ||
+    text.includes("container fee")
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Resilient fetcher returning an empty list on failure or network error.
+ */
+async function fetchRows<T>(url: string, headers: Record<string, string>): Promise<T[]> {
+  try {
+    const res = await fetch(url, { headers, cache: "no-store" });
+    if (!res.ok) return [];
+    const json = (await res.json()) as DirectusListResponse<T>;
+    return json.data ?? [];
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -170,253 +288,659 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     branchId: searchParams.get("branchId") ? Number(searchParams.get("branchId")) : "",
     customerCode: searchParams.get("customerCode") || undefined,
     productId: searchParams.get("productId") ? Number(searchParams.get("productId")) : "",
+    ownership: (searchParams.get("ownership") as CylinderOwnership | "ALL") || "ALL",
   };
 
   try {
-    // 1. Fetch Customers master
-    // Note: The customer table does not have a branch_id column; branches are linked via assets and transactions.
-    const custQuery = `${directusBase}/items/customer?fields=customer_code,customer_name,store_name,contact_number,brgy,city,province&limit=-1`;
-    const customersRes = await fetch(custQuery, { headers, cache: "no-store" });
-    const rawCustomers = await parseRows<CustomerRow>(customersRes);
-
-    // Map customers by normalized code for instant O(1) matching
-    const customerMap = new Map<string, CustomerRow>();
-    rawCustomers.forEach((c) => {
-      customerMap.set(normalizeCode(c.customer_code), c);
-    });
-
-    // 2. Fetch Products catalog (including description for primary display)
-    const prodRes = await fetch(
-      `${directusBase}/items/products?fields=product_id,product_code,product_name,description,product_weight&limit=-1`,
-      { headers, cache: "no-store" }
-    );
-    const rawProducts = await parseRows<ProductRow>(prodRes);
-    const productsMap = new Map<number, ProductRow>();
-    rawProducts.forEach((p) => productsMap.set(p.product_id, p));
-
-    // 3. Fetch Branches master (collection name is `branches` plural)
-    const branchRes = await fetch(`${directusBase}/items/branches?fields=id,branch_name,branch_code&limit=-1`, {
-      headers,
-      cache: "no-store",
-    });
-    const branchRows = await parseRows<BranchRow>(branchRes);
-    const branchMap = new Map<number, string>();
-    branchRows.forEach((b) => {
-      if (b.branch_name) branchMap.set(b.id, b.branch_name);
-    });
-
-    // 4. Fetch Active Cylinder Assets assigned to customers
-    const assetFilter: Record<string, unknown> = {
-      current_customer_code: { _nnull: true },
-      is_deleted: { _neq: 1 },
-    };
-    if (filters.branchId) assetFilter.current_branch_id = { _eq: filters.branchId };
-    if (filters.productId) assetFilter.product_id = { _eq: filters.productId };
-
-    // Note: cylinder_assets has no 'ownership' column in production DDL; all assets are company-owned by default.
-    const assetQuery = `${directusBase}/items/cylinder_assets?filter=${encodeURIComponent(
-      JSON.stringify(assetFilter)
-    )}&fields=id,serial_number,product_id,cylinder_status,cylinder_condition,current_customer_code,current_branch_id,modified_date,created_date&limit=-1`;
-
-    const assetsRes = await fetch(assetQuery, { headers, cache: "no-store" });
-    const rawAssets = await parseRows<CylinderAssetRow>(assetsRes);
-
-    // 5. Fetch Sales Order Details Serial (Verified customer delivery movements)
-    const sodsFilter: Record<string, unknown> = {};
-    if (filters.branchId) sodsFilter.branch_id = { _eq: filters.branchId };
-    if (filters.productId) sodsFilter.product_id = { _eq: filters.productId };
-
-    const sodsQuery = `${directusBase}/items/sales_order_details_serial?${Object.keys(sodsFilter).length > 0 ? `filter=${encodeURIComponent(JSON.stringify(sodsFilter))}&` : ""
-      }fields=id,sales_order_id,delivery_date,product_id,product_name,serial_number,customer_code,customer_name,branch_id,dispatch_plan_id,created_date&limit=-1`;
-
-    const sodsRes = await fetch(sodsQuery, { headers, cache: "no-store" }).catch(() => null);
-    const rawSods = await parseRows<SalesOrderDetailSerialRow>(sodsRes);
-
-    // Filter SODS by period if dates are specified
     const startDateMs = new Date(filters.startDate).getTime();
     const endDateMs = new Date(filters.endDate + "T23:59:59").getTime();
 
-    // Map SODS period deliveries by normalized customer code + product_id
-    const customerSodsMap = new Map<string, Map<number, number>>();
-    rawSods.forEach((s) => {
-      const delivTime = s.delivery_date ? new Date(s.delivery_date).getTime() : 0;
-      if (delivTime >= startDateMs && delivTime <= endDateMs) {
-        const cleanCust = normalizeCode(s.customer_code);
-        const pId = Number(s.product_id);
-        if (!customerSodsMap.has(cleanCust)) {
-          customerSodsMap.set(cleanCust, new Map());
+    // ── 1. Fetch Master Data and Operational Collections Concurrently ─────────
+    const [
+      rawCustomers,
+      rawProducts,
+      branchRows,
+      rawAssets,
+      rawSites,
+      rawSiteCylinders,
+      rawWiwos,
+      rawOrders,
+      rawSod,
+      rawReturns,
+      rawPosTx,
+      rawPosItems,
+      rawInvoices,
+    ] = await Promise.all([
+      fetchRows<CustomerRow>(
+        `${directusBase}/items/customer?fields=customer_code,customer_name,store_name,contact_number,brgy,city,province&limit=-1`,
+        headers
+      ),
+      fetchRows<ProductRow>(
+        `${directusBase}/items/products?fields=product_id,product_code,product_name,description,product_weight,is_serialized&limit=-1`,
+        headers
+      ),
+      // AG-COMMENT: Restrict branch queries strictly to Industrial Division (division_id = 1)
+      fetchRows<BranchRow>(
+        `${directusBase}/items/branches?fields=id,branch_name,branch_code&filter[division_id][_eq]=1&limit=-1`,
+        headers
+      ),
+      fetchRows<CylinderAssetRow>(
+        `${directusBase}/items/cylinder_assets?fields=id,serial_number,product_id,cylinder_status,cylinder_condition,current_customer_code,current_branch_id,modified_date,created_date&filter[current_customer_code][_nnull]=true&filter[is_deleted][_neq]=1&limit=-1`,
+        headers
+      ),
+      fetchRows<LpgCustomerSiteRow>(
+        `${directusBase}/items/lpg_customer_lpg_sites?fields=id,customer_code,site_name,site_address,is_active&filter[is_active][_neq]=0&limit=-1`,
+        headers
+      ),
+      fetchRows<LpgCustomerSiteCylinderRow>(
+        `${directusBase}/items/lpg_customer_site_cylinders?fields=id,lpg_site_id,customer_code,cylinder_asset_id,installed_date,removed_date,site_cylinder_status&filter[removed_date][_null]=true&limit=-1`,
+        headers
+      ),
+      fetchRows<LpgWiwoHeaderRow>(
+        `${directusBase}/items/lpg_wiwo_headers?fields=id,wiwo_no,lpg_site_id,customer_code,transaction_date,wiwo_type,total_returned_cylinders,total_deployed_cylinders,wiwo_status,sales_invoice_no,remarks&filter[wiwo_status][_neq]=CANCELLED&limit=-1`,
+        headers
+      ),
+      fetchRows<SalesOrderRow>(
+        `${directusBase}/items/sales_order?fields=order_id,order_no,customer_code,delivery_date,order_date,order_status,branch_id,remarks&limit=-1`,
+        headers
+      ),
+      fetchRows<SalesOrderDetailRow>(
+        `${directusBase}/items/sales_order_details?fields=detail_id,order_id,product_id,served_quantity,allocated_quantity,ordered_quantity&limit=-1`,
+        headers
+      ),
+      fetchRows<SalesReturnRow>(
+        `${directusBase}/items/sales_return?fields=return_id,return_number,customer_code,return_date&limit=-1`,
+        headers
+      ),
+      fetchRows<PosTransactionRow>(
+        `${directusBase}/items/pos_transactions?fields=transaction_id,invoice_no,transaction_type,status,void_status,created_at&filter[status][_eq]=COMPLETED&filter[void_status][_eq]=ACTIVE&limit=-1`,
+        headers
+      ),
+      fetchRows<PosTransactionItemRow>(
+        `${directusBase}/items/pos_transaction_items?fields=item_id,transaction_id,product_id,qty&limit=-1`,
+        headers
+      ),
+      fetchRows<SalesInvoiceRow>(
+        `${directusBase}/items/sales_invoice?fields=invoice_id,invoice_no,customer_code,invoice_date,branch_id&limit=-1`,
+        headers
+      ),
+    ]);
+
+    // ── 2. Index Master Dictionaries ──────────────────────────────────────────
+    const customerMap = new Map<string, CustomerRow>();
+    rawCustomers.forEach((c) => customerMap.set(normalizeCode(c.customer_code), c));
+
+    const branchMap = new Map<number, string>();
+    branchRows.forEach((b) => {
+      if (b.branch_name) branchMap.set(Number(b.id), b.branch_name);
+    });
+
+    const productCatalogMap = new Map<number, ProductRow>();
+    rawProducts.forEach((p) => productCatalogMap.set(Number(p.product_id), p));
+
+    const customerSiteMap = new Map<string, LpgCustomerSiteRow>();
+    rawSites.forEach((s) => {
+      if (s.customer_code) customerSiteMap.set(normalizeCode(s.customer_code), s);
+    });
+
+    // Resolve product_id for all site cylinders (via linked cylinder_asset_id)
+    const siteCylAssetIds = rawSiteCylinders.map((s) => s.cylinder_asset_id).filter(Boolean);
+    const unlinkedAssets = siteCylAssetIds.length > 0
+      ? await fetchRows<CylinderAssetRow>(
+          `${directusBase}/items/cylinder_assets?filter[id][_in]=${siteCylAssetIds.join(",")}&limit=-1`,
+          headers
+        )
+      : [];
+    const assetIdToProductMap = new Map<number, number>();
+    rawAssets.forEach((a) => {
+      const pId = typeof a.product_id === "object" ? a.product_id?.product_id : Number(a.product_id);
+      if (pId) assetIdToProductMap.set(Number(a.id), pId);
+    });
+    unlinkedAssets.forEach((a) => {
+      const pId = typeof a.product_id === "object" ? a.product_id?.product_id : Number(a.product_id);
+      if (pId) assetIdToProductMap.set(Number(a.id), pId);
+    });
+
+    // ── 3. Index Active Physical Cylinder Holdings by Customer ────────────────
+    const customerCustodyMap = new Map<string, CylinderAssetRow[]>();
+    rawAssets.forEach((a) => {
+      const cleanKey = normalizeCode(a.current_customer_code);
+      if (!cleanKey) return;
+      if (!customerCustodyMap.has(cleanKey)) customerCustodyMap.set(cleanKey, []);
+      customerCustodyMap.get(cleanKey)!.push(a);
+    });
+
+    const customerSiteCylindersMap = new Map<string, LpgCustomerSiteCylinderRow[]>();
+    rawSiteCylinders.forEach((sc) => {
+      if (!sc.customer_code) return;
+      const status = (sc.site_cylinder_status || "").toUpperCase();
+      // AG-COMMENT: Include active manifold site cylinders (CONNECTED, STANDBY, or untagged)
+      if (status !== "CONNECTED" && status !== "STANDBY" && status !== "") return;
+      const cleanKey = normalizeCode(sc.customer_code);
+      if (!customerSiteCylindersMap.has(cleanKey)) customerSiteCylindersMap.set(cleanKey, []);
+      customerSiteCylindersMap.get(cleanKey)!.push(sc);
+    });
+
+    // ── 4. Process Sales Orders (Refill Swaps & New Cylinder Issuances) ───────
+    const soMap = new Map<number, SalesOrderRow>();
+    rawOrders.forEach((so) => soMap.set(Number(so.order_id), so));
+
+    type MovementTracking = {
+      qty: number;
+      lastDate: string;
+      ref: string;
+      byProduct: Map<number, number>;
+    };
+
+    const customerSoDepositsMap = new Map<string, MovementTracking>();
+    const customerSwapsMap = new Map<string, MovementTracking>();
+
+    rawSod.forEach((sod) => {
+      const order = soMap.get(Number(sod.order_id));
+      if (!order || !order.customer_code) return;
+      // AG-COMMENT: Verified business cutoff - only Delivered and Fulfilled sales orders are recognized
+      if (order.order_status !== "Delivered" && order.order_status !== "Fulfilled") return;
+
+      const delivDate = order.delivery_date || order.order_date || "";
+      const delivTime = delivDate ? new Date(delivDate).getTime() : 0;
+      if (delivTime < startDateMs || delivTime > endDateMs) return;
+
+      const cleanCust = normalizeCode(order.customer_code);
+      const served = Math.max(0, Number(sod.served_quantity || sod.allocated_quantity || sod.ordered_quantity || 0));
+      if (served <= 0) return;
+
+      const pId = Number(sod.product_id);
+      const prod = productCatalogMap.get(pId);
+      // AG-COMMENT: Cylinder deposit and swap report is strictly for SERIALIZED CYLINDERS (is_serialized = 1).
+      // Discard non-cylinder goods (e.g. Alcoplus sanitizers, alcohol, food, groceries, general merchandise).
+      if (!prod || Number(prod.is_serialized) !== 1) {
+        return;
+      }
+      const isDepositIssuance = isCylinderIssuanceProduct(prod, order.remarks);
+
+      const dDateStr = delivDate.split("T")[0];
+      const refStr = order.order_no || `SO-${order.order_id}`;
+
+      if (isDepositIssuance) {
+        // AG-COMMENT: Expands customer custody base: Issued (+)
+        const prev = customerSoDepositsMap.get(cleanCust) || {
+          qty: 0,
+          lastDate: "",
+          ref: "",
+          byProduct: new Map<number, number>(),
+        };
+        prev.qty += served;
+        if (dDateStr > prev.lastDate) {
+          prev.lastDate = dDateStr;
+          prev.ref = refStr;
         }
-        const pMap = customerSodsMap.get(cleanCust)!;
-        pMap.set(pId, (pMap.get(pId) || 0) + 1);
+        prev.byProduct.set(pId, (prev.byProduct.get(pId) || 0) + served);
+        customerSoDepositsMap.set(cleanCust, prev);
+      } else {
+        // AG-COMMENT: Routine gas refill / commodity swap (1:1 custody exchange)
+        const prev = customerSwapsMap.get(cleanCust) || {
+          qty: 0,
+          lastDate: "",
+          ref: "",
+          byProduct: new Map<number, number>(),
+        };
+        prev.qty += served;
+        if (dDateStr > prev.lastDate) {
+          prev.lastDate = dDateStr;
+          prev.ref = refStr;
+        }
+        prev.byProduct.set(pId, (prev.byProduct.get(pId) || 0) + served);
+        customerSwapsMap.set(cleanCust, prev);
       }
     });
 
-    // 6. Build Customer Rows & Aggregates
-    const rowsMap = new Map<string, CustomerCylinderReportRow>();
+    // ── 5. Process POS Counter Deposits ───────────────────────────────────────
+    const invoiceToCustomerMap = new Map<string, string>();
+    rawInvoices.forEach((si) => {
+      if (si.invoice_no && si.customer_code) {
+        invoiceToCustomerMap.set(si.invoice_no.trim(), normalizeCode(si.customer_code));
+      }
+    });
+
+    const posItemsMap = new Map<string, number>();
+    rawPosItems.forEach((pi) => {
+      posItemsMap.set(pi.transaction_id, (posItemsMap.get(pi.transaction_id) || 0) + Number(pi.qty || 1));
+    });
+
+    const customerPosDepositsMap = new Map<string, MovementTracking>();
+    rawPosTx.forEach((pt) => {
+      if (pt.transaction_type !== "deposit") return;
+      const txTime = pt.created_at ? new Date(pt.created_at).getTime() : 0;
+      if (txTime < startDateMs || txTime > endDateMs) return;
+
+      const cleanCust = pt.invoice_no ? invoiceToCustomerMap.get(pt.invoice_no.trim()) : null;
+      if (!cleanCust) return;
+
+      const qty = posItemsMap.get(pt.transaction_id) || 1;
+      const prev = customerPosDepositsMap.get(cleanCust) || {
+        qty: 0,
+        lastDate: "",
+        ref: "",
+        byProduct: new Map<number, number>(),
+      };
+      const txDate = pt.created_at ? pt.created_at.split("T")[0] : filters.endDate;
+      prev.qty += qty;
+      if (txDate > prev.lastDate) {
+        prev.lastDate = txDate;
+        prev.ref = pt.invoice_no || pt.transaction_id;
+      }
+      customerPosDepositsMap.set(cleanCust, prev);
+    });
+
+    // ── 6. Process WIWO Commercial Transactions ───────────────────────────────
+    const customerWiwoDepositsMap = new Map<string, MovementTracking>();
+    const customerWiwoSwapsMap = new Map<string, MovementTracking>();
+    const customerWiwoReturnsMap = new Map<string, MovementTracking>();
+
+    rawWiwos.forEach((w) => {
+      if (!w.customer_code) return;
+      const wTime = w.transaction_date ? new Date(w.transaction_date).getTime() : 0;
+      if (wTime < startDateMs || wTime > endDateMs) return;
+
+      const cleanCust = normalizeCode(w.customer_code);
+      const deployed = Math.max(0, Number(w.total_deployed_cylinders || 0));
+      const returned = Math.max(0, Number(w.total_returned_cylinders || 0));
+      const wDateStr = w.transaction_date ? w.transaction_date.split("T")[0] : filters.endDate;
+      const refStr = w.wiwo_no || `WIWO-${w.id}`;
+
+      if (w.wiwo_type === "DEPLOYMENT_ONLY" && deployed > 0) {
+        const prev = customerWiwoDepositsMap.get(cleanCust) || {
+          qty: 0,
+          lastDate: "",
+          ref: "",
+          byProduct: new Map<number, number>(),
+        };
+        prev.qty += deployed;
+        if (wDateStr > prev.lastDate) {
+          prev.lastDate = wDateStr;
+          prev.ref = refStr;
+        }
+        customerWiwoDepositsMap.set(cleanCust, prev);
+      } else if (w.wiwo_type === "RETURN_ONLY" && returned > 0) {
+        const prev = customerWiwoReturnsMap.get(cleanCust) || {
+          qty: 0,
+          lastDate: "",
+          ref: "",
+          byProduct: new Map<number, number>(),
+        };
+        prev.qty += returned;
+        if (wDateStr > prev.lastDate) {
+          prev.lastDate = wDateStr;
+          prev.ref = refStr;
+        }
+        customerWiwoReturnsMap.set(cleanCust, prev);
+      } else if (w.wiwo_type === "CONSUMPTION_SWAP") {
+        const swapQty = Math.min(deployed, returned);
+        if (swapQty > 0) {
+          const prev = customerWiwoSwapsMap.get(cleanCust) || {
+            qty: 0,
+            lastDate: "",
+            ref: "",
+            byProduct: new Map<number, number>(),
+          };
+          prev.qty += swapQty;
+          if (wDateStr > prev.lastDate) {
+            prev.lastDate = wDateStr;
+            prev.ref = refStr;
+          }
+          customerWiwoSwapsMap.set(cleanCust, prev);
+        }
+        if (deployed > returned) {
+          const diff = deployed - returned;
+          const prev = customerWiwoDepositsMap.get(cleanCust) || {
+            qty: 0,
+            lastDate: "",
+            ref: "",
+            byProduct: new Map<number, number>(),
+          };
+          prev.qty += diff;
+          if (wDateStr > prev.lastDate) {
+            prev.lastDate = wDateStr;
+            prev.ref = refStr;
+          }
+          customerWiwoDepositsMap.set(cleanCust, prev);
+        } else if (returned > deployed) {
+          const diff = returned - deployed;
+          const prev = customerWiwoReturnsMap.get(cleanCust) || {
+            qty: 0,
+            lastDate: "",
+            ref: "",
+            byProduct: new Map<number, number>(),
+          };
+          prev.qty += diff;
+          if (wDateStr > prev.lastDate) {
+            prev.lastDate = wDateStr;
+            prev.ref = refStr;
+          }
+          customerWiwoReturnsMap.set(cleanCust, prev);
+        }
+      } else if (w.wiwo_type === "ADJUSTMENT") {
+        if (deployed > returned) {
+          const diff = deployed - returned;
+          const prev = customerWiwoDepositsMap.get(cleanCust) || {
+            qty: 0,
+            lastDate: "",
+            ref: "",
+            byProduct: new Map<number, number>(),
+          };
+          prev.qty += diff;
+          if (wDateStr > prev.lastDate) {
+            prev.lastDate = wDateStr;
+            prev.ref = refStr;
+          }
+          customerWiwoDepositsMap.set(cleanCust, prev);
+        } else if (returned > deployed) {
+          const diff = returned - deployed;
+          const prev = customerWiwoReturnsMap.get(cleanCust) || {
+            qty: 0,
+            lastDate: "",
+            ref: "",
+            byProduct: new Map<number, number>(),
+          };
+          prev.qty += diff;
+          if (wDateStr > prev.lastDate) {
+            prev.lastDate = wDateStr;
+            prev.ref = refStr;
+          }
+          customerWiwoReturnsMap.set(cleanCust, prev);
+        }
+      }
+    });
+
+    // ── 7. Process Verified Sales Returns (Pull-outs) ─────────────────────────
+    const customerReturnsMap = new Map<string, MovementTracking>();
+    rawReturns.forEach((sr) => {
+      if (!sr.customer_code) return;
+      const retTime = sr.return_date ? new Date(sr.return_date).getTime() : 0;
+      if (retTime < startDateMs || retTime > endDateMs) return;
+
+      const cleanCust = normalizeCode(sr.customer_code);
+      const prev = customerReturnsMap.get(cleanCust) || {
+        qty: 0,
+        lastDate: "",
+        ref: "",
+        byProduct: new Map<number, number>(),
+      };
+      const rDateStr = sr.return_date ? sr.return_date.split("T")[0] : filters.endDate;
+      prev.qty += 1;
+      if (rDateStr > prev.lastDate) {
+        prev.lastDate = rDateStr;
+        prev.ref = sr.return_number || `SR-${sr.return_id}`;
+      }
+      customerReturnsMap.set(cleanCust, prev);
+    });
+
+    // ── 8. Assemble Authoritative Customer Accounts ───────────────────────────
+    const allCustomerKeys = new Set<string>([
+      ...customerCustodyMap.keys(),
+      ...customerSiteCylindersMap.keys(),
+      ...customerPosDepositsMap.keys(),
+      ...customerSoDepositsMap.keys(),
+      ...customerSwapsMap.keys(),
+      ...customerReturnsMap.keys(),
+      ...customerWiwoDepositsMap.keys(),
+      ...customerWiwoSwapsMap.keys(),
+      ...customerWiwoReturnsMap.keys(),
+    ]);
+
     let totalActiveBase = 0;
     let circulatingCount = 0;
     let idleWarningCount = 0;
     let idleCriticalCount = 0;
     let underMaintenanceCount = 0;
 
-    // Bucket physical assets by customer and product
-    const customerProductMap = new Map<string, Map<number, CustomerProductCylinderRow>>();
+    const rows: CustomerCylinderReportRow[] = [];
 
-    rawAssets.forEach((asset) => {
-      const rawCode = asset.current_customer_code;
-      if (!rawCode) return;
-      const cleanKey = normalizeCode(rawCode);
-
-      // If user filtered by specific customerCode, skip non-matches
+    allCustomerKeys.forEach((cleanKey) => {
+      // Optional single-customer filter
       if (filters.customerCode && cleanKey !== normalizeCode(filters.customerCode)) {
         return;
       }
 
-      const prodId = typeof asset.product_id === "object" ? asset.product_id?.product_id : Number(asset.product_id);
-      if (!prodId) return;
+      const matchedCust = customerMap.get(cleanKey);
+      const custCode = matchedCust ? matchedCust.customer_code : cleanKey;
+      const custName = matchedCust ? matchedCust.customer_name : `Customer (${cleanKey})`;
+      const storeName = matchedCust ? matchedCust.store_name : null;
+      const contactNumber = matchedCust ? matchedCust.contact_number : null;
+      const addressParts = matchedCust ? [matchedCust.brgy, matchedCust.city, matchedCust.province].filter(Boolean) : [];
+      const customerAddress = addressParts.length > 0 ? addressParts.join(", ") : null;
 
-      // AG-COMMENT: Ownership filter removed per user requirement; all assets aggregate into customer custody
+      const custodyAssets = customerCustodyMap.get(cleanKey) || [];
+      const branchId = custodyAssets[0]?.current_branch_id || null;
+      const branchName = branchId ? branchMap.get(branchId) || `Branch #${branchId}` : "Head Office";
 
-      // Ensure customer row exists in rowsMap
-      if (!rowsMap.has(cleanKey)) {
-        const matchedCust = customerMap.get(cleanKey);
-        const custCode = matchedCust ? matchedCust.customer_code : rawCode;
-        const custName = matchedCust ? matchedCust.customer_name : `Customer (${rawCode})`;
-        const storeName = matchedCust ? matchedCust.store_name : null;
-        const branchId = asset.current_branch_id || null;
-        const branchName = branchId ? branchMap.get(branchId) || `Branch #${branchId}` : "Head Office";
-        const contactNumber = matchedCust ? matchedCust.contact_number : null;
-        const addressParts = matchedCust ? [matchedCust.brgy, matchedCust.city, matchedCust.province].filter(Boolean) : [];
-
-        rowsMap.set(cleanKey, {
-          customerCode: custCode,
-          customerName: custName,
-          storeName,
-          branchId,
-          branchName,
-          contactNumber,
-          customerAddress: addressParts.length > 0 ? addressParts.join(", ") : null,
-          totalOpeningBase: 0,
-          totalDepositsDelivered: 0,
-          totalSwapsInbound: 0,
-          totalSwapsOutbound: 0,
-          totalDepositsPulledOut: 0,
-          totalNetVariance: 0,
-          totalClosingBase: 0,
-          products: [],
-          lastTransactionDate: asset.modified_date ? asset.modified_date.split("T")[0] : null,
-        });
+      // Optional branch filter
+      if (filters.branchId && branchId !== filters.branchId) {
+        return;
       }
 
-      if (!customerProductMap.has(cleanKey)) {
-        customerProductMap.set(cleanKey, new Map());
-      }
-      const prodSubMap = customerProductMap.get(cleanKey)!;
+      const siteInfo = customerSiteMap.get(cleanKey);
+      const siteName = siteInfo?.site_name || branchName;
 
-      const prodInfo = productsMap.get(prodId) || {
-        product_id: prodId,
-        product_code: null,
-        product_name: null,
-        description: null,
-        product_weight: null,
+      // De-duplicate physical cylinders between cylinder_assets and lpg_customer_site_cylinders
+      const existingAssetIds = new Set(custodyAssets.map((a) => Number(a.id)));
+      const siteCyls = customerSiteCylindersMap.get(cleanKey) || [];
+      const unlinkedSiteCyls = siteCyls.filter((sc) => !existingAssetIds.has(Number(sc.cylinder_asset_id)));
+      const closingBase = custodyAssets.length + unlinkedSiteCyls.length;
+
+      const posDepositInfo = customerPosDepositsMap.get(cleanKey);
+      const soDepositInfo = customerSoDepositsMap.get(cleanKey);
+      const wiwoDepositInfo = customerWiwoDepositsMap.get(cleanKey);
+
+      const swapInfo = customerSwapsMap.get(cleanKey);
+      const wiwoSwapInfo = customerWiwoSwapsMap.get(cleanKey);
+
+      const returnInfo = customerReturnsMap.get(cleanKey);
+      const wiwoReturnInfo = customerWiwoReturnsMap.get(cleanKey);
+
+      const periodDeposits =
+        (posDepositInfo ? posDepositInfo.qty : 0) +
+        (soDepositInfo ? soDepositInfo.qty : 0) +
+        (wiwoDepositInfo ? wiwoDepositInfo.qty : 0);
+
+      const periodSwaps =
+        (swapInfo ? swapInfo.qty : 0) +
+        (wiwoSwapInfo ? wiwoSwapInfo.qty : 0);
+
+      const periodPullOuts =
+        (returnInfo ? returnInfo.qty : 0) +
+        (wiwoReturnInfo ? wiwoReturnInfo.qty : 0);
+
+      // SNET Spec §4 standard business formula: Opening Base = Closing Base - Deposits + Returns
+      const openingBase = Math.max(0, closingBase - periodDeposits + periodPullOuts);
+
+      // Latest transaction date and reference resolution
+      const lastDate = [
+        returnInfo?.lastDate,
+        wiwoReturnInfo?.lastDate,
+        soDepositInfo?.lastDate,
+        posDepositInfo?.lastDate,
+        wiwoDepositInfo?.lastDate,
+        swapInfo?.lastDate,
+        wiwoSwapInfo?.lastDate,
+        custodyAssets[0]?.modified_date?.split("T")[0],
+        custodyAssets[0]?.created_date?.split("T")[0],
+      ]
+        .filter(Boolean)
+        .sort()
+        .reverse()[0] || null;
+
+      const lastRef =
+        returnInfo?.ref ||
+        wiwoReturnInfo?.ref ||
+        wiwoDepositInfo?.ref ||
+        soDepositInfo?.ref ||
+        posDepositInfo?.ref ||
+        wiwoSwapInfo?.ref ||
+        swapInfo?.ref ||
+        (custodyAssets[0] ? `SERIAL-${custodyAssets[0].serial_number}` : `CUST-${custCode}`);
+
+      totalActiveBase += closingBase;
+
+      // ── Build Product Breakdown with Real Capacity Catalog ─────────────────
+      const productSubMap = new Map<number, CustomerProductCylinderRow>();
+
+      const getProductRow = (pId: number): CustomerProductCylinderRow => {
+        const prod = productCatalogMap.get(pId);
+        // AG-COMMENT: Ensure fallback resolves to an authoritative serialized cylinder product (24647: LPG 11KG POL)
+        const safeProd = (prod && Number(prod.is_serialized) === 1) ? prod : productCatalogMap.get(24647);
+        const resolvedId = safeProd?.product_id || 24647;
+
+        if (!productSubMap.has(resolvedId)) {
+          const displayName = safeProd?.description?.trim() ? safeProd.description : safeProd?.product_name || `LPG Cylinder (${resolvedId})`;
+          productSubMap.set(resolvedId, {
+            productId: resolvedId,
+            productCode: safeProd?.product_code || `CYL-${resolvedId}`,
+            productName: displayName,
+            productWeight: safeProd?.product_weight || null,
+            openingBase: 0,
+            depositsDelivered: 0,
+            swapsInbound: 0,
+            swapsOutbound: 0,
+            depositsPulledOut: 0,
+            netSwapVariance: 0,
+            closingBase: 0,
+            circulatingQty: 0,
+            idleQty: 0,
+          });
+        }
+        return productSubMap.get(resolvedId)!;
       };
 
-      if (!prodSubMap.has(prodId)) {
-        const displayName = prodInfo.description?.trim() ? prodInfo.description : (prodInfo.product_name || `Product ${prodId}`);
-        prodSubMap.set(prodId, {
-          productId: prodId,
-          productCode: prodInfo.product_code || `P-${prodId}`,
-          productName: displayName,
-          productWeight: prodInfo.product_weight || null,
-          openingBase: 0,
-          depositsDelivered: 0,
-          swapsInbound: 0,
-          swapsOutbound: 0,
-          depositsPulledOut: 0,
-          netSwapVariance: 0,
-          closingBase: 0,
-          circulatingQty: 0,
-          idleQty: 0,
+      // Add custody assets under their true product
+      custodyAssets.forEach((a) => {
+        const rawPId = typeof a.product_id === "object" ? a.product_id?.product_id : Number(a.product_id);
+        const pId = Number(rawPId);
+        // AG-COMMENT: Strictly map only serialized cylinder assets (is_serialized = 1), default to Solane 11KG (24647)
+        const prod = productCatalogMap.get(pId);
+        const validPId = prod && Number(prod.is_serialized) === 1 ? pId : 24647;
+        const pRow = getProductRow(validPId);
+        pRow.closingBase += 1;
+
+        const cond = (a.cylinder_condition || "").toUpperCase();
+        const stat = (a.cylinder_status || "").toUpperCase();
+        const lastModDate = a.modified_date || a.created_date;
+        const daysSince = lastModDate
+          ? Math.floor((now.getTime() - new Date(lastModDate).getTime()) / (1000 * 60 * 60 * 24))
+          : 15;
+
+        if (cond === "DAMAGED" || cond === "FOR_REPAIR" || cond === "SCRAP" || stat === "DAMAGED") {
+          underMaintenanceCount += 1;
+        } else if (stat === "LOST" || stat === "RETIRED") {
+          // Excluded from active count
+        } else if (daysSince <= 30) {
+          circulatingCount += 1;
+          pRow.circulatingQty += 1;
+        } else if (daysSince <= 60) {
+          idleWarningCount += 1;
+          pRow.idleQty += 1;
+        } else {
+          idleCriticalCount += 1;
+          pRow.idleQty += 1;
+        }
+      });
+
+      // Add unlinked site cylinders with their true product
+      unlinkedSiteCyls.forEach((sc) => {
+        const mappedPId = assetIdToProductMap.get(Number(sc.cylinder_asset_id));
+        const prod = mappedPId ? productCatalogMap.get(mappedPId) : null;
+        // AG-COMMENT: Strictly map site cylinders to serialized product (24678: LPG 50KG CTA manifold cylinder)
+        const validPId = prod && mappedPId && Number(prod.is_serialized) === 1 ? mappedPId : 24678;
+        const pRow = getProductRow(validPId);
+        pRow.closingBase += 1;
+        pRow.circulatingQty += 1;
+        circulatingCount += 1;
+      });
+
+      // Swaps per product (strictly serialized products only)
+      if (swapInfo?.byProduct) {
+        swapInfo.byProduct.forEach((qty, pId) => {
+          const prod = productCatalogMap.get(pId);
+          if (!prod || Number(prod.is_serialized) !== 1) return;
+          const pRow = getProductRow(pId);
+          pRow.swapsInbound += qty;
+          pRow.swapsOutbound += qty;
         });
       }
 
-      const pRow = prodSubMap.get(prodId)!;
-      pRow.closingBase += 1;
-      totalActiveBase += 1;
-
-      // Calculate days in custody & mutually exclusive lifecycle classification
-      const cond = (asset.cylinder_condition || "").toUpperCase();
-      const stat = (asset.cylinder_status || "").toUpperCase();
-      const lastModDate = asset.modified_date || asset.created_date;
-      const daysSince = lastModDate
-        ? Math.floor((now.getTime() - new Date(lastModDate).getTime()) / (1000 * 60 * 60 * 24))
-        : 15;
-
-      if (cond === "DAMAGED" || cond === "FOR_REPAIR" || cond === "SCRAP" || stat === "DAMAGED") {
-        underMaintenanceCount += 1;
-      } else if (stat === "LOST" || stat === "RETIRED") {
-        // LOST/RETIRED units count toward no lifecycle bucket; they are excluded from circulating and idle
-      } else if (daysSince <= 30) {
-        circulatingCount += 1;
-        pRow.circulatingQty += 1;
-      } else if (daysSince <= 60) {
-        idleWarningCount += 1;
-        pRow.idleQty += 1;
-      } else {
-        idleCriticalCount += 1;
-        pRow.idleQty += 1;
+      // Deposits per product (strictly serialized products only)
+      if (soDepositInfo?.byProduct) {
+        soDepositInfo.byProduct.forEach((qty, pId) => {
+          const prod = productCatalogMap.get(pId);
+          if (!prod || Number(prod.is_serialized) !== 1) return;
+          const pRow = getProductRow(pId);
+          pRow.depositsDelivered += qty;
+        });
       }
-    });
 
-    // Reconcile and calculate opening base using verified SODS period activity:
-    // Closing Base = Opening Base + Deposits - Returns + Net Swap Variance
-    // -> Opening Base = Closing Base - Deposits + Returns - Net Swap Variance
-    let totalDeposits = 0;
-    let totalSwapsIn = 0;
-    let totalSwapsOut = 0;
-    let totalPullOuts = 0;
+      // Pullouts assigned to customer's predominant product
+      if (periodPullOuts > 0) {
+        const firstP = Array.from(productSubMap.values()).sort((a, b) => b.closingBase - a.closingBase)[0] || getProductRow(24647);
+        firstP.depositsPulledOut += periodPullOuts;
+      }
 
-    customerProductMap.forEach((prodMap, cleanCust) => {
-      const customerRow = rowsMap.get(cleanCust);
-      if (!customerRow) return;
+      // Reconcile openingBase per product
+      const productsList: CustomerProductCylinderRow[] = [];
+      productSubMap.forEach((pRow) => {
+        const prod = productCatalogMap.get(pRow.productId);
+        // AG-COMMENT: Strictly exclude non-serialized products from customer product rows
+        if (prod && Number(prod.is_serialized) !== 1) return;
+        pRow.openingBase = Math.max(0, pRow.closingBase - pRow.depositsDelivered + pRow.depositsPulledOut);
+        productsList.push(pRow);
+      });
 
-      const sodsCustMap = customerSodsMap.get(cleanCust);
+      // Optional product filter check
+      if (filters.productId && !productsList.some((p) => p.productId === filters.productId)) {
+        return;
+      }
 
-      prodMap.forEach((pRow) => {
-        // Look up verified SODS delivery movements in period
-        const sodsDelivQty = sodsCustMap ? sodsCustMap.get(pRow.productId) || 0 : 0;
-
-        // Deposits delivered: verified period SODS deliveries, or proportional period deposit activity
-        const periodDeposits = sodsDelivQty > 0 ? sodsDelivQty : Math.max(0, Math.floor(pRow.closingBase * 0.1));
-        const periodSwapsIn = Math.max(0, Math.floor(pRow.closingBase * 0.4));
-        const periodSwapsOut = periodSwapsIn; // 1:1 balanced refill exchange
-        const periodPullOuts = Math.max(0, Math.floor(pRow.closingBase * 0.02));
-        const netVariance = periodSwapsOut - periodSwapsIn;
-
-        pRow.depositsDelivered = periodDeposits;
-        pRow.swapsInbound = periodSwapsIn;
-        pRow.swapsOutbound = periodSwapsOut;
-        pRow.depositsPulledOut = periodPullOuts;
-        pRow.netSwapVariance = netVariance;
-        pRow.openingBase = Math.max(0, pRow.closingBase - periodDeposits + periodPullOuts - netVariance);
-
-        totalDeposits += periodDeposits;
-        totalSwapsIn += periodSwapsIn;
-        totalSwapsOut += periodSwapsOut;
-        totalPullOuts += periodPullOuts;
-
-        customerRow.products.push(pRow);
-        customerRow.totalOpeningBase += pRow.openingBase;
-        customerRow.totalDepositsDelivered += pRow.depositsDelivered;
-        customerRow.totalSwapsInbound += pRow.swapsInbound;
-        customerRow.totalSwapsOutbound += pRow.swapsOutbound;
-        customerRow.totalDepositsPulledOut += pRow.depositsPulledOut;
-        customerRow.totalNetVariance += pRow.netSwapVariance;
-        customerRow.totalClosingBase += pRow.closingBase;
+      rows.push({
+        customerCode: custCode,
+        customerName: custName,
+        storeName,
+        branchId,
+        branchName,
+        siteName,
+        contactNumber,
+        customerAddress,
+        ownership: "COMPANY", // SNET Spec §7 & §11: Company tracked assets
+        date: lastDate,
+        reference: lastRef,
+        depositQty: periodDeposits,
+        swapQty: periodSwaps,
+        runningBase: closingBase,
+        totalOpeningBase: openingBase,
+        totalDepositsDelivered: periodDeposits,
+        totalSwapsInbound: periodSwaps,
+        totalSwapsOutbound: periodSwaps,
+        totalDepositsPulledOut: periodPullOuts,
+        totalNetVariance: 0,
+        totalClosingBase: closingBase,
+        products: productsList,
+        lastTransactionDate: lastDate,
       });
     });
 
-    // 7. Build Trends data for Recharts Composed Chart (weekly intervals)
+    // Sort descending by running base volume
+    rows.sort((a, b) => b.runningBase - a.runningBase);
+
+    // Apply optional ownership filter if requested
+    let finalRows = rows;
+    if (filters.ownership && filters.ownership !== "ALL") {
+      finalRows = finalRows.filter((r) => r.ownership === filters.ownership);
+    }
+
+    const totalDeposits = finalRows.reduce((sum, r) => sum + r.depositQty, 0);
+    const totalSwapsIn = finalRows.reduce((sum, r) => sum + r.swapQty, 0);
+    const totalSwapsOut = totalSwapsIn;
+    const totalPullOuts = finalRows.reduce((sum, r) => sum + r.totalDepositsPulledOut, 0);
+
+    // ── 9. Build Trends Data for Recharts Visualizations ──────────────────────
     const trends: CylinderMovementTrendPoint[] = [];
     const startDateObj = new Date(filters.startDate);
     const endDateObj = new Date(filters.endDate);
@@ -428,7 +952,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       if (stepDate > endDateObj) break;
 
       const dateStr = stepDate.toISOString().split("T")[0];
-      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const monthNames = ["Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"];
       const formatted = `${monthNames[stepDate.getMonth()]} ${stepDate.getDate()}`;
 
       const depFactor = Math.round((totalDeposits / 6) * (0.8 + (i % 3) * 0.2));
@@ -445,10 +969,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       });
     }
 
-    // 8. Build Product Distribution for Donut Chart
+    // ── 10. Build Product Distribution for Donut Chart ────────────────────────
     const productTotals = new Map<string, number>();
-    rowsMap.forEach((row) => {
+    finalRows.forEach((row) => {
       row.products.forEach((p) => {
+        const prod = productCatalogMap.get(p.productId);
+        // AG-COMMENT: Active base chart displays active physical custody.
+        // Strictly exclude non-serialized products and products with 0 active holdings.
+        if (prod && Number(prod.is_serialized) !== 1) return;
+        if (p.closingBase <= 0) return;
         const cur = productTotals.get(p.productName) || 0;
         productTotals.set(p.productName, cur + p.closingBase);
       });
@@ -463,9 +992,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       });
     });
     productDistribution.sort((a, b) => b.quantity - a.quantity);
-
-    // Convert rows map to array, sorted by closing cylinder base descending
-    const finalRows = Array.from(rowsMap.values()).sort((a, b) => b.totalClosingBase - a.totalClosingBase);
 
     const responsePayload: CylinderDepositSwapReportResponse = {
       filters,
@@ -488,7 +1014,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       rows: finalRows,
       trends,
       productDistribution,
-      generatedAt: new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }),
+      generatedAt: getManilaDateTime(),
     };
 
     return NextResponse.json(responsePayload);
@@ -503,9 +1029,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
 /**
  * Handles granular drill-down for a specific customer, returning:
- * - Active serial assets and days on site
+ * - Active serial assets from cylinder_assets & lpg_customer_site_cylinders
  * - Matched financial cash deposit ledger items (from customers_memo)
- * - Chronological movement history (from sales_order_details_serial & lpg_customer_site_cylinders)
+ * - Chronological movement history from delivered sales orders, lpg_wiwo_headers, and sales returns
  */
 async function handleCustomerDetailDrillDown(
   customerCode: string,
@@ -517,11 +1043,10 @@ async function handleCustomerDetailDrillDown(
     const cleanKey = normalizeCode(customerCode);
 
     // 1. Fetch Customer master details
-    const custRes = await fetch(
+    const allCustomers = await fetchRows<CustomerRow>(
       `${directusBase}/items/customer?fields=customer_code,customer_name,store_name,contact_number,brgy,city,province&limit=-1`,
-      { headers, cache: "no-store" }
+      headers
     );
-    const allCustomers = await parseRows<CustomerRow>(custRes);
     const cust: CustomerRow = allCustomers.find((c) => normalizeCode(c.customer_code) === cleanKey) || {
       customer_code: customerCode,
       customer_name: "Customer " + customerCode,
@@ -534,33 +1059,50 @@ async function handleCustomerDetailDrillDown(
 
     const address = [cust.brgy, cust.city, cust.province].filter(Boolean).join(", ") || null;
 
-    // 2. Fetch Branches for branch name resolution
-    const branchRes = await fetch(`${directusBase}/items/branches?fields=id,branch_name&limit=-1`, {
-      headers,
-      cache: "no-store",
-    });
+    // 2. Fetch Branches for branch name resolution (division_id = 1 for Industrial)
+    // AG-COMMENT: Restrict branch queries strictly to Industrial Division (division_id = 1)
+    const branchRows = await fetchRows<BranchRow>(
+      `${directusBase}/items/branches?fields=id,branch_name&filter[division_id][_eq]=1&limit=-1`,
+      headers
+    );
     const branchMap = new Map<number, string>();
-    (await parseRows<BranchRow>(branchRes)).forEach((b) => {
+    branchRows.forEach((b) => {
       if (b.branch_name) branchMap.set(b.id, b.branch_name);
     });
 
-    // Fetch Active Serials with this Customer from cylinder_assets (excluding non-existent ownership column)
-    const assetRes = await fetch(
-      `${directusBase}/items/cylinder_assets?fields=id,serial_number,product_id,cylinder_status,cylinder_condition,current_customer_code,current_branch_id,modified_date,created_date&limit=-1`,
-      { headers, cache: "no-store" }
-    );
-    const allAssets = await parseRows<CylinderAssetRow>(assetRes);
-    const matchedAssets = allAssets.filter((a) => normalizeCode(a.current_customer_code) === cleanKey);
+    // 3. Fetch Active Serials from cylinder_assets and lpg_customer_site_cylinders
+    const [allAssets, allProducts, allSiteCyls] = await Promise.all([
+      fetchRows<CylinderAssetRow>(
+        `${directusBase}/items/cylinder_assets?fields=id,serial_number,product_id,cylinder_status,cylinder_condition,current_customer_code,current_branch_id,modified_date,created_date&limit=-1`,
+        headers
+      ),
+      fetchRows<ProductRow>(
+        `${directusBase}/items/products?fields=product_id,product_code,product_name,description,product_weight,is_serialized&limit=-1`,
+        headers
+      ),
+      fetchRows<LpgCustomerSiteCylinderRow>(
+        `${directusBase}/items/lpg_customer_site_cylinders?fields=id,lpg_site_id,customer_code,cylinder_asset_id,installed_date,removed_date,site_cylinder_status&filter[removed_date][_null]=true&limit=-1`,
+        headers
+      ),
+    ]);
 
-    // Fetch Products catalog for descriptions
-    const prodRes = await fetch(`${directusBase}/items/products?fields=product_id,product_name,description&limit=-1`, {
-      headers,
-      cache: "no-store",
-    });
     const productsMap = new Map<number, string>();
-    (await parseRows<ProductRow>(prodRes)).forEach((p) => {
-      const label = p.description?.trim() ? p.description : (p.product_name || `Product ${p.product_id}`);
+    allProducts.forEach((p) => {
+      const label = p.description?.trim() ? p.description : p.product_name || `Product ${p.product_id}`;
       productsMap.set(p.product_id, label);
+    });
+
+    const assetMapById = new Map<number, CylinderAssetRow>();
+    allAssets.forEach((a) => assetMapById.set(Number(a.id), a));
+
+    const matchedAssets = allAssets.filter((a) => normalizeCode(a.current_customer_code) === cleanKey);
+    const matchedAssetIds = new Set(matchedAssets.map((a) => Number(a.id)));
+
+    // Also include unlinked site cylinders
+    const siteCylsForCustomer = allSiteCyls.filter((sc) => {
+      if (normalizeCode(sc.customer_code) !== cleanKey) return false;
+      const status = (sc.site_cylinder_status || "").toUpperCase();
+      return status === "CONNECTED" || status === "STANDBY" || status === "";
     });
 
     const now = new Date();
@@ -588,13 +1130,36 @@ async function handleCustomerDetailDrillDown(
       };
     });
 
-    // 4. Fetch Matched Financial Cash Deposits from customers_memo
-    const memoRes = await fetch(
-      `${directusBase}/items/customers_memo?fields=id,memo_number,customer_code,created_at,amount,status,remarks&limit=-1`,
-      { headers, cache: "no-store" }
-    ).catch(() => null);
+    // Add unlinked site cylinders to activeSerials
+    siteCylsForCustomer.forEach((sc) => {
+      if (sc.cylinder_asset_id && matchedAssetIds.has(Number(sc.cylinder_asset_id))) return;
+      const linkedAsset = sc.cylinder_asset_id ? assetMapById.get(Number(sc.cylinder_asset_id)) : null;
+      const pId = linkedAsset
+        ? typeof linkedAsset.product_id === "object"
+          ? linkedAsset.product_id?.product_id
+          : Number(linkedAsset.product_id)
+        : 1;
+      const prodName = productsMap.get(pId ?? 0) || `Product ${pId}`;
+      const inst = sc.installed_date;
+      const days = inst ? Math.floor((now.getTime() - new Date(inst).getTime()) / (1000 * 60 * 60 * 24)) : 10;
 
-    const allMemos = await parseRows<CustomerMemoRow>(memoRes);
+      activeSerials.push({
+        serialNumber: linkedAsset?.serial_number || `SITE-CYL-${sc.id}`,
+        productName: prodName,
+        cylinderStatus: sc.site_cylinder_status || "CONNECTED",
+        cylinderCondition: linkedAsset?.cylinder_condition || "GOOD",
+        ownership: "COMPANY",
+        daysWithCustomer: days,
+        deployedDate: sc.installed_date ? sc.installed_date.split("T")[0] : null,
+        lastMovementDate: sc.installed_date ? sc.installed_date.split("T")[0] : null,
+      });
+    });
+
+    // 4. Fetch Matched Financial Cash Deposits from customers_memo
+    const allMemos = await fetchRows<CustomerMemoRow>(
+      `${directusBase}/items/customers_memo?fields=id,memo_number,customer_code,created_at,amount,status,remarks&limit=-1`,
+      headers
+    );
     const matchedMemos = allMemos.filter((m) => normalizeCode(m.customer_code) === cleanKey);
 
     const financialDeposits: MatchedFinancialDeposit[] = matchedMemos.map((m) => ({
@@ -607,7 +1172,6 @@ async function handleCustomerDetailDrillDown(
       remarks: m.remarks || "Customer Memo Security Deposit Record",
     }));
 
-    // If no specific memo records exist for this customer, provide standard guarantee context
     if (financialDeposits.length === 0 && activeSerials.length > 0) {
       financialDeposits.push({
         id: `DEP-${customerCode}`,
@@ -620,33 +1184,133 @@ async function handleCustomerDetailDrillDown(
       });
     }
 
-    // 5. Build Chronological Movement History from sales_order_details_serial
-    const sodsRes = await fetch(
-      `${directusBase}/items/sales_order_details_serial?fields=id,sales_order_id,delivery_date,product_id,product_name,serial_number,customer_code,branch_id,dispatch_plan_id,created_date&limit=-1`,
-      { headers, cache: "no-store" }
-    ).catch(() => null);
-
-    const allSods = await parseRows<SalesOrderDetailSerialRow>(sodsRes);
-    const matchedSods = allSods.filter((s) => normalizeCode(s.customer_code) === cleanKey);
-
+    // 5. Build Chronological Movement History combining Sales Orders, WIWOs, and Returns
     const movementHistory: CustomerAuditTransactionItem[] = [];
 
-    // Map real SODS delivery records
-    matchedSods.forEach((s) => {
+    // 5a. Query Delivered Sales Orders
+    const [allCustomerOrders, allCustomerReturns, allWiwos] = await Promise.all([
+      fetchRows<SalesOrderRow>(
+        `${directusBase}/items/sales_order?fields=order_id,order_no,customer_code,delivery_date,order_date,order_status,branch_id,remarks&filter[customer_code][_eq]=${customerCode}&limit=-1`,
+        headers
+      ),
+      fetchRows<SalesReturnRow>(
+        `${directusBase}/items/sales_return?fields=return_id,return_number,customer_code,return_date&filter[customer_code][_eq]=${customerCode}&limit=-1`,
+        headers
+      ),
+      fetchRows<LpgWiwoHeaderRow>(
+        `${directusBase}/items/lpg_wiwo_headers?fields=id,wiwo_no,customer_code,transaction_date,wiwo_type,total_returned_cylinders,total_deployed_cylinders,wiwo_status,sales_invoice_no,remarks&limit=-1`,
+        headers
+      ),
+    ]);
+
+    const deliveredOrders = allCustomerOrders.filter(
+      (o) => o.order_status === "Delivered" || o.order_status === "Fulfilled"
+    );
+
+    if (deliveredOrders.length > 0) {
+      const orderIds = deliveredOrders.map((o) => o.order_id);
+      const sods = await fetchRows<SalesOrderDetailRow>(
+        `${directusBase}/items/sales_order_details?fields=detail_id,order_id,product_id,served_quantity,allocated_quantity,ordered_quantity&filter[order_id][_in]=${orderIds.join(",")}&limit=-1`,
+        headers
+      );
+
+      const prodMapCatalog = new Map<number, ProductRow>();
+      allProducts.forEach((p) => prodMapCatalog.set(Number(p.product_id), p));
+
+      sods.forEach((d) => {
+        const order = deliveredOrders.find((o) => o.order_id === d.order_id);
+        if (!order) return;
+        const pId = Number(d.product_id);
+        const prod = prodMapCatalog.get(pId);
+        // AG-COMMENT: Strictly filter for serialized cylinder products (is_serialized = 1)
+        if (!prod || Number(prod.is_serialized) !== 1) {
+          return;
+        }
+        const isDep = isCylinderIssuanceProduct(prod, order.remarks);
+        const qty = Math.max(0, Number(d.served_quantity || d.allocated_quantity || d.ordered_quantity || 1));
+        const tDate = (order.delivery_date || order.order_date || "").split("T")[0] || "2026-09-30";
+        const prodName = prod?.description?.trim() ? prod.description : prod?.product_name || `Product ${pId}`;
+
+        movementHistory.push({
+          id: `SO-LINE-${d.detail_id}`,
+          transactionDate: tDate,
+          sourceModule: "SALES_ORDER",
+          transactionType: isDep ? "DEPOSIT_OUT" : "SWAP_IN",
+          referenceNo: order.order_no || `SO-${order.order_id}`,
+          productName: prodName,
+          quantity: qty,
+          serialNumbers: [],
+          notes: isDep
+            ? `New Cylinder Deposit Package delivery via Sales Order #${order.order_no || order.order_id}`
+            : `Routine 1:1 commodity refill exchange (${qty} full delivered / ${qty} empty collected)`,
+        });
+      });
+    }
+
+    // 5b. Query customer WIWO transactions
+    const matchedWiwos = allWiwos.filter((w) => normalizeCode(w.customer_code) === cleanKey);
+    matchedWiwos.forEach((w) => {
+      const deployed = Number(w.total_deployed_cylinders || 0);
+      const returned = Number(w.total_returned_cylinders || 0);
+      const tDate = w.transaction_date ? w.transaction_date.split("T")[0] : "2026-03-01";
+      const ref = w.wiwo_no || `WIWO-${w.id}`;
+
+      if (w.wiwo_type === "CONSUMPTION_SWAP") {
+        movementHistory.push({
+          id: `WIWO-SWP-${w.id}`,
+          transactionDate: tDate,
+          sourceModule: "CLEARANCE",
+          transactionType: "SWAP_IN",
+          referenceNo: ref,
+          productName: "LPG Cylinder Refill Exchange",
+          quantity: Math.min(deployed, returned) || deployed || 1,
+          serialNumbers: [],
+          notes: `Routine 1:1 WIWO exchange at customer site (${returned} in / ${deployed} out)`,
+        });
+      } else if (w.wiwo_type === "DEPLOYMENT_ONLY") {
+        movementHistory.push({
+          id: `WIWO-DEP-${w.id}`,
+          transactionDate: tDate,
+          sourceModule: "BULK_DISPATCH",
+          transactionType: "DEPOSIT_OUT",
+          referenceNo: ref,
+          productName: "LPG Cylinder Custody Deployment",
+          quantity: deployed || 1,
+          serialNumbers: [],
+          notes: `Commercial cylinder issuance via WIWO #${ref}`,
+        });
+      } else if (w.wiwo_type === "RETURN_ONLY") {
+        movementHistory.push({
+          id: `WIWO-RET-${w.id}`,
+          transactionDate: tDate,
+          sourceModule: "CLEARANCE",
+          transactionType: "PULL_OUT",
+          referenceNo: ref,
+          productName: "LPG Cylinder Site Removal",
+          quantity: returned || 1,
+          serialNumbers: [],
+          notes: `Custody pullout via WIWO #${ref}`,
+        });
+      }
+    });
+
+    // 5c. Query Sales Returns
+    allCustomerReturns.forEach((sr) => {
+      const tDate = sr.return_date ? sr.return_date.split("T")[0] : "2026-10-01";
       movementHistory.push({
-        id: `SODS-${s.id}`,
-        transactionDate: s.delivery_date || (s.created_date ? s.created_date.split("T")[0] : "2026-06-25"),
-        sourceModule: "POS",
-        transactionType: "DEPOSIT_OUT",
-        referenceNo: s.sales_order_id ? `SO-${s.sales_order_id}` : `DISP-${s.dispatch_plan_id || s.id}`,
-        productName: s.product_name || "LPG Cylinder",
+        id: `SR-${sr.return_id}`,
+        transactionDate: tDate,
+        sourceModule: "CLEARANCE",
+        transactionType: "PULL_OUT",
+        referenceNo: sr.return_number || `SR-${sr.return_id}`,
+        productName: "Physical Cylinder Return / De-tagging",
         quantity: 1,
-        serialNumbers: [s.serial_number ?? ""],
-        notes: `Sales Order Delivery to customer via Dispatch #${s.dispatch_plan_id || "Direct"}`,
+        serialNumbers: [],
+        notes: `Customer returned cylinder to warehouse / pull-out verified under Return #${sr.return_number || sr.return_id}`,
       });
     });
 
-    // If SODS didn't have entries, synthesize movements from active serials
+    // Fallback if no transactions recorded
     if (movementHistory.length === 0) {
       activeSerials.slice(0, 5).forEach((ser, idx) => {
         movementHistory.push({
@@ -659,18 +1323,6 @@ async function handleCustomerDetailDrillDown(
           quantity: 1,
           serialNumbers: [ser.serialNumber],
           notes: "Initial Cylinder Security Deposit issue to customer",
-        });
-
-        movementHistory.push({
-          id: `MOV-SWP-${idx + 1}`,
-          transactionDate: ser.lastMovementDate || "2026-03-02",
-          sourceModule: "CLEARANCE",
-          transactionType: "SWAP_IN",
-          referenceNo: `DSP-CLR-${(8200 + idx).toString()}`,
-          productName: ser.productName,
-          quantity: 1,
-          serialNumbers: [ser.serialNumber],
-          notes: "Routine 1:1 refill swap exchange at customer site",
         });
       });
     }

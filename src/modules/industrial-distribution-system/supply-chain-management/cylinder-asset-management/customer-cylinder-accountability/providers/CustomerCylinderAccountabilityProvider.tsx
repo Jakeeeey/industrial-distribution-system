@@ -25,7 +25,6 @@ import {
   fetchCustomerAccountabilityDetail,
 } from "../services/customer-cylinder-accountability.repo";
 import { exportAccountabilityToExcel } from "../services/customer-cylinder-accountability.xlsx";
-import { exportAccountabilityToPdf } from "../services/customer-cylinder-accountability.pdf";
 import { filterAccountabilityRows } from "../services/customer-cylinder-accountability.calc";
 
 interface CustomerAccountabilityContextValue {
@@ -57,8 +56,8 @@ interface CustomerAccountabilityContextValue {
   setPageSize: (size: number) => void;
 
   // Export Actions
+  // AG-COMMENT: Excel is the sole retained export dispatcher per user requirement
   exportExcel: () => void;
-  exportPdf: () => void;
 }
 
 const CustomerAccountabilityContext = React.createContext<CustomerAccountabilityContextValue | null>(null);
@@ -131,25 +130,39 @@ export function CustomerCylinderAccountabilityProvider({
     };
   }, []);
 
-  // 2. Fetch Report Data on Filter Change
+  // 2. Fetch Report Data ONLY when date period changes or manual refresh is triggered
+  // AG-COMMENT: As all customer accountability rows for the specified date period are already fetched in full,
+  // search queries, branch scoping, and ownership are evaluated in-memory without requesting the server again.
   const loadReport = React.useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
-      const res = await fetchCustomerAccountabilityReport(filters);
+      const res = await fetchCustomerAccountabilityReport({
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+      });
       setReportData(res);
       setCurrentPage(1); // Reset to first page
     } catch (err) {
       console.error("[AccountabilityProvider] Failed to load report:", err);
-      setError(err instanceof Error && err.message ? err.message : "Failed to load customer cylinder accountability report.");
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : "Failed to load customer cylinder accountability report."
+      );
     } finally {
       setIsLoading(false);
     }
-  }, [filters]);
+  }, [filters.startDate, filters.endDate]);
 
   React.useEffect(() => {
     loadReport();
   }, [loadReport]);
+
+  // AG-COMMENT: Reset pagination to first page when in-memory search query or filter changes
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [filters.searchQuery, filters.branchId, filters.ownership]);
 
   // 3. Load Customer Drilldown detail when selected
   React.useEffect(() => {
@@ -216,11 +229,6 @@ export function CustomerCylinderAccountabilityProvider({
     exportAccountabilityToExcel(reportData);
   }, [reportData]);
 
-  const exportPdf = React.useCallback(() => {
-    if (!reportData) return;
-    exportAccountabilityToPdf(reportData);
-  }, [reportData]);
-
   const value: CustomerAccountabilityContextValue = {
     filters,
     setFilters,
@@ -242,7 +250,6 @@ export function CustomerCylinderAccountabilityProvider({
     setCurrentPage,
     setPageSize,
     exportExcel,
-    exportPdf,
   };
 
   return (

@@ -58,8 +58,21 @@ export async function fetchCylinderDepositSwapReport(
   return (await res.json()) as CylinderDepositSwapReportResponse;
 }
 
-const LOOKUPS_STORAGE_KEY = "ids_bia_cylinder_deposit_swap_lookups_v1";
+const LOOKUPS_STORAGE_KEY = "ids_industrial_cylinder_deposit_swap_lookups_v3";
 const LOOKUPS_CACHE_DURATION = 15 * 60 * 1000; // 15 minutes TTL
+const INDUSTRIAL_BRANCH_IDS = new Set([196, 197, 278, 279, 280]);
+
+function sanitizeLookups(data: CylinderDepositSwapLookupOptions): CylinderDepositSwapLookupOptions {
+  if (Array.isArray(data?.branches)) {
+    data.branches = data.branches.filter((b) => {
+      if (b.division_id !== undefined && b.division_id !== null) {
+        return Number(b.division_id) === 1;
+      }
+      return INDUSTRIAL_BRANCH_IDS.has(Number(b.id));
+    });
+  }
+  return data;
+}
 
 /**
  * Fetches dynamic lookup options for filter dropdowns (branches, products, customers).
@@ -68,6 +81,16 @@ const LOOKUPS_CACHE_DURATION = 15 * 60 * 1000; // 15 minutes TTL
 export async function fetchCylinderDepositSwapLookups(
   forceRefresh = false
 ): Promise<CylinderDepositSwapLookupOptions> {
+  // Purge legacy storage keys if present
+  if (typeof window !== "undefined") {
+    try {
+      sessionStorage.removeItem("ids_bia_cylinder_deposit_swap_lookups_v1");
+      sessionStorage.removeItem("ids_industrial_cylinder_deposit_swap_lookups_v2");
+    } catch {
+      // Ignore
+    }
+  }
+
   // Check client sessionStorage cache first
   if (!forceRefresh && typeof window !== "undefined") {
     try {
@@ -75,7 +98,7 @@ export async function fetchCylinderDepositSwapLookups(
       if (raw) {
         const cached = JSON.parse(raw);
         if (cached?.timestamp && Date.now() - cached.timestamp < LOOKUPS_CACHE_DURATION && cached.data) {
-          return cached.data as CylinderDepositSwapLookupOptions;
+          return sanitizeLookups(cached.data as CylinderDepositSwapLookupOptions);
         }
       }
     } catch {
@@ -93,7 +116,8 @@ export async function fetchCylinderDepositSwapLookups(
     throw new Error(`[CylinderDepositSwapRepo] Lookups fetch failed with status ${res.status}`);
   }
 
-  const data = (await res.json()) as CylinderDepositSwapLookupOptions;
+  const rawData = (await res.json()) as CylinderDepositSwapLookupOptions;
+  const data = sanitizeLookups(rawData);
 
   // Persist to client sessionStorage
   if (typeof window !== "undefined") {

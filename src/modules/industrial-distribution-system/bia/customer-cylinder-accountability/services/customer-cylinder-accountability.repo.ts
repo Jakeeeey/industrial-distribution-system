@@ -62,23 +62,49 @@ export async function fetchCustomerAccountabilityReport(
   return (await res.json()) as CustomerAccountabilityReportResponse;
 }
 
-const LOOKUPS_STORAGE_KEY = "vos_ids_bia_customer_accountability_lookups_v2";
-const LOOKUPS_CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours persistent client cache
+const LOOKUPS_STORAGE_KEY = "vos_ids_bia_customer_accountability_lookups_v5";
+const LOOKUPS_CACHE_DURATION = 60 * 1000; // 1 minute client cache
+const INDUSTRIAL_BRANCH_IDS = new Set([196, 197, 278, 279, 280]);
+
+function sanitizeAccountabilityLookups(data: AccountabilityLookupOptions): AccountabilityLookupOptions {
+  if (Array.isArray(data?.branches)) {
+    data.branches = data.branches.filter((b) => {
+      if (b.division_id != null && (b.division_id as unknown) !== "") {
+        return Number(b.division_id) === 1 && INDUSTRIAL_BRANCH_IDS.has(Number(b.id));
+      }
+      return INDUSTRIAL_BRANCH_IDS.has(Number(b.id));
+    });
+  }
+  return data;
+}
 
 /**
  * Fetches dynamic lookup options for branches, customers, and ownership categories.
- * Employs persistent client localStorage caching to eliminate redundant Directus fetches on page reload.
+ * Employs short-lived client caching while actively purging stale legacy caches.
  */
 export async function fetchAccountabilityLookups(
   forceRefresh = false
 ): Promise<AccountabilityLookupOptions> {
+  // AG-COMMENT: Purge legacy cache keys that held non-industrial branches
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem("vos_ids_bia_customer_accountability_lookups");
+      localStorage.removeItem("vos_ids_bia_customer_accountability_lookups_v1");
+      localStorage.removeItem("vos_ids_bia_customer_accountability_lookups_v2");
+      localStorage.removeItem("vos_ids_bia_customer_accountability_lookups_v3");
+      localStorage.removeItem("vos_ids_bia_customer_accountability_lookups_v4");
+    } catch {
+      // Ignore
+    }
+  }
+
   if (!forceRefresh && typeof window !== "undefined") {
     try {
       const raw = localStorage.getItem(LOOKUPS_STORAGE_KEY);
       if (raw) {
         const cached = JSON.parse(raw);
         if (cached?.timestamp && Date.now() - cached.timestamp < LOOKUPS_CACHE_DURATION && cached.data) {
-          return cached.data as AccountabilityLookupOptions;
+          return sanitizeAccountabilityLookups(cached.data as AccountabilityLookupOptions);
         }
       }
     } catch {
@@ -96,7 +122,8 @@ export async function fetchAccountabilityLookups(
     throw new Error(`[AccountabilityRepo] Lookups fetch failed with status ${res.status}`);
   }
 
-  const data = (await res.json()) as AccountabilityLookupOptions;
+  const rawData = (await res.json()) as AccountabilityLookupOptions;
+  const data = sanitizeAccountabilityLookups(rawData);
 
   if (typeof window !== "undefined") {
     try {

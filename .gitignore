@@ -49,3 +49,5 @@ lint.log
 zdocs/
 ztest/
 /zmine
+*.js
+.agents/rules/ids-guide.md

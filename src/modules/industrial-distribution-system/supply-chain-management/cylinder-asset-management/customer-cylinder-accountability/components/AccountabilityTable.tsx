@@ -12,10 +12,39 @@
 "use client";
 
 import * as React from "react";
-import { ChevronLeft, ChevronRight, Eye, AlertCircle, Building2, Layers } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, AlertCircle, Building2, Layers, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { useCustomerCylinderAccountability } from "../hooks/useCustomerCylinderAccountability";
-import { OwnershipBadge } from "./OwnershipBadge";
-import { StatusBadge } from "./StatusBadge";
+
+type SortField =
+  | "customer"
+  | "branch"
+  | "opening"
+  | "issued"
+  | "returned"
+  | "held"
+  | "limit"
+  | "variance"
+ 
+type SortDirection = "asc" | "desc";
+
+function SortIndicator({
+  field,
+  currentField,
+  direction,
+}: {
+  field: SortField;
+  currentField: SortField;
+  direction: SortDirection;
+}) {
+  if (field !== currentField) {
+    return <ArrowUpDown className="h-3 w-3 text-muted-foreground/30 opacity-40 group-hover/col:opacity-100 transition shrink-0" />;
+  }
+  return direction === "asc" ? (
+    <ArrowUp className="h-3 w-3 text-primary shrink-0" />
+  ) : (
+    <ArrowDown className="h-3 w-3 text-primary shrink-0" />
+  );
+}
 
 export function AccountabilityTable() {
   const {
@@ -29,13 +58,78 @@ export function AccountabilityTable() {
     resetFilters,
   } = useCustomerCylinderAccountability();
 
+  // Sorting state (default: highest custody held first)
+  const [sortField, setSortField] = React.useState<SortField>("held");
+  const [sortDirection, setSortDirection] = React.useState<SortDirection>("desc");
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection(
+        field === "customer" || field === "branch"   ? "asc" : "desc"
+      );
+    }
+  };
+
+  // Sort rows before pagination
+  const sortedRows = React.useMemo(() => {
+    const list = [...filteredRows];
+    list.sort((a, b) => {
+      let aVal: string | number = 0;
+      let bVal: string | number = 0;
+
+      switch (sortField) {
+        case "customer":
+          aVal = (a.customerName || a.customerCode).toLowerCase();
+          bVal = (b.customerName || b.customerCode).toLowerCase();
+          break;
+        case "branch":
+          aVal = (a.siteName || a.branchName || "").toLowerCase();
+          bVal = (b.siteName || b.branchName || "").toLowerCase();
+          break;
+        case "opening":
+          aVal = a.opening ?? a.openingBase ?? 0;
+          bVal = b.opening ?? b.openingBase ?? 0;
+          break;
+        case "issued":
+          aVal = a.issued ?? a.periodDeposits ?? 0;
+          bVal = b.issued ?? b.periodDeposits ?? 0;
+          break;
+        case "returned":
+          aVal = a.returned ?? a.periodPullOuts ?? 0;
+          bVal = b.returned ?? b.periodPullOuts ?? 0;
+          break;
+        case "held":
+          aVal = a.held ?? a.closingBase ?? 0;
+          bVal = b.held ?? b.closingBase ?? 0;
+          break;
+        case "limit":
+          aVal = a.authorizedLimit ?? 0;
+          bVal = b.authorizedLimit ?? 0;
+          break;
+        case "variance":
+          aVal = a.variance ?? 0;
+          bVal = b.variance ?? 0;
+          break;
+ 
+      }
+
+      if (aVal < bVal) return sortDirection === "asc" ? -1 : 1;
+      if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+    return list;
+  }, [filteredRows, sortField, sortDirection]);
+
   // Pagination calculation
-  const totalRows = filteredRows.length;
+  const totalRows = sortedRows.length;
   const totalPages = Math.ceil(totalRows / pageSize) || 1;
   const startIndex = (currentPage - 1) * pageSize;
   const paginatedRows = React.useMemo(() => {
-    return filteredRows.slice(startIndex, startIndex + pageSize);
-  }, [filteredRows, startIndex, pageSize]);
+    return sortedRows.slice(startIndex, startIndex + pageSize);
+  }, [sortedRows, startIndex, pageSize]);
 
   // Loading skeleton state
   if (isLoading) {
@@ -64,7 +158,7 @@ export function AccountabilityTable() {
   }
 
   // Empty state prompt
-  if (filteredRows.length === 0) {
+  if (sortedRows.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-xl border bg-card p-12 text-center shadow-2xs">
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted/60 text-muted-foreground mb-3">
@@ -119,108 +213,213 @@ export function AccountabilityTable() {
         <table className="w-full text-left text-xs">
           <thead className="border-b bg-muted/40 font-semibold text-muted-foreground uppercase tracking-wider text-[11px]">
             <tr>
-              <th className="py-3 px-4">Customer</th>
-              <th className="py-3 px-3">Branch</th>
-              <th className="py-3 px-3 text-right">Opening Base</th>
-              <th className="py-3 px-3 text-right">Deposit Qty (+)</th>
-              <th className="py-3 px-3 text-right">Swap Qty</th>
-              <th className="py-3 px-3 text-right font-bold text-foreground">Running Base (=)</th>
-              <th className="py-3 px-3 text-center">Ownership</th>
-              <th className="py-3 px-3">Last Transaction</th>
-              <th className="py-3 px-3">Reference</th>
-              <th className="py-3 px-3 text-center">Audit Status</th>
-              <th className="py-3 px-4 text-right">Actions</th>
+              {/* 1. Customer */}
+              {/* AG-COMMENT: Customer Name primary with sub Customer Code, badge removed */}
+              <th
+                className="py-3 px-4 cursor-pointer select-none transition hover:bg-muted/70 group/col"
+                title="Customer name and customer code. Click to sort by ascending/descending."
+                onClick={() => handleSort("customer")}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Customer</span>
+                  <SortIndicator field="customer" currentField={sortField} direction={sortDirection} />
+                </div>
+              </th>
+
+              {/* 2. Branch */}
+              <th
+                className="py-3 px-3 cursor-pointer select-none transition hover:bg-muted/70 group/col"
+                title="Customer operating branch or site location. Click to sort by ascending/descending."
+                onClick={() => handleSort("branch")}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Branch</span>
+                  <SortIndicator field="branch" currentField={sortField} direction={sortDirection} />
+                </div>
+              </th>
+
+              {/* 3. Opening */}
+              <th
+                className="py-3 px-3 text-right cursor-pointer select-none transition hover:bg-muted/70 group/col"
+                title="Beginning cylinder custody holdings at the start of the reporting period. Click to sort by ascending/descending."
+                onClick={() => handleSort("opening")}
+              >
+                <div className="flex items-center justify-end gap-1.5">
+                  <span>Opening</span>
+                  <SortIndicator field="opening" currentField={sortField} direction={sortDirection} />
+                </div>
+              </th>
+
+              {/* 4. Issued (+) */}
+              <th
+                className="py-3 px-3 text-right cursor-pointer select-none transition hover:bg-muted/70 group/col"
+                title="Physical cylinders issued or deposited to the customer within the reporting period. Click to sort by ascending/descending."
+                onClick={() => handleSort("issued")}
+              >
+                <div className="flex items-center justify-end gap-1.5">
+                  <span>Issued (+)</span>
+                  <SortIndicator field="issued" currentField={sortField} direction={sortDirection} />
+                </div>
+              </th>
+
+              {/* 5. Returned (-) */}
+              <th
+                className="py-3 px-3 text-right cursor-pointer select-none transition hover:bg-muted/70 group/col"
+                title="Physical cylinders returned or pulled out from the customer within the reporting period. Click to sort by ascending/descending."
+                onClick={() => handleSort("returned")}
+              >
+                <div className="flex items-center justify-end gap-1.5">
+                  <span>Returned (-)</span>
+                  <SortIndicator field="returned" currentField={sortField} direction={sortDirection} />
+                </div>
+              </th>
+
+              {/* 6. Held (=) */}
+              <th
+                className="py-3 px-3 text-right font-bold text-foreground cursor-pointer select-none transition hover:bg-muted/70 group/col"
+                title="Current cylinders held in customer custody (= Opening + Issued - Returned). Click to sort by ascending/descending."
+                onClick={() => handleSort("held")}
+              >
+                <div className="flex items-center justify-end gap-1.5">
+                  <span>Held (=)</span>
+                  <SortIndicator field="held" currentField={sortField} direction={sortDirection} />
+                </div>
+              </th>
+
+              {/* 7. Limit */}
+              <th
+                className="py-3 px-3 text-right cursor-pointer select-none transition hover:bg-muted/70 group/col"
+                title="Customer authorized cylinder holding quota ceiling. Click to sort by ascending/descending."
+                onClick={() => handleSort("limit")}
+              >
+                <div className="flex items-center justify-end gap-1.5">
+                  <span>Limit</span>
+                  <SortIndicator field="limit" currentField={sortField} direction={sortDirection} />
+                </div>
+              </th>
+
+              {/* 8. Variance */}
+              <th
+                className="py-3 px-3 text-right cursor-pointer select-none transition hover:bg-muted/70 group/col"
+                title="Custody variance against quota: Held minus Limit. Negative = Safe headroom; Positive = Over quota. Click to sort by ascending/descending."
+                onClick={() => handleSort("variance")}
+              >
+                <div className="flex items-center justify-end gap-1.5">
+                  <span>Variance</span>
+                  <SortIndicator field="variance" currentField={sortField} direction={sortDirection} />
+                </div>
+              </th>
+ 
+
+              {/* 10. Actions */}
+              <th className="py-3 px-4 text-right" title="Drilldown actions into customer transaction ledger">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/60">
-            {paginatedRows.map((row) => (
-              <tr
-                key={row.customerCode}
-                className="transition hover:bg-muted/30 cursor-pointer group"
-                onClick={() => openCustomerDetail(row.customerCode)}
-              >
-                {/* 1. Customer Details */}
-                <td className="py-3 px-4">
-                  <div className="font-semibold text-foreground flex items-center gap-1.5">
-                    <span className="font-mono text-primary font-bold">
-                      {row.customerCode}
-                    </span>
-                    <span>• {row.customerName}</span>
-                  </div>
-                  {row.storeName && (
-                    <div className="text-[11px] text-muted-foreground mt-0.5">
-                      Store: {row.storeName}
+            {paginatedRows.map((row) => {
+              const opening = row.opening ?? row.openingBase;
+              const issued = row.issued ?? row.periodDeposits;
+              const returned = row.returned ?? row.periodPullOuts;
+              const held = row.held ?? row.closingBase;
+              const limit = row.authorizedLimit;
+              const variance = row.variance ?? (held - limit);
+              const siteName = row.siteName || row.branchName;
+
+              return (
+                <tr
+                  key={row.customerCode}
+                  className="transition hover:bg-muted/30 cursor-pointer group"
+                  onClick={() => openCustomerDetail(row.customerCode)}
+                >
+                  {/* 1. Customer Details (SNET Spec §11: Customer) */}
+                  {/* AG-COMMENT: Customer Name as primary label with Customer Code sub-line */}
+                  <td className="py-3 px-4">
+                    <div className="font-semibold text-foreground leading-snug">
+                      {row.customerName}
                     </div>
-                  )}
-                </td>
+                    <div className="font-mono text-[11px] text-muted-foreground mt-0.5">
+                      {row.customerCode}
+                    </div>
+                  </td>
 
-                {/* 2. Branch */}
-                <td className="py-3 px-3 text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <Building2 className="h-3 w-3 text-muted-foreground/70" />
-                    <span>{row.branchName}</span>
-                  </div>
-                </td>
+                  {/* 2. Site / Branch (SNET Spec §11: Site) */}
+                  <td className="py-3 px-3 text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <Building2 className="h-3 w-3 text-muted-foreground/70 shrink-0" />
+                      <span className="truncate" title={siteName}>
+                        {siteName}
+                      </span>
+                    </div>
+                  </td>
 
-                {/* 3. Opening Base */}
-                <td className="py-3 px-3 text-right font-mono font-medium text-muted-foreground">
-                  {row.openingBase.toLocaleString()}
-                </td>
+                  {/* 3. Opening Holdings (SNET Spec §11: Opening) */}
+                  <td className="py-3 px-3 text-right font-mono font-medium text-muted-foreground">
+                    {opening.toLocaleString()}
+                  </td>
 
-                {/* 4. Deposit Qty */}
-                <td className="py-3 px-3 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-                  {row.periodDeposits > 0 ? `+${row.periodDeposits.toLocaleString()}` : "0"}
-                </td>
+                  {/* 4. Issued / Deposits (SNET Spec §11: Issued) */}
+                  <td className="py-3 px-3 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+                    {issued > 0 ? `+${issued.toLocaleString()}` : "0"}
+                  </td>
 
-                {/* 5. Swap Qty */}
-                <td className="py-3 px-3 text-right font-mono text-primary font-medium">
-                  {row.periodSwaps.toLocaleString()}
-                </td>
+                  {/* 5. Returned / Pull-outs (SNET Spec §11: Returned) */}
+                  <td className="py-3 px-3 text-right font-mono font-semibold text-rose-600 dark:text-rose-400">
+                    {returned > 0 ? `-${returned.toLocaleString()}` : "0"}
+                  </td>
 
-                {/* 6. Running Base */}
-                <td className="py-3 px-3 text-right font-mono font-bold text-sm text-foreground">
-                  {row.closingBase.toLocaleString()}
-                </td>
+                  {/* 6. Current Held (SNET Spec §11: Held) */}
+                  <td className="py-3 px-3 text-right font-mono font-bold text-sm text-foreground">
+                    {held.toLocaleString()}
+                  </td>
 
-                {/* 7. Ownership */}
-                <td className="py-3 px-3 text-center">
-                  <OwnershipBadge ownership={row.ownership} />
-                </td>
+                  {/* 7. Authorized Limit (SNET Spec §11: Limit) */}
+                  <td className="py-3 px-3 text-right font-mono text-muted-foreground font-medium">
+                    {limit.toLocaleString()}
+                  </td>
 
-                {/* 8. Last Transaction Date */}
-                <td className="py-3 px-3 font-mono text-[11px] text-muted-foreground">
-                  {row.lastTransactionDate || "—"}
-                </td>
+                  {/* 8. Variance (SNET Spec §10 & §11: Variance = Held - Limit) */}
+                  <td className="py-3 px-3 text-right">
+                    {variance > 0 ? (
+                      <span
+                        className="inline-flex items-center rounded-md border border-amber-500/20 bg-amber-500/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-amber-700 dark:text-amber-400"
+                        title={`Exceeding authorized holding limit by ${variance.toLocaleString()} cylinders`}
+                      >
+                        +{variance.toLocaleString()} Over
+                      </span>
+                    ) : variance === 0 ? (
+                      <span className="inline-flex items-center rounded-md border border-slate-500/20 bg-slate-500/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-slate-600 dark:text-slate-400">
+                        0 Balanced
+                      </span>
+                    ) : (
+                      <span
+                        className="inline-flex items-center rounded-md border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-emerald-700 dark:text-emerald-400"
+                        title={`Within authorized quota by ${Math.abs(variance).toLocaleString()} cylinders`}
+                      >
+                        {variance.toLocaleString()}
+                      </span>
+                    )}
+                  </td>
+ 
 
-                {/* 9. Reference */}
-                <td className="py-3 px-3 font-mono text-[11px] text-muted-foreground truncate max-w-[140px]" title={row.lastReferenceNo || "—"}>
-                  {row.lastReferenceNo || "—"}
-                </td>
-
-                {/* 10. Audit Status */}
-                <td className="py-3 px-3 text-center">
-                  <StatusBadge
-                    isVerified={row.verifiedTransactionsCount > 0}
-                    exceptionCount={row.exceptionCount}
-                  />
-                </td>
-
-                {/* 11. Actions */}
-                <td className="py-3 px-4 text-right">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openCustomerDetail(row.customerCode);
-                    }}
-                    className="inline-flex items-center gap-1 rounded-md border bg-background px-2.5 py-1 text-[11px] font-semibold text-foreground shadow-2xs transition hover:bg-muted group-hover:border-primary/40 group-hover:text-primary"
-                  >
-                    <Eye className="h-3 w-3" />
-                    <span>View Ledger</span>
-                  </button>
-                </td>
-              </tr>
-            ))}
+                  {/* 10. Actions */}
+                  <td className="py-3 px-4 text-right">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openCustomerDetail(row.customerCode);
+                      }}
+                      className="inline-flex items-center gap-1 rounded-md border bg-background px-2.5 py-1 text-[11px] font-semibold text-foreground shadow-2xs transition hover:bg-muted group-hover:border-primary/40 group-hover:text-primary"
+                    >
+                      <Eye className="h-3 w-3" />
+                      <span>View Ledger</span>
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

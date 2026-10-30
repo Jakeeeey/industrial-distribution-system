@@ -146,7 +146,72 @@ export function reconcileCustomerTransactionLedger(
 }
 
 /**
+ * Calculates SNET §7 Turnaround velocity and commercial incentive rebate.
+ * Turns per year = (Period Swaps / Current Held) * (365 / Period Days)
+ * Months per turn = 12 / Turns per year
+ * Customer Grade = A (>= 12), B (>= 6), C (>= 2), STANDARD (< 2)
+ */
+export function calculateCustomerTurnaroundMetrics(
+  currentHeld: number,
+  periodSwaps: number,
+  periodDays: number = 30
+): {
+  turnsPerYear: number;
+  monthsPerTurn: number;
+  customerGrade: "A" | "B" | "C" | "STANDARD";
+  incentiveRate: number;
+  totalIncentive: number;
+} {
+  const held = Math.max(0, currentHeld || 0);
+  const swaps = Math.max(0, periodSwaps || 0);
+  const days = Math.max(1, periodDays || 30);
+
+  if (held === 0 || swaps === 0) {
+    return {
+      turnsPerYear: 0,
+      monthsPerTurn: 0,
+      customerGrade: "STANDARD",
+      incentiveRate: 0,
+      totalIncentive: 0,
+    };
+  }
+
+  // Annualized turnover rate
+  const turnsPerYear = Number(((swaps / held) * (365 / days)).toFixed(2));
+  const monthsPerTurn = turnsPerYear > 0 ? Number((12 / turnsPerYear).toFixed(1)) : 0;
+
+  // Grade classification based on turnaround velocity
+  let customerGrade: "A" | "B" | "C" | "STANDARD" = "STANDARD";
+  let incentiveRate = 0; // ₱ incentive rebate per swap turn
+
+  if (turnsPerYear >= 12) {
+    customerGrade = "A"; // Rapid monthly turnaround
+    incentiveRate = 15.0; // ₱15 / cylinder
+  } else if (turnsPerYear >= 6) {
+    customerGrade = "B"; // Bi-monthly turnaround
+    incentiveRate = 10.0; // ₱10 / cylinder
+  } else if (turnsPerYear >= 2) {
+    customerGrade = "C"; // Moderate turnaround
+    incentiveRate = 5.0; // ₱5 / cylinder
+  } else {
+    customerGrade = "STANDARD";
+    incentiveRate = 0;
+  }
+
+  const totalIncentive = Number((swaps * incentiveRate).toFixed(2));
+
+  return {
+    turnsPerYear,
+    monthsPerTurn,
+    customerGrade,
+    incentiveRate,
+    totalIncentive,
+  };
+}
+
+/**
  * Aggregates high-level KPI summary cards from all customer accountability rows.
+ * Includes SNET §7 & §11 totals for authorized limits, fleet variance, and over-limit flags.
  */
 export function calculateAccountabilityKPIs(
   rows: CustomerAccountabilityRow[]
@@ -156,15 +221,29 @@ export function calculateAccountabilityKPIs(
   let totalPeriodSwaps = 0;
   let totalPeriodPullOuts = 0;
   let totalClosingBase = 0;
+  let totalAuthorizedLimit = 0;
+  let totalVariance = 0;
+  let overLimitCount = 0;
   let totalVerifiedRecords = 0;
   let totalExceptions = 0;
 
   for (const row of rows) {
-    totalOpeningBase += Number(row.openingBase || 0);
-    totalPeriodDeposits += Number(row.periodDeposits || 0);
+    const held = Number(row.closingBase || row.held || 0);
+    const limit = Number(row.authorizedLimit || 0);
+    const variance = Number(row.variance ?? (held - limit));
+
+    totalOpeningBase += Number(row.openingBase || row.opening || 0);
+    totalPeriodDeposits += Number(row.periodDeposits || row.issued || 0);
     totalPeriodSwaps += Number(row.periodSwaps || 0);
-    totalPeriodPullOuts += Number(row.periodPullOuts || 0);
-    totalClosingBase += Number(row.closingBase || 0);
+    totalPeriodPullOuts += Number(row.periodPullOuts || row.returned || 0);
+    totalClosingBase += held;
+    totalAuthorizedLimit += limit;
+    totalVariance += variance;
+
+    if (variance > 0) {
+      overLimitCount += 1;
+    }
+
     totalVerifiedRecords += Number(row.verifiedTransactionsCount || 0);
     totalExceptions += Number(row.exceptionCount || 0);
   }
@@ -175,6 +254,9 @@ export function calculateAccountabilityKPIs(
     totalPeriodSwaps,
     totalPeriodPullOuts,
     totalClosingBase,
+    totalAuthorizedLimit,
+    totalVariance,
+    overLimitCount,
     activeCustomerAccounts: rows.length,
     totalVerifiedRecords,
     totalExceptions,
@@ -203,13 +285,14 @@ export function filterAccountabilityRows(
       if (r.ownership !== ownership) return false;
     }
 
-    // 3. Search query match
+    // 3. Search query match (in-memory filtering across period data)
+    // AG-COMMENT: Evaluates search queries instantaneously in-memory on loaded rows
     if (query) {
-      const matchCode = r.customerCode.toLowerCase().includes(query);
-      const matchName = r.customerName.toLowerCase().includes(query);
-      const matchStore = (r.storeName || "").toLowerCase().includes(query);
+      const matchCode = (r.customerCode || "").toLowerCase().includes(query);
+      const matchName = (r.customerName || "").toLowerCase().includes(query);
+      const matchSite = (r.siteName || "").toLowerCase().includes(query);
       const matchBranch = (r.branchName || "").toLowerCase().includes(query);
-      if (!matchCode && !matchName && !matchStore && !matchBranch) {
+      if (!matchCode && !matchName && !matchSite && !matchBranch) {
         return false;
       }
     }
