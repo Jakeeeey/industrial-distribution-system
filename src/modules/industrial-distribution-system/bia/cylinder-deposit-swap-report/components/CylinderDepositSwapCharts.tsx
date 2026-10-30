@@ -23,7 +23,7 @@ import {
   Pie,
   Cell,
 } from "recharts";
-import { TrendingUp, PieChart as PieChartIcon, Activity } from "lucide-react";
+import { TrendingUp, PieChart as PieChartIcon } from "lucide-react";
 import { useCylinderDepositSwapReport } from "../hooks/useCylinderDepositSwapReport";
 
 const DONUT_COLORS = [
