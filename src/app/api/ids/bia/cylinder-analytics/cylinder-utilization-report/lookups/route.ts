@@ -14,7 +14,7 @@
 // ==============================================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import { buildSizeLabel } from "@/modules/industrial-distribution-system/bia/cylinder-analytics/cylinder-utilization-report/services/cylinder-utilization.helpers";
+ 
 import type { UtilizationLookupOptions } from "@/modules/industrial-distribution-system/bia/cylinder-analytics/cylinder-utilization-report/types/cylinder-utilization-report.types";
 
 export const runtime = "nodejs";
@@ -81,8 +81,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   );
 
   // ── Sizes: products that are serialized are the cylinders ─────────────────
-  // `is_serialized` is what distinguishes a cylinder stock item from a refill or
-  // accessory, which the Deposit & Swap lookups already rely on.
+  // AG-COMMENT: Fetch products filtered by is_serialized = 1, isActive = 1, sorted by description per ids-guide
   const productRows = await fetchRows<{
     product_id: number;
     product_code: string | null;
@@ -90,7 +89,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     description: string | null;
     product_weight: number | null;
   }>(
-    `${directusBase}/items/products?filter[is_serialized][_eq]=1&filter[isActive][_eq]=1&fields=product_id,product_code,product_name,description,product_weight&sort=product_name&limit=-1`,
+    `${directusBase}/items/products?filter[is_serialized][_eq]=1&filter[isActive][_eq]=1&fields=product_id,product_code,product_name,description,product_weight&sort=description&limit=-1`,
     headers
   );
 
@@ -98,12 +97,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     branches: branchRows
       .filter((b) => b.branch_name)
       .map((b) => ({ id: Number(b.id), name: String(b.branch_name), code: String(b.branch_code ?? "") })),
-    sizes: productRows.map((p) => ({
-      id: Number(p.product_id),
-      label: buildSizeLabel(p.product_name || p.description, p.product_code, p.product_weight),
-      code: String(p.product_code ?? ""),
-      weight: p.product_weight === null || p.product_weight === undefined ? null : Number(p.product_weight),
-    })),
+    sizes: productRows.map((p) => {
+      // AG-COMMENT: Shows products.description as product name per ids-guide rule and user prompt
+      const productLabel = p.description?.trim() || p.product_name?.trim() || (p.product_code ? `Size ${p.product_code}` : "Unmapped size");
+      return {
+        id: Number(p.product_id),
+        label: productLabel,
+        code: String(p.product_code ?? ""),
+        weight: p.product_weight === null || p.product_weight === undefined ? null : Number(p.product_weight),
+      };
+    }),
   };
 
   cached = { payload, expiresAt: Date.now() + CACHE_TTL_MS };

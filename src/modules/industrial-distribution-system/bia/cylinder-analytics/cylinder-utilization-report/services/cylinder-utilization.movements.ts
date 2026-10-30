@@ -95,7 +95,9 @@ export function buildMovementIndex(
   deliveries: RawDeliveryMovementRow[],
   orderStatusById: Map<number, string>,
   siteCylinders: RawSiteCylinderMovementRow[],
-  cutoffMs: number
+  cutoffMs: number,
+  siteNamesById?: Map<number, string>,
+  startMs?: number
 ): MovementIndex {
   const index: MovementIndex = {
     bySerial: new Map(),
@@ -141,7 +143,10 @@ export function buildMovementIndex(
 
     if (isVerified && millis !== null) {
       applyActivity(trail, millis, "SALES_DELIVERY", cutoffMs);
-      index.verifiedMovements += 1;
+      const inPeriod = startMs !== undefined ? millis >= startMs && millis <= cutoffMs : millis <= cutoffMs;
+      if (inPeriod) {
+        index.verifiedMovements += 1;
+      }
       trail.countedCount += 1;
     }
   }
@@ -158,19 +163,28 @@ export function buildMovementIndex(
     const millis = removed !== null ? removed : installed;
     if (millis === null) continue;
 
+    const siteId = row.lpg_site_id !== null && row.lpg_site_id !== undefined ? Number(row.lpg_site_id) : null;
+    const siteName = siteId !== null && Number.isFinite(siteId) ? siteNamesById?.get(siteId) ?? null : null;
+    // AG-COMMENT: Displays resolved site_name from lpg_customer_lpg_sites instead of Site #ID per user request
+    const documentNo = siteName || (siteId !== null && Number.isFinite(siteId) ? `Site #${siteId}` : "Unlinked site cylinder");
+
     const trail = ensureTrail(index.byAssetId, assetId);
     trail.documents.push({
       id: `SITE-${row.id}`,
       sourceModule: "METERED_SITE",
-      documentNo: row.lpg_site_id ? `Site #${row.lpg_site_id}` : "Unlinked site cylinder",
+      documentNo,
       documentDate: new Date(millis).toISOString().split("T")[0],
       documentStatus: (row.site_cylinder_status || "").toUpperCase() || null,
       customerCode: row.customer_code ?? null,
       counted: true,
+      siteName: siteName ?? null,
     });
 
     applyActivity(trail, millis, "SITE_INSTALLATION", cutoffMs);
-    index.verifiedMovements += 1;
+    const inPeriod = startMs !== undefined ? millis >= startMs && millis <= cutoffMs : millis <= cutoffMs;
+    if (inPeriod) {
+      index.verifiedMovements += 1;
+    }
     trail.countedCount += 1;
   }
 

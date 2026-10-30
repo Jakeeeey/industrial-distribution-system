@@ -36,37 +36,44 @@ export function UtilizationRuleLegend() {
 
   if (!rules) return null;
 
-  /** One legend entry per bucket: the statuses and conditions that resolve into it. */
-  const entries: Array<{ bucket: UtilizationBucket; detail: string; note: string }> = [
+  /** One legend entry per bucket: the statuses, conditions, and basis that resolve into it. */
+  // AG-COMMENT: Plain-language explanations of the basis for Unavailable and Unclassified per user request
+  const entries: Array<{ bucket: UtilizationBucket; detail: string; note: string; basis: string }> = [
     {
       bucket: "CIRCULATING",
       detail: rules.circulatingStatuses.join(", "),
-      note: "Numerator of the utilization ratio",
+      note: "Earning with customers or in delivery — numerator of the utilization ratio",
+      basis: "Asset status WITH_CUSTOMER or LOADED, or verified delivery movement",
     },
     {
       bucket: "AVAILABLE",
-      detail: `${rules.yardStatuses.join(", ")} — dormant within ${rules.idleThresholdDays} days`,
-      note: "In the yard and eligible, not yet dormant",
+      detail: `${rules.yardStatuses.join(", ")} — activity within ${rules.idleThresholdDays} days`,
+      note: "Available in stock and active in working fleet, not dormant",
+      basis: "In-stock status (AVAILABLE, FULL, EMPTY, RESERVED) with activity under 30 days",
     },
     {
       bucket: "IDLE",
-      detail: `Same yard statuses — dormant more than ${rules.idleThresholdDays} days`,
-      note: "Primary target of this report",
+      detail: `Same stock statuses — no activity for more than ${rules.idleThresholdDays} days`,
+      note: "Usable fleet dormant in stock — primary opportunity for redeployment",
+      basis: "In-stock status with no movement or audit stamp for >30 days",
     },
     {
       bucket: "MAINTENANCE",
       detail: `${rules.maintenanceStatuses.join(", ")} / condition ${rules.maintenanceConditions.join(", ")}`,
-      note: "Eligible fleet, but not able to circulate",
+      note: "Eligible active fleet, but temporarily out of service pending repair",
+      basis: "Tagged as DAMAGED status or condition FOR_REPAIR / DAMAGED",
     },
     {
       bucket: "UNAVAILABLE",
       detail: `${rules.unavailableStatuses.join(", ")} / condition ${rules.unavailableConditions.join(", ")}`,
-      note: "Excluded from the utilization denominator",
+      note: "Permanently removed from working fleet — excluded from the utilization denominator",
+      basis: "Status LOST or RETIRED, or physical condition SCRAP (written off)",
     },
     {
       bucket: "UNCLASSIFIED",
-      detail: "Status blank or outside the source ENUM domain",
-      note: "Reported as a data exception, excluded from the denominator",
+      detail: "Status missing (blank/null) or outside standard system ENUM options",
+      note: "Flagged as a data exception for review — excluded from denominator pending correction",
+      basis: "Asset record lacks a valid status; requires data cleanup in Directus",
     },
   ];
 
@@ -106,12 +113,15 @@ export function UtilizationRuleLegend() {
               {/* ── Bucket definitions ───────────────────────────────────── */}
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {entries.map((entry) => (
-                  <div key={entry.bucket} className="rounded-lg border bg-muted/20 p-3">
+                  <div key={entry.bucket} className="rounded-lg border bg-muted/20 p-3 space-y-1.5">
                     <BucketBadge bucket={entry.bucket} />
-                    <p className="mt-2 font-mono text-[11px] leading-relaxed text-foreground">
+                    <p className="font-mono text-[11px] leading-relaxed text-foreground">
                       {entry.detail}
                     </p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">{entry.note}</p>
+                    <p className="text-[11px] text-muted-foreground">{entry.note}</p>
+                    <div className="pt-1 border-t border-border/40 text-[10px] text-muted-foreground/80">
+                      <strong>Basis:</strong> {entry.basis}
+                    </div>
                   </div>
                 ))}
               </div>

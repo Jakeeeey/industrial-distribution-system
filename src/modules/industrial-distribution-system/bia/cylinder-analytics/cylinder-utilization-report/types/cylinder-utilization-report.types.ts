@@ -20,8 +20,8 @@
  */
 export type UtilizationBucket =
   | "CIRCULATING" // Deployed out and actively earning
-  | "AVAILABLE" // In yard / eligible, last activity inside the idle threshold
-  | "IDLE" // In yard / eligible, dormant beyond the idle threshold
+  | "AVAILABLE" // In warehouse / eligible, last activity inside the idle threshold
+  | "IDLE" // In warehouse / eligible, dormant beyond the idle threshold
   | "MAINTENANCE" // Out of service pending repair
   | "UNAVAILABLE" // Removed from the eligible fleet (lost / retired / scrapped)
   | "UNCLASSIFIED"; // Status absent or outside the source ENUM domain (data exception)
@@ -104,6 +104,8 @@ export interface SupportingMovementDocument {
   customerCode: string | null;
   counted: boolean; // true when the document is verified under its posting workflow
   note?: string | null;
+  // AG-COMMENT: Resolved site_name from lpg_customer_lpg_sites for human-readable metered site display
+  siteName?: string | null;
 }
 
 /**
@@ -228,4 +230,21 @@ export interface CylinderUtilizationDetailResponse {
   assets: CylinderUtilizationAssetRecord[];
   rules: UtilizationRuleSnapshot;
   reportingCutoff: string;
+  // AG-COMMENT: Counts per bucket for the current grouping, powering the drawer tabs count badges
+  bucketCounts?: Record<UtilizationBucket | "ALL", number>;
 }
+
+/**
+ * Sortable column keys in the results table.
+ */
+export type UtilizationSortField =
+  | "branchName"
+  | "sizeLabel"
+  | "fleet"
+  | "eligibleFleet"
+  | "circulating"
+  | "available"
+  | "idle"
+  | "maintenance"
+  | "unavailable"
+  | "utilization";

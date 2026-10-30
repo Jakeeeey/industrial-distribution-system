@@ -2,158 +2,198 @@
 // ==============================================================================
 // Parameter Filter Bar for the Cylinder Utilization Report (spec §2, §5).
 //
-// Controls the reporting period, the cutoff the fleet is measured against, branch
-// scoping and the cylinder size. The search box narrows the grid that is already
-// in memory, so typing never triggers a Directus round-trip.
+// Controls the reporting period, reporting cutoff, branch multi-scoping, and
+// cylinder size multi-scoping with dynamic select-all/unselect-all.
+//
+// AG-COMMENT: Staged filter pattern — selections only update the dataset when the
+// user clicks the explicit "Apply" button, preventing unnecessary server round-trips.
 //
 // Complies with VoSync Design System standards:
-// - Searchable shadcn popover with Framer Motion for branch / size scoping
-// - Debounced local search synced back to the provider
-// - Full comments left behind for long-term maintainability
+// - Searchable multi-select popovers with select/unselect all and reset
+// - Clear period start and reporting cutoff controls
+// - Explicit "Apply" button with unapplied changes indicator
+// - Full comments left behind for long-term maintainability (AG-COMMENT)
 // ==============================================================================
 
 "use client";
 
 import * as React from "react";
-import { Building2, Calendar, Layers, RotateCcw, Search, X } from "lucide-react";
+import { Building2, Calendar, Filter, Layers, RotateCcw } from "lucide-react";
 import { useCylinderUtilizationReport } from "../hooks/useCylinderUtilizationReport";
-import { SmoothSearchableSelect } from "./SmoothSearchableSelect";
+import { UtilizationMultiSelect } from "./UtilizationMultiSelect";
+import type { CylinderUtilizationFilters } from "../types/cylinder-utilization-report.types";
 
 export function UtilizationFilters() {
-  const { filters, setFilters, resetFilters, lookups, isLookupsLoading, search, setSearch } =
+  const { filters, setFilters, resetFilters, lookups, isLookupsLoading, isLoading } =
     useCylinderUtilizationReport();
 
-  // Local echo of the in-memory search term, debounced into the provider.
-  const [localSearch, setLocalSearch] = React.useState(search);
+  // AG-COMMENT: Staged filters ensure network fetches occur ONLY when the "Apply" button is clicked
+  const [stagedFilters, setStagedFilters] = React.useState<CylinderUtilizationFilters>(filters);
 
+  // Sync staged filters whenever the external filters are updated or reset
   React.useEffect(() => {
-    const timer = setTimeout(() => setSearch(localSearch), 280);
-    return () => clearTimeout(timer);
-  }, [localSearch, setSearch]);
+    setStagedFilters(filters);
+  }, [filters]);
 
-  // Keeps the box in sync when filters are reset from anywhere else in the module.
-  React.useEffect(() => {
-    setLocalSearch(search);
-  }, [search]);
+  const hasUnappliedChanges = React.useMemo(() => {
+    return JSON.stringify(stagedFilters) !== JSON.stringify(filters);
+  }, [stagedFilters, filters]);
 
+  // ── 1. Options mapping ──────────────────────────────────────────────────────
   const branchOptions = React.useMemo(
-    () => [
-      { value: "ALL", label: "All Active Branches" },
-      ...lookups.branches.map((branch) => ({ value: String(branch.id), label: branch.name })),
-    ],
+    () => lookups.branches.map((b) => ({ value: String(b.id), label: b.name, code: b.code })),
     [lookups.branches]
   );
 
   const sizeOptions = React.useMemo(
-    () => [
-      { value: "", label: "All Cylinder Sizes" },
-      ...lookups.sizes.map((size) => ({ value: String(size.id), label: size.label })),
-    ],
+    () => lookups.sizes.map((s) => ({ value: String(s.id), label: s.label, code: s.code })),
     [lookups.sizes]
   );
 
+  const allBranchValues = React.useMemo(() => branchOptions.map((b) => b.value), [branchOptions]);
+  const allSizeValues = React.useMemo(() => sizeOptions.map((s) => s.value), [sizeOptions]);
+
+  // ── 2. Active selection calculation for multi-selects based on STAGED filters
+  const selectedBranchValues = React.useMemo(() => {
+    if (stagedFilters.branchId === "NONE") return [];
+    if (!stagedFilters.branchId || stagedFilters.branchId === "ALL") return allBranchValues;
+    return String(stagedFilters.branchId).split(",").map((s) => s.trim()).filter(Boolean);
+  }, [stagedFilters.branchId, allBranchValues]);
+
+  const selectedSizeValues = React.useMemo(() => {
+    if (stagedFilters.productId === "NONE") return [];
+    if (!stagedFilters.productId || stagedFilters.productId === "ALL" || stagedFilters.productId === "") return allSizeValues;
+    return String(stagedFilters.productId).split(",").map((s) => s.trim()).filter(Boolean);
+  }, [stagedFilters.productId, allSizeValues]);
+
+  // ── 3. Change handlers: update STAGED state only ────────────────────────────
+  const handleBranchChange = (newSelected: string[]) => {
+    setStagedFilters((prev) => {
+      if (newSelected.length === 0) {
+        return { ...prev, branchId: "NONE" };
+      }
+      if (newSelected.length === allBranchValues.length) {
+        return { ...prev, branchId: "ALL" };
+      }
+      return { ...prev, branchId: newSelected.join(",") };
+    });
+  };
+
+  const handleSizeChange = (newSelected: string[]) => {
+    setStagedFilters((prev) => {
+      if (newSelected.length === 0) {
+        return { ...prev, productId: "NONE" };
+      }
+      if (newSelected.length === allSizeValues.length) {
+        return { ...prev, productId: "" };
+      }
+      return { ...prev, productId: newSelected.join(",") };
+    });
+  };
+
+  // AG-COMMENT: Commits staged filters to provider, which fires the network fetch
+  const handleApply = () => {
+    setFilters(stagedFilters);
+  };
+
+  const handleReset = () => {
+    resetFilters();
+  };
+
   return (
     <div className="rounded-xl border bg-card p-4 shadow-2xs">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-12 md:items-end">
-        {/* ── 1. Grid Search (in-memory) ───────────────────────────────── */}
-        <div className="sm:col-span-2 md:col-span-4">
-          <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">
-            Search Branch or Size
-          </label>
-          <div className="relative">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <input
-              type="text"
-              value={localSearch}
-              onChange={(e) => setLocalSearch(e.target.value)}
-              placeholder="Filters the loaded grid only..."
-              className="w-full rounded-lg border bg-background py-2 pl-9 pr-8 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-            />
-            {localSearch && (
-              <button
-                type="button"
-                onClick={() => setLocalSearch("")}
-                className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
-                title="Clear search"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* ── 2. Period Start ──────────────────────────────────────────── */}
-        <div className="md:col-span-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-12 lg:items-end">
+        {/* ── 1. Period Start ──────────────────────────────────────────── */}
+        <div className="sm:col-span-1 lg:col-span-2">
           <label className="mb-1.5 flex items-center gap-1 text-xs font-semibold text-muted-foreground">
             <Calendar className="h-3.5 w-3.5" />
             <span>Period Start</span>
           </label>
-          {/* Honest affordance: with no asset history in the schema only the cutoff
-              moves the figures, so the opening day is recorded, not applied. */}
           <input
             type="date"
-            title="Recorded as the reporting period opening for audit context. Fleet composition is read live, so only the reporting cutoff changes the figures."
-            value={filters.startDate}
-            onChange={(e) => setFilters({ startDate: e.target.value })}
-            className="w-full rounded-lg border bg-background px-3 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            title="Start date of the reporting period."
+            value={stagedFilters.startDate}
+            onChange={(e) => setStagedFilters((prev) => ({ ...prev, startDate: e.target.value }))}
+            className="w-full h-9 rounded-lg border bg-background px-3 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
           />
         </div>
 
-        {/* ── 3. Reporting Cutoff ──────────────────────────────────────── */}
-        <div className="md:col-span-2">
+        {/* ── 2. Reporting Cutoff ──────────────────────────────────────── */}
+        <div className="sm:col-span-1 lg:col-span-2">
           <label className="mb-1.5 flex items-center gap-1 text-xs font-semibold text-muted-foreground">
             <Calendar className="h-3.5 w-3.5" />
             <span>Reporting Cutoff</span>
           </label>
           <input
             type="date"
-            title="The date every asset's dormancy is measured against. Must not be in the future; a future cutoff is clamped to today."
-            value={filters.endDate}
-            onChange={(e) => setFilters({ endDate: e.target.value })}
-            className="w-full rounded-lg border bg-background px-3 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            title="Cutoff date against which cylinder dormancy and fleet status are measured."
+            value={stagedFilters.endDate}
+            onChange={(e) => setStagedFilters((prev) => ({ ...prev, endDate: e.target.value }))}
+            className="w-full h-9 rounded-lg border bg-background px-3 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
           />
         </div>
 
-        {/* ── 4. Branch Scope ──────────────────────────────────────────── */}
-        <div className="md:col-span-2">
+        {/* ── 3. Branch Multi-Select ───────────────────────────────────── */}
+        <div className="sm:col-span-1 lg:col-span-3">
           <label className="mb-1.5 flex items-center gap-1 text-xs font-semibold text-muted-foreground">
             <Building2 className="h-3.5 w-3.5" />
             <span>Branch</span>
           </label>
-          <SmoothSearchableSelect
+          <UtilizationMultiSelect
             options={branchOptions}
-            value={filters.branchId === undefined || filters.branchId === "" ? "ALL" : String(filters.branchId)}
-            onValueChange={(val) => setFilters({ branchId: val })}
-            placeholder="Select Branch..."
+            selectedValues={selectedBranchValues}
+            onSelectionChange={handleBranchChange}
+            unitLabel="Branches"
+            placeholder="Select Branches..."
             disabled={isLookupsLoading}
           />
         </div>
 
-        {/* ── 5. Cylinder Size ─────────────────────────────────────────── */}
-        <div className="md:col-span-2">
+        {/* ── 4. Product Multi-Select ────────────────────────────── */}
+        <div className="sm:col-span-1 lg:col-span-3">
           <label className="mb-1.5 flex items-center gap-1 text-xs font-semibold text-muted-foreground">
             <Layers className="h-3.5 w-3.5" />
-            <span>Cylinder Size</span>
+            <span>Product</span>
           </label>
-          <SmoothSearchableSelect
+          <UtilizationMultiSelect
             options={sizeOptions}
-            value={filters.productId === undefined ? "" : String(filters.productId)}
-            onValueChange={(val) => setFilters({ productId: val })}
-            placeholder="Select Size..."
+            selectedValues={selectedSizeValues}
+            onSelectionChange={handleSizeChange}
+            unitLabel="Products"
+            placeholder="Select Products..."
             disabled={isLookupsLoading}
           />
         </div>
 
-        {/* ── 6. Reset ─────────────────────────────────────────────────── */}
-        <div className="flex justify-end md:col-span-1">
+        {/* ── 5. Action Buttons: Reset & Apply Filter ───────────────────── */}
+        <div className="sm:col-span-2 lg:col-span-2 flex items-center gap-2">
           <button
             type="button"
-            onClick={resetFilters}
-            className="inline-flex w-full items-center justify-center gap-1 rounded-lg border bg-muted/40 py-2 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
-            title="Reset to month-to-date, all branches and sizes"
+            onClick={handleReset}
+            disabled={isLoading}
+            className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border bg-muted/40 px-2.5 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground cursor-pointer disabled:opacity-50"
+            title="Reset to default filters"
           >
             <RotateCcw className="h-3.5 w-3.5" />
             <span>Reset</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleApply}
+            disabled={isLoading}
+            className={`inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-semibold shadow-xs transition cursor-pointer disabled:opacity-60 ${
+              hasUnappliedChanges
+                ? "bg-primary text-primary-foreground hover:bg-primary/90 ring-2 ring-primary/30 font-bold"
+                : "bg-primary text-primary-foreground hover:bg-primary/90"
+            }`}
+            title="Apply filter parameters to update report data"
+          >
+            <Filter className="h-3.5 w-3.5" />
+            <span>Apply</span>
+            {hasUnappliedChanges && (
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" title="Unapplied changes pending" />
+            )}
           </button>
         </div>
       </div>

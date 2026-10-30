@@ -43,7 +43,10 @@ export interface UtilizationBuildInput {
   siteCylinders: RawSiteCylinderMovementRow[];
   products: Map<number, ProductMeta>;
   branchNames: Map<number, string>;
+  // AG-COMMENT: Resolved site_name map from lpg_customer_lpg_sites
+  siteNamesById?: Map<number, string>;
   cutoffMs: number;
+  startMs?: number;
 }
 
 /** The fully built dataset: grid rows, KPI strip and the classified asset index. */
@@ -80,7 +83,13 @@ function emptyCounts(): Record<UtilizationBucket, number> {
 export function buildUtilizationReport(input: UtilizationBuildInput): UtilizationBuildResult {
   const { deliveries, orderStatusById, siteCylinders, ...classifyInput } = input;
 
-  const movementIndex = buildMovementIndex(deliveries, orderStatusById, siteCylinders, classifyInput.cutoffMs);
+  const movementIndex = buildMovementIndex(
+    deliveries,
+    orderStatusById,
+    siteCylinders,
+    classifyInput.cutoffMs,
+    input.siteNamesById
+  );
   const classified = classifyAssets({ ...classifyInput, movementIndex });
 
   // ── Classified assets → branch × size groupings ───────────────────────────

@@ -165,7 +165,7 @@ function resolveBucket(raw?: string): UtilizationBucket | null {
 function resolveSizeLabel(productId: number | null, products: Map<number, ProductMeta>): string {
   if (productId === null) return "Unmapped size";
   const meta = products.get(productId);
-  return meta ? buildSizeLabel(meta.name, meta.code, meta.weight) : `Size #${productId}`;
+  return meta ? buildSizeLabel(meta.name, meta.code) : `Size #${productId}`;
 }
 
 /** Human label for one branch id, falling back to a stub when it has no master row. */
@@ -185,8 +185,9 @@ async function loadDataset(
   headers: Record<string, string>
 ): Promise<UtilizationBuildResult & { branchNames: Map<number, string>; products: Map<number, ProductMeta> }> {
   // ── 1. Branch directory ───────────────────────────────────────────────────
+  // AG-COMMENT: Filter branches by division_id = 1 per ids-guide rule
   const branchRows = await fetchRows<{ id: number; branch_name: string | null }>(
-    `${directusBase}/items/branches?fields=id,branch_name&limit=-1`,
+    `${directusBase}/items/branches?fields=id,branch_name&filter[division_id][_eq]=1&limit=-1`,
     headers
   );
   const branchNames = new Map<number, string>();
@@ -196,6 +197,7 @@ async function loadDataset(
   });
 
   // ── 2. Product master (cylinder sizes) ───────────────────────────────────
+  // AG-COMMENT: Filter products by is_serialized = 1 and show description as product name per ids-guide rule
   const productRows = await fetchRows<{
     product_id: number;
     product_code: string | null;
@@ -203,29 +205,50 @@ async function loadDataset(
     description: string | null;
     product_weight: number | null;
   }>(
-    `${directusBase}/items/products?fields=product_id,product_code,product_name,description,product_weight&limit=-1`,
+    `${directusBase}/items/products?filter[is_serialized][_eq]=1&fields=product_id,product_code,product_name,description,product_weight&limit=-1`,
     headers
   );
   const products = new Map<number, ProductMeta>();
   productRows.forEach((p) => {
     const id = toId(p.product_id);
     if (id === null) return;
-    // `description` carries the marketing size on LPG stock items; the name is the
-    // safer primary label, so weight is appended by buildSizeLabel instead.
+    // AG-COMMENT: Shows products.description as product name per ids-guide rule and user prompt
+    const displayName = p.description?.trim() || p.product_name?.trim() || null;
     products.set(id, {
-      name: p.product_name || p.description || null,
+      name: displayName,
       code: p.product_code || null,
       weight: p.product_weight === null || p.product_weight === undefined ? null : Number(p.product_weight),
     });
   });
 
   // ── 3. Fleet in scope (soft-deleted assets excluded at the source) ───────
+  // AG-COMMENT: Handles single ID, multi-select comma-separated IDs, ALL, and NONE
   const assetFilter: Record<string, unknown> = { is_deleted: { _neq: 1 } };
   if (filters.branchId !== undefined && filters.branchId !== "" && filters.branchId !== "ALL") {
-    assetFilter.current_branch_id = { _eq: Number(filters.branchId) };
+    if (filters.branchId === "NONE") {
+      assetFilter.current_branch_id = { _eq: -999999 };
+    } else {
+      const rawBranchIds = String(filters.branchId).split(",").map((s) => s.trim()).filter(Boolean);
+      const numBranchIds = rawBranchIds.map(Number).filter((n) => !Number.isNaN(n));
+      if (numBranchIds.length === 1) {
+        assetFilter.current_branch_id = { _eq: numBranchIds[0] };
+      } else if (numBranchIds.length > 1) {
+        assetFilter.current_branch_id = { _in: numBranchIds };
+      }
+    }
   }
   if (filters.productId !== undefined && filters.productId !== "" && filters.productId !== "ALL") {
-    assetFilter.product_id = { _eq: Number(filters.productId) };
+    if (filters.productId === "NONE") {
+      assetFilter.product_id = { _eq: -999999 };
+    } else {
+      const rawProductIds = String(filters.productId).split(",").map((s) => s.trim()).filter(Boolean);
+      const numProductIds = rawProductIds.map(Number).filter((n) => !Number.isNaN(n));
+      if (numProductIds.length === 1) {
+        assetFilter.product_id = { _eq: numProductIds[0] };
+      } else if (numProductIds.length > 1) {
+        assetFilter.product_id = { _in: numProductIds };
+      }
+    }
   }
 
   const assets = await fetchRows<RawCylinderAssetRow>(
@@ -235,11 +258,12 @@ async function loadDataset(
     headers
   );
 
-  // A cutoff in the future is clamped to today: a clock that has not arrived would
-  // otherwise report every dormant cylinder as active.
+  // AG-COMMENT: Parse startMs and cutoffMs from filters without clamping, allowing dynamic past and future projections
   const todayMs = new Date(`${todayIso()}T23:59:59`).getTime();
+  const parsedStart = new Date(`${filters.startDate}T00:00:00`).getTime();
   const parsedCutoff = new Date(`${filters.endDate}T23:59:59`).getTime();
-  const cutoffMs = Number.isFinite(parsedCutoff) ? Math.min(parsedCutoff, todayMs) : todayMs;
+  const startMs = Number.isFinite(parsedStart) ? parsedStart : new Date(`${monthStartIso()}T00:00:00`).getTime();
+  const cutoffMs = Number.isFinite(parsedCutoff) ? parsedCutoff : todayMs;
 
   // ── 4. Verified delivery movements, batched on the in-scope serials ──────
   const serials = assets.map((a) => normalizeSerial(a.serial_number)).filter(Boolean);
@@ -284,6 +308,23 @@ async function loadDataset(
     );
   }
 
+  // ── 7. Metered-site names from lpg_customer_lpg_sites ─────────────────────
+  // AG-COMMENT: Resolves human-readable site_name from lpg_customer_lpg_sites instead of showing raw Site #ID
+  const siteIds = Array.from(
+    new Set(siteCylinders.map((s) => toId(s.lpg_site_id)).filter((id): id is number => id !== null))
+  );
+  const siteNamesById = new Map<number, string>();
+  for (const group of chunk(siteIds, CHUNK_SIZE)) {
+    const siteRows = await fetchRows<{ id: number; site_name: string | null }>(
+      `${directusBase}/items/lpg_customer_lpg_sites?filter[id][_in]=${encodeURIComponent(group.join(","))}&fields=id,site_name&limit=-1`,
+      headers
+    );
+    siteRows.forEach((s) => {
+      const id = toId(s.id);
+      if (id !== null && s.site_name) siteNamesById.set(id, s.site_name.trim());
+    });
+  }
+
   const result = buildUtilizationReport({
     assets,
     deliveries,
@@ -291,7 +332,9 @@ async function loadDataset(
     siteCylinders,
     products,
     branchNames,
+    siteNamesById,
     cutoffMs,
+    startMs,
   });
 
   return { ...result, branchNames, products };
@@ -396,6 +439,18 @@ async function handleDrillDown(
       headers
     );
 
+    // AG-COMMENT: Calculate counts for all tabs in this grouping (for drawer tabs count display)
+    const groupingAssets = selectDetailAssets(dataset.assets, { branchId, productId, bucket: null });
+    const bucketCounts: Record<UtilizationBucket | "ALL", number> = {
+      ALL: groupingAssets.length,
+      CIRCULATING: groupingAssets.filter((a) => a.bucket === "CIRCULATING").length,
+      AVAILABLE: groupingAssets.filter((a) => a.bucket === "AVAILABLE").length,
+      IDLE: groupingAssets.filter((a) => a.bucket === "IDLE").length,
+      MAINTENANCE: groupingAssets.filter((a) => a.bucket === "MAINTENANCE").length,
+      UNAVAILABLE: groupingAssets.filter((a) => a.bucket === "UNAVAILABLE").length,
+      UNCLASSIFIED: groupingAssets.filter((a) => a.bucket === "UNCLASSIFIED").length,
+    };
+
     const payload: CylinderUtilizationDetailResponse = {
       branchId,
       branchName: resolveBranchLabel(branchId, dataset.branchNames),
@@ -405,6 +460,7 @@ async function handleDrillDown(
       assets: selectDetailAssets(dataset.assets, { branchId, productId, bucket }),
       rules: getRuleSnapshot(),
       reportingCutoff: endDate,
+      bucketCounts,
     };
 
     return NextResponse.json(payload);

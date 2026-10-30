@@ -107,16 +107,31 @@ export function classifyAssets(input: ClassifyAssetsInput): CylinderUtilizationA
     const branchId = toId(asset.current_branch_id);
     const product = productId !== null ? products.get(productId) : undefined;
     const sizeLabel = product
-      ? buildSizeLabel(product.name, product.code, product.weight)
+      ? buildSizeLabel(product.name, product.code)
       : UNMAPPED_SIZE;
     const branchName = branchId !== null ? branchNames.get(branchId) ?? UNASSIGNED_BRANCH : UNASSIGNED_BRANCH;
+
+    // AG-COMMENT: Bounding checks for cutoff date:
+    // 1. If asset was registered after cutoff, it did not exist in the fleet as of cutoff
+    const createdMillis = toMillis(asset.created_date);
+    if (createdMillis !== null && createdMillis > cutoffMs) {
+      continue;
+    }
+
+    // 2. Audit timestamp cannot reflect modifications made in the future relative to cutoff
+    const modMillis = toMillis(asset.modified_date);
+    const auditMillis =
+      modMillis !== null && modMillis <= cutoffMs
+        ? modMillis
+        : createdMillis !== null && createdMillis <= cutoffMs
+        ? createdMillis
+        : null;
 
     // Resolve last activity from BOTH candidate bases, then take the most recent.
     const trail = mergeTrails(
       movementIndex.bySerial.get(normalizeSerial(asset.serial_number)),
       movementIndex.byAssetId.get(assetId)
     );
-    const auditMillis = toMillis(asset.modified_date) ?? toMillis(asset.created_date);
     const activity = resolveActivity(auditMillis, trail);
     const idleDays = resolveIdleDays(activity, cutoffMs);
     const bucket = classifyAsset(asset.cylinder_status, asset.cylinder_condition, idleDays);

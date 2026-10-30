@@ -33,6 +33,7 @@ import type {
   CylinderUtilizationRow,
   UtilizationBucket,
   UtilizationLookupOptions,
+  UtilizationSortField,
 } from "../types/cylinder-utilization-report.types";
 
 /** Identifies the results-grid row the details panel is currently expanded on. */
@@ -41,6 +42,8 @@ export interface UtilizationGroupingSelection {
   productId: number | null;
   branchName: string;
   sizeLabel: string;
+  // AG-COMMENT: Stored bucket counts for instant display on drawer tabs
+  counts?: Record<UtilizationBucket | "ALL", number>;
 }
 
 interface CylinderUtilizationContextValue {
@@ -65,6 +68,11 @@ interface CylinderUtilizationContextValue {
   // In-memory search over the loaded grid
   search: string;
   setSearch: (value: string) => void;
+
+  // Sorting
+  sortField: UtilizationSortField;
+  sortDirection: "asc" | "desc";
+  handleSort: (field: UtilizationSortField) => void;
 
   // Drill-down details panel
   selection: UtilizationGroupingSelection | null;
@@ -123,6 +131,23 @@ export function CylinderUtilizationReportProvider({ children }: { children: Reac
 
   const [currentPage, setCurrentPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(20);
+
+  // AG-COMMENT: Sorting state for results table; default sorts by branch then size
+  const [sortField, setSortField] = React.useState<UtilizationSortField>("branchName");
+  const [sortDirection, setSortDirection] = React.useState<"asc" | "desc">("asc");
+
+  const handleSort = React.useCallback((field: UtilizationSortField) => {
+    setSortField((prevField) => {
+      if (prevField === field) {
+        setSortDirection((prevDir) => (prevDir === "asc" ? "desc" : "asc"));
+        return field;
+      }
+      // Text columns default asc, numeric metrics default desc
+      setSortDirection(field === "branchName" || field === "sizeLabel" ? "asc" : "desc");
+      return field;
+    });
+    setCurrentPage(1);
+  }, []);
 
   // Latest filters without making them a dependency of the fetch callback.
   const filtersRef = React.useRef(filters);
@@ -199,9 +224,29 @@ export function CylinderUtilizationReportProvider({ children }: { children: Reac
     );
   }, [reportData?.rows, search]);
 
+  // AG-COMMENT: In-memory sorting over filtered rows before pagination slicing
+  const sortedRows = React.useMemo(() => {
+    const rows = [...filteredRows];
+    return rows.sort((a, b) => {
+      const valA = a[sortField];
+      const valB = b[sortField];
+      if (valA === valB) return 0;
+      if (valA === null || valA === undefined) return 1;
+      if (valB === null || valB === undefined) return -1;
+      if (typeof valA === "string" && typeof valB === "string") {
+        const cmp = valA.localeCompare(valB, undefined, { numeric: true, sensitivity: "base" });
+        return sortDirection === "asc" ? cmp : -cmp;
+      }
+      if (typeof valA === "number" && typeof valB === "number") {
+        return sortDirection === "asc" ? valA - valB : valB - valA;
+      }
+      return 0;
+    });
+  }, [filteredRows, sortField, sortDirection]);
+
   const visibleRows = React.useMemo(
-    () => filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize),
-    [filteredRows, currentPage, pageSize]
+    () => sortedRows.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [sortedRows, currentPage, pageSize]
   );
 
   /** Pulls the supporting cylinders behind one grouping (spec §5). */
@@ -227,11 +272,21 @@ export function CylinderUtilizationReportProvider({ children }: { children: Reac
 
   const openDetail = React.useCallback(
     (row: CylinderUtilizationRow, bucket: UtilizationBucket | null = null) => {
+      // AG-COMMENT: Store row's bucket counts so tabs immediately display accurate numbers before fetch completes
       const target: UtilizationGroupingSelection = {
         branchId: row.branchId,
         productId: row.productId,
         branchName: row.branchName,
         sizeLabel: row.sizeLabel,
+        counts: {
+          ALL: row.fleet,
+          CIRCULATING: row.circulating,
+          AVAILABLE: row.available,
+          IDLE: row.idle,
+          MAINTENANCE: row.maintenance,
+          UNAVAILABLE: row.unavailable,
+          UNCLASSIFIED: row.unclassified,
+        },
       };
       setSelection(target);
       setSelectedBucket(bucket);
@@ -290,6 +345,9 @@ export function CylinderUtilizationReportProvider({ children }: { children: Reac
     isLookupsLoading,
     search,
     setSearch,
+    sortField,
+    sortDirection,
+    handleSort,
     selection,
     selectedBucket,
     detail,

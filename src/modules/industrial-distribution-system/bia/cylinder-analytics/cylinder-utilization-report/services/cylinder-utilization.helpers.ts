@@ -67,26 +67,19 @@ export function isDeletedFlag(value?: number | string | null): boolean {
 
 /**
  * Builds the "cylinder size" label (spec §11 column) from the product master.
- * Prefers the product name, falls back to code, then to an identifiable stub, and
- * appends the kilogram rating only when the label does not already carry it.
- *
- * A zero or negative `product_weight` is skipped: the empty-cylinder stock items
- * carry no rating, and live data showed that appending it produced labels like
- * "LPG 50KG (0 kg)" in both the grid and the size filter.
+ * AG-COMMENT: Displays products.description as product name per ids-guide rule and user prompt.
+ * Falls back to product code, then to an identifiable stub ("Unmapped size").
  */
-export function buildSizeLabel(productName?: string | null, productCode?: string | null, weight?: number | null): string {
+export function buildSizeLabel(
+  productName?: string | null,
+  productCode?: string | null
+): string {
   const name = (productName || "").trim();
   const code = (productCode || "").trim();
-  let label = name || code;
+  const label = name || code;
 
   if (!label) return code ? `Size ${code}` : "Unmapped size";
 
-  const numericWeight = Number(weight);
-  const hasWeight = Number.isFinite(numericWeight) && numericWeight > 0;
-  const hasKg = /\bkg\b/i.test(label);
-  if (hasWeight && !hasKg) {
-    label = `${label} (${numericWeight} kg)`;
-  }
   return label;
 }
 
