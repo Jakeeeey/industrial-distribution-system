@@ -202,6 +202,7 @@ type LpgWiwoHeaderRow = {
  * Only explicit cylinder deposit purchases, onboarding packages, or container deposit fees increase custody.
  */
 function isCylinderIssuanceProduct(product: ProductRow | undefined, orderRemarks?: string | null): boolean {
+  if (product && Number(product.is_serialized) !== 1) return false;
   if (!product && !orderRemarks) return false;
   const remarksText = (orderRemarks ?? "").toLowerCase();
   if (remarksText.includes("initial cylinder onboarding") || remarksText.includes("new cylinder deployment")) {
@@ -275,9 +276,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       customerMap.set(normalizeCode(c.customer_code), c);
     });
 
-    // 2. Fetch Branches
+    // 2. Fetch Branches (division_id = 1 for Industrial)
+    // AG-COMMENT: Restrict branch queries strictly to Industrial Division (division_id = 1)
     const branchRows = await fetchRows<BranchRow>(
-      `${directusBase}/items/branches?fields=id,branch_name,branch_code&limit=-1`,
+      `${directusBase}/items/branches?fields=id,branch_name,branch_code&filter[division_id][_eq]=1&limit=-1`,
       headers
     );
     const branchMap = new Map<number, string>();
@@ -386,6 +388,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
       const pId = Number(sod.product_id);
       const prod = productCatalogMap.get(pId);
+      // AG-COMMENT: Customer cylinder accountability is strictly for SERIALIZED CYLINDERS (is_serialized = 1).
+      // Discard non-cylinder goods (e.g. Alcoplus sanitizers, alcohol, food, groceries, general merchandise).
+      if (!prod || Number(prod.is_serialized) !== 1) {
+        return;
+      }
       const isDepositIssuance = isCylinderIssuanceProduct(prod, order.remarks);
 
       const dDateStr = delivDate.split("T")[0];
@@ -731,9 +738,10 @@ async function handleCustomerDetailDrillDown(
 
     const address = [cust.brgy, cust.city, cust.province].filter(Boolean).join(", ") || null;
 
-    // 2. Fetch Branches Directory for accurate branch name resolution
+    // 2. Fetch Branches Directory for accurate branch name resolution (division_id = 1 for Industrial)
+    // AG-COMMENT: Restrict branch queries strictly to Industrial Division (division_id = 1)
     const branchRows = await fetchRows<BranchRow>(
-      `${directusBase}/items/branches?fields=id,branch_name,branch_code&limit=-1`,
+      `${directusBase}/items/branches?fields=id,branch_name,branch_code&filter[division_id][_eq]=1&limit=-1`,
       headers
     );
     const branchMap = new Map<number, string>();
@@ -764,7 +772,9 @@ async function handleCustomerDetailDrillDown(
     const activeSerials = matchedAssets.map((s) => {
       const pId = typeof s.product_id === "object" ? s.product_id?.product_id : Number(s.product_id);
       const prod = productsMap.get(pId ?? 0);
-      const prodName = prod?.description || prod?.product_name || `Product ${pId}`;
+      // AG-COMMENT: Ensure fallback resolves to authoritative serialized cylinder (24647) if asset product is not serialized
+      const safeProd = prod && Number(prod.is_serialized) === 1 ? prod : productsMap.get(24647);
+      const prodName = safeProd?.description || safeProd?.product_name || `LPG Cylinder (${pId})`;
       const mod = s.modified_date || s.created_date;
       const days = mod ? Math.floor((now.getTime() - new Date(mod).getTime()) / (1000 * 60 * 60 * 24)) : 14;
 
@@ -911,6 +921,8 @@ async function handleCustomerDetailDrillDown(
         if (qty <= 0) return;
         const pId = Number(d.product_id);
         const prod = productsMap.get(pId);
+        // AG-COMMENT: Strictly filter for serialized cylinder products (is_serialized = 1)
+        if (!prod || Number(prod.is_serialized) !== 1) return;
         const name = prod?.description || prod?.product_name || `Product ${pId}`;
 
         if (isCylinderIssuanceProduct(prod, o.remarks)) {

@@ -34,15 +34,25 @@ export function AccountabilityFilters() {
     setLocalSearch(filters.searchQuery || "");
   }, [filters.searchQuery]);
 
+  // AG-COMMENT: Strictly filter dropdown options to Industrial Division branches (division_id = 1).
+  const INDUSTRIAL_BRANCH_IDS = React.useMemo(() => new Set(["196", "197", "278", "279", "280"]), []);
+
   // Branch options for SmoothSearchableSelect
   const branchOptions = React.useMemo(() => {
     const allOpt = { value: "ALL", label: "All Active Branches" };
-    const branchOpts = lookups.branches.map((b) => ({
-      value: String(b.id),
-      label: b.name,
-    }));
+    const branchOpts = lookups.branches
+      .filter((b: { id: number | string; division_id?: number | string | null }) => {
+        if (b.division_id != null && (b.division_id as unknown) !== "") {
+          return Number(b.division_id) === 1 && INDUSTRIAL_BRANCH_IDS.has(String(b.id));
+        }
+        return INDUSTRIAL_BRANCH_IDS.has(String(b.id));
+      })
+      .map((b) => ({
+        value: String(b.id),
+        label: b.name,
+      }));
     return [allOpt, ...branchOpts];
-  }, [lookups.branches]);
+  }, [lookups.branches, INDUSTRIAL_BRANCH_IDS]);
 
   return (
     <div className="rounded-xl border bg-card p-4 shadow-2xs">

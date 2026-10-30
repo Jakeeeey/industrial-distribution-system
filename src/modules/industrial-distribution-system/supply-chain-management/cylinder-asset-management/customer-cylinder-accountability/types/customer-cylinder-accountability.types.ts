@@ -137,7 +137,7 @@ export interface AccountabilityKPISummary {
  * Dynamic lookup options for filter controls.
  */
 export interface AccountabilityLookupOptions {
-  branches: Array<{ id: number; name: string; code: string }>;
+  branches: Array<{ id: number; name: string; code: string; division_id?: number | null }>;
   customers: Array<{ code: string; name: string; storeName?: string }>;
   ownerships: Array<{ code: CylinderOwnership | "ALL"; label: string }>;
 }
