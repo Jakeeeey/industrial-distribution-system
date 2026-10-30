@@ -154,8 +154,9 @@ export async function fetchCustomerCylinderAgingReport(
     fetchDirectus<{ data: RawCustomerRecord[] }>(
       `${directusBase}/items/customer?fields=customer_code,customer_name,store_name,contact_number,customer_email,brgy,city,province&limit=-1`
     ),
+    // AG-COMMENT: Restrict branch queries strictly to Industrial Division (division_id = 1)
     fetchDirectus<{ data: RawBranchRecord[] }>(
-      `${directusBase}/items/branches?fields=id,branch_code,branch_name&limit=-1`
+      `${directusBase}/items/branches?fields=id,branch_code,branch_name&filter[division_id][_eq]=1&limit=-1`
     ),
     fetchSpringMovements(userToken),
   ]);
@@ -190,9 +191,10 @@ export async function fetchCustomerCylinderAgingLookups(): Promise<CustomerCylin
     "filter[is_serialized][_neq]": "0",
   });
 
+  // AG-COMMENT: Filter for active branches in the Industrial Division (division_id = 1, isActive = 1)
   const [branchesRes, productsRes, customersRes] = await Promise.all([
     fetchDirectus<{ data: Array<{ id: number; branch_code: string; branch_name: string }> }>(
-      `${directusBase}/items/branches?fields=id,branch_code,branch_name&sort=branch_name&limit=-1`
+      `${directusBase}/items/branches?filter[isActive][_eq]=1&filter[division_id][_eq]=1&fields=id,branch_code,branch_name&sort=branch_name&limit=-1`
     ),
     fetchDirectus<{ data: Array<{ product_id: number; product_code: string; product_name: string; is_serialized?: number | boolean | string | null }> }>(
       `${directusBase}/items/products?${productParams.toString()}`

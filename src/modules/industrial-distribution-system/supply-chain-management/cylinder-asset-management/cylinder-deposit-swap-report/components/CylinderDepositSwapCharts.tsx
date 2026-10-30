@@ -23,7 +23,7 @@ import {
   Pie,
   Cell,
 } from "recharts";
-import { TrendingUp, PieChart as PieChartIcon, Activity } from "lucide-react";
+import { TrendingUp, PieChart as PieChartIcon } from "lucide-react";
 import { useCylinderDepositSwapReport } from "../hooks/useCylinderDepositSwapReport";
 
 const DONUT_COLORS = [
@@ -39,7 +39,8 @@ export function CylinderDepositSwapCharts() {
   const { report, isLoading } = useCylinderDepositSwapReport();
 
   const trends = report?.trends || [];
-  const productDistribution = report?.productDistribution || [];
+  // AG-COMMENT: Strictly filter active base distribution to serialized cylinder products with active physical units (> 0)
+  const productDistribution = (report?.productDistribution || []).filter((p) => p.quantity > 0);
 
   return (
     <AnimatePresence mode="wait">
@@ -84,10 +85,7 @@ export function CylinderDepositSwapCharts() {
               </p>
             </div>
           </div>
-          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
-            <Activity className="h-3 w-3" />
-            Live Movements
-          </span>
+  
         </div>
 
         <div className="h-[250px] w-full">

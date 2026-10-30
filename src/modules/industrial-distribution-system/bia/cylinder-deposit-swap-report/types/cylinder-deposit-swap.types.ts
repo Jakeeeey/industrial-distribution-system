@@ -20,7 +20,7 @@ export interface CylinderDepositSwapFilters {
  * Lookup options available for populating the filter bar.
  */
 export interface CylinderDepositSwapLookupOptions {
-  branches: Array<{ id: number; branch_code: string; branch_name: string }>;
+  branches: Array<{ id: number; branch_code: string; branch_name: string; division_id?: number | null }>;
   products: Array<{
     product_id: number;
     product_code: string;

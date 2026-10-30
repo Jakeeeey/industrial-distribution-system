@@ -40,9 +40,17 @@ function getDirectusConfig() {
   return { url: /^https?:\/\//i.test(url) ? url : `http://${url}`, token };
 }
 
+const INDUSTRIAL_BRANCH_IDS = new Set([196, 197, 278, 279, 280]);
+
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const forceRefresh = req.nextUrl.searchParams.get("refresh") === "true";
   const now = Date.now();
+
+  // In development, invalidate in-memory cache to guarantee instant updates
+  if (process.env.NODE_ENV === "development") {
+    cachedLookups = null;
+    cacheExpiresAt = 0;
+  }
 
   // Return warm cache if still valid and forceRefresh is not requested
   if (!forceRefresh && cachedLookups && now < cacheExpiresAt) {
@@ -65,9 +73,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   try {
     const [branchesRes, productsRes, customersRes] = await Promise.all([
-      // 1. Branches: Filter for active branches only (isActive = 1)
+      // 1. Branches: Filter for active branches in the Industrial Division (division_id = 1, isActive = 1)
       fetch(
-        `${directusBase}/items/branches?filter[isActive][_eq]=1&fields=id,branch_code,branch_name&limit=-1&sort=branch_name`,
+        `${directusBase}/items/branches?filter[isActive][_eq]=1&filter[division_id][_eq]=1&fields=id,branch_code,branch_name,division_id&limit=-1&sort=branch_name`,
         { headers, cache: "no-store" }
       ).catch(() => null),
 
@@ -89,8 +97,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const productsJson = productsRes && productsRes.ok ? await productsRes.json() : { data: [] };
     const customersJson = customersRes && customersRes.ok ? await customersRes.json() : { data: [] };
 
+    // AG-COMMENT: Strictly filter branches to Industrial Division (division_id = 1)
+    const industrialBranches = (Array.isArray(branchesJson?.data) ? branchesJson.data : []).filter(
+      (b: { id: number; division_id?: number | null }) => {
+        if (b.division_id !== undefined && b.division_id !== null) {
+          return Number(b.division_id) === 1;
+        }
+        return INDUSTRIAL_BRANCH_IDS.has(Number(b.id));
+      }
+    );
+
     const lookups: CylinderDepositSwapLookupOptions = {
-      branches: Array.isArray(branchesJson?.data) ? branchesJson.data : [],
+      branches: industrialBranches,
       products: Array.isArray(productsJson?.data) ? productsJson.data : [],
       customers: Array.isArray(customersJson?.data) ? customersJson.data : [],
     };

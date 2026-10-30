@@ -5,6 +5,11 @@
 // ==============================================================================
 
 /**
+ * Cylinder Ownership classification (Company vs Customer owned).
+ */
+export type CylinderOwnership = "COMPANY" | "CUSTOMER" | "MIXED";
+
+/**
  * Filter parameters supplied by the UI to the BFF API route.
  */
 export interface CylinderDepositSwapFilters {
@@ -13,14 +18,14 @@ export interface CylinderDepositSwapFilters {
   branchId?: number | ""; // Optional branch filter (active branches only)
   customerCode?: string; // Optional single customer lookup
   productId?: number | ""; // Optional product/capacity filter (serialized products only)
-  // AG-COMMENT: Ownership filter removed per user requirement
+  ownership?: CylinderOwnership | "ALL"; // Restored per updated spec §7 & §11
 }
 
 /**
  * Lookup options available for populating the filter bar.
  */
 export interface CylinderDepositSwapLookupOptions {
-  branches: Array<{ id: number; branch_code: string; branch_name: string }>;
+  branches: Array<{ id: number; branch_code: string; branch_name: string; division_id?: number | null }>;
   products: Array<{
     product_id: number;
     product_code: string;
@@ -29,6 +34,7 @@ export interface CylinderDepositSwapLookupOptions {
     product_weight: number | null;
   }>;
   customers: Array<{ customer_code: string; customer_name: string; store_name: string | null }>;
+  ownerships?: Array<{ code: CylinderOwnership | "ALL"; label: string }>;
 }
 
 /**
@@ -63,6 +69,8 @@ export interface CustomerProductCylinderRow {
 
 /**
  * Parent customer-level aggregation row displayed in the primary table.
+ * Aligns with Doc §7 & §11 proposed columns:
+ * Customer, Date, Deposit Qty, Swap Qty, Ownership, Running Base, Reference.
  */
 export interface CustomerCylinderReportRow {
   customerCode: string;
@@ -70,8 +78,15 @@ export interface CustomerCylinderReportRow {
   storeName: string | null;
   branchId: number | null;
   branchName: string | null;
+  siteName?: string | null;
   contactNumber: string | null;
   customerAddress: string | null;
+  ownership: CylinderOwnership; // Company vs Customer owned
+  date: string | null; // Last transaction date (Doc §11)
+  reference: string | null; // Primary movement reference, e.g. WIWO-..., SO-... (Doc §11)
+  depositQty: number; // Proposed column alias for totalDepositsDelivered (Doc §11)
+  swapQty: number; // Proposed column alias for totalSwapsInbound (Doc §11)
+  runningBase: number; // Proposed column alias for totalClosingBase (Doc §11)
   totalOpeningBase: number;
   totalDepositsDelivered: number;
   totalSwapsInbound: number;
@@ -163,7 +178,7 @@ export interface MatchedFinancialDeposit {
 export interface CustomerAuditTransactionItem {
   id: string | number;
   transactionDate: string;
-  sourceModule: "POS" | "BULK_DISPATCH" | "CLEARANCE" | "SALES_RETURN" | "MANUAL_STOCK";
+  sourceModule: "POS" | "BULK_DISPATCH" | "CLEARANCE" | "SALES_RETURN" | "MANUAL_STOCK" | "SALES_ORDER";
   transactionType: "DEPOSIT_OUT" | "SWAP_IN" | "SWAP_OUT" | "PULL_OUT" | "MAINTENANCE_RETURN";
   referenceNo: string;
   productName: string;

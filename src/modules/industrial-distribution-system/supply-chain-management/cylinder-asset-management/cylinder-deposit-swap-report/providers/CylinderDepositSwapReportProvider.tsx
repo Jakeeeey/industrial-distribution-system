@@ -64,6 +64,7 @@ export function CylinderDepositSwapReportProvider({
     branchId: "",
     customerCode: "",
     productId: "",
+    ownership: "ALL",
   });
 
   const [searchQuery, setSearchQuery] = React.useState("");

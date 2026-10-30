@@ -24,6 +24,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { useCylinderDepositSwapReport } from "../hooks/useCylinderDepositSwapReport";
+import { OwnershipBadge } from "./OwnershipBadge";
 
 export function CylinderTransactionDrawer() {
   const {
@@ -87,6 +88,7 @@ export function CylinderTransactionDrawer() {
                     <Building2 className="h-3 w-3" />
                     {customerDetail?.branchName || "Branch"}
                   </span>
+                  <OwnershipBadge ownership="COMPANY" />
                 </div>
                 <h2 className="text-lg font-bold text-foreground">
                   {customerDetail?.customerName || "Loading customer details..."}

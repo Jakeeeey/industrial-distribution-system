@@ -129,8 +129,9 @@ export async function getCylinderCirculationLookups(): Promise<CylinderCirculati
   const base = getDirectusBase();
 
   const [branchesRes, productsRes] = await Promise.all([
+    // AG-COMMENT: Filter for active branches in the Industrial Division (division_id = 1, isActive = 1)
     fetchDirectus<{ data: RawBranchRow[] }>(
-      `${base}/items/branches?filter[isActive][_eq]=1&limit=-1&fields=id,branch_name,branch_code`
+      `${base}/items/branches?filter[isActive][_eq]=1&filter[division_id][_eq]=1&limit=-1&fields=id,branch_name,branch_code&sort=branch_name`
     ),
     fetchDirectus<{ data: RawProductRow[] }>(
       `${base}/items/products?filter[isActive][_eq]=1&filter[is_serialized][_eq]=1&limit=-1&fields=product_id,product_name,product_code`
@@ -166,8 +167,9 @@ export async function generateCylinderCirculationReport(
     fetchDirectus<{ data: RawProductRow[] }>(
       `${base}/items/products?filter[isActive][_eq]=1&filter[is_serialized][_eq]=1&limit=-1&fields=product_id,product_name,product_code,is_serialized`
     ),
+    // AG-COMMENT: Restrict branch queries strictly to Industrial Division (division_id = 1)
     fetchDirectus<{ data: RawBranchRow[] }>(
-      `${base}/items/branches?limit=-1&fields=id,branch_name,branch_code`
+      `${base}/items/branches?filter[division_id][_eq]=1&limit=-1&fields=id,branch_name,branch_code`
     ),
     fetchSpringMovements(userToken),
   ]);

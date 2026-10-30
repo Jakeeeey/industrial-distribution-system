@@ -1,11 +1,12 @@
-// src/modules/industrial-distribution-system/bia/cylinder-deposit-swap-report/components/CylinderDepositSwapFilters.tsx
+// src/modules/industrial-distribution-system/supply-chain-management/cylinder-asset-management/cylinder-deposit-swap-report/components/CylinderDepositSwapFilters.tsx
 // ==============================================================================
 // Multi-dimensional Filter Bar for Cylinder Deposit and Swap Report.
 // Enhanced with Shadcn SearchableSelect comboboxes for:
-// - Branch: Filters by active branches (isActive = 1)
+// - Branch: Filters by active branches in Industrial Division (division_id = 1)
 // - Product / Size: Filters by serialized products (is_serialized = 1), displaying description
+//   mapped by product ID to prevent identical descriptions from selecting together
 // - Customer: Searchable commercial & retail accounts
-// - Ownership filter removed as per user instruction
+// - Ownership filter removed per user instructions
 // - Date range with cutoff parameters
 // Includes client-side caching to prevent unnecessary Directus re-fetches.
 // ==============================================================================
@@ -39,19 +40,32 @@ export function CylinderDepositSwapFilters() {
     setLocalProductId(filters.productId || "");
   }, [filters]);
 
+  // AG-COMMENT: Strictly filter dropdown options to Industrial Division branches (division_id = 1).
+  // Excludes non-industrial branches (e.g., CENTRAL PANGASINAN CHARIOT - 3, BENGUET-VAN, etc.).
+  const INDUSTRIAL_BRANCH_IDS = React.useMemo(() => new Set(["196", "197", "278", "279", "280"]), []);
+
   // Memoized SearchableSelect Options
-  // 1. Branch Options (Only active branches from Directus)
+  // 1. Branch Options (Only active Industrial Division branches)
   const branchOptions = React.useMemo(() => {
+    const validBranches = (lookups?.branches || []).filter((b) => {
+      if (b.division_id != null && (b.division_id as unknown) !== "") {
+        return Number(b.division_id) === 1;
+      }
+      return INDUSTRIAL_BRANCH_IDS.has(String(b.id));
+    });
+
     return [
       { value: "all", label: "All Branches" },
-      ...(lookups?.branches || []).map((b) => ({
+      ...validBranches.map((b) => ({
         value: String(b.id),
         label: b.branch_name,
       })),
     ];
-  }, [lookups?.branches]);
+  }, [lookups?.branches, INDUSTRIAL_BRANCH_IDS]);
 
   // 2. Product Options (Serialized products only, displaying description instead of product_name)
+  // AG-COMMENT: Mapped by unique product_id while displaying product.description as label.
+  // Includes SKU as subLabel so items with duplicate descriptions can still be distinguished and selected independently.
   const productOptions = React.useMemo(() => {
     return [
       { value: "all", label: "All Products" },
@@ -60,6 +74,7 @@ export function CylinderDepositSwapFilters() {
         return {
           value: String(p.product_id),
           label: displayLabel,
+          subLabel: p.product_code ? `SKU: ${p.product_code}` : undefined,
         };
       }),
     ];
@@ -85,6 +100,7 @@ export function CylinderDepositSwapFilters() {
       branchId: localBranchId,
       customerCode: localCustomerCode || undefined,
       productId: localProductId,
+      ownership: "ALL",
     }));
   };
 
@@ -106,6 +122,7 @@ export function CylinderDepositSwapFilters() {
       branchId: "",
       customerCode: undefined,
       productId: "",
+      ownership: "ALL",
     }));
   };
 
@@ -179,7 +196,7 @@ export function CylinderDepositSwapFilters() {
         </div>
 
         {/* Customer Lookup (Searchable Shadcn UI) */}
-        <div className="lg:col-span-3">
+        <div className="lg:col-span-2">
           <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
             <User className="h-3.5 w-3.5" />
             <span>Customer</span>
@@ -193,8 +210,8 @@ export function CylinderDepositSwapFilters() {
           />
         </div>
 
-        {/* Product / Size (Searchable Shadcn UI with description display) */}
-        <div className="lg:col-span-2">
+        {/* Product / Size (Searchable Shadcn UI with description display, mapped by ID) */}
+        <div className="lg:col-span-3">
           <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
             <Package className="h-3.5 w-3.5" />
             <span>Product / Size</span>

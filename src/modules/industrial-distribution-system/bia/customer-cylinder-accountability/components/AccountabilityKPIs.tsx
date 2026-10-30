@@ -93,10 +93,19 @@ export function AccountabilityKPIs() {
     return (
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {Array.from({ length: 6 }).map((_, idx) => (
-          <div key={idx} className="h-28 rounded-xl border bg-card p-4 animate-pulse">
-            <div className="h-3 w-20 rounded-sm bg-muted mb-3" />
-            <div className="h-6 w-16 rounded-sm bg-muted mb-2" />
-            <div className="h-2.5 w-full rounded-sm bg-muted" />
+          <div key={idx} className="min-h-[8.5rem] flex flex-col justify-between rounded-xl border bg-card p-4 animate-pulse">
+            <div className="flex items-start justify-between">
+              <div className="h-3 w-20 rounded-sm bg-muted" />
+              <div className="h-7 w-7 rounded-lg bg-muted" />
+            </div>
+            <div className="my-2 flex items-baseline justify-between gap-1.5">
+              <div className="h-6 w-16 rounded-sm bg-muted" />
+              <div className="h-4 w-12 rounded-sm bg-muted" />
+            </div>
+            <div className="space-y-1">
+              <div className="h-2.5 w-full rounded-sm bg-muted" />
+              <div className="h-2.5 w-3/4 rounded-sm bg-muted" />
+            </div>
           </div>
         ))}
       </div>
@@ -121,20 +130,22 @@ export function AccountabilityKPIs() {
               </div>
             </div>
 
-            <div className="my-2">
+            <div className="my-2 flex items-baseline justify-between gap-1.5">
               <div className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
                 {card.value}
               </div>
-            </div>
-
-            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-              <span className="truncate pr-1" title={card.description}>
-                {card.description}
-              </span>
-              <span className={`shrink-0 rounded-md border px-1.5 py-0.2 font-semibold text-[10px] ${card.border} ${card.bg} ${card.color}`}>
+              <span className={`shrink-0 rounded-md border px-1.5 py-0.5 font-semibold text-[10px] ${card.border} ${card.bg} ${card.color}`}>
                 {card.badge}
               </span>
             </div>
+
+            {/* AG-COMMENT: Allow KPI description to wrap over 2 lines without truncation */}
+            <p
+              className="text-[11px] text-muted-foreground leading-snug line-clamp-2 min-h-[2.25rem]"
+              title={card.description}
+            >
+              {card.description}
+            </p>
           </div>
         );
       })}

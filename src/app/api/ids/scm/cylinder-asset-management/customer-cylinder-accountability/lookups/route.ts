@@ -41,6 +41,7 @@ type BranchRow = {
   id: number;
   branch_name: string | null;
   branch_code: string | null;
+  division_id?: number | null;
   isActive: number | string | boolean | null;
 };
 
@@ -58,9 +59,17 @@ async function fetchRows<T>(url: string, headers: Record<string, string>): Promi
   return json.data ?? [];
 }
 
+const INDUSTRIAL_BRANCH_IDS = new Set([196, 197, 278, 279, 280]);
+
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const forceRefresh = req.nextUrl.searchParams.get("refresh") === "true";
   const now = Date.now();
+
+  // In development, invalidate in-memory cache to guarantee instant updates
+  if (process.env.NODE_ENV === "development") {
+    cachedLookups = null;
+    cacheExpiresAt = 0;
+  }
 
   if (!forceRefresh && cachedLookups && now < cacheExpiresAt) {
     return NextResponse.json(cachedLookups, {
@@ -76,18 +85,26 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
   try {
-    // 1. Fetch active branches (isActive = 1)
+    // 1. Fetch active branches in the Industrial Division (division_id = 1, isActive = 1)
+    // AG-COMMENT: Strictly filter branches for Industrial Division (division_id = 1) and active status (isActive = 1)
     const branchRows = await fetchRows<BranchRow>(
-      `${directusBase}/items/branches?fields=id,branch_name,branch_code,isActive&filter[isActive][_eq]=1&limit=-1`,
+      `${directusBase}/items/branches?filter[isActive][_eq]=1&filter[division_id][_eq]=1&fields=id,branch_code,branch_name,division_id,isActive&limit=-1&sort=branch_name`,
       headers
     );
 
     const branches = branchRows
-      .filter((b) => b.isActive === 1 || b.isActive === "1" || b.isActive === true)
+      .filter((b) => {
+        const isActive = b.isActive === 1 || b.isActive === "1" || b.isActive === true || b.isActive === undefined;
+        const isIndustrial = b.division_id != null && (b.division_id as unknown) !== ""
+          ? Number(b.division_id) === 1
+          : INDUSTRIAL_BRANCH_IDS.has(Number(b.id));
+        return isActive && isIndustrial;
+      })
       .map((b) => ({
         id: Number(b.id),
         name: b.branch_name || `Branch #${b.id}`,
         code: b.branch_code || `BR-${b.id}`,
+        division_id: b.division_id != null ? Number(b.division_id) : 1,
       }));
 
     // 2. Fetch active customers
