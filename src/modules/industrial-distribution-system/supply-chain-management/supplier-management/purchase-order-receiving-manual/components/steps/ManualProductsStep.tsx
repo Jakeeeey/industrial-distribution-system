@@ -50,6 +50,7 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
 
     // ✅ Serial Verification state
     const [verifyingSerial, setVerifyingSerial] = React.useState(false);
+    const [committingSerials, setCommittingSerials] = React.useState(false);
     const [blockedAssetSerial, setBlockedAssetSerial] = React.useState<{ sn: string; assetId: unknown; status: unknown; condition: unknown } | null>(null);
     const [isBlockedSerialOpen, setIsBlockedSerialOpen] = React.useState(false);
     const [isSerialOverLimitOpen, setIsSerialOverLimitOpen] = React.useState(false);
@@ -149,35 +150,8 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
     const proceedToSave = async () => {
         setIsPartialWarningOpen(false);
 
-        // ✅ Comments: Ensure all captured serials across all product lines are synced to draft rows before finalizing the receipt.
-        // This guarantees that serialized products always decompose into individual 1-to-1 purchase_order_receiving draft rows.
-        const poId = selectedPO?.id;
-        if (poId) {
-            for (const it of filteredItems) {
-                if (!it.isSerialized) continue;
-                const id = String(it.id);
-                const serials = serialsByPorId[id] || [];
-                if (serials.length > 0) {
-                    try {
-                        await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                                action: "sync_draft_serials",
-                                poId,
-                                productId: it.productId,
-                                branchId: it.branchId,
-                                // Mark as unsaved so sync_draft_serials ensures 1-to-1 row creation for every serial
-                                serials: serials.map(s => ({ ...s, isSaved: false })),
-                            }),
-                        });
-                    } catch (e) {
-                        console.error("[proceedToSave] Failed to sync draft serials for item:", it.name, e);
-                    }
-                }
-            }
-        }
-
+        // Developer comment: Atomic receipt save delegation.
+        // All serials across all product lines are passed cleanly to saveReceipt, which handles validation and atomic rollback on error without premature database writes.
         await saveReceipt();
     };
 
@@ -321,7 +295,18 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
             const result = j?.data;
 
             if (result?.status === "REJECTED") {
-                toast.error("Serial Rejected", { description: result.message });
+                // Developer comment: If serial is already registered in cylinder_assets master, trigger Blocked Serial popup modal
+                if (result.asset) {
+                    setBlockedAssetSerial({
+                        sn: val,
+                        assetId: result.asset.id,
+                        status: result.asset.status,
+                        condition: result.asset.condition
+                    });
+                    setIsBlockedSerialOpen(true);
+                } else {
+                    toast.error("Serial Rejected", { description: result.message });
+                }
                 return;
             }
 
@@ -394,12 +379,24 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
         }, 0);
     };
 
+    // Developer comment: Support removing both unsaved and saved draft serials to prevent hard-lock
     const removeSerial = async (index: number) => {
         const serialToRemove = tempSerials[index];
+        if (!serialToRemove) return;
         
-        // Clean up draft registration if it was purely a new item this session
-        if (serialToRemove.isNew && !serialToRemove.isSaved) {
-            try {
+        try {
+            // Delete presaved serial from purchase_order_receiving_serial if present
+            await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "delete_presaved_serial",
+                    serialNumber: serialToRemove.sn
+                })
+            }).catch(() => null);
+
+            // Clean up draft registration if it was a new item
+            if (serialToRemove.isNew) {
                 await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -407,20 +404,28 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
                         action: "deregister_serial",
                         serialNumber: serialToRemove.sn
                     })
-                });
-            } catch (e) {
-                console.error("Failed to deregister serial", e);
+                }).catch(() => null);
             }
+        } catch (e) {
+            console.error("Failed to delete serial record:", e);
         }
 
-        setTempSerials(tempSerials.filter((_, i) => i !== index));
+        const remaining = tempSerials.filter((_, i) => i !== index);
+        setTempSerials(remaining);
+
+        // Synchronize parent state immediately so committed count reflects deletion
+        if (activePorId) {
+            setSerialsByPorId(prev => ({ ...prev, [activePorId]: remaining }));
+            setManualCounts(prev => ({ ...prev, [activePorId]: remaining.length }));
+        }
     };
 
-    // ✅ FIX: Made async to persist serials to DB via presave_serial on commit
+    // Developer comment: Synchronize physical tag / manual counter strictly to successfully committed records.
+    // If backend draft synchronization fails or rejects entries, local state is rolled back to prevent false positive counts.
     const saveSerials = async () => {
         const finalSerials = [...tempSerials];
         
-        // ✅ Smart Auto-Add: Only if completely fulfilled
+        // Smart Auto-Add check: notify user if there is an unadded input
         const pending = newSerial.trim();
         if (pending) {
             toast.error("Pending Serial Unverified", { 
@@ -429,41 +434,57 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
             return;
         }
 
-        if (activePorId) {
-            // 1. Write to React state immediately (fast, does not block UI)
-            const mappedFinal = finalSerials.map(s => ({ ...s, isSaved: true }));
-            setSerialsByPorId(prev => {
-                return { ...prev, [activePorId]: mappedFinal };
-            });
-            
-            setManualCounts(prev => {
-                return { ...prev, [activePorId]: finalSerials.length };
-            });
-            
-            toast.success("Progress Saved", { description: `${finalSerials.length} serials committed.` });
+        if (!activePorId) {
+            setSerialModalOpen(false);
+            return;
+        }
 
-            // 2. ✅ FIX: Persist ONLY the newly scanned serials atomically to DB via sync_draft_serials
-            const poId = selectedPO?.id;
-            const productId = activeItem?.productId;
-            const branchId = activeItem?.branchId;
+        const poId = selectedPO?.id;
+        const productId = activeItem?.productId;
+        const branchId = activeItem?.branchId;
+        const newlyAdded = finalSerials.filter(s => !s.isSaved);
 
-            if (poId && productId && branchId) {
-                const newlyAdded = finalSerials.filter(s => !s.isSaved);
-                if (newlyAdded.length > 0) {
-                    fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            action: "sync_draft_serials",
-                            poId,
-                            productId,
-                            branchId,
-                            serials: newlyAdded,
-                        }),
-                    }).catch(e => console.warn("[sync_draft_serials] Non-blocking failure:", e));
+        // If there are new serials to persist, ensure atomic persistence to DB before confirming state
+        if (poId && productId && branchId && newlyAdded.length > 0) {
+            setCommittingSerials(true);
+            try {
+                const syncRes = await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        action: "sync_draft_serials",
+                        poId,
+                        productId,
+                        branchId,
+                        serials: newlyAdded,
+                    }),
+                });
+                const syncData = await syncRes.json().catch(() => null);
+
+                if (!syncRes.ok || syncData?.error) {
+                    const errMsg = syncData?.error || "Failed to commit serials to database.";
+                    toast.error("Serial Commit Failed", { description: errMsg });
+                    // Developer comment: Rollback - keep modal open and do NOT increment committed count
+                    setCommittingSerials(false);
+                    return;
                 }
+            } catch (err: unknown) {
+                console.error("[sync_draft_serials] Rejection/Error:", err);
+                const errMsg = err instanceof Error ? err.message : String((err as Record<string, unknown>)?.message || "Network error while committing serials.");
+                toast.error("Commit Error", { description: errMsg });
+                // Developer comment: Rollback on network failure
+                setCommittingSerials(false);
+                return;
+            } finally {
+                setCommittingSerials(false);
             }
         }
+
+        // Commit successful: All pieces are saved and confirmed in DB
+        const mappedFinal = finalSerials.map(s => ({ ...s, isSaved: true }));
+        setSerialsByPorId(prev => ({ ...prev, [activePorId]: mappedFinal }));
+        setManualCounts(prev => ({ ...prev, [activePorId]: finalSerials.length }));
+        toast.success("Progress Saved", { description: finalSerials.length + " serials committed." });
         setSerialModalOpen(false);
     };
 
@@ -710,39 +731,66 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
                 </AlertDialogContent>
             </AlertDialog>
 
-            {/* ✅ Fix 3 (UPDATED): Blocked Serial dialog — fires when serial is ALREADY in cylinder_assets master - AG 2026-07-14 */}
+            {/* Developer comment: Enhanced Blocked Serial dialog with spacious layout, clear typography, and elevated z-index */}
             <AlertDialog open={isBlockedSerialOpen} onOpenChange={setIsBlockedSerialOpen}>
-                <AlertDialogContent className="rounded-3xl border-none shadow-2xl overflow-hidden p-0 max-w-md">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2 text-red-600 font-black uppercase tracking-tight">
-                            <AlertTriangle className="w-5 h-5" /> Serial Already Registered
-                        </AlertDialogTitle>
-                        <AlertDialogDescription asChild>
-                            <div className="space-y-3">
-                                <p className="text-sm font-bold text-slate-600 uppercase tracking-wider leading-relaxed">
-                                    Serial <span className="font-mono text-red-700 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">{blockedAssetSerial?.sn}</span> already exists in the Cylinder Asset master database and cannot be received again.
-                                </p>
-                                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5">
-                                    <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest">
-                                        <span className="text-slate-400">Asset ID</span>
-                                        <span className="font-mono text-slate-700">{String(blockedAssetSerial?.assetId || "—")}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest">
-                                        <span className="text-slate-400">Status</span>
-                                        <span className="text-slate-700">{String(blockedAssetSerial?.status || "—")}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest">
-                                        <span className="text-slate-400">Condition</span>
-                                        <span className="text-slate-700">{String(blockedAssetSerial?.condition || "—")}</span>
-                                    </div>
-                                </div>
-                                <p className="text-[10px] font-bold text-red-500 uppercase tracking-widest">
-                                    Please verify the physical serial number and try a different one.
-                                </p>
+                <AlertDialogContent className="z-[70] rounded-3xl border border-red-100 dark:border-red-950/40 shadow-2xl overflow-hidden p-0 max-w-xl bg-white dark:bg-slate-950">
+                    <div className="bg-red-600 p-6 text-white relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl" />
+                        <div className="relative z-10 flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
+                                <AlertTriangle className="w-5 h-5 text-white" />
                             </div>
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
+                            <div>
+                                <AlertDialogTitle className="text-lg font-black uppercase tracking-tight text-white m-0">
+                                    Serial Already Registered
+                                </AlertDialogTitle>
+                                <div className="text-[10px] font-bold text-white/80 uppercase tracking-widest">
+                                    Master Asset Database Conflict
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="p-6 md:p-8 space-y-6">
+                        <div className="space-y-2">
+                            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                                Conflicting Serial Number:
+                            </div>
+                            <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40 rounded-xl flex items-center justify-between">
+                                <span className="font-mono text-base font-black text-red-700 dark:text-red-400">
+                                    {blockedAssetSerial?.sn}
+                                </span>
+                                <Badge variant="outline" className="text-[9px] uppercase font-black border-red-300 text-red-600 bg-red-100/60">
+                                    Already Exists
+                                </Badge>
+                            </div>
+                            <p className="text-xs text-slate-600 dark:text-slate-300 pt-1 leading-relaxed">
+                                This serial number is already registered in the system database and cannot be received as a new piece.
+                            </p>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-3">
+                            <div className="bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-3 text-center">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-1">Asset ID</span>
+                                <span className="font-mono font-bold text-xs text-slate-800 dark:text-slate-200">{String(blockedAssetSerial?.assetId || "—")}</span>
+                            </div>
+                            <div className="bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-3 text-center">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-1">Status</span>
+                                <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{String(blockedAssetSerial?.status || "—")}</span>
+                            </div>
+                            <div className="bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-3 text-center">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-1">Condition</span>
+                                <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{String(blockedAssetSerial?.condition || "—")}</span>
+                            </div>
+                        </div>
+
+                        <div className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                            Please inspect the physical serial stamp and try a different serial number.
+                        </div>
+                    </div>
+
+                    <div className="p-4 bg-slate-50 dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex justify-end">
                         <AlertDialogAction
                             onClick={() => {
                                 setBlockedAssetSerial(null);
@@ -750,11 +798,11 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
                                 setNewSerial("");
                                 setTimeout(() => inputRef.current?.focus(), 10);
                             }}
-                            className="bg-red-600 hover:bg-red-700 rounded-xl font-black uppercase tracking-widest text-[10px]"
+                            className="bg-red-600 hover:bg-red-700 text-white rounded-xl font-black uppercase tracking-widest text-[11px] h-11 px-8 shadow-md shadow-red-600/20"
                         >
                             OK, Clear Entry
                         </AlertDialogAction>
-                    </AlertDialogFooter>
+                    </div>
                 </AlertDialogContent>
             </AlertDialog>
 
@@ -911,16 +959,16 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
                                     <Button
                                         variant="link"
                                         onClick={async () => {
-                                            const toDelete = tempSerials.filter(s => !s.isSaved).map(s => s.sn);
-                                            if (toDelete.length > 0) {
+                                            // Developer comment: Clear all serials for this line and purge draft rows to resolve locked state
+                                            const allSns = tempSerials.map(s => s.sn);
+                                            if (allSns.length > 0) {
                                                 try {
                                                     await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
                                                         method: "POST",
                                                         headers: { "Content-Type": "application/json" },
-                                                        body: JSON.stringify({ action: "delete_presaved_serials", serialNumbers: toDelete }),
+                                                        body: JSON.stringify({ action: "delete_presaved_serials", serialNumbers: allSns }),
                                                     });
-                                                    // Also deregister from draft to prevent ghost records
-                                                    toDelete.forEach(sn => {
+                                                    allSns.forEach(sn => {
                                                         fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
                                                             method: "POST",
                                                             headers: { "Content-Type": "application/json" },
@@ -931,12 +979,16 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
                                                     console.error("Failed to bulk clear serials", e);
                                                 }
                                             }
-                                            setTempSerials(prev => prev.filter(s => s.isSaved));
-                                            toast.info("Cleared all unsaved serials");
+                                            setTempSerials([]);
+                                            if (activePorId) {
+                                                setSerialsByPorId(prev => ({ ...prev, [activePorId]: [] }));
+                                                setManualCounts(prev => ({ ...prev, [activePorId]: 0 }));
+                                            }
+                                            toast.info("Cleared all serials for this product line");
                                         }}
                                         className="h-auto p-0 text-[10px] font-black uppercase tracking-widest text-red-500 hover:text-red-600"
                                     >
-                                        Clear Unsaved
+                                        Clear All Serials
                                     </Button>
                                 )}
                             </div>
@@ -978,16 +1030,16 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
                                                             {item.expiryDate || "-"}
                                                         </TableCell>
                                                         <TableCell className="py-2 px-2 text-center">
-                                                            {!item.isSaved && (
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="icon"
-                                                                    className="h-8 w-8 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all opacity-0 group-hover:opacity-100"
-                                                                    onClick={() => removeSerial(idx)}
-                                                                >
-                                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                                </Button>
-                                                            )}
+                                                            {/* Developer comment: Always allow deleting serials from the registration table to prevent hard-lock error states */}
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-8 w-8 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all opacity-0 group-hover:opacity-100"
+                                                                onClick={() => removeSerial(idx)}
+                                                                title="Remove serial"
+                                                            >
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                            </Button>
                                                         </TableCell>
                                                     </TableRow>
                                                 ))
@@ -1014,7 +1066,7 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
                                     isPartialEntry && !isPendingValid ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-primary shadow-primary/30"
                                 )}
                             >
-                                Commit Pieces
+                                {committingSerials ? "Committing..." : "Commit Pieces"}
                             </Button>
                         </div>
                     </div>

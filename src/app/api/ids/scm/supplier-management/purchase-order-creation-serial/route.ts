@@ -362,8 +362,9 @@ async function tagSerials(
 
     const onhandMap = new Map<string, Record<string, unknown>>();
 
+    // Developer comment: Enforce strict case-sensitive matching for serial numbers in PO Creation Serial Tagging
     await Promise.all(uniqueSerials.map(async (sn) => {
-        const url = `${SPRING_API_BASE_URL.replace(/\/$/, "")}/api/v-serial-onhand/all?serialNumber=${encodeURIComponent(sn.toUpperCase())}`;
+        const url = `${SPRING_API_BASE_URL.replace(/\/$/, "")}/api/v-serial-onhand/all?serialNumber=${encodeURIComponent(sn)}`;
         
         try {
             const onhandRes = await fetch(url, {
@@ -380,14 +381,14 @@ async function tagSerials(
                 const data = await onhandRes.json().catch(() => []);
                 const rows = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
                 
-                // Determine expected branch and product from the PO lines for this serial
-                const entryForSn = entries.find(e => String(e.serial_number).trim().toUpperCase() === sn.toUpperCase());
+                // Determine expected branch and product from the PO lines for this serial using exact character casing
+                const entryForSn = entries.find(e => String(e.serial_number).trim() === sn);
                 const expectedBranchId = entryForSn ? linesMap.get(entryForSn.lineId)?.branch_id : undefined;
                 const expectedProductId = entryForSn ? linesMap.get(entryForSn.lineId)?.product_id : undefined;
 
                 // Find the PERFECT match, filtering by exact serial number AND expected branch/product (handles historical/duplicate rows from API)
                 const perfectMatch = rows.find((r: { serialNumber?: string, serial_number?: string, branchId?: string | number, branch_id?: string | number, productId?: string | number, product_id?: string | number }) => {
-                    const matchSn = String(r.serialNumber || r.serial_number || "").trim().toUpperCase() === sn.toUpperCase();
+                    const matchSn = String(r.serialNumber || r.serial_number || "").trim() === sn;
                     const rBranchId = Number(r.branchId ?? r.branch_id);
                     const matchBranch = expectedBranchId !== undefined ? rBranchId === expectedBranchId : true;
                     const rProductId = Number(r.productId ?? r.product_id);
@@ -398,14 +399,12 @@ async function tagSerials(
                 if (perfectMatch) {
                     onhandMap.set(sn, perfectMatch as Record<string, unknown>);
                 } else {
-                    // Fallback to any record matching the serial number (so the validation loop can throw a "different branch/product" error)
+                    // Fallback to exact-matching record (so the validation loop can throw a "different branch/product" error)
                     const basicMatch = rows.find((r: { serialNumber?: string, serial_number?: string }) => 
-                        String(r.serialNumber || r.serial_number || "").trim().toUpperCase() === sn.toUpperCase()
+                        String(r.serialNumber || r.serial_number || "").trim() === sn
                     );
                     if (basicMatch) {
                         onhandMap.set(sn, basicMatch as Record<string, unknown>);
-                    } else if (rows.length > 0) {
-                        onhandMap.set(sn, rows[0] as Record<string, unknown>);
                     }
                 }
             } else {
@@ -484,13 +483,14 @@ async function tagSerials(
     // 4.5 Update cylinder_assets status to 'WITH_SUPPLIER' for each tagged serial.
     // Run in parallel for performance. Non-blocking.
     await Promise.all(entries.map(async (e) => {
-        const sn = String(e.serial_number).trim().toUpperCase();
+        // Developer comment: Preserve exact character casing when updating cylinder_assets to WITH_SUPPLIER
+        const sn = String(e.serial_number).trim();
         try {
             const assetCheck = await directusFetch(
-                `${base}/items/cylinder_assets?limit=1&filter[serial_number][_eq]=${encodeURIComponent(sn)}&filter[is_deleted][_eq]=0&fields=id`
+                `${base}/items/cylinder_assets?limit=5&filter[serial_number][_eq]=${encodeURIComponent(sn)}&filter[is_deleted][_eq]=0&fields=id,serial_number`
             );
             const assetJson = await assetCheck.json().catch(() => ({}));
-            const asset = assetJson?.data?.[0];
+            const asset = (assetJson?.data || []).find((a: Record<string, unknown>) => String(a.serial_number).trim() === sn);
             if (asset?.id) {
                 await directusFetch(`${base}/items/cylinder_assets/${asset.id}`, {
                     method: 'PATCH',

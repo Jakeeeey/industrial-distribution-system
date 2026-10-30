@@ -22,6 +22,8 @@ interface PODetailItem {
     barcode?: string;
     name?: string;
     productId?: string;
+    // Developer comment: Measurement unit (e.g. FULL, EMPTY, BOX, PCS) indicating whether item is full/empty or container type
+    uom?: string;
 }
 import { money } from "../../utils/format";
 
@@ -104,6 +106,8 @@ export function PODetailsBreakdownCard() {
                                                         <TableRow className="border-border hover:bg-transparent">
                                                             <TableHead className="w-[120px] font-medium h-8 py-1">SKU/Barcode</TableHead>
                                                             <TableHead className="min-w-[150px] font-medium h-8 py-1">Item</TableHead>
+                                                            {/* Developer comment: Dedicated UOM column to immediately verify unit condition (FULL, EMPTY, BOX, etc.) */}
+                                                            <TableHead className="w-[85px] font-medium h-8 py-1">UOM</TableHead>
                                                             <TableHead className="text-right font-medium h-8 py-1">Qty</TableHead>
                                                             <TableHead className="text-right font-medium h-8 py-1">Unit Price</TableHead>
                                                             <TableHead className="text-right font-medium h-8 py-1">Discount</TableHead>
@@ -132,6 +136,12 @@ export function PODetailsBreakdownCard() {
                                                                 <TableRow key={`${it.productId || 'item'}-${index}`} className="border-border transition-colors hover:bg-muted/30">
                                                                     <TableCell className="h-8 py-1 align-middle text-muted-foreground">{it.barcode}</TableCell>
                                                                     <TableCell className="h-8 py-1 align-middle font-medium" title={it.name}>{it.name}</TableCell>
+                                                                    {/* Developer comment: Render measurement unit badge (e.g. FULL, EMPTY, BOX, PCS) */}
+                                                                    <TableCell className="h-8 py-1 align-middle">
+                                                                        <Badge variant="outline" className="text-[10px] font-semibold tracking-wide uppercase px-1.5 py-0 text-muted-foreground border-border/80">
+                                                                            {it.uom || "—"}
+                                                                        </Badge>
+                                                                    </TableCell>
                                                                     <TableCell className="h-8 py-1 align-middle text-right">{qty}</TableCell>
                                                                     <TableCell className="h-8 py-1 align-middle text-right">
                                                                         {money(uprice, selectedPO.currency || "PHP")}

@@ -3,6 +3,7 @@
 // Recharts graphical analytics for Customer Cylinder Turnaround Ratio (CTR) Module.
 // Enhanced with topside gradient accent lines, card hover elevation,
 // and optimized dark mode tooltip styling.
+// Includes Unmonitored Holding category for active base with 0 transactions.
 // ──────────────────────────────────────────────────────────────────────────────
 
 "use client";
@@ -31,6 +32,7 @@ const GRADE_COLORS: Record<string, string> = {
   "CTR 6 (Standard)": "#3b82f6",   // Blue 500
   "CTR 8 (Moderate)": "#f59e0b",   // Amber 500
   "Sub-standard": "#f43f5e",       // Rose 500
+  "Unmonitored Holding": "#fbbf24", // Warm Amber 400
   "Unrated (Base=0)": "#64748b",   // Slate 500
 };
 
@@ -52,12 +54,13 @@ export function CustomerCylinderTurnaroundCharts() {
     { name: "CTR 6 (Standard)", value: kpis.gradeDistribution.ctr6Count },
     { name: "CTR 8 (Moderate)", value: kpis.gradeDistribution.ctr8Count },
     { name: "Sub-standard", value: kpis.gradeDistribution.subStandardCount },
+    { name: "Unmonitored Holding", value: kpis.gradeDistribution.unmonitoredCount || 0 },
     { name: "Unrated (Base=0)", value: kpis.gradeDistribution.baseZeroCount },
   ].filter((d) => d.value > 0);
 
   // 2. Prepare Top 7 Customers Turnaround Bar Data
   const barData = items
-    .filter((i) => !i.isBaseZero)
+    .filter((i) => !i.isBaseZero && i.annualTurns > 0)
     .sort((a, b) => b.annualTurns - a.annualTurns)
     .slice(0, 7)
     .map((i) => ({
@@ -84,7 +87,7 @@ export function CustomerCylinderTurnaroundCharts() {
             </span>
           </div>
           <CardDescription className="text-xs">
-            Share of customer accounts categorized into CTR 4, CTR 6, CTR 8, and sub-standard tiers.
+            Share of customer accounts categorized into CTR 4, CTR 6, CTR 8, Unmonitored, and Sub-standard tiers.
           </CardDescription>
         </CardHeader>
         <CardContent>

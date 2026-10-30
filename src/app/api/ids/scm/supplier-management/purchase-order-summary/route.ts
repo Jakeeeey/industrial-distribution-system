@@ -40,6 +40,8 @@ async function fetchJson<T = unknown>(url: string, init?: RequestInit): Promise<
 
 interface ReceiptItem {
     productName: string;
+    // Developer comment: Measurement unit (e.g. FULL, EMPTY, BOX, PCS) indicating item unit classification
+    uom: string;
     branchName: string;
     quantity: number;
     unitPrice: number;
@@ -319,7 +321,7 @@ export async function POST(req: NextRequest) {
                             `${base}/items/products` +
                             `?limit=-1` +
                             `&filter[product_id][_in]=${encodeURIComponent(ids.join(","))}` +
-                            `&fields=product_id,product_name,barcode,product_code,is_serialized`;
+                            `&fields=product_id,product_name,barcode,product_code,is_serialized,uom_ids,unit_of_measurement.*`;
                         const j = await fetchJson<{ data: Record<string, unknown>[] }>(url);
                         for (const p of (j?.data ?? [])) map.set(toNum(p.product_id), p);
                     }
@@ -342,6 +344,67 @@ export async function POST(req: NextRequest) {
                     return map;
                 })()
             ]);
+
+            // Developer comment: Fetch unit definitions from vos_database.units to resolve measurement units (e.g. FULL, EMPTY, BOX, PCS)
+            const rawUnitIds: number[] = [];
+            for (const p of Array.from(productsMap.values())) {
+                const uomVal = p?.unit_of_measurement;
+                if (typeof uomVal === "number" || typeof uomVal === "string") {
+                    const uid = toNum(uomVal);
+                    if (uid > 0) rawUnitIds.push(uid);
+                } else if (uomVal && typeof uomVal === "object") {
+                    const uid = toNum((uomVal as Record<string, unknown>).unit_id);
+                    if (uid > 0) rawUnitIds.push(uid);
+                }
+            }
+            const uniqueUnitIds = Array.from(new Set(rawUnitIds));
+            const unitsMap = new Map<number, { unit_id: number; unit_name: string; unit_shortcut: string }>();
+            if (uniqueUnitIds.length > 0) {
+                try {
+                    const uRes = await fetchJson<{ data: Record<string, unknown>[] }>(
+                        `${base}/items/units?limit=-1&filter[unit_id][_in]=${encodeURIComponent(uniqueUnitIds.join(","))}&fields=unit_id,unit_name,unit_shortcut`
+                    );
+                    for (const u of uRes?.data ?? []) {
+                        const uid = toNum(u?.unit_id);
+                        if (uid > 0) {
+                            unitsMap.set(uid, {
+                                unit_id: uid,
+                                unit_name: toStr(u?.unit_name),
+                                unit_shortcut: toStr(u?.unit_shortcut) || toStr(u?.unit_name) || "—"
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.warn("[PO Summary] Could not fetch units:", e);
+                }
+            }
+
+            // Developer comment: Standard helper to resolve UOM for PO Summary allocations and receipts
+            const resolveItemUom = (product: Record<string, unknown> | undefined): string => {
+                if (!product) return "—";
+                // 1. Explicit uom_ids variant (e.g. FULL, EMPTY, SWAP for cylinders)
+                const uomIds = toStr(product.uom_ids).trim();
+                if (uomIds && uomIds !== "—") return uomIds.toUpperCase();
+
+                // 2. Nested unit_of_measurement object
+                if (product.unit_of_measurement && typeof product.unit_of_measurement === "object") {
+                    const uObj = product.unit_of_measurement as Record<string, unknown>;
+                    const sc = toStr(uObj.unit_shortcut).trim();
+                    const nm = toStr(uObj.unit_name).trim();
+                    if (sc) return sc.toUpperCase();
+                    if (nm) return nm.toUpperCase();
+                }
+
+                // 3. Numeric ID in unitsMap
+                const uid = toNum(typeof product.unit_of_measurement === "number" || typeof product.unit_of_measurement === "string" ? product.unit_of_measurement : (product.unit_of_measurement as Record<string, unknown>)?.unit_id);
+                if (uid && unitsMap.has(uid)) {
+                    const rec = unitsMap.get(uid);
+                    if (rec?.unit_shortcut) return rec.unit_shortcut.toUpperCase();
+                    if (rec?.unit_name) return rec.unit_name.toUpperCase();
+                }
+
+                return "—";
+            };
 
             const serializedPOPIds = new Set<number>(
                 receivingItems
@@ -374,6 +437,8 @@ export async function POST(req: NextRequest) {
                     id: row.purchase_order_product_id,
                     productId: pid,
                     productName: toStr(product?.product_name, `Product #${pid}`),
+                    // Developer comment: Measurement unit (e.g. FULL, EMPTY, BOX, PCS) indicating sizing or condition tier
+                    uom: resolveItemUom(product),
                     branchName: branchesMap.get(bid) || `Branch ${bid}`,
                     orderedQty: toNum(row.ordered_quantity),
                     receivedQty: totalReceived,
@@ -419,6 +484,8 @@ export async function POST(req: NextRequest) {
 
                 receipt.items.push({
                     productName: toStr(product?.product_name, `Product #${row.product_id}`),
+                    // Developer comment: Measurement unit (e.g. FULL, EMPTY, BOX, PCS) indicating sizing or condition tier
+                    uom: resolveItemUom(product),
                     branchName: branchesMap.get(toNum(row.branch_id)) || `Branch ${row.branch_id}`,
                     quantity: toNum(row.received_quantity),
                     unitPrice: toNum(row.unit_price),

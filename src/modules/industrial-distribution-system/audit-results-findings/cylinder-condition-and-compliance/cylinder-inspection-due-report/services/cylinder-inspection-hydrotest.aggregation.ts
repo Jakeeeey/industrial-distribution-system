@@ -152,20 +152,25 @@ export function aggregateInspectionHydrotestReport(
     const unit = product?.unit_of_measurement ? unitMap.get(Number(product.unit_of_measurement)) : null;
     const branch = asset.current_branch_id ? branchMap.get(Number(asset.current_branch_id)) : null;
 
-    // Custodian determination
-    let custodianCode = "BRANCH";
-    let custodianName = branch?.branch_name || "Central Warehouse";
+    // Custodian determination - standardized audit fallbacks when linked entities are null
+    let custodianCode = branch?.branch_code || "UNASSIGNED";
+    let custodianName = branch?.branch_name || "Unassigned Branch";
     let custodianType: CylinderInspectionRecord["custodianType"] = "Branch";
 
     if (asset.current_customer_code) {
       const codeKey = String(asset.current_customer_code).trim().toUpperCase();
       const cust = customerMap.get(codeKey);
       custodianCode = asset.current_customer_code;
-      custodianName = cust?.store_name || cust?.customer_name || `Customer #${asset.current_customer_code}`;
+      custodianName =
+        cust?.store_name ||
+        cust?.customer_name ||
+        (asset.current_customer_code ? `Customer (${asset.current_customer_code})` : "Unassigned Customer");
       custodianType = "Customer";
     } else if (asset.cylinder_status === "WITH_SUPPLIER") {
-      custodianCode = `SUPP-${asset.current_supplier_id || "EXT"}`;
-      custodianName = `Supplier Partner (#${asset.current_supplier_id || "Ext"})`;
+      custodianCode = asset.current_supplier_id ? `SUPP-${asset.current_supplier_id}` : "SUPP-UNASSIGNED";
+      custodianName = asset.current_supplier_id
+        ? `Supplier (#${asset.current_supplier_id})`
+        : "Unassigned Supplier";
       custodianType = "Supplier";
     }
 
@@ -205,7 +210,7 @@ export function aggregateInspectionHydrotestReport(
       daysRemaining,
       complianceStatus,
       isRetired,
-      remarks: asset.remarks || "No recorded remarks",
+      remarks: asset.remarks && asset.remarks.trim() ? asset.remarks.trim() : "—",
       movementsTrace: sortedTrace,
     });
   }
