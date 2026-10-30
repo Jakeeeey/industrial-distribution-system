@@ -39,17 +39,28 @@ export function CylinderDepositSwapFilters() {
     setLocalProductId(filters.productId || "");
   }, [filters]);
 
+  // AG-COMMENT: Strictly filter dropdown options to Industrial Division branches (division_id = 1).
+  // Excludes non-industrial branches (e.g., CENTRAL PANGASINAN CHARIOT - 3, BENGUET-VAN, etc.).
+  const INDUSTRIAL_BRANCH_IDS = React.useMemo(() => new Set(["196", "197", "278", "279", "280"]), []);
+
   // Memoized SearchableSelect Options
-  // 1. Branch Options (Only active branches from Directus)
+  // 1. Branch Options (Only active Industrial Division branches)
   const branchOptions = React.useMemo(() => {
+    const validBranches = (lookups?.branches || []).filter((b) => {
+      if (b.division_id != null && (b.division_id as unknown) !== "") {
+        return Number(b.division_id) === 1;
+      }
+      return INDUSTRIAL_BRANCH_IDS.has(String(b.id));
+    });
+
     return [
       { value: "all", label: "All Branches" },
-      ...(lookups?.branches || []).map((b) => ({
+      ...validBranches.map((b) => ({
         value: String(b.id),
         label: b.branch_name,
       })),
     ];
-  }, [lookups?.branches]);
+  }, [lookups?.branches, INDUSTRIAL_BRANCH_IDS]);
 
   // 2. Product Options (Serialized products only, displaying description instead of product_name)
   const productOptions = React.useMemo(() => {

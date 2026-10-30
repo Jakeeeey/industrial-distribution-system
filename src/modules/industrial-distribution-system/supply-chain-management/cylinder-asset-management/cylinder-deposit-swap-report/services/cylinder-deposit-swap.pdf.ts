@@ -33,7 +33,7 @@ export function exportCylinderDepositSwapToPdf(
 
   doc.setFontSize(12);
   doc.setTextColor(71, 85, 105); // slate-600
-  doc.text("Business Intelligence & Analytics | Cylinder Deposit and Swap Report", 40, 58);
+  doc.text("Supply Chain Management | Cylinder Deposit and Swap Report", 40, 58);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
@@ -73,31 +73,27 @@ export function exportCylinderDepositSwapToPdf(
     doc.text(item.label, x, 118);
   });
 
-  // ── Tabular Data ───────────────────────────────────────────────────────────
+  // ── Tabular Data: Doc §11 Proposed Columns ─────────────────────────────────
   const tableHeaders = [
     [
-      "Customer Code & Name",
-      "Branch",
-      "Opening Base",
-      "Deposits (+)",
-      "Swaps In (Empty)",
-      "Swaps Out (Full)",
-      "Returns (-)",
-      "Net Delta",
-      "Closing Base",
+      "Customer",
+      "Date",
+      "Reference",
+      "Deposit Qty",
+      "Swap Qty",
+      "Ownership",
+      "Running Base",
     ],
   ];
 
   const tableRows = report.rows.map((row) => [
-    `${row.customerCode}\n${row.customerName}${row.storeName ? ` (${row.storeName})` : ""}`,
-    row.branchName || "—",
-    row.totalOpeningBase.toLocaleString(),
-    row.totalDepositsDelivered > 0 ? `+${row.totalDepositsDelivered}` : "0",
-    row.totalSwapsInbound.toLocaleString(),
-    row.totalSwapsOutbound.toLocaleString(),
-    row.totalDepositsPulledOut > 0 ? `-${row.totalDepositsPulledOut}` : "0",
-    row.totalNetVariance >= 0 ? `+${row.totalNetVariance}` : `${row.totalNetVariance}`,
-    row.totalClosingBase.toLocaleString(),
+    `${row.customerName}\n(${row.customerCode})`,
+    row.date || row.lastTransactionDate || "—",
+    row.reference || "—",
+    row.depositQty > 0 ? `+${row.depositQty}` : "0",
+    row.swapQty.toLocaleString(),
+    row.ownership || "COMPANY",
+    row.runningBase.toLocaleString(),
   ]);
 
   autoTable(doc, {

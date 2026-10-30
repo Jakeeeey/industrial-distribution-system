@@ -1,4 +1,4 @@
-// src/modules/industrial-distribution-system/bia/cylinder-deposit-swap-report/components/SmoothSearchableSelect.tsx
+// src/modules/industrial-distribution-system/supply-chain-management/cylinder-asset-management/cylinder-deposit-swap-report/components/SmoothSearchableSelect.tsx
 // ==============================================================================
 // Smooth Searchable Select Combobox with Framer Motion.
 // Provides fluid opening/closing transitions for dropdowns, rotating chevrons,
@@ -7,7 +7,8 @@
 // Complies with Vertex IDS UI standards:
 // - Always leave comments on all changes and development workflows
 // - Accessible keyboard navigation via Radix UI & Command primitive
-// - Framer Motion spring and tween transitions for premium micro-interactions
+// - Mapped by unique item ID while preserving rich description labels
+//   to prevent duplicate labels from triggering multiple selections at once.
 // ==============================================================================
 
 "use client";
@@ -31,8 +32,14 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
+export interface SmoothSelectOption {
+  value: string;
+  label: string;
+  subLabel?: string;
+}
+
 export interface SmoothSearchableSelectProps {
-  options: { value: string; label: string }[];
+  options: SmoothSelectOption[];
   value?: string;
   onValueChange: (value: string) => void;
   placeholder?: string;
@@ -84,7 +91,7 @@ export function SmoothSearchableSelect({
       </PopoverTrigger>
 
       <PopoverContent
-        className="w-[--radix-popover-trigger-width] min-w-[220px] p-0 shadow-lg border bg-popover"
+        className="w-[--radix-popover-trigger-width] min-w-[240px] p-0 shadow-lg border bg-popover"
         align="start"
         sideOffset={4}
       >
@@ -108,10 +115,15 @@ export function SmoothSearchableSelect({
               <CommandGroup>
                 {options.map((opt) => {
                   const isSelected = value === opt.value;
+                  // AG-COMMENT: Map CommandItem with unique compound search value containing the option value (ID).
+                  // This prevents cmdk from merging items that share the exact same label (e.g. duplicate product descriptions)
+                  // and ensures clicking one item will only select that specific option by ID.
+                  const searchString = `${opt.label} ${opt.subLabel || ""} [id:${opt.value}]`;
                   return (
                     <CommandItem
                       key={opt.value}
-                      value={opt.label}
+                      value={searchString}
+                      keywords={[opt.label, opt.subLabel || "", opt.value]}
                       onSelect={() => {
                         onValueChange(opt.value);
                         setOpen(false);
@@ -121,7 +133,14 @@ export function SmoothSearchableSelect({
                         isSelected && "bg-primary/10 text-primary font-medium"
                       )}
                     >
-                      <span className="truncate">{opt.label}</span>
+                      <div className="flex flex-col min-w-0 pr-2">
+                        <span className="truncate">{opt.label}</span>
+                        {opt.subLabel && (
+                          <span className="text-[10px] text-muted-foreground font-mono">
+                            {opt.subLabel}
+                          </span>
+                        )}
+                      </div>
                       <Check
                         className={cn(
                           "ml-2 h-3.5 w-3.5 shrink-0 transition-opacity",

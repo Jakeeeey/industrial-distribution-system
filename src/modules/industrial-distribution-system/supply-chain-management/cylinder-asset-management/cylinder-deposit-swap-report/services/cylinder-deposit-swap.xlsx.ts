@@ -18,7 +18,7 @@ export function exportCylinderDepositSwapToExcel(
 
   // ── Sheet 1: Executive Summary & KPIs ───────────────────────────────────────
   const summaryRows = [
-    ["INDUSTRIAL DISTRIBUTION SYSTEM - BUSINESS INTELLIGENCE & ANALYTICS"],
+    ["INDUSTRIAL DISTRIBUTION SYSTEM - SUPPLY CHAIN MANAGEMENT"],
     ["CYLINDER DEPOSIT AND SWAP REPORT - EXECUTIVE SUMMARY"],
     ["Generated At", report.generatedAt],
     ["Reporting Period", `${report.filters.startDate} to ${report.filters.endDate}`],
@@ -43,37 +43,37 @@ export function exportCylinderDepositSwapToExcel(
   summarySheet["!cols"] = [{ wch: 45 }, { wch: 25 }];
   XLSX.utils.book_append_sheet(workbook, summarySheet, "Overview & KPIs");
 
-  // ── Sheet 2: Customer Aggregation Master ────────────────────────────────────
+  // ── Sheet 2: Customer Aggregation Master (Doc §11 Proposed Columns) ─────────
   const customerHeaders = [
     "Customer Code",
     "Customer Name",
-    "Store Name",
+    "Site / Store",
     "Branch",
-    "Contact Number",
+    "Date",
+    "Deposit Qty",
+    "Swap Qty",
+    "Ownership",
+    "Running Base",
+    "Reference",
     "Opening Base",
-    "Deposits (+)",
-    "Swaps In (Empty)",
-    "Swaps Out (Full)",
     "Pull-Outs (-)",
-    "Net Swap Variance",
-    "Closing Base",
-    "Last Transaction Date",
+    "Net Delta",
   ];
 
   const customerData = report.rows.map((row) => [
     row.customerCode,
     row.customerName,
-    row.storeName || "",
+    row.siteName || row.storeName || "",
     row.branchName || "",
-    row.contactNumber || "",
+    row.date || row.lastTransactionDate || "N/A",
+    row.depositQty,
+    row.swapQty,
+    row.ownership || "COMPANY",
+    row.runningBase,
+    row.reference || "",
     row.totalOpeningBase,
-    row.totalDepositsDelivered,
-    row.totalSwapsInbound,
-    row.totalSwapsOutbound,
     row.totalDepositsPulledOut,
     row.totalNetVariance,
-    row.totalClosingBase,
-    row.lastTransactionDate || "N/A",
   ]);
 
   const customerSheet = XLSX.utils.aoa_to_sheet([customerHeaders, ...customerData]);
@@ -82,15 +82,15 @@ export function exportCylinderDepositSwapToExcel(
     { wch: 28 },
     { wch: 24 },
     { wch: 16 },
-    { wch: 16 },
     { wch: 14 },
     { wch: 14 },
-    { wch: 16 },
-    { wch: 16 },
     { wch: 14 },
-    { wch: 16 },
+    { wch: 14 },
     { wch: 14 },
     { wch: 20 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 14 },
   ];
   customerSheet["!autofilter"] = { ref: `A1:M${customerData.length + 1}` };
   XLSX.utils.book_append_sheet(workbook, customerSheet, "Customer Base Summary");
