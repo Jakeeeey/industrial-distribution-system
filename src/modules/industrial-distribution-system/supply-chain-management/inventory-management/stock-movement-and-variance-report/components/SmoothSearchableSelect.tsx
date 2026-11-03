@@ -64,7 +64,9 @@ export function SmoothSearchableSelect({
           aria-expanded={open}
           className={cn(
             "w-full justify-between transition-all duration-150 hover:border-primary/50 focus-visible:ring-1",
-            !value && "text-muted-foreground",
+            // Muted only when nothing is resolved: an empty value can still be a
+            // real choice ("All branches"), so the label decides the styling.
+            !selectedLabel && "text-muted-foreground",
             open && "border-primary ring-1 ring-ring",
             className
           )}

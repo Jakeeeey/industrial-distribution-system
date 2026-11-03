@@ -38,6 +38,11 @@ const NAIVE_DATETIME = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}(?:
 // A bare calendar date, e.g. "2026-10-05".
 const NAIVE_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
+const MONTH_ABBR = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+] as const;
+
 /**
  * Product master metadata required to resolve units and display names.
  */
@@ -202,7 +207,9 @@ function normaliseMovement(row: RawMovementRow, meta?: ProductMeta): LedgerEntry
     restatement,
     isCount,
     unitCount,
-    productName: String(row.productName ?? ""),
+    // The view carries both the master name and the description; only the
+    // description is a label an operator recognises.
+    productName: productDisplayName(row.descr, row.productName),
     branchName: String(row.branchName ?? ""),
   };
 }
@@ -239,6 +246,8 @@ export interface VarianceCalculationInput {
   counts: RawCountLine[];
   productMeta: Record<number, ProductMeta>;
   filters: StockMovementVarianceFilters;
+  /** Branch label for this run; the view sometimes returns movements without one. */
+  scopeBranchName?: string;
   /** Document numbers voided after posting; excluded from every balance. */
   voidedDocuments: Set<string>;
   /** Serials known to the asset register, used to validate counted serials. */
@@ -253,7 +262,8 @@ export interface VarianceCalculationInput {
 export function buildVarianceRows(
   input: VarianceCalculationInput
 ): { rows: StockMovementVarianceRow[]; excluded: SupportingDocument[] } {
-  const { movements, counts, productMeta, filters, voidedDocuments, knownSerials } = input;
+  const { movements, counts, productMeta, filters, scopeBranchName, voidedDocuments, knownSerials } =
+    input;
 
   const startMs = dayBoundaryUtcMs(filters.startDate, false);
   const endMs = dayBoundaryUtcMs(filters.endDate, true);
@@ -278,6 +288,8 @@ export function buildVarianceRows(
         docNo: entry.docNo,
         docType: entry.docType,
         ts: entry.timeMs === null ? "" : new Date(entry.timeMs).toISOString(),
+        branchId: entry.branchId || num(filters.branchId),
+        branchName: entry.branchName || scopeBranchName || "",
         inBase: entry.inBase,
         outBase: entry.outBase,
         countAdjustment: entry.restatement,
@@ -404,6 +416,8 @@ export function buildVarianceRows(
         docNo: entry.docNo,
         docType: entry.docType,
         ts: new Date(entry.timeMs ?? 0).toISOString(),
+        branchId: entry.branchId || num(filters.branchId),
+        branchName: entry.branchName || scopeBranchName || "",
         inBase: entry.inBase,
         outBase: entry.outBase,
         countAdjustment: entry.restatement,
@@ -415,6 +429,11 @@ export function buildVarianceRows(
       governing?.line.branchId ??
       num(filters.branchId);
 
+    const rowBranchName =
+      productMovements.find((entry) => entry.branchName)?.branchName ??
+      scopeBranchName ??
+      displayBranchName(governing?.line.branchId);
+
     rows.push({
       productId,
       productCode: meta?.productCode ?? null,
@@ -423,9 +442,7 @@ export function buildVarianceRows(
         productMovements.find((entry) => entry.productName)?.productName ||
         `Product #${productId}`,
       branchId,
-      branchName:
-        productMovements.find((entry) => entry.branchName)?.branchName ??
-        displayBranchName(governing?.line.branchId),
+      branchName: rowBranchName,
       categoryName: meta?.categoryName ?? null,
       unitCount,
       openingBalance,
@@ -453,6 +470,8 @@ export function buildVarianceRows(
     const aVar = Math.abs(a.variance ?? 0);
     const bVar = Math.abs(b.variance ?? 0);
     if (aVar !== bVar) return bVar - aVar;
+    const branchOrder = a.branchName.localeCompare(b.branchName);
+    if (branchOrder !== 0) return branchOrder;
     return a.productName.localeCompare(b.productName);
   });
 
@@ -514,13 +533,11 @@ export function summariseKpis(
  */
 export function filterRows(
   rows: StockMovementVarianceRow[],
-  query: string,
-  onlyExceptions: boolean
+  query: string
 ): StockMovementVarianceRow[] {
   const needle = query.trim().toLowerCase();
+  if (!needle) return rows;
   return rows.filter((row) => {
-    if (onlyExceptions && row.exceptionCodes.length === 0) return false;
-    if (!needle) return true;
     return (
       row.productName.toLowerCase().includes(needle) ||
       (row.productCode ?? "").toLowerCase().includes(needle) ||
@@ -528,6 +545,41 @@ export function filterRows(
       row.branchName.toLowerCase().includes(needle)
     );
   });
+}
+
+/**
+ * Formats any source timestamp as a Philippines wall-clock reading. The ledger
+ * and Directus both store PH local time without an offset, so displaying the
+ * raw value (or its UTC form) would misdate every document by eight hours.
+ */
+export function formatPhDateTime(value: string | number | null | undefined): string {
+  const ms = toUtcMs(value);
+  if (ms === null) return "—";
+  const ph = new Date(ms + PH_OFFSET_MS);
+  const month = MONTH_ABBR[ph.getUTCMonth()];
+  const day = String(ph.getUTCDate()).padStart(2, "0");
+  const hour = String(ph.getUTCHours()).padStart(2, "0");
+  const minute = String(ph.getUTCMinutes()).padStart(2, "0");
+  return `${day} ${month} ${ph.getUTCFullYear()} ${hour}:${minute}`;
+}
+
+/**
+ * The label a product is shown under, everywhere in this report.
+ *
+ * ids-guide rule: `products.description` is the name operators read; the master
+ * `product_name` is only the key the movements ledger is queried with, so it is
+ * never what the screen displays. Values are taken in priority order and empty
+ * or missing ones fall through, finally returning "".
+ */
+export function productDisplayName(...parts: unknown[]): string {
+  for (const part of parts) {
+    // Only text (or a numeric code) can name a product; booleans, objects and
+    // nulls are skipped rather than stringified into a label.
+    if (typeof part !== "string" && typeof part !== "number") continue;
+    const value = String(part).trim();
+    if (value) return value;
+  }
+  return "";
 }
 
 /**

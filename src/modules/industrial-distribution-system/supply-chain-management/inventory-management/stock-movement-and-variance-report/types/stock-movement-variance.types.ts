@@ -18,8 +18,18 @@
 export interface StockMovementVarianceFilters {
   startDate: string; // YYYY-MM-DD, period opening boundary
   endDate: string; // YYYY-MM-DD, reporting cutoff
-  branchId?: number | string; // Required for a meaningful ledger
+  branchId?: number | string; // Omitted or empty means every branch in scope
   categoryId?: number | string;
+  /**
+   * Product master id. This is what the picker actually selects: product NAMES
+   * are not unique in this schema, so a name could never identify one product.
+   */
+  productId?: number | string;
+  /**
+   * The product name the movements view was queried with, resolved by the BFF
+   * from `productId`. Echoed back for display; the ledger view only accepts a
+   * name, so narrowing to the chosen product id happens after reconciliation.
+   */
   productName?: string;
 }
 
@@ -76,6 +86,8 @@ export interface SupportingDocument {
   docNo: string;
   docType: string;
   ts: string;
+  branchId: number;
+  branchName: string;
   inBase: number;
   outBase: number;
   /** Variance restatement applied by a Physical Inventory document, in base units. */
@@ -160,7 +172,10 @@ export interface StockMovementVarianceReportResponse {
   ok: true;
   generatedAt: string;
   filters: StockMovementVarianceFilters;
+  /** Resolved branch name, or null when the scope is every branch. */
   branchName: string | null;
+  /** How many branches were actually reconciled; fewer than the scope when a ledger call failed. */
+  branchesReconciled: number;
   /** Documents excluded because a later void reversed them. Kept for audit visibility. */
   excludedDocuments: SupportingDocument[];
   rows: StockMovementVarianceRow[];

@@ -67,23 +67,22 @@ export function StockMovementVarianceKPIs() {
   const { report, isLoading } = useStockMovementVarianceReport();
   const kpis = report?.kpis;
 
+  // Nothing has been applied yet: the results table carries the prompt, so the
+  // band stays out of the way rather than showing figures that do not exist.
+  if (!kpis && !isLoading) return null;
+
   if (!kpis) {
     return (
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {Array.from({ length: 5 }, (_, index) => (
-          <div
-            key={index}
-            className={`h-[78px] animate-pulse rounded-xl border bg-muted/40 ${
-              isLoading ? "" : "opacity-60"
-            }`}
-          />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        {Array.from({ length: 8 }, (_, index) => (
+          <div key={index} className="h-[78px] animate-pulse rounded-xl border bg-muted/40" />
         ))}
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
       <KpiCard
         icon={Hash}
         label="Reconciled lines"

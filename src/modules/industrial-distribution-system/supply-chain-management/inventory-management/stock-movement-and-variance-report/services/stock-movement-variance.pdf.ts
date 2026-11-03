@@ -7,6 +7,7 @@
 
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { formatPhDateTime } from "./stock-movement-variance.calc";
 import type { StockMovementVarianceReportResponse } from "../types/stock-movement-variance.types";
 
 /** Renders a base-unit figure, keeping uncounted lines explicit. */
@@ -45,7 +46,13 @@ export function exportStockMovementVarianceToPdf(
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
-  doc.text(`Branch: ${report.branchName ?? String(report.filters.branchId ?? "Not specified")}`, 32, 70);
+  doc.text(
+    `Branch scope: ${
+      report.branchName ?? `All branches (${report.branchesReconciled} reconciled)`
+    }`,
+    32,
+    70
+  );
   doc.text(
     `Period: ${report.filters.startDate} to ${report.filters.endDate} (reporting cutoff)`,
     32,
@@ -92,6 +99,7 @@ export function exportStockMovementVarianceToPdf(
     head: [
       [
         "Product",
+        "Branch",
         "Opening",
         "In",
         "Out",
@@ -106,6 +114,7 @@ export function exportStockMovementVarianceToPdf(
     ],
     body: report.rows.map((row) => [
       row.productCode ? `${row.productCode} ${row.productName}` : row.productName,
+      row.branchName || `#${row.branchId}`,
       qty(row.openingBalance),
       qty(row.periodIn),
       qty(row.periodOut),
@@ -114,23 +123,24 @@ export function exportStockMovementVarianceToPdf(
       signed(row.variance),
       row.variancePercent === null ? "—" : `${Math.round(row.variancePercent * 10) / 10}%`,
       row.countDocNo ?? "—",
-      row.countCutoffDate ?? "—",
+      row.countCutoffDate ? formatPhDateTime(row.countCutoffDate) : "—",
       row.exceptionCodes.join(", ") || "None",
     ]),
     theme: "striped",
     styles: { fontSize: 7, cellPadding: 2.5 },
     headStyles: { fillColor: [30, 58, 108] },
     columnStyles: {
-      0: { cellWidth: 170 },
-      1: { halign: "right" },
+      0: { cellWidth: 150 },
+      1: { cellWidth: 80 },
       2: { halign: "right" },
       3: { halign: "right" },
       4: { halign: "right" },
       5: { halign: "right" },
       6: { halign: "right" },
       7: { halign: "right" },
-      9: { cellWidth: 60 },
-      10: { cellWidth: 100 },
+      8: { halign: "right" },
+      10: { cellWidth: 62 },
+      11: { cellWidth: 90 },
     },
   });
 
@@ -146,8 +156,8 @@ export function exportStockMovementVarianceToPdf(
 
   const reversalRows = report.excludedDocuments.map((item) => [
     "Void reversal",
-    item.docType,
-    item.docNo,
+    item.branchName || "—",
+    `${item.docType} ${item.docNo}`,
     `Excluded: in ${qty(item.inBase)} / out ${qty(item.outBase)}`,
   ]);
 
