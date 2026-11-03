@@ -6,7 +6,7 @@
 // - Dynamic "Select All" / "Unselect All" toggle
 // - In-dropdown "Reset" button to restore all options
 // - Real-time client-side search filtering
-// - Checkboxes with count badges on trigger
+// - Checkboxes, with the selected count shown once in the trigger label
 // - Full comments left behind for long-term maintainability (AG-COMMENT)
 // ==============================================================================
 
@@ -22,7 +22,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 
 export interface UtilizationMultiSelectOption {
   value: string;
@@ -103,7 +102,8 @@ export function UtilizationMultiSelect({
     onSelectionChange([]);
   };
 
-  // Trigger button summary text
+  // AG-COMMENT: The summary text is the only place the selected count appears; a separate
+  // badge repeated the same number next to "N of M" (same rule as ReportFilterLookup).
   const triggerText = React.useMemo(() => {
     if (options.length === 0) return placeholder;
     if (isAllSelected) return `All ${unitLabel} (${options.length})`;
@@ -133,14 +133,6 @@ export function UtilizationMultiSelect({
             {triggerText}
           </span>
           <div className="flex items-center gap-1.5 shrink-0">
-            {!isAllSelected && !isNoneSelected && (
-              <Badge
-                variant="secondary"
-                className="h-5 px-1.5 text-[10px] font-semibold bg-primary/10 text-primary"
-              >
-                {selectedValues.length}
-              </Badge>
-            )}
             {!isAllSelected && (
               <span
                 role="button"
