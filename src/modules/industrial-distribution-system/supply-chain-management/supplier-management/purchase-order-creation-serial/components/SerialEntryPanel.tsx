@@ -54,6 +54,8 @@ export function SerialEntryPanel({ line, isReadOnly, onAddSerial, onRemoveDraft 
     const totalEntered = line.savedSerials.length + line.draftSerials.length;
     const required = line.orderedQty;
     const status = getStatus(totalEntered, required);
+    // Developer comment: Exact 1:1 quantity enforcement. Hard-lock inputs the exact moment entered count reaches or exceeds ordered qty.
+    const isAtLimit = totalEntered >= required && required > 0;
 
     // Border color by status
     const borderClass = {
@@ -66,6 +68,14 @@ export function SerialEntryPanel({ line, isReadOnly, onAddSerial, onRemoveDraft 
     const commitSerial = React.useCallback(async (raw: string) => {
         const sn = raw.trim();
         if (!sn) return;
+
+        // Developer comment: Hard guard to reject additional entries when count matches or exceeds ordered quantity (exact 1:1)
+        const currentTotal = line.savedSerials.length + line.draftSerials.length;
+        if (currentTotal >= line.orderedQty) {
+            toast.error(`Ordered quantity (${line.orderedQty}) reached. Cannot add more serials.`);
+            setInputValue("");
+            return;
+        }
 
         // Local duplicate check (saved + draft)
         const existing = [
@@ -122,7 +132,7 @@ export function SerialEntryPanel({ line, isReadOnly, onAddSerial, onRemoveDraft 
         } finally {
             setIsValidating(false);
         }
-    }, [line.savedSerials, line.draftSerials, line.productId, line.productName, line.lineId, onAddSerial]);
+    }, [line.savedSerials, line.draftSerials, line.productId, line.productName, line.lineId, line.orderedQty, onAddSerial]);
 
     // ── Keyboard: Enter submits ────────────────────────────────────────────────
     const handleKeyDown = React.useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -136,11 +146,20 @@ export function SerialEntryPanel({ line, isReadOnly, onAddSerial, onRemoveDraft 
     const processBulkTokens = React.useCallback(async (tokens: string[]) => {
         if (tokens.length === 0) return;
 
+        // Developer comment: Check remaining slots to prevent over-tagging during bulk paste
+        const currentTotal = line.savedSerials.length + line.draftSerials.length;
+        const availableSlots = Math.max(0, line.orderedQty - currentTotal);
+        if (availableSlots <= 0) {
+            toast.error(`Ordered quantity (${line.orderedQty}) already reached for "${line.productName}".`);
+            return;
+        }
+
         setIsValidating(true);
         let added = 0;
         let skipped = 0;
         try {
             for (const t of tokens) {
+                if (added >= availableSlots) break;
                 const sn = t.trim();
                 if (!sn) continue;
                 const existing = [
@@ -167,6 +186,9 @@ export function SerialEntryPanel({ line, isReadOnly, onAddSerial, onRemoveDraft 
                 if (skipped > 0) {
                     desc += ` Skipped ${skipped} non-EMPTY.`;
                 }
+                if (tokens.length > availableSlots) {
+                    desc += ` Capped at ordered quantity limit (${line.orderedQty}).`;
+                }
                 toast.success(desc);
             } else {
                 toast.warning(skipped > 0 ? `Skipped ${skipped} non-EMPTY serials.` : "No valid serials added.");
@@ -175,7 +197,7 @@ export function SerialEntryPanel({ line, isReadOnly, onAddSerial, onRemoveDraft 
         } finally {
             setIsValidating(false);
         }
-    }, [line.savedSerials, line.draftSerials, line.productId, line.lineId, onAddSerial]);
+    }, [line.savedSerials, line.draftSerials, line.productId, line.lineId, line.productName, line.orderedQty, onAddSerial]);
 
     const handlePaste = React.useCallback(async (e: React.ClipboardEvent<HTMLInputElement>) => {
         const pasted = e.clipboardData.getData("text");
@@ -261,11 +283,11 @@ export function SerialEntryPanel({ line, isReadOnly, onAddSerial, onRemoveDraft 
                             onChange={(e) => setInputValue(e.target.value)}
                             onKeyDown={handleKeyDown}
                             onPaste={handlePaste}
-                            placeholder={isValidating ? "Validating…" : "Scan or type serial number, then press Enter…"}
+                            placeholder={isValidating ? "Validating…" : isAtLimit ? `Ordered quantity reached (${line.orderedQty}/${line.orderedQty})` : "Scan or type serial number, then press Enter…"}
                             className="pl-9 pr-8 h-9 text-xs font-mono"
                             autoComplete="off"
                             spellCheck={false}
-                            disabled={isValidating || status === "complete" || isReadOnly}
+                            disabled={isValidating || isAtLimit || isReadOnly}
                         />
                         {isValidating && (
                             <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -284,7 +306,7 @@ export function SerialEntryPanel({ line, isReadOnly, onAddSerial, onRemoveDraft 
                         size="icon"
                         className="h-9 w-9 shrink-0"
                         onClick={() => commitSerial(inputValue)}
-                        disabled={!inputValue.trim() || isValidating || status === "complete" || isReadOnly}
+                        disabled={!inputValue.trim() || isValidating || isAtLimit || isReadOnly}
                     >
                         <Plus className="h-4 w-4" />
                     </Button>
@@ -297,7 +319,7 @@ export function SerialEntryPanel({ line, isReadOnly, onAddSerial, onRemoveDraft 
                         className="h-9 w-9 shrink-0"
                         onClick={handleManualPaste}
                         title="Paste serials from clipboard (newline/comma separated)"
-                        disabled={isValidating || status === "complete" || isReadOnly}
+                        disabled={isValidating || isAtLimit || isReadOnly}
                     >
                         <ClipboardPaste className="h-4 w-4" />
                     </Button>
