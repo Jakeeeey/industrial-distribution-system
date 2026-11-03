@@ -279,7 +279,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // 2. Fetch Branches (division_id = 1 for Industrial)
     // AG-COMMENT: Restrict branch queries strictly to Industrial Division (division_id = 1)
     const branchRows = await fetchRows<BranchRow>(
-      `${directusBase}/items/branches?fields=id,branch_name,branch_code&filter[division_id][_eq]=1&limit=-1`,
+      `${directusBase}/items/branches?fields=id,branch_name,branch_code&filter[isActive][_eq]=1&filter[division_id][_eq]=1&limit=-1`,
       headers
     );
     const branchMap = new Map<number, string>();
@@ -352,6 +352,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     });
 
     // 6. Fetch Products catalog for distinguishing Serialized Cylinder Asset Issuances vs Refill Swaps
+    // AG-FILTER: not narrowed by isActive/is_serialized — isCylinderIssuanceProduct
+    // and the custody gates read these flags per row, so a scoped map would make an
+    // ineligible product look unknown and take the opposite branch.
     const prodQuery = `${directusBase}/items/products?fields=product_id,product_code,product_name,description,is_serialized&limit=-1`;
     const rawProducts = await fetchRows<ProductRow>(prodQuery, headers);
     const productCatalogMap = new Map<number, ProductRow>();
@@ -741,7 +744,7 @@ async function handleCustomerDetailDrillDown(
     // 2. Fetch Branches Directory for accurate branch name resolution (division_id = 1 for Industrial)
     // AG-COMMENT: Restrict branch queries strictly to Industrial Division (division_id = 1)
     const branchRows = await fetchRows<BranchRow>(
-      `${directusBase}/items/branches?fields=id,branch_name,branch_code&filter[division_id][_eq]=1&limit=-1`,
+      `${directusBase}/items/branches?fields=id,branch_name,branch_code&filter[isActive][_eq]=1&filter[division_id][_eq]=1&limit=-1`,
       headers
     );
     const branchMap = new Map<number, string>();
@@ -851,7 +854,7 @@ async function handleCustomerDetailDrillDown(
 
     // 7b. Fetch Customer LPG Sites (for site name and manifold address)
     const customerSites = await fetchRows<LpgCustomerSiteRow>(
-      `${directusBase}/items/lpg_customer_lpg_sites?fields=id,customer_code,site_name,site_address&filter[_or][0][customer_code][_eq]=${encodeURIComponent(cust.customer_code.trim())}&filter[_or][1][customer_code][_icontains]=${encodeURIComponent(cleanKey)}&limit=-1`,
+      `${directusBase}/items/lpg_customer_lpg_sites?fields=id,customer_code,site_name,site_address&filter[is_active][_neq]=0&filter[_or][0][customer_code][_eq]=${encodeURIComponent(cust.customer_code.trim())}&filter[_or][1][customer_code][_icontains]=${encodeURIComponent(cleanKey)}&limit=-1`,
       headers
     );
     const matchedSite = customerSites.find((s) => normalizeCode(s.customer_code) === cleanKey);
