@@ -756,18 +756,30 @@ export async function POST(req: NextRequest) {
             const { serialNumber } = body;
             if (!serialNumber) return bad("Missing serialNumber", 400);
 
-            // Check cylinder_assets
-            const caUrl = `${base}/items/cylinder_assets?limit=1&filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&fields=id,cylinder_status,cylinder_condition,tare_weight,expiration_date`;
+            // Developer comment: Enforce strict case-sensitive matching for serial number validation
+            const targetSerial = String(serialNumber).trim();
+
+            // Check cylinder_assets and cylinder_assets_draft with strict case-sensitive in-memory filter
+            const caUrl = `${base}/items/cylinder_assets?limit=5&filter[serial_number][_eq]=${encodeURIComponent(targetSerial)}&fields=id,serial_number,cylinder_status,cylinder_condition,tare_weight,expiration_date`;
             const caJ = await fetchJson<{ data: Array<Record<string, unknown>> }>(caUrl).catch(() => null);
-            const caExists = (caJ?.data && caJ.data.length > 0);
-            const ca = caExists ? caJ.data[0] : null;
+            let exactCaMatch = (caJ?.data || []).find(a => String(a.serial_number || "").trim() === targetSerial);
+
+            // Also check cylinder_assets_draft for any in-flight registrations with exact case
+            if (!exactCaMatch) {
+                const draftCaUrl = `${base}/items/cylinder_assets_draft?limit=5&filter[serial_number][_eq]=${encodeURIComponent(targetSerial)}&fields=id,serial_number,cylinder_status,cylinder_condition,tare_weight,expiration_date`;
+                const draftCaJ = await fetchJson<{ data: Array<Record<string, unknown>> }>(draftCaUrl).catch(() => null);
+                exactCaMatch = (draftCaJ?.data || []).find(a => String(a.serial_number || "").trim() === targetSerial);
+            }
+
+            const caExists = !!exactCaMatch;
+            const ca = exactCaMatch || null;
 
             if (body.poType === "NORMAL") {
                 let sohExists = false;
                 const SPRING_API_BASE_URL = process.env.SPRING_API_BASE_URL || "";
                 if (SPRING_API_BASE_URL) {
                     const userToken = req.cookies.get("vos_access_token")?.value || req.headers.get("Authorization")?.replace("Bearer ", "") || "";
-                    const filterUrl = `${SPRING_API_BASE_URL.replace(/\/$/, "")}/api/v-serial-onhand/filter?serialNumber=${encodeURIComponent(serialNumber)}`;
+                    const filterUrl = `${SPRING_API_BASE_URL.replace(/\/$/, "")}/api/v-serial-onhand/filter?serialNumber=${encodeURIComponent(targetSerial)}`;
 
                     try {
                         const springRes = await fetch(filterUrl, {
@@ -779,31 +791,38 @@ export async function POST(req: NextRequest) {
                         if (springRes.ok) {
                             const data = await springRes.json();
                             const results = (Array.isArray(data) ? data : (data && typeof data === "object") ? (Array.isArray((data as Record<string, unknown>).v_serial_onhand) ? (data as Record<string, unknown>).v_serial_onhand : (Array.isArray((data as Record<string, unknown>).content) ? (data as Record<string, unknown>).content : (Array.isArray((data as Record<string, unknown>).data) ? (data as Record<string, unknown>).data : [data]))) : []) as Record<string, unknown>[];
-                            const exactMatch = results.find((item: Record<string, unknown>) => String(item.serialNumber || item.serial_number || "").toUpperCase() === String(serialNumber).trim().toUpperCase());
+                            // Developer comment: Case-sensitive match; lowercase vs uppercase must not match
+                            const exactMatch = results.find((item: Record<string, unknown>) => String(item.serialNumber || item.serial_number || "").trim() === targetSerial);
                             sohExists = !!exactMatch;
                         }
                     } catch (err) {
                         console.error("[validate_serial] Spring API onhand check failed:", err);
                     }
                 } else {
-                    const sohUrl = `${base}/items/v_serial_onhand?limit=1&filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&fields=serial_number`;
+                    const sohUrl = `${base}/items/v_serial_onhand?limit=5&filter[serial_number][_eq]=${encodeURIComponent(targetSerial)}&fields=serial_number`;
                     const sohJ = await fetchJson<{ data: Array<Record<string, unknown>> }>(sohUrl).catch(() => null);
-                    sohExists = !!(sohJ?.data && sohJ.data.length > 0);
+                    // Developer comment: Case-sensitive check against Directus fallback view
+                    sohExists = !!(sohJ?.data || []).some(item => String(item.serial_number || "").trim() === targetSerial);
                 }
 
                 if (sohExists) {
                     return ok({ status: "REJECTED", message: "Serial Number is already on hand." });
                 }
 
+                // Developer comment: In Normal PO receiving, duplicate serial numbers from cylinder_assets must be rejected.
+                // New cylinders being received cannot reuse an existing serial number from the cylinder asset master DB.
                 if (caExists) {
-                    if (String(ca?.cylinder_status).toUpperCase() === "AVAILABLE" && String(ca?.cylinder_condition).toUpperCase() === "GOOD") {
-                        return ok({ 
-                            status: "ACCEPTED",
+                    return ok({ 
+                        status: "REJECTED", 
+                        message: `Serial Number "${serialNumber}" already exists in the Cylinder Asset master database and cannot be received as a new asset.`,
+                        asset: {
+                            id: ca?.id,
+                            status: ca?.cylinder_status,
+                            condition: ca?.cylinder_condition,
                             tareWeight: ca?.tare_weight || "",
-                            expiryDate: ca?.expiration_date || ""
-                        });
-                    }
-                    return ok({ status: "REJECTED", message: "Serial Number exists but is unavailable." });
+                            expirationDate: ca?.expiration_date || ""
+                        }
+                    });
                 }
 
                 return ok({ status: "REQUIRES_REGISTRATION" });
@@ -1295,7 +1314,9 @@ export async function POST(req: NextRequest) {
                             const inQuery = chunk.map(s => encodeURIComponent(s)).join(',');
                             const ext2 = await fetchJson<{ data: Array<{ receiving_item_id: number; serial_number: string; purchase_order_receiving_id?: Record<string, unknown> | number | string }> }>(`${base}/items/purchase_order_receiving_serial?filter[serial_number][_in]=${inQuery}&fields=receiving_item_id,serial_number,purchase_order_receiving_id.purchase_order_product_id,purchase_order_receiving_id.receipt_no`).catch(() => null);
                             if (ext2?.data) {
-                                for (const row of ext2.data) {
+                                // Developer comment: Enforce strict case-sensitive matching; database collation must not falsely associate t1 with T1
+                                const caseMatchedRows = ext2.data.filter(row => incomingSnList.includes(String(row.serial_number).trim()));
+                                for (const row of caseMatchedRows) {
                                     if (!existingRows.some(r => r.receiving_item_id === row.receiving_item_id)) {
                                         existingRows.push(row);
                                     }
@@ -1304,7 +1325,7 @@ export async function POST(req: NextRequest) {
                         }
                     }
 
-                    // 2.5 Guard against stealing serials from other receipts
+                    // 2.5 Guard against stealing serials from other receipts (strictly case-sensitive)
                     for (const row of existingRows) {
                         const existingPor = row.purchase_order_receiving_id;
                         const existingPorId = typeof existingPor === 'object' ? existingPor?.purchase_order_product_id : existingPor;
@@ -1312,7 +1333,10 @@ export async function POST(req: NextRequest) {
 
                         if (Number(existingPorId) !== Number(targetPorId)) {
                             if (existingReceiptNo && existingReceiptNo !== receiptNo) {
-                                throw new Error(`Serial ${row.serial_number} already belongs to receipt ${existingReceiptNo}. Cannot re-receive.`);
+                                // Strict verification that incoming serial actually equals row.serial_number
+                                if (incomingMap.has(String(row.serial_number).trim())) {
+                                    throw new Error(`Serial ${row.serial_number} already belongs to receipt ${existingReceiptNo}. Cannot re-receive.`);
+                                }
                             }
                         }
                     }
@@ -1776,26 +1800,28 @@ export async function POST(req: NextRequest) {
                 const allPorIds = (allPorJ?.data ?? []).map(r => r.purchase_order_product_id);
 
                 if (allPorIds.length > 0) {
-                    const taggedUrl = `${base}/items/purchase_order_serial?limit=1&filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&filter[purchase_order_product_id][_in]=${allPorIds.join(",")}&fields=id,serial_number,product_id,purchase_order_product_id`;
+                    const taggedUrl = `${base}/items/purchase_order_serial?limit=5&filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&filter[purchase_order_product_id][_in]=${allPorIds.join(",")}&fields=id,serial_number,product_id,purchase_order_product_id`;
                     const taggedJ = await fetchJson<{ data: { id: number; serial_number: string; product_id: number; purchase_order_product_id: number }[] }>(taggedUrl).catch(() => null);
 
-                    if (taggedJ?.data?.length) {
-                        const matched = taggedJ.data[0];
+                    // Developer comment: Case-sensitive match for tagged serials
+                    const matched = (taggedJ?.data || []).find(r => String(r.serial_number).trim() === String(serialNumber).trim());
+                    if (matched) {
                         return ok({
                             valid: true,
                             source: "tagged",
-                            serial: serialNumber,
+                            serial: matched.serial_number,
                             purchaseOrderProductId: matched.purchase_order_product_id
                         });
                     }
                 }
             }
 
-            // Step 2: Check cylinder_assets
-            const assetUrl = `${base}/items/cylinder_assets?limit=1&filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&filter[is_deleted][_eq]=0&fields=id,serial_number,product_id,cylinder_status,cylinder_condition,tare_weight,expiration_date,current_supplier_id`;
+            // Step 2: Check cylinder_assets with case-sensitive matching
+            const assetUrl = `${base}/items/cylinder_assets?limit=5&filter[serial_number][_eq]=${encodeURIComponent(serialNumber)}&filter[is_deleted][_eq]=0&fields=id,serial_number,product_id,cylinder_status,cylinder_condition,tare_weight,expiration_date,current_supplier_id`;
             const assetJ = await fetchJson<{ data: Record<string, unknown>[] }>(assetUrl).catch(() => null);
-            if (assetJ?.data?.length) {
-                const asset = assetJ.data[0];
+            const matchedAsset = (assetJ?.data || []).find(a => String(a.serial_number).trim() === String(serialNumber).trim());
+            if (matchedAsset) {
+                const asset = matchedAsset;
                 return ok({
                     valid: true,
                     source: "asset",

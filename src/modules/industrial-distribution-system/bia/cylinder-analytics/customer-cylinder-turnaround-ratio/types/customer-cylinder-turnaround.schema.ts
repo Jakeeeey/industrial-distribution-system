@@ -24,8 +24,9 @@ export const CustomerCylinderTurnaroundFilterSchema = z.object({
   periodEndMonth: z.coerce.number().min(1).max(12).default(10),
   branchId: z.coerce.number().optional().or(z.literal("")),
   customerCode: z.string().optional(),
+  // Added UNMONITORED to schema enum for filter selection
   grade: z
-    .enum(["ALL", "CTR_4", "CTR_6", "CTR_8", "SUB_STANDARD", "BASE_ZERO"])
+    .enum(["ALL", "CTR_4", "CTR_6", "CTR_8", "SUB_STANDARD", "BASE_ZERO", "UNMONITORED"])
     .optional()
     .default("ALL"),
   status: z

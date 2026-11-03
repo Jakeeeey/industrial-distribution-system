@@ -4,6 +4,7 @@
 // Columns: Customer, Period, Cylinder Base, RO Qty, Deposit Qty, Annual Turns,
 // Months/Turn, Grade Badge, Eligible 11kg Refill, Incentive Rate, Total Incentive, and Actions.
 // Features full pagination (default 10 rows), page size selector, and jump navigation.
+// Displays '—' for months/turn when account is Unmonitored (0 circulation) or Base = 0.
 // ──────────────────────────────────────────────────────────────────────────────
 
 "use client";
@@ -231,111 +232,115 @@ export function CustomerCylinderTurnaroundTable() {
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedItems.map((item) => (
-                  <TableRow
-                    key={item.id}
-                    onClick={() => setSelectedItem(item)}
-                    className="cursor-pointer transition-colors hover:bg-muted/50"
-                  >
-                    {/* Customer */}
-                    <TableCell className="py-2.5">
-                      <div className="font-medium text-xs text-foreground">
-                        {item.customerName}
-                      </div>
-                      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                        <span className="font-mono">{item.customerCode}</span>
-                        <span>•</span>
-                        <span>{item.branchName}</span>
-                      </div>
-                    </TableCell>
+                paginatedItems.map((item) => {
+                  const isDormantOrZero = item.isBaseZero || item.grade === "UNMONITORED" || item.annualTurns === 0;
 
-                    {/* Cylinder Base */}
-                    <TableCell className="text-right py-2.5">
-                      {item.isBaseZero ? (
-                        <span className="inline-flex items-center gap-1 text-rose-600 dark:text-rose-400 font-semibold text-xs">
-                          <AlertCircle className="h-3 w-3" />
-                          0
-                        </span>
-                      ) : (
-                        <span className="font-mono text-xs font-medium">
-                          {item.cylinderBase}
-                        </span>
-                      )}
-                    </TableCell>
-
-                    {/* RO Qty */}
-                    <TableCell className="text-right py-2.5 font-mono text-xs text-muted-foreground">
-                      {item.repeatOrderQty}
-                    </TableCell>
-
-                    {/* Deposit Qty */}
-                    <TableCell className="text-right py-2.5 font-mono text-xs text-muted-foreground">
-                      {item.depositCylinderQty}
-                    </TableCell>
-
-                    {/* Annual Turns */}
-                    <TableCell className="text-right py-2.5 font-mono text-xs font-bold text-foreground">
-                      {item.isBaseZero ? "—" : `${item.annualTurns}x`}
-                    </TableCell>
-
-                    {/* Months Per Turn */}
-                    <TableCell className="text-right py-2.5 font-mono text-xs">
-                      {item.isBaseZero ? "—" : `${item.monthsPerTurn} mos`}
-                    </TableCell>
-
-                    {/* Grade Badge */}
-                    <TableCell className="text-center py-2.5">
-                      <CTRGradeBadge grade={item.grade} />
-                    </TableCell>
-
-                    {/* Eligible 11kg Refills */}
-                    <TableCell className="text-right py-2.5">
-                      <div className="font-mono text-xs font-medium">
-                        {item.eligibleRefill11kgQty} pcs
-                      </div>
-                      <div className="text-[10px] text-muted-foreground">
-                        {item.eligibleKilograms} kg
-                      </div>
-                    </TableCell>
-
-                    {/* Rate per kg */}
-                    <TableCell className="text-right py-2.5 font-mono text-xs text-muted-foreground">
-                      {item.incentiveRatePerKg > 0 ? `₱${item.incentiveRatePerKg}/kg` : "—"}
-                    </TableCell>
-
-                    {/* Total Incentive */}
-                    <TableCell className="text-right py-2.5">
-                      <div className="font-mono text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                        {item.totalIncentiveAmount > 0
-                          ? `₱${item.totalIncentiveAmount.toLocaleString(undefined, {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}`
-                          : "₱0.00"}
-                      </div>
-                      {item.incentivePerRefill > 0 && (
-                        <div className="text-[10px] text-muted-foreground">
-                          ₱{item.incentivePerRefill}/refill
+                  return (
+                    <TableRow
+                      key={item.id}
+                      onClick={() => setSelectedItem(item)}
+                      className="cursor-pointer transition-colors hover:bg-muted/50"
+                    >
+                      {/* Customer */}
+                      <TableCell className="py-2.5">
+                        <div className="font-medium text-xs text-foreground">
+                          {item.customerName}
                         </div>
-                      )}
-                    </TableCell>
+                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <span className="font-mono">{item.customerCode}</span>
+                          <span>•</span>
+                          <span>{item.branchName}</span>
+                        </div>
+                      </TableCell>
 
-                    {/* Action / View */}
-                    <TableCell className="text-center py-2.5">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedItem(item);
-                        }}
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
+                      {/* Cylinder Base */}
+                      <TableCell className="text-right py-2.5">
+                        {item.isBaseZero ? (
+                          <span className="inline-flex items-center gap-1 text-rose-600 dark:text-rose-400 font-semibold text-xs">
+                            <AlertCircle className="h-3 w-3" />
+                            0
+                          </span>
+                        ) : (
+                          <span className="font-mono text-xs font-medium">
+                            {item.cylinderBase}
+                          </span>
+                        )}
+                      </TableCell>
+
+                      {/* RO Qty */}
+                      <TableCell className="text-right py-2.5 font-mono text-xs text-muted-foreground">
+                        {item.repeatOrderQty}
+                      </TableCell>
+
+                      {/* Deposit Qty */}
+                      <TableCell className="text-right py-2.5 font-mono text-xs text-muted-foreground">
+                        {item.depositCylinderQty}
+                      </TableCell>
+
+                      {/* Annual Turns */}
+                      <TableCell className="text-right py-2.5 font-mono text-xs font-bold text-foreground">
+                        {item.isBaseZero ? "—" : `${item.annualTurns}x`}
+                      </TableCell>
+
+                      {/* Months Per Turn: Avoid 99.9 fallback on unmonitored / 0 turnover */}
+                      <TableCell className="text-right py-2.5 font-mono text-xs text-muted-foreground">
+                        {isDormantOrZero ? "—" : `${item.monthsPerTurn} mos`}
+                      </TableCell>
+
+                      {/* Grade Badge */}
+                      <TableCell className="text-center py-2.5">
+                        <CTRGradeBadge grade={item.grade} />
+                      </TableCell>
+
+                      {/* Eligible 11kg Refills */}
+                      <TableCell className="text-right py-2.5">
+                        <div className="font-mono text-xs font-medium">
+                          {item.eligibleRefill11kgQty} pcs
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          {item.eligibleKilograms} kg
+                        </div>
+                      </TableCell>
+
+                      {/* Rate per kg */}
+                      <TableCell className="text-right py-2.5 font-mono text-xs text-muted-foreground">
+                        {item.incentiveRatePerKg > 0 ? `₱${item.incentiveRatePerKg}/kg` : "—"}
+                      </TableCell>
+
+                      {/* Total Incentive */}
+                      <TableCell className="text-right py-2.5">
+                        <div className="font-mono text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                          {item.totalIncentiveAmount > 0
+                            ? `₱${item.totalIncentiveAmount.toLocaleString(undefined, {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}`
+                            : "₱0.00"}
+                        </div>
+                        {item.incentivePerRefill > 0 && (
+                          <div className="text-[10px] text-muted-foreground">
+                            ₱{item.incentivePerRefill}/refill
+                          </div>
+                        )}
+                      </TableCell>
+
+                      {/* Action / View */}
+                      <TableCell className="text-center py-2.5">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedItem(item);
+                          }}
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>

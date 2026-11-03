@@ -1,8 +1,8 @@
 // components/CustomerCylinderTurnaroundDrawer.tsx
 // ──────────────────────────────────────────────────────────────────────────────
-// Slide-over detail drawer for Customer Cylinder Turnaround Ratio (CTR) Module.
-// Displays customer profile, calculation math breakdown, underlying delivery & deposit orders,
-// and change audit logs.
+// Detail drawer panel for inspecting individual customer turnaround metrics,
+// underlying transaction documents, formula calculation steps, and audit history.
+// Displays contextual alerts for Zero Cylinder Base and Unmonitored Holding accounts.
 // ──────────────────────────────────────────────────────────────────────────────
 
 "use client";
@@ -11,9 +11,9 @@ import * as React from "react";
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
-  SheetDescription,
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -26,12 +26,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  FileText,
-  User,
+  Clock,
   Calculator,
+  Receipt,
   History,
-  CheckCircle2,
   AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 import { CTRGradeBadge } from "./CTRGradeBadge";
 import { useCustomerCylinderTurnaround } from "../providers/CustomerCylinderTurnaroundProvider";
@@ -41,71 +41,74 @@ export function CustomerCylinderTurnaroundDrawer() {
 
   if (!selectedItem) return null;
 
+  const isDormant = selectedItem.grade === "UNMONITORED" || (selectedItem.cylinderBase > 0 && selectedItem.totalCirculatingQty === 0);
+
   return (
-    <Sheet open={!!selectedItem} onOpenChange={(open) => !open && setSelectedItem(null)}>
-      <SheetContent
-        side="right"
-        className="w-full sm:max-w-xl p-0 flex flex-col bg-background text-foreground"
-      >
-        <SheetHeader className="p-5 border-b border-border/80 bg-card">
-          <div className="flex items-center justify-between gap-2">
-            <SheetTitle className="text-lg font-bold flex items-center gap-2">
-              <User className="h-5 w-5 text-primary" />
-              <span>{selectedItem.customerName}</span>
+    <Sheet open={Boolean(selectedItem)} onOpenChange={(open) => !open && setSelectedItem(null)}>
+      <SheetContent className="sm:max-w-xl w-full overflow-y-auto p-6 space-y-6">
+        <SheetHeader className="space-y-1 pb-4 border-b border-border/60">
+          <div className="flex items-center justify-between">
+            <SheetTitle className="text-lg font-bold text-foreground">
+              {selectedItem.customerName}
             </SheetTitle>
             <CTRGradeBadge grade={selectedItem.grade} />
           </div>
-          <SheetDescription className="text-xs flex items-center gap-2 text-muted-foreground">
+          <SheetDescription className="text-xs text-muted-foreground flex flex-wrap items-center gap-2">
             <span className="font-mono">{selectedItem.customerCode}</span>
             <span>•</span>
             <span>{selectedItem.branchName}</span>
-            <span>•</span>
-            <span>Period: {selectedItem.periodLabel}</span>
+            {selectedItem.storeName && (
+              <>
+                <span>•</span>
+                <span>{selectedItem.storeName}</span>
+              </>
+            )}
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
-          {/* Quick Metrics Banner */}
-          <div className="grid grid-cols-3 gap-2.5 rounded-lg border border-border/70 bg-muted/30 p-3 text-center">
-            <div>
-              <p className="text-[10px] uppercase font-semibold text-muted-foreground">
-                Annual Turns
-              </p>
-              <p className="text-lg font-bold text-foreground">
-                {selectedItem.isBaseZero ? "N/A" : `${selectedItem.annualTurns}x`}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase font-semibold text-muted-foreground">
-                Months / Turn
-              </p>
-              <p className="text-lg font-bold text-foreground">
-                {selectedItem.isBaseZero ? "N/A" : `${selectedItem.monthsPerTurn} mos`}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase font-semibold text-muted-foreground">
-                Total Incentive
-              </p>
-              <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
-                ₱{selectedItem.totalIncentiveAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-              </p>
+        {/* Quick High-Level Metrics Banner */}
+        <div className="grid grid-cols-3 gap-2.5 rounded-xl bg-muted/40 p-3 border border-border/60">
+          <div className="space-y-0.5">
+            <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
+              Cylinder Base
+            </span>
+            <div className="text-base font-bold font-mono text-foreground">
+              {selectedItem.cylinderBase} units
             </div>
           </div>
+          <div className="space-y-0.5">
+            <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
+              Circulating Qty
+            </span>
+            <div className="text-base font-bold font-mono text-foreground">
+              {selectedItem.totalCirculatingQty} units
+            </div>
+          </div>
+          <div className="space-y-0.5">
+            <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
+              Annual Turns
+            </span>
+            <div className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400">
+              {selectedItem.isBaseZero ? "—" : `${selectedItem.annualTurns}x`}
+            </div>
+          </div>
+        </div>
 
+        {/* Detailed Tabs */}
+        <div>
           <Tabs defaultValue="calculation" className="w-full">
-            <TabsList className="grid grid-cols-3 w-full h-9">
+            <TabsList className="grid w-full grid-cols-3 h-8.5">
               <TabsTrigger value="calculation" className="text-xs gap-1.5">
                 <Calculator className="h-3.5 w-3.5" />
-                <span>Calculation</span>
+                Calculation
               </TabsTrigger>
               <TabsTrigger value="transactions" className="text-xs gap-1.5">
-                <FileText className="h-3.5 w-3.5" />
-                <span>Orders ({selectedItem.transactions.length})</span>
+                <Receipt className="h-3.5 w-3.5" />
+                Transactions ({selectedItem.transactions.length})
               </TabsTrigger>
               <TabsTrigger value="audit" className="text-xs gap-1.5">
                 <History className="h-3.5 w-3.5" />
-                <span>Audit Trail</span>
+                Audit Trail
               </TabsTrigger>
             </TabsList>
 
@@ -145,13 +148,17 @@ export function CustomerCylinderTurnaroundDrawer() {
                   <div className="flex justify-between py-1 pt-2 font-bold text-foreground">
                     <span>Calculated Annual Turns:</span>
                     <span className="font-mono text-emerald-600 dark:text-emerald-400">
-                      {selectedItem.isBaseZero ? "0 (Base Zero)" : `${selectedItem.annualTurns} turns/yr`}
+                      {selectedItem.isBaseZero
+                        ? "0 (Base Zero)"
+                        : isDormant
+                        ? "0x (No Orders)"
+                        : `${selectedItem.annualTurns} turns/yr`}
                     </span>
                   </div>
                   <div className="flex justify-between py-1 font-bold text-foreground">
                     <span>Calculated Months per Turn (12 / Turns):</span>
                     <span className="font-mono text-foreground">
-                      {selectedItem.isBaseZero ? "N/A" : `${selectedItem.monthsPerTurn} months`}
+                      {selectedItem.isBaseZero || isDormant ? "— (Dormant)" : `${selectedItem.monthsPerTurn} months`}
                     </span>
                   </div>
                 </div>
@@ -193,9 +200,22 @@ export function CustomerCylinderTurnaroundDrawer() {
                 </div>
               </div>
 
-              {selectedItem.isBaseZero && (
+              {/* Warning for Unmonitored Holding */}
+              {isDormant && !selectedItem.isBaseZero && (
                 <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3.5 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2.5">
-                  <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+                  <Clock className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+                  <div>
+                    <p className="font-semibold">Unmonitored Cylinder Holding</p>
+                    <p className="mt-0.5 text-muted-foreground">
+                      This customer currently holds {selectedItem.cylinderBase} cylinder(s) but has zero recorded repeat orders or deposits in this evaluation period. Marked as Unmonitored Holding rather than a cycle failure.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {selectedItem.isBaseZero && (
+                <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 p-3.5 text-xs text-rose-800 dark:text-rose-300 flex items-start gap-2.5">
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600 mt-0.5" />
                   <div>
                     <p className="font-semibold">Zero Cylinder Base Detected</p>
                     <p className="mt-0.5 text-muted-foreground">

@@ -24,6 +24,7 @@ import type {
 import type { CylinderInspectionFilterInput } from "../types/cylinder-inspection-hydrotest.schema";
 
 function getDirectusBase(): string {
+  // AG-COMMENT: Retrieve Directus base URL strictly from environment variables without hardcoded host fallbacks
   const raw = (
     process.env.DIRECTUS_URL ||
     process.env.NEXT_PUBLIC_DIRECTUS_URL ||
@@ -32,7 +33,7 @@ function getDirectusBase(): string {
   )
     .trim()
     .replace(/\/$/, "");
-  if (!raw) return "http://127.0.0.1:8055";
+  if (!raw) return "";
   return /^https?:\/\//i.test(raw) ? raw : `http://${raw}`;
 }
 
@@ -54,6 +55,10 @@ function directusHeaders(): Record<string, string> {
 async function fetchDirectus<T>(path: string): Promise<T[]> {
   try {
     const base = getDirectusBase();
+    if (!base) {
+      console.warn("[Cylinder Inspection Service] Directus base URL is not configured in environment variables.");
+      return [];
+    }
     const url = `${base}/${path.replace(/^\//, "")}`;
     const res = await fetch(url, { headers: directusHeaders(), cache: "no-store" });
     if (!res.ok) return [];

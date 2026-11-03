@@ -5,7 +5,8 @@
 // Mapped to customer, branches, products, cylinder_assets, and sales/deposit movements.
 // ──────────────────────────────────────────────────────────────────────────────
 
-export type CTRGrade = "CTR_4" | "CTR_6" | "CTR_8" | "SUB_STANDARD" | "BASE_ZERO";
+// Added UNMONITORED grade for active cylinder base holders with zero transactions
+export type CTRGrade = "CTR_4" | "CTR_6" | "CTR_8" | "SUB_STANDARD" | "BASE_ZERO" | "UNMONITORED";
 
 export type AssessmentStatus = "DRAFT" | "FOR_REVIEW" | "APPROVED" | "LOCKED";
 
@@ -79,6 +80,8 @@ export interface CustomerCylinderTurnaroundKPIs {
     ctr8Count: number;
     subStandardCount: number;
     baseZeroCount: number;
+    // Added unmonitored count for accounts with active base > 0 but zero circulating volume
+    unmonitoredCount: number;
   };
   totalEligibleRefills11kg: number;
   totalEligibleKilograms: number;

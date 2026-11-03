@@ -2,6 +2,7 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // KPI Metric summary cards for Customer Cylinder Turnaround Ratio (CTR) Module.
 // Enhanced with interactive hover colors, elevation, border transitions, and icon animations.
+// Displays unmonitored count breakdown in addition to CTR grades.
 // ──────────────────────────────────────────────────────────────────────────────
 
 "use client";
@@ -64,7 +65,7 @@ export function CustomerCylinderTurnaroundKPICards() {
             </div>
             <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">
               <span className="font-semibold text-foreground">
-                {averageMonthsPerTurn} mos
+                {averageMonthsPerTurn > 0 ? `${averageMonthsPerTurn} mos` : "—"}
               </span>
               <span>cycle time across {activeTurnaroundCustomers} active accts</span>
             </div>
@@ -103,6 +104,11 @@ export function CustomerCylinderTurnaroundKPICards() {
               <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 font-semibold">
                 CTR 8: {gradeDistribution.ctr8Count}
               </span>
+              {gradeDistribution.unmonitoredCount > 0 && (
+                <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-800 dark:text-amber-300 font-medium">
+                  Unmonitored: {gradeDistribution.unmonitoredCount}
+                </span>
+              )}
               {gradeDistribution.baseZeroCount > 0 && (
                 <span className="px-1.5 py-0.5 rounded bg-slate-500/15 text-slate-700 dark:text-slate-300">
                   Unrated: {gradeDistribution.baseZeroCount}

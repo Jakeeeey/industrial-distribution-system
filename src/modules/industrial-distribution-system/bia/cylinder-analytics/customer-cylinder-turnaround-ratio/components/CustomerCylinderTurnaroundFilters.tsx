@@ -4,8 +4,8 @@
 // Unified single-line layout following exact order:
 // 1. Searchbar (compact quick search)
 // 2. Customer (Searchable select combobox)
-// 3. Branch (Searchable select combobox)
-// 4. CTR Grade Tier (Searchable select combobox)
+// 3. Branch (Searchable select combobox - restricted to Industrial Division)
+// 4. CTR Grade Tier (Searchable select combobox including Unmonitored Holding)
 // 5. Date Selection (Today, This week, This month, This year, Custom range)
 // 6. Dynamic Date Pickers: From - To appear ONLY when "Custom range" is active.
 // 7. Reset Action button.
@@ -48,6 +48,7 @@ const GRADE_OPTIONS: Array<{ value: NonNullable<CustomerCylinderTurnaroundFilter
   { value: "CTR_6", label: "CTR 6 (Standard / ₱4/kg)" },
   { value: "CTR_8", label: "CTR 8 (Moderate / ₱6/kg)" },
   { value: "SUB_STANDARD", label: "Sub-standard (>8 mos)" },
+  { value: "UNMONITORED", label: "Unmonitored Holding (Base > 0, No Orders)" },
   { value: "BASE_ZERO", label: "Unrated (Base = 0)" },
 ];
 

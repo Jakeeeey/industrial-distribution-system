@@ -4,7 +4,7 @@
 // Queries LIVE vos_database:
 // 1. Directus REST:
 //    - customer: customer_code, customer_name, store_name, contact_number, city, province
-//    - branches: id, branch_code, branch_name
+//    - branches: id, branch_code, branch_name (filtered strictly to Industrial Division: division_id = 1)
 //    - products: product_id, product_code, product_name, product_weight, is_serialized
 //    - cylinder_assets: current_customer_code, cylinder_status='WITH_CUSTOMER' (Live Cylinder Base)
 //    - sales_invoice & sales_invoice_details: Repeat Orders and 11kg Refill Volume
@@ -46,6 +46,7 @@ interface DirectusBranchRow {
   id: number;
   branch_code: string;
   branch_name: string;
+  division_id?: number | null;
   isActive?: number;
 }
 
@@ -244,6 +245,7 @@ export async function fetchCustomerCylinderTurnaroundReport(
   }
 
   // Parallel live queries to Directus and Spring Boot
+  // Applying Industrial Division standard (division_id = 1) for branches
   const [
     customersRes,
     branchesRes,
@@ -256,7 +258,7 @@ export async function fetchCustomerCylinderTurnaroundReport(
       `${directusBase}/items/customer?fields=id,customer_code,customer_name,store_name,contact_number,customer_email,city,province&limit=-1`
     ),
     fetchDirectus<{ data?: DirectusBranchRow[] }>(
-      `${directusBase}/items/branches?fields=id,branch_code,branch_name&limit=-1`
+      `${directusBase}/items/branches?fields=id,branch_code,branch_name,division_id&filter[division_id][_eq]=1&limit=-1`
     ),
     fetchDirectus<{ data?: DirectusProductRow[] }>(
       `${directusBase}/items/products?fields=product_id,product_code,product_name,product_weight,is_serialized&limit=-1`
@@ -276,7 +278,7 @@ export async function fetchCustomerCylinderTurnaroundReport(
   const liveCylinders = cylinderAssetsRes.data || [];
   const liveInvoices = invoicesRes.data || [];
 
-  // Index branches by ID
+  // Index Industrial branches by ID
   const branchMap = new Map<number, DirectusBranchRow>();
   for (const b of liveBranches) {
     branchMap.set(b.id, b);
@@ -348,7 +350,7 @@ export async function fetchCustomerCylinderTurnaroundReport(
     const invoiceMetaMap = new Map<number, DirectusSalesInvoiceRow>();
     for (const inv of liveInvoices) {
       invoiceMetaMap.set(inv.invoice_id, inv);
-      // Map branch from invoice if available
+      // Map branch from invoice if available and in industrial branches
       if (inv.customer_code && inv.branch_id && !customerBranchMap.has(inv.customer_code.trim())) {
         const b = branchMap.get(inv.branch_id);
         if (b) {
@@ -487,7 +489,8 @@ export async function fetchCustomerCylinderTurnaroundReport(
 }
 
 /**
- * Fetches real customer & branch lookup dropdowns directly from vos_database
+ * Fetches real customer & branch lookup dropdowns directly from vos_database.
+ * Restricts branch list strictly to Industrial Division branches (division_id = 1).
  */
 export async function fetchCustomerCylinderTurnaroundLookups(): Promise<CustomerCylinderTurnaroundLookupsResponse> {
   const directusBase = getDirectusBase();
@@ -496,8 +499,9 @@ export async function fetchCustomerCylinderTurnaroundLookups(): Promise<Customer
     fetchDirectus<{ data?: DirectusCustomerRow[] }>(
       `${directusBase}/items/customer?fields=id,customer_code,customer_name,city,province&limit=-1`
     ),
+    // Industrial Division branches only (division_id: 1)
     fetchDirectus<{ data?: DirectusBranchRow[] }>(
-      `${directusBase}/items/branches?fields=id,branch_code,branch_name&limit=-1`
+      `${directusBase}/items/branches?fields=id,branch_code,branch_name,division_id&filter[division_id][_eq]=1&limit=-1`
     ),
     fetchDirectus<{ data?: DirectusProductRow[] }>(
       `${directusBase}/items/products?fields=product_id,product_code,product_name&filter[is_serialized][_eq]=1&limit=-1`
@@ -515,11 +519,14 @@ export async function fetchCustomerCylinderTurnaroundLookups(): Promise<Customer
     sublabel: [c.city, c.province].filter(Boolean).join(", "),
   }));
 
-  const branches: LookupOption[] = liveBranches.map((b) => ({
-    value: b.id,
-    label: `${b.branch_name} (${b.branch_code})`,
-    code: b.branch_code,
-  }));
+  // Restrict options strictly to Industrial Division branches
+  const branches: LookupOption[] = liveBranches
+    .filter((b) => b.division_id === undefined || b.division_id === null || b.division_id === 1)
+    .map((b) => ({
+      value: b.id,
+      label: `${b.branch_name} (${b.branch_code})`,
+      code: b.branch_code,
+    }));
 
   const products: LookupOption[] = liveProducts.map((p) => ({
     value: p.product_id,

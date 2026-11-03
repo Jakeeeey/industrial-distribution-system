@@ -38,6 +38,8 @@ interface Allocation {
   id: string | number;
   productId: number;
   productName: string;
+  // Developer comment: Measurement unit (e.g. FULL, EMPTY, BOX, PCS) indicating sizing or condition tier
+  uom?: string;
   branchName: string;
   orderedQty: number;
   receivedQty: number;
@@ -49,6 +51,8 @@ interface Allocation {
 
 interface ReceiptItem {
   productName: string;
+  // Developer comment: Measurement unit (e.g. FULL, EMPTY, BOX, PCS) indicating sizing or condition tier
+  uom?: string;
   branchName: string;
   quantity: number;
   unitPrice: number;
@@ -804,6 +808,8 @@ export default function PurchaseOrderSummaryModule({
                           <TableHeader className="bg-muted/40">
                             <TableRow className="hover:bg-transparent border-b border-border">
                               <TableHead className="text-[9px] font-bold uppercase tracking-widest h-10 px-4">Product</TableHead>
+                              {/* Developer comment: Dedicated UOM column to immediately verify unit sizing / status tier (FULL, EMPTY, etc.) */}
+                              <TableHead className="text-[9px] font-bold uppercase tracking-widest px-3">UOM</TableHead>
                               <TableHead className="text-[9px] font-bold uppercase tracking-widest px-3">Branch</TableHead>
                               <TableHead className="text-[9px] font-bold uppercase tracking-widest text-center px-2">Ordered</TableHead>
                               <TableHead className="text-[9px] font-bold uppercase tracking-widest text-center px-2">Received</TableHead>
@@ -821,6 +827,12 @@ export default function PurchaseOrderSummaryModule({
                                 <TableRow key={item.id} className="border-border hover:bg-muted/20 transition-colors">
                                   <TableCell className="text-xs font-black text-foreground uppercase tracking-tight px-4 py-3 max-w-[250px]">
                                     {item.productName}
+                                  </TableCell>
+                                  {/* Developer comment: Render measurement unit badge */}
+                                  <TableCell className="text-[10px] px-3">
+                                    <Badge variant="outline" className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0 text-muted-foreground border-border/80">
+                                      {item.uom || "—"}
+                                    </Badge>
                                   </TableCell>
                                   <TableCell className="text-[10px] text-muted-foreground font-semibold px-3">
                                     {item.branchName}
@@ -843,7 +855,7 @@ export default function PurchaseOrderSummaryModule({
                           </TableBody>
                           <TableFooter className="bg-muted/30 hover:bg-muted/30">
                             <TableRow>
-                              <TableCell colSpan={2} className="text-[10px] font-bold uppercase text-muted-foreground px-4 py-3">Total Estimated</TableCell>
+                              <TableCell colSpan={3} className="text-[10px] font-bold uppercase text-muted-foreground px-4 py-3">Total Estimated</TableCell>
                               <TableCell className="text-center font-black font-mono text-[11px]">
                                 {allocations.reduce((s, i) => s + i.orderedQty, 0)}
                               </TableCell>
@@ -1080,6 +1092,8 @@ export default function PurchaseOrderSummaryModule({
                                     <TableHeader className="bg-muted/30">
                                       <TableRow className="hover:bg-transparent border-b border-border">
                                         <TableHead className="text-[9px] font-bold uppercase tracking-widest h-9 px-4">Product</TableHead>
+                                        {/* Developer comment: Dedicated UOM column for receipt history breakdown */}
+                                        <TableHead className="text-[9px] font-bold uppercase tracking-widest px-3">UOM</TableHead>
                                         <TableHead className="text-[9px] font-bold uppercase tracking-widest px-3">Branch</TableHead>
                                         <TableHead className="text-[9px] font-bold uppercase tracking-widest text-center px-3">Qty</TableHead>
                                         <TableHead className="text-[9px] font-bold uppercase tracking-widest text-right px-3">Unit Price</TableHead>
@@ -1098,6 +1112,12 @@ export default function PurchaseOrderSummaryModule({
                                                 {item.expiryDate && <span className="text-[8px] text-muted-foreground">Exp: {item.expiryDate}</span>}
                                               </div>
                                             )}
+                                          </TableCell>
+                                          {/* Developer comment: Render measurement unit badge */}
+                                          <TableCell className="text-[10px] px-3">
+                                            <Badge variant="outline" className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0 text-muted-foreground border-border/80">
+                                              {item.uom || "—"}
+                                            </Badge>
                                           </TableCell>
                                           <TableCell className="text-[10px] text-muted-foreground font-medium px-3">{item.branchName}</TableCell>
                                           <TableCell className="text-[10px] font-black text-center px-3">{item.quantity}</TableCell>

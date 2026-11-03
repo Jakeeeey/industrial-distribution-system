@@ -11,7 +11,7 @@ export function ReceiptDetailsModule({ receiverId, receiverName }: { receiverId?
             <div className="h-full flex flex-col px-6 py-4 overflow-hidden">
                 <div className="mb-4 shrink-0">
                     <h1 className="text-2xl font-semibold tracking-tight">
-                        Purchase Order Receipt RFID
+                        Purchase Order Receipt Serial
                     </h1>
                     <p className="text-sm text-muted-foreground">
                         Enter receipt details and finalize received products from approved purchase orders

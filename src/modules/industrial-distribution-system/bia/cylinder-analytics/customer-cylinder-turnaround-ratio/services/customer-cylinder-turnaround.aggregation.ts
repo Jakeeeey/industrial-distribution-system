@@ -2,6 +2,7 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // Pure business logic & calculation algorithms for Customer Cylinder Turnaround Ratio (CTR)
 // Computes Annual Turns, Months Per Turn, Progressive CTR Grading, and Incentive Payouts.
+// Handles active cylinder base with zero circulating transactions as UNMONITORED.
 // ──────────────────────────────────────────────────────────────────────────────
 
 import type {
@@ -35,21 +36,32 @@ export interface RawCustomerInput {
  * - Months per Turn <= 4.0 (Annual Turns >= 3.0)  -> CTR 4 (₱2/kg, ₱22/11kg refill)
  * - Months per Turn 4.01 to 6.0 (2.0 <= Turns < 3.0) -> CTR 6 (₱4/kg, ₱44/11kg refill)
  * - Months per Turn 6.01 to 8.0 (1.5 <= Turns < 2.0) -> CTR 8 (₱6/kg, ₱66/11kg refill)
- * - Months per Turn > 8.0 (Turns < 1.5)           -> SUB_STANDARD (₱0/kg, ₱0/refill)
+ * - Months per Turn > 8.0 (Turns < 1.5, with circulation) -> SUB_STANDARD (₱0/kg, ₱0/refill)
  * - Base Zero                                     -> BASE_ZERO (Unrated, ₱0)
+ * - Base > 0 but Zero Circulation                 -> UNMONITORED (No transactions, ₱0)
  */
 export function evaluateCTRGrade(
   annualTurns: number,
   monthsPerTurn: number,
-  isBaseZero: boolean
+  isBaseZero: boolean,
+  hasCirculation: boolean = true
 ): {
   grade: CTRGrade;
   incentiveRatePerKg: number;
   incentivePerRefill: number;
 } {
-  if (isBaseZero || annualTurns <= 0) {
+  if (isBaseZero) {
     return {
-      grade: isBaseZero ? "BASE_ZERO" : "SUB_STANDARD",
+      grade: "BASE_ZERO",
+      incentiveRatePerKg: 0,
+      incentivePerRefill: 0,
+    };
+  }
+
+  // Active base > 0, but no repeat orders or deposits in period
+  if (!hasCirculation || annualTurns <= 0) {
+    return {
+      grade: "UNMONITORED",
       incentiveRatePerKg: 0,
       incentivePerRefill: 0,
     };
@@ -85,6 +97,7 @@ export function evaluateCTRGrade(
 
 /**
  * Calculates turnaround metrics for a customer over the specified month span.
+ * Avoids assigning 99.9 months to dormant accounts with 0 circulation.
  */
 export function calculateCustomerTurnaroundItem(
   raw: RawCustomerInput,
@@ -93,11 +106,12 @@ export function calculateCustomerTurnaroundItem(
 ): CustomerCylinderTurnaroundItem {
   const isBaseZero = raw.cylinderBase <= 0;
   const totalCirculating = Math.max(0, raw.repeatOrderQty + raw.depositCylinderQty);
+  const hasCirculation = totalCirculating > 0;
   
   let annualTurns = 0;
   let monthsPerTurn = 0;
 
-  if (!isBaseZero) {
+  if (!isBaseZero && hasCirculation) {
     // Formula: ((RO + Deposit) / Base) * (12 / Months Covered)
     const annualizingFactor = 12 / Math.max(1, monthsCovered);
     annualTurns = Number(((totalCirculating / raw.cylinderBase) * annualizingFactor).toFixed(2));
@@ -105,15 +119,14 @@ export function calculateCustomerTurnaroundItem(
     // Formula: 12 / Annual Turns
     if (annualTurns > 0) {
       monthsPerTurn = Number((12 / annualTurns).toFixed(2));
-    } else {
-      monthsPerTurn = 99.9; // Beyond threshold
     }
   }
 
   const { grade, incentiveRatePerKg, incentivePerRefill } = evaluateCTRGrade(
     annualTurns,
     monthsPerTurn,
-    isBaseZero
+    isBaseZero,
+    hasCirculation
   );
 
   const eligibleRefills = Math.max(0, raw.eligibleRefill11kgQty);
@@ -136,7 +149,7 @@ export function calculateCustomerTurnaroundItem(
     depositCylinderQty: raw.depositCylinderQty,
     totalCirculatingQty: totalCirculating,
     annualTurns,
-    monthsPerTurn: isBaseZero ? 0 : monthsPerTurn,
+    monthsPerTurn,
     grade,
     eligibleRefill11kgQty: eligibleRefills,
     eligibleKilograms,
@@ -152,12 +165,14 @@ export function calculateCustomerTurnaroundItem(
 
 /**
  * Computes KPIs from aggregated customer items.
+ * Accounts without circulation do not distort active turnaround averages.
  */
 export function computeTurnaroundKPIs(
   items: CustomerCylinderTurnaroundItem[]
 ): CustomerCylinderTurnaroundKPIs {
   const totalCustomers = items.length;
-  const validItems = items.filter((i) => !i.isBaseZero && i.annualTurns > 0);
+  // Valid active turnaround items must have base > 0 and recorded annual turns > 0
+  const validItems = items.filter((i) => !i.isBaseZero && i.annualTurns > 0 && i.grade !== "UNMONITORED");
   const activeTurnaroundCustomers = validItems.length;
 
   const sumTurns = validItems.reduce((acc, curr) => acc + curr.annualTurns, 0);
@@ -174,6 +189,7 @@ export function computeTurnaroundKPIs(
     ctr8Count: 0,
     subStandardCount: 0,
     baseZeroCount: 0,
+    unmonitoredCount: 0,
   };
 
   let totalEligibleRefills11kg = 0;
@@ -185,6 +201,7 @@ export function computeTurnaroundKPIs(
     else if (item.grade === "CTR_6") gradeDistribution.ctr6Count++;
     else if (item.grade === "CTR_8") gradeDistribution.ctr8Count++;
     else if (item.grade === "BASE_ZERO") gradeDistribution.baseZeroCount++;
+    else if (item.grade === "UNMONITORED") gradeDistribution.unmonitoredCount++;
     else gradeDistribution.subStandardCount++;
 
     totalEligibleRefills11kg += item.eligibleRefill11kgQty;
