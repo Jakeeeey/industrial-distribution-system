@@ -2,7 +2,7 @@
 // ==============================================================================
 // Master Results Table for Cylinder Deposit and Swap Report.
 // Columns:
-// Customer, Date, Deposit Qty, Swap Qty, Running Base, Reference, Action.
+// Customer, Last Activity, Deposit Qty, Swap Qty, Running Base, Action.
 // Features:
 // - Interactive column sorting with asc/desc indicators on all data columns
 // - Informative hover tooltips (titles) detailing metric calculation basis
@@ -10,6 +10,8 @@
 // - Expandable product line-item breakdown with Framer Motion accordions
 // - Audit drawer slide-over trigger
 // - Ownership column removed per user instruction
+// - Reference column removed: a customer row aggregates many documents, so no single
+//   reference represents it. Document numbers live in the Audit drawer.
 // ==============================================================================
 
 "use client";
@@ -23,7 +25,6 @@ import {
   ArrowRightCircle,
   Package,
   Calendar,
-  FileText,
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
@@ -37,8 +38,7 @@ type SortField =
   | "date"
   | "depositQty"
   | "swapQty"
-  | "runningBase"
-  | "reference";
+  | "runningBase";
 
 type SortDirection = "asc" | "desc";
 
@@ -109,10 +109,8 @@ export function CylinderDepositSwapTable() {
       setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
     } else {
       setSortField(field);
-      // Alphabetical and reference columns default to ascending; numeric metrics default to descending
-      setSortDirection(
-        field === "customer" || field === "reference" ? "asc" : "desc"
-      );
+      // Customer defaults to alphabetical; dates and numeric metrics to most recent / largest first
+      setSortDirection(field === "customer" ? "asc" : "desc");
     }
     setCurrentPage(1);
   };
@@ -170,12 +168,6 @@ export function CylinderDepositSwapTable() {
         case "runningBase":
           comp = a.runningBase - b.runningBase;
           break;
-        case "reference": {
-          const refA = a.reference || "";
-          const refB = b.reference || "";
-          comp = refA.localeCompare(refB);
-          break;
-        }
       }
       return sortDirection === "asc" ? comp : -comp;
     });
@@ -196,7 +188,7 @@ export function CylinderDepositSwapTable() {
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Search customer name, code, store, reference, or product..."
+            placeholder="Search customer name, code, store, branch, or product..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             className="w-full rounded-md border border-input bg-background pl-9 pr-8 py-1.5 text-xs shadow-xs focus:outline-hidden focus:ring-1 focus:ring-ring"
@@ -257,14 +249,14 @@ export function CylinderDepositSwapTable() {
                 </div>
               </th>
 
-              {/* 2. Date */}
+              {/* 2. Last Activity */}
               <th
                 onClick={() => handleSort("date")}
                 className="py-3 px-3 cursor-pointer select-none group hover:text-foreground transition-colors"
-                title="Date of the latest recorded cylinder movement (delivery, refill swap, or return). Click to sort."
+                title="Latest movement in the selected range, or the last record change on a cylinder the customer holds. May predate the range when there was no movement. Click to sort."
               >
                 <div className="flex items-center gap-1">
-                  <span>Date</span>
+                  <span>Last Activity</span>
                   <SortIcon field="date" currentField={sortField} direction={sortDirection} />
                 </div>
               </th>
@@ -305,18 +297,6 @@ export function CylinderDepositSwapTable() {
                 </div>
               </th>
 
-              {/* 6. Reference */}
-              <th
-                onClick={() => handleSort("reference")}
-                className="py-3 px-4 cursor-pointer select-none group hover:text-foreground transition-colors"
-                title="Document reference number of the latest movement transaction (WIWO, Sales Order, or Return). Click to sort."
-              >
-                <div className="flex items-center gap-1">
-                  <span>Reference</span>
-                  <SortIcon field="reference" currentField={sortField} direction={sortDirection} />
-                </div>
-              </th>
-
               {/* Action */}
               <th
                 className="py-3 px-4 text-center"
@@ -332,14 +312,14 @@ export function CylinderDepositSwapTable() {
             {isLoading ? (
               Array.from({ length: 6 }).map((_, idx) => (
                 <tr key={`skeleton-${idx}`} className="animate-pulse">
-                  <td colSpan={8} className="py-3.5 px-4">
+                  <td colSpan={7} className="py-3.5 px-4">
                     <div className="h-4 w-full bg-muted rounded-xs" />
                   </td>
                 </tr>
               ))
             ) : paginatedRows.length === 0 ? (
               <tr key="empty-state">
-                <td colSpan={8} className="py-12 text-center text-muted-foreground">
+                <td colSpan={7} className="py-12 text-center text-muted-foreground">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <Layers className="h-8 w-8 text-muted-foreground/50" />
                     <p className="font-medium">No cylinder records match the selected criteria.</p>
@@ -396,7 +376,7 @@ export function CylinderDepositSwapTable() {
                         </div>
                       </td>
 
-                      {/* 2. Date */}
+                      {/* 2. Last Activity */}
                       <td className="py-3 px-3 text-muted-foreground">
                         <div className="flex items-center gap-1.5 font-mono text-[11px]">
                           <Calendar className="h-3 w-3 text-muted-foreground/60" />
@@ -425,16 +405,6 @@ export function CylinderDepositSwapTable() {
                       {/* 5. Running Base */}
                       <td className="py-3 px-3 text-right font-bold text-foreground text-sm">
                         {row.runningBase.toLocaleString()}
-                      </td>
-
-                      {/* 6. Reference */}
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground">
-                          <FileText className="h-3 w-3 text-primary/70 shrink-0" />
-                          <span className="truncate max-w-[140px]" title={row.reference || ""}>
-                            {row.reference || "—"}
-                          </span>
-                        </div>
                       </td>
 
                       {/* Action: Audit Drawer */}
@@ -496,7 +466,7 @@ export function CylinderDepositSwapTable() {
                             </td>
 
                             {/* Reconciliation Formula Breakdown */}
-                            <td className="py-2.5 px-4 text-[10px] text-muted-foreground font-mono" colSpan={2}>
+                            <td className="py-2.5 px-4 text-[10px] text-muted-foreground font-mono">
                               Open: {prod.openingBase} | Ret: -{prod.depositsPulledOut} | NetΔ:{" "}
                               {prod.netSwapVariance > 0 ? `+${prod.netSwapVariance}` : prod.netSwapVariance}
                             </td>
