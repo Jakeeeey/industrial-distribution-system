@@ -32,7 +32,10 @@ function buildSearchParams(filters: StockMovementVarianceFilters): URLSearchPara
   if (filters.categoryId !== undefined && filters.categoryId !== "") {
     params.set("categoryId", String(filters.categoryId));
   }
-  if (filters.productName?.trim()) params.set("productName", filters.productName.trim());
+  // The product is identified by its master id, never by name: names repeat.
+  if (filters.productId !== undefined && filters.productId !== "") {
+    params.set("productId", String(filters.productId));
+  }
   return params;
 }
 
@@ -62,7 +65,10 @@ export async function fetchStockMovementVarianceReport(
   return payload;
 }
 
-const LOOKUPS_STORAGE_KEY = "ids_scm_stock_movement_variance_lookups_v1";
+// v2: option ids are the only product/branch identifier the pickers trust, and
+// categories are now narrowed to industrial ones. Anything cached under v1 may
+// carry nameless rows or non-industrial categories, so it is discarded.
+const LOOKUPS_STORAGE_KEY = "ids_scm_stock_movement_variance_lookups_v2";
 const LOOKUPS_CACHE_DURATION = 15 * 60 * 1000; // 15 minutes TTL
 
 interface CachedLookups {

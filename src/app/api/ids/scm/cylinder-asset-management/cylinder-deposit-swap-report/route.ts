@@ -17,8 +17,8 @@
 // - Physical quantity segregation from cash guarantee values
 // - Pure read-only aggregation (no operational mutations)
 // - Normalized customer code matching reconciling whitespace & collation differences
-// - Strict alignment with Doc §7 & §11 proposed columns:
-//   Customer, Date, Deposit Qty, Swap Qty, Ownership, Running Base, Reference
+// - Strict alignment with Doc §7 & §11 proposed columns, minus Reference: a customer row
+//   aggregates many documents, so no single document number represents it
 // - Full comments left behind for long-term maintainability
 // ==============================================================================
 
@@ -315,13 +315,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         `${directusBase}/items/customer?fields=customer_code,customer_name,store_name,contact_number,brgy,city,province&limit=-1`,
         headers
       ),
+      // AG-FILTER: not narrowed by isActive/is_serialized — the row gates read these
+      // flags from this map, so a scoped map would make an ineligible product unknown.
       fetchRows<ProductRow>(
         `${directusBase}/items/products?fields=product_id,product_code,product_name,description,product_weight,is_serialized&limit=-1`,
         headers
       ),
       // AG-COMMENT: Restrict branch queries strictly to Industrial Division (division_id = 1)
       fetchRows<BranchRow>(
-        `${directusBase}/items/branches?fields=id,branch_name,branch_code&filter[division_id][_eq]=1&limit=-1`,
+        `${directusBase}/items/branches?fields=id,branch_name,branch_code&filter[isActive][_eq]=1&filter[division_id][_eq]=1&limit=-1`,
         headers
       ),
       fetchRows<CylinderAssetRow>(
@@ -384,6 +386,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     });
 
     // Resolve product_id for all site cylinders (via linked cylinder_asset_id)
+    // AG-FILTER: deliberately NOT narrowed by is_deleted. This is an id-keyed
+    // back-fill for assets the custody query above did not return; narrowing it
+    // would leave an installed cylinder without a product, and the size label
+    // would fall back to a default serial instead of the cylinder's real one.
     const siteCylAssetIds = rawSiteCylinders.map((s) => s.cylinder_asset_id).filter(Boolean);
     const unlinkedAssets = siteCylAssetIds.length > 0
       ? await fetchRows<CylinderAssetRow>(
@@ -428,7 +434,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     type MovementTracking = {
       qty: number;
       lastDate: string;
-      ref: string;
       byProduct: Map<number, number>;
     };
 
@@ -459,20 +464,17 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const isDepositIssuance = isCylinderIssuanceProduct(prod, order.remarks);
 
       const dDateStr = delivDate.split("T")[0];
-      const refStr = order.order_no || `SO-${order.order_id}`;
 
       if (isDepositIssuance) {
         // AG-COMMENT: Expands customer custody base: Issued (+)
         const prev = customerSoDepositsMap.get(cleanCust) || {
           qty: 0,
           lastDate: "",
-          ref: "",
           byProduct: new Map<number, number>(),
         };
         prev.qty += served;
         if (dDateStr > prev.lastDate) {
           prev.lastDate = dDateStr;
-          prev.ref = refStr;
         }
         prev.byProduct.set(pId, (prev.byProduct.get(pId) || 0) + served);
         customerSoDepositsMap.set(cleanCust, prev);
@@ -481,13 +483,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         const prev = customerSwapsMap.get(cleanCust) || {
           qty: 0,
           lastDate: "",
-          ref: "",
           byProduct: new Map<number, number>(),
         };
         prev.qty += served;
         if (dDateStr > prev.lastDate) {
           prev.lastDate = dDateStr;
-          prev.ref = refStr;
         }
         prev.byProduct.set(pId, (prev.byProduct.get(pId) || 0) + served);
         customerSwapsMap.set(cleanCust, prev);
@@ -520,14 +520,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const prev = customerPosDepositsMap.get(cleanCust) || {
         qty: 0,
         lastDate: "",
-        ref: "",
         byProduct: new Map<number, number>(),
       };
       const txDate = pt.created_at ? pt.created_at.split("T")[0] : filters.endDate;
       prev.qty += qty;
       if (txDate > prev.lastDate) {
         prev.lastDate = txDate;
-        prev.ref = pt.invoice_no || pt.transaction_id;
       }
       customerPosDepositsMap.set(cleanCust, prev);
     });
@@ -546,32 +544,27 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const deployed = Math.max(0, Number(w.total_deployed_cylinders || 0));
       const returned = Math.max(0, Number(w.total_returned_cylinders || 0));
       const wDateStr = w.transaction_date ? w.transaction_date.split("T")[0] : filters.endDate;
-      const refStr = w.wiwo_no || `WIWO-${w.id}`;
 
       if (w.wiwo_type === "DEPLOYMENT_ONLY" && deployed > 0) {
         const prev = customerWiwoDepositsMap.get(cleanCust) || {
           qty: 0,
           lastDate: "",
-          ref: "",
           byProduct: new Map<number, number>(),
         };
         prev.qty += deployed;
         if (wDateStr > prev.lastDate) {
           prev.lastDate = wDateStr;
-          prev.ref = refStr;
         }
         customerWiwoDepositsMap.set(cleanCust, prev);
       } else if (w.wiwo_type === "RETURN_ONLY" && returned > 0) {
         const prev = customerWiwoReturnsMap.get(cleanCust) || {
           qty: 0,
           lastDate: "",
-          ref: "",
           byProduct: new Map<number, number>(),
         };
         prev.qty += returned;
         if (wDateStr > prev.lastDate) {
           prev.lastDate = wDateStr;
-          prev.ref = refStr;
         }
         customerWiwoReturnsMap.set(cleanCust, prev);
       } else if (w.wiwo_type === "CONSUMPTION_SWAP") {
@@ -580,13 +573,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           const prev = customerWiwoSwapsMap.get(cleanCust) || {
             qty: 0,
             lastDate: "",
-            ref: "",
             byProduct: new Map<number, number>(),
           };
           prev.qty += swapQty;
           if (wDateStr > prev.lastDate) {
             prev.lastDate = wDateStr;
-            prev.ref = refStr;
           }
           customerWiwoSwapsMap.set(cleanCust, prev);
         }
@@ -595,13 +586,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           const prev = customerWiwoDepositsMap.get(cleanCust) || {
             qty: 0,
             lastDate: "",
-            ref: "",
             byProduct: new Map<number, number>(),
           };
           prev.qty += diff;
           if (wDateStr > prev.lastDate) {
             prev.lastDate = wDateStr;
-            prev.ref = refStr;
           }
           customerWiwoDepositsMap.set(cleanCust, prev);
         } else if (returned > deployed) {
@@ -609,13 +598,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           const prev = customerWiwoReturnsMap.get(cleanCust) || {
             qty: 0,
             lastDate: "",
-            ref: "",
             byProduct: new Map<number, number>(),
           };
           prev.qty += diff;
           if (wDateStr > prev.lastDate) {
             prev.lastDate = wDateStr;
-            prev.ref = refStr;
           }
           customerWiwoReturnsMap.set(cleanCust, prev);
         }
@@ -625,13 +612,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           const prev = customerWiwoDepositsMap.get(cleanCust) || {
             qty: 0,
             lastDate: "",
-            ref: "",
             byProduct: new Map<number, number>(),
           };
           prev.qty += diff;
           if (wDateStr > prev.lastDate) {
             prev.lastDate = wDateStr;
-            prev.ref = refStr;
           }
           customerWiwoDepositsMap.set(cleanCust, prev);
         } else if (returned > deployed) {
@@ -639,13 +624,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           const prev = customerWiwoReturnsMap.get(cleanCust) || {
             qty: 0,
             lastDate: "",
-            ref: "",
             byProduct: new Map<number, number>(),
           };
           prev.qty += diff;
           if (wDateStr > prev.lastDate) {
             prev.lastDate = wDateStr;
-            prev.ref = refStr;
           }
           customerWiwoReturnsMap.set(cleanCust, prev);
         }
@@ -663,14 +646,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const prev = customerReturnsMap.get(cleanCust) || {
         qty: 0,
         lastDate: "",
-        ref: "",
         byProduct: new Map<number, number>(),
       };
       const rDateStr = sr.return_date ? sr.return_date.split("T")[0] : filters.endDate;
       prev.qty += 1;
       if (rDateStr > prev.lastDate) {
         prev.lastDate = rDateStr;
-        prev.ref = sr.return_number || `SR-${sr.return_id}`;
       }
       customerReturnsMap.set(cleanCust, prev);
     });
@@ -754,7 +735,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       // SNET Spec §4 standard business formula: Opening Base = Closing Base - Deposits + Returns
       const openingBase = Math.max(0, closingBase - periodDeposits + periodPullOuts);
 
-      // Latest transaction date and reference resolution
+      // Latest activity date: in-period movements, or the most recent record change on any
+      // held cylinder. custodyAssets is unordered, so scan all of them rather than [0].
       const lastDate = [
         returnInfo?.lastDate,
         wiwoReturnInfo?.lastDate,
@@ -763,22 +745,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         wiwoDepositInfo?.lastDate,
         swapInfo?.lastDate,
         wiwoSwapInfo?.lastDate,
-        custodyAssets[0]?.modified_date?.split("T")[0],
-        custodyAssets[0]?.created_date?.split("T")[0],
+        ...custodyAssets.flatMap((a) => [
+          a.modified_date?.split("T")[0],
+          a.created_date?.split("T")[0],
+        ]),
       ]
         .filter(Boolean)
         .sort()
         .reverse()[0] || null;
-
-      const lastRef =
-        returnInfo?.ref ||
-        wiwoReturnInfo?.ref ||
-        wiwoDepositInfo?.ref ||
-        soDepositInfo?.ref ||
-        posDepositInfo?.ref ||
-        wiwoSwapInfo?.ref ||
-        swapInfo?.ref ||
-        (custodyAssets[0] ? `SERIAL-${custodyAssets[0].serial_number}` : `CUST-${custCode}`);
 
       totalActiveBase += closingBase;
 
@@ -910,7 +884,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         customerAddress,
         ownership: "COMPANY", // SNET Spec §7 & §11: Company tracked assets
         date: lastDate,
-        reference: lastRef,
         depositQty: periodDeposits,
         swapQty: periodSwaps,
         runningBase: closingBase,
@@ -1062,7 +1035,7 @@ async function handleCustomerDetailDrillDown(
     // 2. Fetch Branches for branch name resolution (division_id = 1 for Industrial)
     // AG-COMMENT: Restrict branch queries strictly to Industrial Division (division_id = 1)
     const branchRows = await fetchRows<BranchRow>(
-      `${directusBase}/items/branches?fields=id,branch_name&filter[division_id][_eq]=1&limit=-1`,
+      `${directusBase}/items/branches?fields=id,branch_name&filter[isActive][_eq]=1&filter[division_id][_eq]=1&limit=-1`,
       headers
     );
     const branchMap = new Map<number, string>();
@@ -1073,9 +1046,11 @@ async function handleCustomerDetailDrillDown(
     // 3. Fetch Active Serials from cylinder_assets and lpg_customer_site_cylinders
     const [allAssets, allProducts, allSiteCyls] = await Promise.all([
       fetchRows<CylinderAssetRow>(
-        `${directusBase}/items/cylinder_assets?fields=id,serial_number,product_id,cylinder_status,cylinder_condition,current_customer_code,current_branch_id,modified_date,created_date&limit=-1`,
+        `${directusBase}/items/cylinder_assets?fields=id,serial_number,product_id,cylinder_status,cylinder_condition,current_customer_code,current_branch_id,modified_date,created_date&filter[is_deleted][_neq]=1&limit=-1`,
         headers
       ),
+      // AG-FILTER: not narrowed by isActive/is_serialized — the row gates read these
+      // flags from this map, so a scoped map would make an ineligible product unknown.
       fetchRows<ProductRow>(
         `${directusBase}/items/products?fields=product_id,product_code,product_name,description,product_weight,is_serialized&limit=-1`,
         headers

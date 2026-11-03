@@ -44,7 +44,7 @@ function SourceWarnings() {
 }
 
 function StockMovementVarianceReportContent() {
-  const { error, isLoading, refresh, filters } = useStockMovementVarianceReport();
+  const { error, isLoading, appliedFilters, refresh } = useStockMovementVarianceReport();
 
   return (
     <div className="w-full min-w-0 space-y-5 animate-in fade-in duration-300">
@@ -64,7 +64,7 @@ function StockMovementVarianceReportContent() {
           <button
             type="button"
             onClick={() => refresh()}
-            disabled={isLoading || !filters.branchId}
+            disabled={isLoading || !appliedFilters}
             className="inline-flex shrink-0 items-center gap-1 font-semibold underline hover:opacity-80 disabled:no-underline disabled:opacity-50"
           >
             <RefreshCw className="h-3.5 w-3.5" />

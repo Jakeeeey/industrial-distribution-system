@@ -78,7 +78,6 @@ export function exportCylinderDepositSwapToPdf(
     [
       "Customer",
       "Date",
-      "Reference",
       "Deposit Qty",
       "Swap Qty",
       "Ownership",
@@ -89,7 +88,6 @@ export function exportCylinderDepositSwapToPdf(
   const tableRows = report.rows.map((row) => [
     `${row.customerName}\n(${row.customerCode})`,
     row.date || row.lastTransactionDate || "—",
-    row.reference || "—",
     row.depositQty > 0 ? `+${row.depositQty}` : "0",
     row.swapQty.toLocaleString(),
     row.ownership || "COMPANY",
@@ -117,10 +115,7 @@ export function exportCylinderDepositSwapToPdf(
       2: { halign: "right" },
       3: { halign: "right" },
       4: { halign: "right" },
-      5: { halign: "right" },
-      6: { halign: "right" },
-      7: { halign: "right", fontStyle: "bold" },
-      8: { halign: "right", fontStyle: "bold" },
+      5: { halign: "right", fontStyle: "bold" },
     },
     didDrawPage: (data) => {
       // Footer page numbering
