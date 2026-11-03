@@ -113,11 +113,14 @@ export async function fetchCustomerOrderConsumptionSources(
       }),
       read<RawClassificationRow>("customer_classification", { fields: "id,classification_name" }),
       read<RawSalesmanRow>("salesman", { fields: "id,salesman_code,salesman_name" }),
+      // AG-FILTER: read whole — cylinderProductScope evaluates is_serialized from
+      // this map, and a missing product is reported as an exception, not excluded.
       read<RawProductRow>("products", {
         fields: "product_id,product_code,product_name,product_weight,weight,weight_unit_id,is_serialized,product_category",
       }),
       read<RawLpgSiteRow>("lpg_customer_lpg_sites", {
         fields: "id,customer_code,site_name,billing_mode",
+        filter: { is_active: { _neq: 0 } },
       }),
     ]);
 

@@ -6,6 +6,7 @@
 // ==============================================================================
 
 import { NextRequest, NextResponse } from "next/server";
+import { productDisplayName } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-movement-and-variance-report/services/stock-movement-variance.calc";
 import type {
   StockMovementVarianceLookupOptions,
   VarianceLookupOption,
@@ -79,8 +80,11 @@ export async function GET(_req: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    // Branches are restricted to the Industrial division and to active records,
-    // matching how every other SCM branch picker in the platform behaves.
+    // The three option lists are all narrowed to the Industrial side of the
+    // platform, matching how every other SCM picker behaves: branches and
+    // products by active status, branches additionally by division_id,
+    // categories by is_industrial. Products are deliberately NOT narrowed to
+    // is_serialized — this report reconciles every countable product.
     const branchQuery =
       `fields=id,branch_name,branch_code&filter[isActive][_eq]=1` +
       `&filter[division_id][_eq]=1&sort=branch_name&limit=-1`;
@@ -96,32 +100,47 @@ export async function GET(_req: NextRequest): Promise<NextResponse> {
         directusBase,
         directusToken,
         "categories",
-        `fields=category_id,category_name&sort=category_name&limit=-1`
+        `fields=category_id,category_name&filter[is_industrial][_eq]=1&sort=category_name&limit=-1`
       ),
-      directusList<{ product_id: number; product_code?: string; product_name: string }>(
+      directusList<{
+        product_id: number;
+        product_code?: string;
+        product_name?: string;
+        description?: string;
+      }>(
         directusBase,
         directusToken,
         "products",
-        `fields=product_id,product_code,product_name&sort=product_name&limit=-1`
+        `fields=product_id,product_code,product_name,description&filter[isActive][_eq]=1&sort=product_name&limit=-1`
       ),
     ]);
 
-    const branches: VarianceLookupOption[] = branchRows.map((row) => ({
-      id: row.id,
-      label: row.branch_name,
-      secondary: row.branch_code ? String(row.branch_code) : undefined,
-    }));
+    const branches: VarianceLookupOption[] = branchRows
+      .filter((row) => Number.isFinite(row.id) && Boolean(row.branch_name))
+      .map((row) => ({
+        id: row.id,
+        label: String(row.branch_name),
+        secondary: row.branch_code ? String(row.branch_code) : undefined,
+      }));
 
-    const categories: VarianceLookupOption[] = categoryRows.map((row) => ({
-      id: row.category_id,
-      label: row.category_name,
-    }));
+    const categories: VarianceLookupOption[] = categoryRows
+      .filter((row) => Number.isFinite(row.category_id))
+      .map((row) => ({
+        id: row.category_id,
+        label: row.category_name,
+      }));
 
-    const products: VarianceLookupOption[] = productRows.map((row) => ({
-      id: row.product_id,
-      label: row.product_name,
-      secondary: row.product_code ? String(row.product_code) : undefined,
-    }));
+    // Keyed by product_id: names are NOT unique in this schema, so the id is the
+    // only thing that can select one product. What is shown is the master
+    // `description`, per the ids-guide rule every other product picker follows.
+    const products: VarianceLookupOption[] = productRows
+      .filter((row) => Number.isFinite(row.product_id))
+      .map((row) => ({
+        id: row.product_id,
+        label: productDisplayName(row.description, row.product_name, row.product_code),
+        secondary: row.product_code ? String(row.product_code) : undefined,
+      }))
+      .filter((option) => option.label !== "");
 
     const data: StockMovementVarianceLookupOptions = { branches, categories, products };
 

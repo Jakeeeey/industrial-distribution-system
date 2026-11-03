@@ -7,6 +7,7 @@
 // ==============================================================================
 
 import * as XLSX from "xlsx";
+import { formatPhDateTime } from "./stock-movement-variance.calc";
 import type { StockMovementVarianceReportResponse } from "../types/stock-movement-variance.types";
 
 /** Rounds to two decimals while keeping genuine numbers numeric. */
@@ -29,7 +30,7 @@ export function exportStockMovementVarianceToExcel(
     ["INDUSTRIAL DISTRIBUTION SYSTEM - SUPPLY CHAIN MANAGEMENT"],
     ["STOCK MOVEMENT AND VARIANCE REPORT - EXECUTIVE SUMMARY"],
     ["Generated At", report.generatedAt],
-    ["Branch", report.branchName ?? String(report.filters.branchId ?? "All")],
+    ["Branch", report.branchName ?? `All branches (${report.branchesReconciled} reconciled)`],
     ["Reporting Period", `${report.filters.startDate} to ${report.filters.endDate}`],
     ["Business Rule", "Expected = opening + in - out; Variance = counted - expected"],
     [],
@@ -87,7 +88,7 @@ export function exportStockMovementVarianceToExcel(
     qty(row.variance),
     row.variancePercent === null ? "" : Math.round(row.variancePercent * 100) / 100,
     row.countDocNo ?? "",
-    row.countCutoffDate ?? "",
+    row.countCutoffDate ? formatPhDateTime(row.countCutoffDate) : "",
     qty(row.countSystemQty),
     qty(row.countSourceVariance),
     row.adjustmentReferences.join(" | "),
@@ -101,9 +102,10 @@ export function exportStockMovementVarianceToExcel(
   // ── Sheet 3: Supporting Documents (drill-down evidence) ─────────────────────
   const docHeader = [
     "Product",
+    "Branch",
     "Document No",
     "Document Type",
-    "Timestamp (UTC)",
+    "Timestamp (Philippines)",
     "In (base)",
     "Out (base)",
     "Count Restatement (base)",
@@ -113,9 +115,10 @@ export function exportStockMovementVarianceToExcel(
   const docRows = report.rows.flatMap((row) =>
     row.supportingDocuments.map((doc) => [
       row.productName,
+      doc.branchName || row.branchName,
       doc.docNo,
       doc.docType,
-      doc.ts,
+      formatPhDateTime(doc.ts),
       qty(doc.inBase),
       qty(doc.outBase),
       qty(doc.countAdjustment),
@@ -128,7 +131,7 @@ export function exportStockMovementVarianceToExcel(
   XLSX.utils.book_append_sheet(workbook, docSheet, "Supporting Documents");
 
   // ── Sheet 4: Exceptions (unmatched serials and excluded reversals) ─────────
-  const excHeader = ["Type", "Product", "Reference", "Detail"];
+  const excHeader = ["Type", "Product / Branch", "Reference", "Detail"];
 
   const serialExceptions = report.rows.flatMap((row) =>
     row.serialExceptions.map((serial) => [
@@ -141,7 +144,7 @@ export function exportStockMovementVarianceToExcel(
 
   const reversalExceptions = report.excludedDocuments.map((doc) => [
     "Void reversal (excluded)",
-    "",
+    doc.branchName,
     `${doc.docType} ${doc.docNo}`,
     `In ${qty(doc.inBase)} / Out ${qty(doc.outBase)} excluded from every balance`,
   ]);

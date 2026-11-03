@@ -26,17 +26,13 @@ import {
   printCustomerOrderConsumptionPdf,
 } from "../services/customer-order-consumption.pdf";
 import { exportCustomerOrderConsumptionWorkbook } from "../services/customer-order-consumption.xlsx";
-import {
-  formatGeneratedAt,
-  formatQty,
-} from "../services/customer-order-consumption.helpers";
 
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : "Export failed."
 }
 
 export function CustomerOrderConsumptionHeader(): React.ReactElement {
-  const { report, appliedFilters, refresh, isInitialLoading, isRefreshing } =
+  const { report, refresh, isInitialLoading, isRefreshing } =
     useCustomerOrderConsumptionReport();
   const isLoading = isInitialLoading || isRefreshing;
 
@@ -58,11 +54,17 @@ export function CustomerOrderConsumptionHeader(): React.ReactElement {
   );
 
   return (
-    <Card className="gap-3 border-border/80 py-4">
+    <Card className="relative gap-3 overflow-hidden border-border/80 py-4">
+      <span
+        aria-hidden="true"
+        className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-primary via-primary/40 to-transparent"
+      />
       <CardContent className="space-y-3 px-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
+          {/* Title and description only — the filter card's applied chips own the period,
+              branch, product and channel the figures were built from. */}
           <div className="min-w-0 space-y-1">
-            <h1 className="text-lg font-semibold leading-tight">
+            <h1 className="text-lg font-bold leading-tight tracking-tight">
               Customer Order &amp; Consumption Report
             </h1>
             <p className="text-xs text-muted-foreground">
@@ -71,53 +73,26 @@ export function CustomerOrderConsumptionHeader(): React.ReactElement {
               purchase proxy; LPG figures are metered or weighed usage. The two
               are never combined.
             </p>
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-              <span>
-                Period:{" "}
-                <span className="font-medium text-foreground">
-                  {appliedFilters.startDate} → {appliedFilters.endDate}
-                </span>
-              </span>
-              <span>
-                Cutoff:{" "}
-                <span className="font-medium text-foreground">
-                  {report?.reportingCutoff ?? appliedFilters.endDate}
-                </span>
-              </span>
-              {report ? (
-                <span>
-                  Source rows:{" "}
-                  <span className="font-medium text-foreground">
-                    {formatQty(report.sourceRowCount)}
-                  </span>
-                </span>
-              ) : null}
-              {report ? (
-                <span>Generated: {formatGeneratedAt(report.generatedAt)}</span>
-              ) : null}
-            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
               variant="outline"
-              size="sm"
               onClick={() => void refresh()}
               disabled={isLoading}
-              className="gap-2"
+              className="h-9 gap-1.5 text-xs font-semibold shadow-2xs"
             >
               {isLoading ? (
-                <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
               ) : (
-                <RefreshCw aria-hidden="true" className="size-4" />
+                <RefreshCw aria-hidden="true" className="size-3.5" />
               )}
               Refresh
             </Button>
             <Button
               type="button"
               variant="outline"
-              size="sm"
               onClick={() =>
                 runExport(
                   () => exportCustomerOrderConsumptionWorkbook(report!),
@@ -125,15 +100,13 @@ export function CustomerOrderConsumptionHeader(): React.ReactElement {
                 )
               }
               disabled={!report}
-              className="gap-2"
+              className="h-9 gap-1.5 border-emerald-500/25 bg-emerald-500/10 text-xs font-semibold text-emerald-700 shadow-2xs hover:bg-emerald-500/20 hover:text-emerald-700 dark:text-emerald-400"
             >
-              <FileDown aria-hidden="true" className="size-4" />
+              <FileDown aria-hidden="true" className="size-3.5" />
               Excel
             </Button>
             <Button
               type="button"
-              variant="outline"
-              size="sm"
               onClick={() =>
                 runExport(
                   () => exportCustomerOrderConsumptionPdf(report!),
@@ -141,15 +114,14 @@ export function CustomerOrderConsumptionHeader(): React.ReactElement {
                 )
               }
               disabled={!report}
-              className="gap-2"
+              className="h-9 gap-1.5 text-xs font-semibold shadow-2xs"
             >
-              <FileText aria-hidden="true" className="size-4" />
+              <FileText aria-hidden="true" className="size-3.5" />
               PDF
             </Button>
             <Button
               type="button"
-              size="sm"
-              variant="secondary"
+              variant="outline"
               onClick={() =>
                 runExport(
                   () => printCustomerOrderConsumptionPdf(report!),
@@ -157,9 +129,9 @@ export function CustomerOrderConsumptionHeader(): React.ReactElement {
                 )
               }
               disabled={!report}
-              className="gap-2"
+              className="h-9 gap-1.5 text-xs font-semibold shadow-2xs"
             >
-              <Printer aria-hidden="true" className="size-4" />
+              <Printer aria-hidden="true" className="size-3.5" />
               Print
             </Button>
           </div>

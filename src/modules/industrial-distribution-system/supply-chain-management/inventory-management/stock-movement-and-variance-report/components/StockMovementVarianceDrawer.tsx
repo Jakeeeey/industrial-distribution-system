@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useStockMovementVarianceReport } from "../hooks/useStockMovementVarianceReport";
-import { formatQty, formatSigned } from "../services/stock-movement-variance.calc";
+import { formatPhDateTime, formatQty, formatSigned } from "../services/stock-movement-variance.calc";
 import { ExceptionBadge } from "./ExceptionBadge";
 
 type PanelTab = "documents" | "exceptions" | "references";
@@ -70,7 +70,9 @@ export function StockMovementVarianceDrawer() {
   const voidedForBranch = React.useMemo(() => {
     if (!selectedRow || !report) return [];
     const own = new Set(selectedRow.supportingDocuments.map((doc) => doc.docNo));
-    return report.excludedDocuments.filter((doc) => !own.has(doc.docNo));
+    return report.excludedDocuments.filter(
+      (doc) => !own.has(doc.docNo) && doc.branchId === selectedRow.branchId
+    );
   }, [selectedRow, report]);
 
   const serialCount = selectedRow?.serialExceptions.length ?? 0;
@@ -165,7 +167,7 @@ export function StockMovementVarianceDrawer() {
                 <div className="space-y-1 text-[11px]">
                   <p>
                     <span className="font-medium">{selectedRow.countDocNo}</span> · cutoff{" "}
-                    {selectedRow.countCutoffDate ?? "not recorded"}
+                    {formatPhDateTime(selectedRow.countCutoffDate)}
                   </p>
                   <p className="text-muted-foreground">
                     Count sheet recorded system {formatQty(selectedRow.countSystemQty)} and its own
@@ -241,7 +243,7 @@ export function StockMovementVarianceDrawer() {
                             <div className="mt-1 flex items-center gap-3 text-[10px] tabular-nums text-muted-foreground">
                               <span className="flex items-center gap-1">
                                 <FileClock className="h-3 w-3" />
-                                {doc.ts ? doc.ts.slice(0, 16).replace("T", " ") : "no timestamp"}
+                                {formatPhDateTime(doc.ts)}
                               </span>
                               {doc.inBase ? <span className="text-emerald-600">in {formatQty(doc.inBase)}</span> : null}
                               {doc.outBase ? <span className="text-orange-600">out {formatQty(doc.outBase)}</span> : null}
@@ -296,7 +298,10 @@ export function StockMovementVarianceDrawer() {
                             <div>
                               <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold">
                                 <Undo2 className="h-3 w-3" />
-                                <span>Void documents excluded across this branch</span>
+                                <span>
+                                  Void documents excluded at{" "}
+                                  {selectedRow.branchName || `Branch #${selectedRow.branchId}`}
+                                </span>
                               </p>
                               <p className="mb-1.5 text-[10px] text-muted-foreground">
                                 The movement ledger does not apply a later void, so these documents

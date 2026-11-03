@@ -34,7 +34,7 @@ function CylinderUtilizationReportContent() {
 
   return (
     <div className="w-full min-w-0 animate-in space-y-5 fade-in duration-300">
-      {/* 1. Header, cutoff label and export actions */}
+      {/* 1. Header: title, description and export actions */}
       <UtilizationHeader />
 
       {/* 2. Reporting period, branch and cylinder-size parameters */}

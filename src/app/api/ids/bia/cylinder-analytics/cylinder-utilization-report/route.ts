@@ -187,7 +187,7 @@ async function loadDataset(
   // ── 1. Branch directory ───────────────────────────────────────────────────
   // AG-COMMENT: Filter branches by division_id = 1 per ids-guide rule
   const branchRows = await fetchRows<{ id: number; branch_name: string | null }>(
-    `${directusBase}/items/branches?fields=id,branch_name&filter[division_id][_eq]=1&limit=-1`,
+    `${directusBase}/items/branches?fields=id,branch_name&filter[isActive][_eq]=1&filter[division_id][_eq]=1&limit=-1`,
     headers
   );
   const branchNames = new Map<number, string>();
@@ -205,7 +205,7 @@ async function loadDataset(
     description: string | null;
     product_weight: number | null;
   }>(
-    `${directusBase}/items/products?filter[is_serialized][_eq]=1&fields=product_id,product_code,product_name,description,product_weight&limit=-1`,
+    `${directusBase}/items/products?filter[is_serialized][_eq]=1&filter[isActive][_eq]=1&fields=product_id,product_code,product_name,description,product_weight&limit=-1`,
     headers
   );
   const products = new Map<number, ProductMeta>();

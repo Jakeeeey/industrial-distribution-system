@@ -315,13 +315,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         `${directusBase}/items/customer?fields=customer_code,customer_name,store_name,contact_number,brgy,city,province&limit=-1`,
         headers
       ),
+      // AG-FILTER: not narrowed by isActive/is_serialized — the row gates read these
+      // flags from this map, so a scoped map would make an ineligible product unknown.
       fetchRows<ProductRow>(
         `${directusBase}/items/products?fields=product_id,product_code,product_name,description,product_weight,is_serialized&limit=-1`,
         headers
       ),
       // AG-COMMENT: Restrict branch queries strictly to Industrial Division (division_id = 1)
       fetchRows<BranchRow>(
-        `${directusBase}/items/branches?fields=id,branch_name,branch_code&filter[division_id][_eq]=1&limit=-1`,
+        `${directusBase}/items/branches?fields=id,branch_name,branch_code&filter[isActive][_eq]=1&filter[division_id][_eq]=1&limit=-1`,
         headers
       ),
       fetchRows<CylinderAssetRow>(
@@ -384,6 +386,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     });
 
     // Resolve product_id for all site cylinders (via linked cylinder_asset_id)
+    // AG-FILTER: deliberately NOT narrowed by is_deleted. This is an id-keyed
+    // back-fill for assets the custody query above did not return; narrowing it
+    // would leave an installed cylinder without a product, and the size label
+    // would fall back to a default serial instead of the cylinder's real one.
     const siteCylAssetIds = rawSiteCylinders.map((s) => s.cylinder_asset_id).filter(Boolean);
     const unlinkedAssets = siteCylAssetIds.length > 0
       ? await fetchRows<CylinderAssetRow>(
@@ -1062,7 +1068,7 @@ async function handleCustomerDetailDrillDown(
     // 2. Fetch Branches for branch name resolution (division_id = 1 for Industrial)
     // AG-COMMENT: Restrict branch queries strictly to Industrial Division (division_id = 1)
     const branchRows = await fetchRows<BranchRow>(
-      `${directusBase}/items/branches?fields=id,branch_name&filter[division_id][_eq]=1&limit=-1`,
+      `${directusBase}/items/branches?fields=id,branch_name&filter[isActive][_eq]=1&filter[division_id][_eq]=1&limit=-1`,
       headers
     );
     const branchMap = new Map<number, string>();
@@ -1073,9 +1079,11 @@ async function handleCustomerDetailDrillDown(
     // 3. Fetch Active Serials from cylinder_assets and lpg_customer_site_cylinders
     const [allAssets, allProducts, allSiteCyls] = await Promise.all([
       fetchRows<CylinderAssetRow>(
-        `${directusBase}/items/cylinder_assets?fields=id,serial_number,product_id,cylinder_status,cylinder_condition,current_customer_code,current_branch_id,modified_date,created_date&limit=-1`,
+        `${directusBase}/items/cylinder_assets?fields=id,serial_number,product_id,cylinder_status,cylinder_condition,current_customer_code,current_branch_id,modified_date,created_date&filter[is_deleted][_neq]=1&limit=-1`,
         headers
       ),
+      // AG-FILTER: not narrowed by isActive/is_serialized — the row gates read these
+      // flags from this map, so a scoped map would make an ineligible product unknown.
       fetchRows<ProductRow>(
         `${directusBase}/items/products?fields=product_id,product_code,product_name,description,product_weight,is_serialized&limit=-1`,
         headers
