@@ -352,6 +352,43 @@ async function tagSerials(
         }
     }
 
+    // Developer comment: Backend zero-trust capacity enforcement. Check existing saved serials to prevent over-tagging past ordered_quantity.
+    const allLineIds = linesData.map((l) => Number(l.purchase_order_product_id)).filter(Boolean);
+    if (allLineIds.length > 0) {
+        const existingSerialsUrl =
+            `${base}/items/purchase_order_serial` +
+            `?filter[purchase_order_product_id][_in]=${allLineIds.join(",")}` +
+            `&limit=-1` +
+            `&fields=purchase_order_product_id`;
+        const existingSerialsRes = await directusFetch(existingSerialsUrl);
+        const existingSerialsData = ((await existingSerialsRes.json().catch(() => ({}))).data ?? []) as Record<string, unknown>[];
+        
+        const existingCountByLine = new Map<number, number>();
+        for (const sr of existingSerialsData) {
+            const raw = sr.purchase_order_product_id;
+            const lid = typeof raw === 'object' && raw !== null ? Number((raw as Record<string, unknown>).id || (raw as Record<string, unknown>).purchase_order_product_id) : Number(raw);
+            if (Number.isFinite(lid) && lid > 0) {
+                existingCountByLine.set(lid, (existingCountByLine.get(lid) ?? 0) + 1);
+            }
+        }
+
+        const incomingCountByLine = new Map<number, number>();
+        for (const e of entries) {
+            incomingCountByLine.set(e.lineId, (incomingCountByLine.get(e.lineId) ?? 0) + 1);
+        }
+
+        for (const [lineId, incomingCount] of incomingCountByLine.entries()) {
+            const lineMeta = linesMap.get(lineId);
+            const orderedQty = lineMeta?.ordered_quantity ?? 0;
+            const currentCount = existingCountByLine.get(lineId) ?? 0;
+            if (currentCount + incomingCount > orderedQty) {
+                throw new Error(
+                    `Over-tagging rejected: Line ID ${lineId} has ${currentCount} saved serial(s), adding ${incomingCount} exceeds ordered quantity of ${orderedQty}. Exact 1:1 required.`
+                );
+            }
+        }
+    }
+
     // 2. Fetch v_serial_onhand for validation (via Spring API)
     const uniqueSerials = Array.from(new Set(entries.map((e) => String(e.serial_number).trim())));
     
