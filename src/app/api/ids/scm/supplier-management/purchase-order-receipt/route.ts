@@ -148,6 +148,12 @@ const LOTS_COLLECTION = "lots";
 const UNITS_COLLECTION = "units";
 const PRODUCT_SUPPLIER_COLLECTION = "product_per_supplier";
 
+// Developer Comment: Unit IDs allocated for Cylinder & LPG products from vos_database.units (IDs: 1, 18, 19, 20, 21, 22, 23).
+// Cylinder products strictly use cylinder unit codes and do not have a BOX unit category.
+// Developer Comment: Unit IDs strictly allowed for 'Add Extra' cylinder product receiving from vos_database.units:
+// 18 = EMPTY, 19 = SWAP, 23 = FULL
+const ALLOWED_EXTRA_CYLINDER_UOM_IDS = new Set<number>([18, 19, 23]);
+
 type POStatus = "OPEN" | "PARTIAL" | "CLOSED";
 
 type POItem = {
@@ -941,18 +947,11 @@ export async function POST(req: NextRequest) {
             const p = j?.data?.[0];
             if (!p) return bad("Product not found", 404);
             const uomId = Number(p.unit_of_measurement?.unit_id ?? p.unit_of_measurement);
-            if (uomId !== 11 && uomId !== 1) {
-                return bad("Only 'Box' or 'Piece' UOM allowed.", 400);
+            // Developer Comment: Validate against allowed 'Add Extra' cylinder product units strictly: Full (18), Empty (19), and Swap (23).
+            if (!ALLOWED_EXTRA_CYLINDER_UOM_IDS.has(uomId)) {
+                return bad("Invalid product unit. Only Full, Empty, and Swap cylinder products are allowed.", 400);
             }
-
-            if (uomId === 1) {
-                // Check if a Box variant exists for this product name
-                const boxUrl = `${base}/items/${PRODUCTS_COLLECTION}?limit=1&filter[product_name][_eq]=${encodeURIComponent(String(p.product_name))}&filter[unit_of_measurement][_eq]=11&fields=product_id`;
-                const boxJ = await fetchJson<{ data: Record<string, unknown>[] }>(boxUrl).catch(() => null);
-                if (boxJ && Array.isArray(boxJ.data) && boxJ.data.length > 0) {
-                    return bad("A Box variant exists for this product. Please use the Box variant.", 400);
-                }
-            }
+            const uomShortcut = String(p.unit_of_measurement?.unit_shortcut || p.unit_of_measurement?.unit_name || "").toUpperCase();
 
             let discTypeStr = "Standard";
             let discPct = 0;
@@ -978,7 +977,8 @@ export async function POST(req: NextRequest) {
                 unitPrice: toNum(p.cost_per_unit),
                 discountType: discTypeStr,
                 discountPercent: discPct,
-                uom: String(p.unit_of_measurement?.unit_shortcut ?? (uomId === 11 ? "BOX" : "PCS")).toUpperCase(),
+                uom: uomShortcut,
+                uomId: uomId,
                 sku: String(p.barcode || p.product_code)
             });
         }
@@ -1416,7 +1416,9 @@ export async function POST(req: NextRequest) {
                 if (!p) return null;
 
                 const uomId = Number(p.unit_of_measurement?.unit_id ?? p.unit_of_measurement);
-                if (uomId !== 11 && uomId !== 1) return null;
+                // Developer Comment: Filter extra products strictly to Empty (18), Swap (19), and Full (23) cylinder variants.
+                if (!ALLOWED_EXTRA_CYLINDER_UOM_IDS.has(uomId)) return null;
+                const uomShortcut = String(p.unit_of_measurement?.unit_shortcut || p.unit_of_measurement?.unit_name || "").toUpperCase();
 
                 const dt = link.discount_type as Record<string, unknown> | null | undefined;
                 let discTypeStr = "No Discount";
@@ -1436,7 +1438,7 @@ export async function POST(req: NextRequest) {
                     barcode: String(p.barcode || p.product_code),
                     unitPrice: toNum(p.cost_per_unit),
                     uomId: uomId,
-                    uom: String(p.unit_of_measurement?.unit_shortcut ?? (uomId === 11 ? "BOX" : "PCS")).toUpperCase(),
+                    uom: uomShortcut,
                     discountType: discTypeStr,
                     discountPercent: discPct
                 };
@@ -1452,28 +1454,8 @@ export async function POST(req: NextRequest) {
                 discountPercent: number;
             }>;
 
-            // Box Priority Logic: group by name, keep Box if exists, else Piece
-            const groupedByName = new Map<string, typeof rawResults>();
-            for (const item of rawResults) {
-                const arr = groupedByName.get(item.name) || [];
-                arr.push(item);
-                groupedByName.set(item.name, arr);
-            }
-
-            const results: typeof rawResults = [];
-            groupedByName.forEach((items) => {
-                const boxItem = items.find(i => i.uomId === 11);
-                if (boxItem) {
-                    results.push(boxItem);
-                } else {
-                    const pieceItem = items.find(i => i.uomId === 1);
-                    if (pieceItem) {
-                        results.push(pieceItem);
-                    }
-                }
-            });
-
-            return ok(results.map(r => ({
+            // Developer Comment: Return cylinder product results directly without box grouping
+            return ok(rawResults.map(r => ({
                 productId: r.productId,
                 name: r.name,
                 sku: r.sku,

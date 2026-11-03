@@ -19,8 +19,9 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { AlertTriangle, Plus, Trash2, QrCode, Package, ChevronRight, ChevronLeft, Lock, History } from "lucide-react";
+import { AlertTriangle, QrCode, Package, ChevronRight, ChevronLeft, History } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { SerialRegistrationModal, TempSerialItem } from "../SerialRegistrationModal";
 
 export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack: () => void }) {
     const {
@@ -47,6 +48,8 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
     const [newExpiry, setNewExpiry] = React.useState("");
     const inputRef = React.useRef<HTMLInputElement>(null);
     const [highlightNewSerialFields, setHighlightNewSerialFields] = React.useState(false);
+
+// Developer comment: Bulk paste removed in favor of rapid continuous barcode scanning workflow.
 
     // ✅ Serial Verification state
     const [verifyingSerial, setVerifyingSerial] = React.useState(false);
@@ -193,30 +196,28 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
     // orderedLimit is the remaining balance — used for display, NOT for hard blocking (warning shown instead) - AG 2026-07-14
     const orderedLimit = activeItem ? Math.max(0, Number(activeItem.expectedQty || 0) - Number(activeItem.receivedQty || 0)) : Infinity;
 
-    // ✅ Validation Helper
-    const isPendingValid = newSerial.trim() !== "";
-    const isPartialEntry = newSerial.trim() !== "" || newTare.trim() !== "" || newExpiry.trim() !== "";
-
-
     // ✅ Fix 3: Serial Verification — NEW LOGIC (AG 2026-07-14)
     // - Serial NOT in cylinder_assets (requiresRegistration=true) → AUTO-ACCEPT (new asset, free to receive)
     // - Serial IS in cylinder_assets (source="asset") → BLOCK with popup (already registered, cannot duplicate)
-    const addSerial = async (skipLimitCheckOrEvent?: boolean | unknown) => {
+    const addSerial = async (skipLimitCheckOrEvent?: boolean | unknown, customSn?: string, customTare?: string, customExpiry?: string): Promise<boolean> => {
         const skipLimitCheck = typeof skipLimitCheckOrEvent === "boolean" ? skipLimitCheckOrEvent : false;
         
-        if (!isPendingValid) {
+        // Developer comment: Validate directly against incoming parameter to avoid asynchronous React state latency
+        const val = (customSn !== undefined ? customSn : newSerial).trim();
+        const effectiveTare = (customTare !== undefined ? customTare : newTare).trim();
+        const effectiveExpiry = (customExpiry !== undefined ? customExpiry : newExpiry).trim();
+
+        if (!val) {
             toast.error("Incomplete Registration", {
                 description: "Please enter a Serial Number.",
             });
-            return;
+            return false;
         }
-
-        const val = newSerial.trim();
 
         // 1. In-session duplicate check
         if (tempSerials.some(x => x.sn === val)) {
             toast.warning("Duplicate Serial", { description: "Already in current list." });
-            return;
+            return false;
         }
 
         // 2. Cross-product duplicate check (within this receiving session)
@@ -230,21 +231,21 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
         }
         if (existingProduct) {
             toast.error("Duplicate Serial", { description: `Already registered for ${existingProduct}` });
-            return;
+            return false;
         }
 
         // 3. Check if over the ordered balance — warn instead of hard block - AG 2026-07-14
         if (!skipLimitCheck && tempSerials.length >= orderedLimit) {
-            setPendingSerialEntry({ sn: val, tare: newTare, expiry: newExpiry });
+            setPendingSerialEntry({ sn: val, tare: effectiveTare, expiry: effectiveExpiry });
             setIsSerialOverLimitOpen(true);
-            return;
+            return false;
         }
 
         // ✅ If it's flagged as a new serial, validate Tare & Expiry and register directly
         if (highlightNewSerialFields) {
-            if (!newTare.trim() || !newExpiry.trim()) {
+            if (!effectiveTare || !effectiveExpiry) {
                 toast.error("New Serial Detected", { description: "Tare weight and expiry date are strictly required for new serials." });
-                return;
+                return false;
             }
             setVerifyingSerial(true);
             try {
@@ -254,8 +255,8 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
                     body: JSON.stringify({
                         action: "register_serial",
                         serialNumber: val,
-                        tareWeight: newTare,
-                        expiryDate: newExpiry,
+                        tareWeight: effectiveTare,
+                        expiryDate: effectiveExpiry,
                         productId: activeItem?.productId,
                         currentBranchId: activeItem?.branchId,
                         userId: receiverId
@@ -265,18 +266,17 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
                 if (j?.error) throw new Error(j.error);
                 
                 // Registration successful!
-                setTempSerials(prev => [...prev, { sn: val, tareWeight: newTare, expiryDate: newExpiry, isNew: true }]);
+                setTempSerials(prev => [...prev, { sn: val, tareWeight: effectiveTare, expiryDate: effectiveExpiry, isNew: true }]);
                 setNewSerial("");
-                setNewTare("");
-                setNewExpiry("");
                 setHighlightNewSerialFields(false);
                 setTimeout(() => inputRef.current?.focus(), 10);
+                return true;
             } catch (e) {
                 toast.error("Registration Failed", { description: (e as Error).message });
+                return false;
             } finally {
                 setVerifyingSerial(false);
             }
-            return;
         }
 
         // 4. Verify against Cylinder Asset master DB
@@ -307,11 +307,11 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
                 } else {
                     toast.error("Serial Rejected", { description: result.message });
                 }
-                return;
+                return false;
             }
 
             if (result?.status === "REQUIRES_REGISTRATION") {
-                if (newTare.trim() && newExpiry.trim()) {
+                if (effectiveTare && effectiveExpiry) {
                     try {
                         const res = await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
                             method: "POST",
@@ -319,8 +319,8 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
                             body: JSON.stringify({
                                 action: "register_serial",
                                 serialNumber: val,
-                                tareWeight: newTare,
-                                expiryDate: newExpiry,
+                                tareWeight: effectiveTare,
+                                expiryDate: effectiveExpiry,
                                 productId: activeItem?.productId,
                                 currentBranchId: activeItem?.branchId,
                                 userId: receiverId
@@ -329,41 +329,40 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
                         const jReg = await res.json();
                         if (jReg?.error) throw new Error(jReg.error);
                         
-                        setTempSerials(prev => [...prev, { sn: val, tareWeight: newTare, expiryDate: newExpiry, isNew: true }]);
+                        setTempSerials(prev => [...prev, { sn: val, tareWeight: effectiveTare, expiryDate: effectiveExpiry, isNew: true }]);
                         setNewSerial("");
-                        setNewTare("");
-                        setNewExpiry("");
                         setHighlightNewSerialFields(false);
                         setTimeout(() => inputRef.current?.focus(), 10);
+                        return true;
                     } catch (e) {
                         toast.error("Registration Failed", { description: (e as Error).message });
+                        return false;
                     }
-                    return;
                 }
 
                 setHighlightNewSerialFields(true);
                 toast.error("New Serial Detected", { description: "Tare weight and expiry date are required to register this serial." });
-                return; // Wait for user to input Tare and Expiry
+                return false;
             }
 
             // ACCEPTED (Existing Serial)
             setTempSerials(prev => [...prev, { 
                 sn: val, 
-                tareWeight: result.tareWeight || newTare, 
-                expiryDate: result.expiryDate || newExpiry 
+                tareWeight: result.tareWeight || effectiveTare, 
+                expiryDate: result.expiryDate || effectiveExpiry 
             }]);
             setNewSerial("");
-            setNewTare("");
-            setNewExpiry("");
             setTimeout(() => inputRef.current?.focus(), 10);
+            return true;
         } catch (e) {
             toast.error("Action Failed", { description: (e as Error).message || "Could not verify serial." });
+            return false;
         } finally {
             setVerifyingSerial(false);
         }
     };
 
-    // ✅ Confirm adding an over-limit serial (user acknowledged warning) - AG 2026-07-14
+        // ✅ Confirm adding an over-limit serial (user acknowledged warning) - AG 2026-07-14
     const confirmAddOverLimitSerial = async () => {
         if (!pendingSerialEntry) return;
         setIsSerialOverLimitOpen(false);
@@ -379,6 +378,7 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
         }, 0);
     };
 
+    
     // Developer comment: Support removing both unsaved and saved draft serials to prevent hard-lock
     const removeSerial = async (index: number) => {
         const serialToRemove = tempSerials[index];
@@ -806,274 +806,52 @@ export function ManualProductsStep({ onBack }: { onContinue: () => void; onBack:
                 </AlertDialogContent>
             </AlertDialog>
 
-            <Dialog open={serialModalOpen} onOpenChange={(open) => {
-                if (!open && (tempSerials.length > 0 || newSerial.trim())) return;
-                setSerialModalOpen(open);
-            }}>
-                <DialogContent 
-                    onPointerDownOutside={(e) => e.preventDefault()}
-                    onEscapeKeyDown={(e) => {
-                        if (tempSerials.length > 0 || newSerial.trim()) e.preventDefault();
-                    }}
-                    showCloseButton={false}
-                    className="max-w-xl p-0 overflow-hidden rounded-3xl border-none shadow-2xl"
-                >
-                    <div className="bg-primary p-6 text-white relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl" />
-                        <div className="relative z-10 flex items-center justify-between">
-                            <div className="flex flex-col gap-1">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center backdrop-blur-sm">
-                                        <QrCode className="w-4 h-4 text-white" />
-                                    </div>
-                                    <DialogTitle className="text-xl font-black uppercase tracking-tight m-0">Serial Registration</DialogTitle>
-                                </div>
-                                <DialogDescription className="text-[10px] font-bold text-white/70 uppercase tracking-widest m-0">
-                                    Piece-by-Piece Inventory Tracking
-                                </DialogDescription>
-                            </div>
-                            <Badge variant="outline" className={cn(
-                                "border-white/40 text-white font-mono bg-white/10 px-3 py-1",
-                                tempSerials.length > orderedLimit ? "bg-red-500/80 border-red-400" :
-                                tempSerials.length === orderedLimit ? "bg-emerald-500/30 border-emerald-400" : ""
-                            )}>
-                                {tempSerials.length} / {orderedLimit} REGISTERED {tempSerials.length > orderedLimit && "(OVER)"}
-                            </Badge>
-                        </div>
-                    </div>
-
-                    <div className="p-6 space-y-6">
-                        <div className="flex items-center justify-between gap-4">
-                            <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 leading-none mb-1">Current Product</span>
-                                <span className="text-base font-bold text-slate-900 dark:text-white truncate">{activeProductName}</span>
-                            </div>
-                            <div className="flex flex-col items-end shrink-0">
-                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 leading-none mb-1 text-right">Items</span>
-                                <span className="text-sm font-black text-slate-900 dark:text-white">{orderedLimit} Units</span>
-                            </div>
-                        </div>
-
-                        {orderedLimit !== Infinity && (
-                            <div className="space-y-1.5">
-                                <div className="flex justify-between items-end text-[9px] font-black uppercase tracking-widest text-slate-400">
-                                    <span>Registration Progress</span>
-                                    <span className={tempSerials.length > orderedLimit ? "text-red-500" : tempSerials.length === orderedLimit ? "text-emerald-500" : "text-primary"}>
-                                        {((tempSerials.length / orderedLimit) * 100).toFixed(0)}%
-                                    </span>
-                                </div>
-                                <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                                    <div
-                                        className={cn(
-                                            "h-full transition-all duration-500 ease-out",
-                                            tempSerials.length > orderedLimit ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]" :
-                                            tempSerials.length === orderedLimit ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" : "bg-primary"
-                                        )}
-                                        style={{ width: `${Math.min(100, (tempSerials.length / orderedLimit) * 100)}%` }}
-                                    />
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="space-y-4">
-                            <div className="space-y-3">
-                                <div className="grid grid-cols-12 gap-3 items-end">
-                                    <div className="col-span-5 space-y-1">
-                                        <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Serial Number</label>
-                                        <div className="relative w-full">
-                                            <Input
-                                                ref={inputRef}
-                                                value={newSerial}
-                                                onChange={(e) => {
-                                                    setNewSerial(e.target.value);
-                                                    setHighlightNewSerialFields(false);
-                                                }}
-                                                onKeyDown={(e) => e.key === "Enter" && addSerial()}
-                                                placeholder="Scan/Type..."
-                                                className={cn(
-                                                    // Developer comment: Removed uppercase class to preserve mixed-case character input as typed/scanned
-                                                    "h-12 px-4 rounded-xl font-mono text-sm border-2 transition-all shadow-sm",
-                                                    tempSerials.length >= orderedLimit
-                                                        ? "border-amber-500/50 bg-amber-50/10 focus-visible:border-amber-500"
-                                                        : "border-slate-200 dark:border-slate-800 focus-visible:ring-0 focus-visible:border-primary"
-                                                )}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="col-span-3 space-y-1">
-                                        <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Tare (kg)</label>
-                                        <Input
-                                            type="number"
-                                            step="0.01"
-                                            placeholder="0.00"
-                                            value={newTare}
-                                            onKeyDown={(e) => {
-                                                if (e.key === "Enter") addSerial();
-                                                if (["e", "E", "+"].includes(e.key)) e.preventDefault();
-                                            }}
-                                            onChange={(e) => {
-                                                const val = e.target.value;
-                                                if (val === "" || /^\d*\.?\d*$/.test(val)) {
-                                                    setNewTare(val);
-                                                }
-                                            }}
-                                            className={cn(
-                                                "h-12 text-sm font-bold border-2 rounded-xl focus-visible:ring-primary focus-visible:border-primary px-3 transition-colors",
-                                                highlightNewSerialFields ? "border-red-500 bg-red-50/10 focus-visible:border-red-600" : ""
-                                            )}
-                                        />
-                                    </div>
-                                    <div className="col-span-4 space-y-1">
-                                        <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Expiry Date</label>
-                                        <Input
-                                            type="date"
-                                            value={newExpiry}
-                                            onChange={(e) => setNewExpiry(e.target.value)}
-                                            onKeyDown={(e) => e.key === "Enter" && addSerial()}
-                                            className={cn(
-                                                "h-12 text-sm font-bold border-2 rounded-xl focus-visible:ring-primary focus-visible:border-primary px-2 transition-colors",
-                                                highlightNewSerialFields ? "border-red-500 bg-red-50/10 focus-visible:border-red-600" : ""
-                                            )}
-                                        />
-                                    </div>
-                                </div>
-
-                                <Button 
-                                    onClick={addSerial} 
-                                    disabled={verifyingSerial || !isPendingValid}
-                                    className={cn(
-                                        "w-full h-11 rounded-xl font-black uppercase tracking-widest text-[10px] gap-2 shadow-md transition-all active:scale-[0.98]",
-                                        !isPendingValid ? "bg-muted text-muted-foreground cursor-not-allowed" : "bg-primary hover:bg-primary/90 text-primary-foreground"
-                                    )}
-                                >
-                                    <Plus className="h-3.5 w-3.5" />
-                                    {verifyingSerial ? "Verifying..." : "Add Registered Piece"}
-                                </Button>
-                            </div>
-                        </div>
-
-                        <div className="space-y-3">
-                            <div className="flex items-center justify-between px-1">
-                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Registered Pieces</span>
-                                {tempSerials.length > 0 && (
-                                    <Button
-                                        variant="link"
-                                        onClick={async () => {
-                                            // Developer comment: Clear all serials for this line and purge draft rows to resolve locked state
-                                            const allSns = tempSerials.map(s => s.sn);
-                                            if (allSns.length > 0) {
-                                                try {
-                                                    await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
-                                                        method: "POST",
-                                                        headers: { "Content-Type": "application/json" },
-                                                        body: JSON.stringify({ action: "delete_presaved_serials", serialNumbers: allSns }),
-                                                    });
-                                                    allSns.forEach(sn => {
-                                                        fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
-                                                            method: "POST",
-                                                            headers: { "Content-Type": "application/json" },
-                                                            body: JSON.stringify({ action: "deregister_serial", serialNumber: sn })
-                                                        }).catch(() => null);
-                                                    });
-                                                } catch (e) {
-                                                    console.error("Failed to bulk clear serials", e);
-                                                }
-                                            }
-                                            setTempSerials([]);
-                                            if (activePorId) {
-                                                setSerialsByPorId(prev => ({ ...prev, [activePorId]: [] }));
-                                                setManualCounts(prev => ({ ...prev, [activePorId]: 0 }));
-                                            }
-                                            toast.info("Cleared all serials for this product line");
-                                        }}
-                                        className="h-auto p-0 text-[10px] font-black uppercase tracking-widest text-red-500 hover:text-red-600"
-                                    >
-                                        Clear All Serials
-                                    </Button>
-                                )}
-                            </div>
-                            <div className="border border-slate-100 dark:border-slate-900 rounded-2xl overflow-hidden shadow-sm">
-                                <div className="max-h-48 overflow-y-auto scrollbar-thin">
-                                    <Table>
-                                        <TableHeader className="bg-slate-50 dark:bg-slate-900 sticky top-0 z-10">
-                                            <TableRow className="border-none hover:bg-transparent">
-                                                <TableHead className="h-9 text-[10px] font-black uppercase tracking-widest px-4">Serial Number</TableHead>
-                                                <TableHead className="h-9 text-[10px] font-black uppercase tracking-widest text-center">Tare</TableHead>
-                                                <TableHead className="h-9 text-[10px] font-black uppercase tracking-widest text-center">Expiry</TableHead>
-                                                <TableHead className="h-9 w-10"></TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {tempSerials.length === 0 ? (
-                                                <TableRow>
-                                                    <TableCell colSpan={4} className="h-24 text-center text-slate-400 text-xs font-medium">
-                                                        No serials registered yet
-                                                    </TableCell>
-                                                </TableRow>
-                                            ) : (
-                                                tempSerials.map((item, idx) => (
-                                                    <TableRow key={idx} className="group border-slate-50 dark:border-slate-900 hover:bg-slate-50/50 dark:hover:bg-slate-900/50">
-                                                        <TableCell className="py-2 px-4 font-mono text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                                                            <div className="flex items-center gap-2">
-                                                                {item.sn}
-                                                                {item.isSaved && (
-                                                                    <Badge variant="outline" className="text-[7px] h-4 px-1 py-0 uppercase border-slate-300 text-slate-500 tracking-widest bg-slate-100 flex items-center">
-                                                                        <Lock className="w-2.5 h-2.5 mr-0.5" /> Saved
-                                                                    </Badge>
-                                                                )}
-                                                            </div>
-                                                        </TableCell>
-                                                        <TableCell className="py-2 text-center font-bold text-[10px] text-slate-500">
-                                                            {item.tareWeight || "-"}
-                                                        </TableCell>
-                                                        <TableCell className="py-2 text-center font-bold text-[10px] text-slate-500">
-                                                            {item.expiryDate || "-"}
-                                                        </TableCell>
-                                                        <TableCell className="py-2 px-2 text-center">
-                                                            {/* Developer comment: Always allow deleting serials from the registration table to prevent hard-lock error states */}
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="h-8 w-8 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all opacity-0 group-hover:opacity-100"
-                                                                onClick={() => removeSerial(idx)}
-                                                                title="Remove serial"
-                                                            >
-                                                                <Trash2 className="h-3.5 w-3.5" />
-                                                            </Button>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))
-                                            )}
-                                        </TableBody>
-                                    </Table>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="p-6 bg-slate-50 dark:bg-slate-900/80 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                        <div className="flex flex-col">
-                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Verification Status</span>
-                            <span className="text-sm font-black text-primary uppercase italic">{tempSerials.length > 0 ? "Scanned" : "Awaiting Input"}</span>
-                        </div>
-                        <div className="flex gap-3">
-                            <Button variant="outline" onClick={handleCancelSerial} className="rounded-xl px-6 font-black uppercase tracking-widest text-[10px] h-11 border-2">Cancel</Button>
-                            <Button 
-                                onClick={saveSerials} 
-                                disabled={isPartialEntry && !isPendingValid}
-                                className={cn(
-                                    "rounded-xl px-10 font-black uppercase tracking-widest text-[10px] h-11 shadow-lg",
-                                    isPartialEntry && !isPendingValid ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-primary shadow-primary/30"
-                                )}
-                            >
-                                {committingSerials ? "Committing..." : "Commit Pieces"}
-                            </Button>
-                        </div>
-                    </div>
-                </DialogContent>
-            </Dialog>
-
-
+            {/* Developer comment: Dedicated local SerialRegistrationModal component with tailored dimensions and rapid continuous scanning */}
+            <SerialRegistrationModal
+                open={serialModalOpen}
+                onClose={handleCancelSerial}
+                productName={activeProductName}
+                orderedLimit={orderedLimit}
+                tempSerials={tempSerials as TempSerialItem[]}
+                onAddSerial={async (sn, tare, expiry) => {
+                    setNewSerial(sn);
+                    setNewTare(tare);
+                    setNewExpiry(expiry);
+                    return await addSerial(false, sn, tare, expiry);
+                }}
+                onRemoveSerial={removeSerial}
+                onClearAllSerials={async () => {
+                    const allSns = tempSerials.map(s => s.sn);
+                    if (allSns.length > 0) {
+                        try {
+                            await fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ action: "delete_presaved_serials", serialNumbers: allSns }),
+                            });
+                            allSns.forEach(sn => {
+                                fetch("/api/ids/scm/supplier-management/purchase-order-receiving-manual", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ action: "deregister_serial", serialNumber: sn })
+                                }).catch(() => null);
+                            });
+                        } catch (e) {
+                            console.error("Failed to bulk clear serials", e);
+                        }
+                    }
+                    setTempSerials([]);
+                    if (activePorId) {
+                        setSerialsByPorId(prev => ({ ...prev, [activePorId]: [] }));
+                        setManualCounts(prev => ({ ...prev, [activePorId]: 0 }));
+                    }
+                    toast.info("Cleared all serials for this product line");
+                }}
+                onCommitPieces={saveSerials}
+                verifyingSerial={verifyingSerial}
+                committingSerials={committingSerials}
+                highlightNewSerialFields={highlightNewSerialFields}
+            />
 
             <Dialog open={historyModalOpen} onOpenChange={setHistoryModalOpen}>
                 <DialogContent className="max-w-2xl bg-white dark:bg-slate-950 rounded-3xl border-0 shadow-2xl p-0 overflow-hidden flex flex-col h-[80vh]">

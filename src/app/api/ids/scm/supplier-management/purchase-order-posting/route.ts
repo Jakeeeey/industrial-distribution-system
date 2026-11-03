@@ -1834,6 +1834,41 @@ export async function POST(req: NextRequest) {
             });
             await Promise.all(popSyncPromises);
 
+            // Developer Comment: When PO receipt is posted, if that receipt has an extra item,
+            // the item will be saved in purchase_order_products with is_ExtraItem: 1.
+            for (const postItem of toPost) {
+                const pId = postItem.productId;
+                const bId = postItem.branchId;
+                const hasLine = lines.some(l => toNum(l.product_id) === pId && toNum(l.branch_id ?? 0) === bId);
+                if (!hasLine && pId > 0) {
+                    const checkUrl = `${base}/items/${PO_PRODUCTS_COLLECTION}?limit=1&filter[purchase_order_id][_eq]=${poId}&filter[product_id][_eq]=${pId}&filter[branch_id][_eq]=${bId}&fields=purchase_order_product_id`;
+                    const checkRes = await fetchJson<{ data: Array<{ purchase_order_product_id: number }> }>(checkUrl).catch(() => ({ data: [] }));
+                    if (!checkRes?.data || checkRes.data.length === 0) {
+                        const rObj = postItem.rowObj;
+                        await fetchJson(`${base}/items/${PO_PRODUCTS_COLLECTION}`, {
+                            method: "POST",
+                            body: JSON.stringify({
+                                purchase_order_id: poId,
+                                product_id: pId,
+                                branch_id: bId,
+                                ordered_quantity: 0,
+                                unit_price: toNum(rObj?.unit_price ?? 0),
+                                approved_price: toNum(rObj?.unit_price ?? 0),
+                                discount_type: rObj?.discount_type ? toNum(rObj.discount_type) : null,
+                                discounted_price: toNum(rObj?.discounted_amount ?? 0),
+                                vat_amount: toNum(rObj?.vat_amount ?? 0),
+                                withholding_amount: toNum(rObj?.withholding_amount ?? 0),
+                                total_amount: toNum(rObj?.total_amount ?? 0),
+                                received: 1,
+                                is_ExtraItem: 1
+                            })
+                        }).catch(err => {
+                            console.error("[POSTING] Failed to insert extra item to purchase_order_products:", err);
+                        });
+                    }
+                }
+            }
+
             const fully = isFullyReceived(poId, lines, updatedPorRows);
             try {
                 const poUpdate: Record<string, unknown> = { date_received: nowISO() };
@@ -1974,6 +2009,40 @@ export async function POST(req: NextRequest) {
                 }
             });
             await Promise.all(popSyncPromisesAll);
+
+            // Developer Comment: When PO is posted (post_all), if any posted receiving row is an extra item,
+            // save it in purchase_order_products with is_ExtraItem: 1.
+            for (const r of toPost) {
+                const pId = toNum(r.product_id);
+                const bId = toNum(r.branch_id ?? 0);
+                const hasLine = lines.some(l => toNum(l.product_id) === pId && toNum(l.branch_id ?? 0) === bId);
+                if (!hasLine && pId > 0) {
+                    const checkUrl = `${base}/items/${PO_PRODUCTS_COLLECTION}?limit=1&filter[purchase_order_id][_eq]=${poId}&filter[product_id][_eq]=${pId}&filter[branch_id][_eq]=${bId}&fields=purchase_order_product_id`;
+                    const checkRes = await fetchJson<{ data: Array<{ purchase_order_product_id: number }> }>(checkUrl).catch(() => ({ data: [] }));
+                    if (!checkRes?.data || checkRes.data.length === 0) {
+                        await fetchJson(`${base}/items/${PO_PRODUCTS_COLLECTION}`, {
+                            method: "POST",
+                            body: JSON.stringify({
+                                purchase_order_id: poId,
+                                product_id: pId,
+                                branch_id: bId,
+                                ordered_quantity: 0,
+                                unit_price: toNum(r?.unit_price ?? 0),
+                                approved_price: toNum(r?.unit_price ?? 0),
+                                discount_type: r?.discount_type ? toNum(r.discount_type) : null,
+                                discounted_price: toNum(r?.discounted_amount ?? 0),
+                                vat_amount: toNum(r?.vat_amount ?? 0),
+                                withholding_amount: toNum(r?.withholding_amount ?? 0),
+                                total_amount: toNum(r?.total_amount ?? 0),
+                                received: 1,
+                                is_ExtraItem: 1
+                            })
+                        }).catch(err => {
+                            console.error("[POSTING] Failed to insert extra item to purchase_order_products:", err);
+                        });
+                    }
+                }
+            }
 
             // ✅ CYLINDER REGISTRATION
             // Fetch receiving items and products map for the rows being posted
