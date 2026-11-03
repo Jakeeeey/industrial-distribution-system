@@ -54,7 +54,6 @@ export function exportCylinderDepositSwapToExcel(
     "Swap Qty",
     "Ownership",
     "Running Base",
-    "Reference",
     "Opening Base",
     "Pull-Outs (-)",
     "Net Delta",
@@ -70,7 +69,6 @@ export function exportCylinderDepositSwapToExcel(
     row.swapQty,
     row.ownership || "COMPANY",
     row.runningBase,
-    row.reference || "",
     row.totalOpeningBase,
     row.totalDepositsPulledOut,
     row.totalNetVariance,
@@ -87,12 +85,11 @@ export function exportCylinderDepositSwapToExcel(
     { wch: 14 },
     { wch: 14 },
     { wch: 14 },
-    { wch: 20 },
     { wch: 14 },
     { wch: 14 },
     { wch: 14 },
   ];
-  customerSheet["!autofilter"] = { ref: `A1:M${customerData.length + 1}` };
+  customerSheet["!autofilter"] = { ref: `A1:L${customerData.length + 1}` };
   XLSX.utils.book_append_sheet(workbook, customerSheet, "Customer Base Summary");
 
   // ── Sheet 3: Product Breakdown by Customer ──────────────────────────────────

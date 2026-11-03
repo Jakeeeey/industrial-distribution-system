@@ -72,8 +72,8 @@ export function recalculateCustomerTotals(
 }
 
 /**
- * Filters report rows by text query (matches customer code, customer name, store name, reference, or product name)
- * and optional ownership filter.
+ * Filters report rows by text query (matches customer code, customer name, store name, site,
+ * branch, or product name) and optional ownership filter.
  */
 export function filterReportRows(
   rows: CustomerCylinderReportRow[],
@@ -96,7 +96,6 @@ export function filterReportRows(
       row.customerName.toLowerCase().includes(query) ||
       (row.storeName && row.storeName.toLowerCase().includes(query)) ||
       (row.siteName && row.siteName.toLowerCase().includes(query)) ||
-      (row.reference && row.reference.toLowerCase().includes(query)) ||
       (row.branchName && row.branchName.toLowerCase().includes(query));
 
     if (matchesCustomer) return true;

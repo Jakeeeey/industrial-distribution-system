@@ -69,8 +69,8 @@ export interface CustomerProductCylinderRow {
 
 /**
  * Parent customer-level aggregation row displayed in the primary table.
- * Aligns with Doc §7 & §11 proposed columns:
- * Customer, Date, Deposit Qty, Swap Qty, Ownership, Running Base, Reference.
+ * Aligns with Doc §7 & §11 proposed columns, minus Reference: a customer row aggregates
+ * many sales orders, WIWOs and returns, so no single document number represents it.
  */
 export interface CustomerCylinderReportRow {
   customerCode: string;
@@ -82,8 +82,7 @@ export interface CustomerCylinderReportRow {
   contactNumber: string | null;
   customerAddress: string | null;
   ownership: CylinderOwnership; // Company vs Customer owned
-  date: string | null; // Last transaction date (Doc §11)
-  reference: string | null; // Primary movement reference, e.g. WIWO-..., SO-... (Doc §11)
+  date: string | null; // Latest activity date: in-period movement or held-cylinder record change
   depositQty: number; // Proposed column alias for totalDepositsDelivered (Doc §11)
   swapQty: number; // Proposed column alias for totalSwapsInbound (Doc §11)
   runningBase: number; // Proposed column alias for totalClosingBase (Doc §11)
