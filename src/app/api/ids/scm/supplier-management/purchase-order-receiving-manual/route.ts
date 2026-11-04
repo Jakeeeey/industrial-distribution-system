@@ -138,6 +138,12 @@ const LOTS_COLLECTION = "lots";
 const UNITS_COLLECTION = "units";
 const PRODUCT_SUPPLIER_COLLECTION = "product_per_supplier";
 
+// Developer Comment: Unit IDs allocated for Cylinder & LPG products from vos_database.units (IDs: 1, 18, 19, 20, 21, 22, 23).
+// Cylinder products strictly use cylinder unit codes and do not have a BOX unit category.
+// Developer Comment: Unit IDs strictly allowed for 'Add Extra' cylinder product receiving from vos_database.units:
+// 18 = EMPTY, 19 = SWAP, 23 = FULL
+const ALLOWED_EXTRA_CYLINDER_UOM_IDS = new Set<number>([18, 19, 23]);
+
 function chunk<T>(arr: T[], size: number) {
     const out: T[][] = [];
     for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
@@ -720,7 +726,12 @@ export async function POST(req: NextRequest) {
             const j = await fetchJson<{ data: ProductRow[] }>(url);
             const p = j?.data?.[0];
             if (!p) return bad("Product not found", 404);
-            if (Number(p.unit_of_measurement?.unit_id ?? p.unit_of_measurement) !== 11) return bad("Only 'Box' UOM allowed", 400);
+            const uomId = Number(p.unit_of_measurement?.unit_id ?? p.unit_of_measurement);
+            // Developer Comment: Validate against allowed 'Add Extra' cylinder product units strictly: Full (18), Empty (19), and Swap (23).
+            if (!ALLOWED_EXTRA_CYLINDER_UOM_IDS.has(uomId)) {
+                return bad("Invalid product unit. Only Full, Empty, and Swap cylinder products are allowed.", 400);
+            }
+            const uomShortcut = String(p.unit_of_measurement?.unit_shortcut || p.unit_of_measurement?.unit_name || "").toUpperCase();
 
             let discTypeStr = "Standard";
             let discPct = 0;
@@ -746,7 +757,8 @@ export async function POST(req: NextRequest) {
                 unitPrice: toNum(p.cost_per_unit),
                 discountType: discTypeStr,
                 discountPercent: discPct,
-                uom: "BOX",
+                uom: uomShortcut,
+                uomId: uomId,
                 sku: String(p.barcode || p.product_code),
                 isSerialized: !!p.is_serialized
             });
@@ -1706,14 +1718,17 @@ export async function POST(req: NextRequest) {
             const pids = links.map(r => toNum(r.product_id)).filter(id => id > 0);
             if (!pids.length) return ok([]);
 
-            // Then get the full product details (only BOX items)
+            // Developer Comment: Fetch product details and filter strictly by valid cylinder product UOMs (1, 18, 19, 20, 21, 22, 23)
             const map = await fetchProductsMap(base, pids);
 
             const results = links.map(link => {
                 const pid = toNum(link.product_id);
                 const p = map.get(pid);
                 if (!p) return null;
-                if (Number(p.unit_of_measurement?.unit_id ?? p.unit_of_measurement) !== 11) return null;
+                const uomId = Number(p.unit_of_measurement?.unit_id ?? p.unit_of_measurement);
+                // Developer Comment: Filter extra products strictly to Empty (18), Swap (19), and Full (23) cylinder variants.
+                if (!ALLOWED_EXTRA_CYLINDER_UOM_IDS.has(uomId)) return null;
+                const uomShortcut = String(p.unit_of_measurement?.unit_shortcut || p.unit_of_measurement?.unit_name || "").toUpperCase();
 
                 const dt = link.discount_type as Record<string, unknown> | null | undefined;
                 let discTypeStr = "Standard";
@@ -1732,7 +1747,8 @@ export async function POST(req: NextRequest) {
                     sku: String(p.barcode || p.product_code),
                     barcode: String(p.barcode || p.product_code),
                     unitPrice: toNum(p.cost_per_unit),
-                    uom: "BOX",
+                    uom: uomShortcut,
+                    uomId: uomId,
                     discountType: discTypeStr,
                     discountPercent: discPct,
                     isSerialized: !!p.is_serialized

@@ -164,7 +164,8 @@ type Ctx = {
 
     // ✅ NEW: Extra Product
     getSupplierProducts: (supplierId: string) => Promise<{ productId: string; name: string; sku: string; barcode: string; unitPrice: number; uom: string; discountType: string; discountPercent: number; }[]>;
-    addExtraProductLocally: (item: { productId: string; name: string; barcode: string; branchId: string; branchName: string; unitPrice?: number; discountType?: string; discountPercent?: number; uom?: string; sku?: string; }) => boolean;
+    // Developer comment: Support optional isSerialized flag when registering extra products locally so cylinder lines trigger serial modal correctly
+    addExtraProductLocally: (item: { productId: string; name: string; barcode: string; branchId: string; branchName: string; unitPrice?: number; discountType?: string; discountPercent?: number; uom?: string; sku?: string; isSerialized?: boolean; }) => boolean;
     removeExtraProductLocally: (productId: string) => void;
 
     // ✅ METADATA (Batch, Lot, Expiry)

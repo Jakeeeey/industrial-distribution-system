@@ -32,6 +32,7 @@ type SupplierProduct = {
     uom: string; 
     discountType: string; 
     discountPercent: number; 
+    isSerialized?: boolean; 
 };
 
 export function AddExtraProductModal({ isOpen, onClose }: AddExtraProductModalProps) {
@@ -98,6 +99,8 @@ export function AddExtraProductModal({ isOpen, onClose }: AddExtraProductModalPr
             targetBranch = { id: "0", name: "Unassigned" };
         }
 
+        // Developer comment: Ensure isSerialized is preserved when adding extra cylinder products so that
+        // piece-by-piece serial registration modal is triggered instead of a plain numeric quantity input.
         const added = addExtraProductLocally({
             productId: product.productId,
             name: product.name,
@@ -108,7 +111,8 @@ export function AddExtraProductModal({ isOpen, onClose }: AddExtraProductModalPr
             discountType: product.discountType,
             discountPercent: product.discountPercent,
             uom: product.uom,
-            sku: product.sku
+            sku: product.sku,
+            isSerialized: product.isSerialized ?? true
         });
 
         if (added) {

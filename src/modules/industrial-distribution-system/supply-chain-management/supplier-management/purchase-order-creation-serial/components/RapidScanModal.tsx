@@ -117,8 +117,21 @@ export function RapidScanModal({ poId, open, onClose, lines, onAddSerial }: Rapi
                 return;
             }
 
-            // Prefer a line that still needs serials, fallback to first line if over-receiving
-            const target = matchedLines.find((l) => l.currentCount < l.orderedQty) || matchedLines[0];
+            // Developer comment: Exact 1:1 capacity enforcement. Do NOT fallback to matchedLines[0] if full — reject excess entries completely.
+            const target = matchedLines.find((l) => l.currentCount < l.orderedQty);
+            if (!target) {
+                const totalCap = matchedLines.reduce((acc, l) => acc + l.orderedQty, 0);
+                store.addRapidScanLog(poId, {
+                    serial: sn,
+                    lineId: null,
+                    productName: assetProductName,
+                    branchName: "—",
+                    status: "error",
+                    message: `Ordered quantity (${totalCap}) already reached for ${assetProductName}`
+                });
+                toast.error(`Ordered quantity already reached for "${assetProductName}".`);
+                return;
+            }
 
             // Check for duplicates within this line
             if (target.allSerialNumbers.includes(sn)) {
