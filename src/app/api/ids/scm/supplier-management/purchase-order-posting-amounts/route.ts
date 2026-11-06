@@ -128,11 +128,24 @@ const BRANCHES_COLLECTION = "branches";
 
 const POR_COLLECTION = "purchase_order_receiving";
 const POR_ITEMS_COLLECTION = "purchase_order_receiving_items";
+// Developer comment: Support units collection from vos_database.units to resolve measurement units (e.g. FULL, EMPTY, BOX, PCS)
+const UNITS_COLLECTION = "units";
 
 type POStatus = "OPEN" | "PARTIAL" | "RECEIVED" | "CLOSED";
 interface Supplier { id: number; supplier_name: string; }
 interface Branch { id: number; branch_name: string; branch_description: string; }
-interface Product { product_id: number; product_name: string; barcode: string; product_code: string; cost_per_unit?: number; is_serialized?: boolean; }
+// Developer comment: Support uom_ids (e.g. FULL/EMPTY) and unit_of_measurement relation (from units table) for accurate UOM rendering
+interface UnitRecord { unit_id: number; unit_name: string; unit_shortcut: string; }
+interface Product {
+    product_id: number;
+    product_name: string;
+    barcode: string;
+    product_code: string;
+    cost_per_unit?: number;
+    is_serialized?: boolean;
+    uom_ids?: string;
+    unit_of_measurement?: { unit_id?: number | string; unit_name?: string; unit_shortcut?: string } | number | string;
+}
 interface POHeader {
     purchase_order_id: number;
     purchase_order_no: string;
@@ -160,6 +173,7 @@ interface PORRow {
     received_date: string;
     isPosted: number | string;
     is_posted_amounts?: number | string;
+    is_reverted?: number | string | null;
     discounted_amount: number | string;
     vat_amount: number | string;
     withholding_amount: number | string;
@@ -178,7 +192,7 @@ interface ReceivingItem {
 }
 
 const POR_SAFE_FIELDS =
-    "purchase_order_product_id,purchase_order_id,product_id,branch_id,received_quantity,receipt_no,receipt_date,received_date,isPosted,is_posted_amounts,discounted_amount,vat_amount,withholding_amount,total_amount,unit_price";
+    "purchase_order_product_id,purchase_order_id,product_id,branch_id,received_quantity,receipt_no,receipt_date,received_date,isPosted,is_posted_amounts,is_reverted,discounted_amount,vat_amount,withholding_amount,total_amount,unit_price";
 
 // =====================
 // FETCHERS
@@ -266,18 +280,76 @@ async function fetchBranchesMap(base: string, branchIds: number[]) {
     return map;
 }
 
+// Developer comment: Helper to query units table from vos_database.units to resolve measurement units (e.g. FULL, EMPTY, BOX, PCS)
+async function fetchUnitsMapByIds(base: string, unitIds: (number | string | null | undefined)[]) {
+    const map = new Map<number, UnitRecord>();
+    const ids = Array.from(new Set(unitIds.map(toNum).filter((n) => n > 0)));
+    if (!ids.length) return map;
+
+    try {
+        const url = `${base}/items/${UNITS_COLLECTION}?limit=-1` +
+            `&filter[unit_id][_in]=${encodeURIComponent(ids.join(","))}` +
+            `&fields=unit_id,unit_shortcut,unit_name`;
+        const j = await fetchJson(url) as { data: Record<string, unknown>[] };
+        for (const u of j?.data ?? []) {
+            const id = toNum(u?.unit_id);
+            if (!id) continue;
+            map.set(id, {
+                unit_id: id,
+                unit_name: toStr(u?.unit_name),
+                unit_shortcut: toStr(u?.unit_shortcut) || toStr(u?.unit_name) || "—"
+            });
+        }
+    } catch (e) {
+        console.error("fetchUnitsMapByIds error:", e);
+    }
+    return map;
+}
+
+// Developer comment: Standardized function to resolve UOM (FULL, EMPTY, BOX, etc.) with priority:
+// 1. uom_ids variant code (e.g. EMPTY, FULL, SWAP)
+// 2. unit_of_measurement.unit_shortcut or unit_name from nested relation
+// 3. unit_of_measurement numeric ID resolved via unitsMap
+function resolveProductUom(p: Product | undefined, unitsMap?: Map<number, UnitRecord>): string {
+    if (!p) return "—";
+
+    // 1. If explicit uom_ids variant is present (e.g. EMPTY, FULL, SWAP for LPG cylinders)
+    const uomIds = toStr(p.uom_ids).trim();
+    if (uomIds && uomIds !== "—") {
+        return uomIds.toUpperCase();
+    }
+
+    // 2. If unit_of_measurement is an expanded object from Directus
+    if (p.unit_of_measurement && typeof p.unit_of_measurement === "object") {
+        const sc = toStr(p.unit_of_measurement.unit_shortcut).trim();
+        const nm = toStr(p.unit_of_measurement.unit_name).trim();
+        if (sc) return sc.toUpperCase();
+        if (nm) return nm.toUpperCase();
+    }
+
+    // 3. If unit_of_measurement is a numeric ID, look up in unitsMap
+    const uomId = toNum(typeof p.unit_of_measurement === "number" || typeof p.unit_of_measurement === "string" ? p.unit_of_measurement : (p.unit_of_measurement as Record<string, unknown>)?.unit_id);
+    if (uomId && unitsMap && unitsMap.has(uomId)) {
+        const rec = unitsMap.get(uomId);
+        if (rec?.unit_shortcut) return rec.unit_shortcut.toUpperCase();
+        if (rec?.unit_name) return rec.unit_name.toUpperCase();
+    }
+
+    return "—";
+}
+
 async function fetchProductsMap(base: string, productIds: number[]) {
     const map = new Map<number, Product>();
     const uniq = Array.from(new Set((productIds || []).filter((n) => n > 0)));
     if (!uniq.length) return map;
 
-    const rows: (Product & { id?: number; is_serialized?: unknown })[] = [];
+    const rows: (Product & { id?: number; is_serialized?: unknown; uom_ids?: string; unit_of_measurement?: unknown })[] = [];
     for (const ids of chunk(uniq, 250)) {
         const url =
             `${base}/items/${PRODUCTS_COLLECTION}?limit=-1` +
             `&filter[product_id][_in]=${encodeURIComponent(ids.join(","))}` +
-            `&fields=product_id,product_name,barcode,product_code,cost_per_unit,is_serialized`;
-        const j = await fetchJson(url) as { data: (Product & { id?: number; is_serialized?: unknown })[] };
+            `&fields=product_id,product_name,barcode,product_code,cost_per_unit,is_serialized,uom_ids,unit_of_measurement.*`;
+        const j = await fetchJson(url) as { data: (Product & { id?: number; is_serialized?: unknown; uom_ids?: string; unit_of_measurement?: unknown })[] };
         rows.push(...(Array.isArray(j?.data) ? j.data : []));
     }
 
@@ -291,6 +363,8 @@ async function fetchProductsMap(base: string, productIds: number[]) {
             product_code: toStr(p?.product_code),
             cost_per_unit: toNum(p?.cost_per_unit),
             is_serialized: !!(p?.is_serialized),
+            uom_ids: toStr(p?.uom_ids),
+            unit_of_measurement: p?.unit_of_measurement as Product["unit_of_measurement"],
         } as Product);
     }
     return map;
@@ -524,8 +598,11 @@ function buildReceiptSummary(porRows: PORRow[], priceMap?: Map<number, number>, 
     const groups = new Map<string, PORRow[]>();
 
     for (const r of porRows ?? []) {
-        const rn = toStr(r?.receipt_no);
+        // Developer comment: Skip reverted rows or rows without an assigned receipt_no (ghost/empty drafts)
+        if (toNum(r?.is_reverted) === 1) continue;
+        const rn = toStr(r?.receipt_no).trim();
         if (!rn) continue;
+
         const arr = groups.get(rn) ?? [];
         arr.push(r);
         groups.set(rn, arr);
@@ -615,7 +692,8 @@ function buildReceiptSummary(porRows: PORRow[], priceMap?: Map<number, number>, 
 
     let loosePendingCount = 0;
     for (const r of porRows ?? []) {
-        const rn = toStr(r?.receipt_no);
+        if (toNum(r?.is_reverted) === 1) continue;
+        const rn = toStr(r?.receipt_no).trim();
         if (!rn) {
             if (toNum(r.isPosted) === 0 && toNum(r.received_quantity) > 0) {
                 loosePendingCount = 1;
@@ -629,18 +707,9 @@ function buildReceiptSummary(porRows: PORRow[], priceMap?: Map<number, number>, 
 }
 
 function receivingStatusFrom(porRows: PORRow[], opts?: { isClosed?: boolean; fullyReceived?: boolean; hasAnyPosted?: boolean }) {
-    // CLOSED only if fully received AND all receipts/rows are posted
-    if (opts?.isClosed) return "CLOSED" as POStatus;
-    // RECEIVED: all items received, receipts exist but not yet posted
-    if (opts?.fullyReceived) return "FOR POSTING" as POStatus;
-    // PARTIAL_POSTED: some receipts posted, some not, NOT fully received
+    // Developer comment: Status of PO in post modules strictly returns PARTIAL_POSTED (if any receipts posted) or FOR POSTING
     if (opts?.hasAnyPosted) return "PARTIAL_POSTED" as POStatus;
-
-    const anyActivity = (porRows ?? []).some((r) => {
-        return effectiveReceivedQty(r) > 0 || hasReceiptEvidence(r);
-    });
-
-    return anyActivity ? "PARTIAL" : "OPEN";
+    return "FOR POSTING" as POStatus;
 }
 
 function latestReceiptInfo(porRows: PORRow[]) {
@@ -651,7 +720,10 @@ function latestReceiptInfo(porRows: PORRow[]) {
     };
 
     for (const r of porRows ?? []) {
-        const rn = toStr(r?.receipt_no);
+        if (toNum(r?.is_reverted) === 1) continue;
+        const rn = toStr(r?.receipt_no).trim();
+        if (!rn) continue;
+
         const rd = toStr(r?.receipt_date);
         const rcd = toStr(r?.received_date);
         const ts = rcd || rd;
@@ -870,21 +942,21 @@ export async function GET() {
             const poId = toNum(po?.purchase_order_id);
             if (!poId) continue;
 
-            // We allow is_posted POs in the list (sorted to the bottom) as per user request
+            // Developer comment: Do not show Closed (status 6 or is_posted=1), Rejected (status 8 or 4), or Cancelled (status 7) POs in PO Posting Amounts
+            const invStatus = toNum(po?.inventory_status);
+            if (invStatus === 6 || invStatus === 8 || invStatus === 4 || invStatus === 7) continue;
+            if (toNum(po?.is_posted) === 1 || po?.is_posted === true) continue;
 
             const porRows = porByPo.get(poId) ?? [];
             const lines = linesByPo.get(poId) ?? [];
 
             const fully = isFullyReceived(poId, lines, porRows);
 
-            // hasAnyPosted: true when at least one POR row is already posted
-            // This is the key signal for PARTIAL_POSTED status
+            // hasAnyPosted: true when at least one POR row is already posted (inventory posted)
             const totalAnyPosted = porRows.some((r) => toNum(r?.isPosted) === 1);
-            const isHeaderPostedCheck = toNum(po?.is_posted) === 1;
 
-            // Only show POs where inventory has already been posted (isPosted=1 on at least one receipt)
-            // OR where the PO itself is already financially closed (is_posted=1 on header)
-            if (!totalAnyPosted && !isHeaderPostedCheck) continue;
+            // Only show POs where inventory has already been posted and is ready for amounts posting
+            if (!totalAnyPosted) continue;
 
             const poSupplierId = toNum(po?.supplier_name);
             const supplierName = poSupplierId ? toStr(supplierNamesMap.get(poSupplierId), "—") : "—";
@@ -942,6 +1014,8 @@ export async function GET() {
 
             const lr = latestReceiptInfo(porRows);
             const rs = buildReceiptSummary(porRows, porPriceMap, porDiscMap);
+            // Developer comment: Define allPosted derived from receipt summary counts to resolve 'allPosted is not defined' error
+            const allPosted = rs.receiptsCount > 0 && rs.unpostedReceiptsCount === 0;
             
             const isHeaderPosted = toNum(po?.is_posted) === 1;
             const isClosed = isHeaderPosted;
@@ -978,8 +1052,8 @@ export async function GET() {
                 status: receivingStatusFrom(porRows, {
                     isClosed,
                     fullyReceived,
-                    // Only flag PARTIAL_POSTED when not fully received
-                    hasAnyPosted: !fully && totalAnyPosted,
+                    // Developer comment: Allow PARTIAL_POSTED status whenever some receipts are posted and some remain unposted (not all posted)
+                    hasAnyPosted: totalAnyPosted && !allPosted,
                 }),
                 totalAmount: listTotal,
                 currency: "PHP",
@@ -1067,12 +1141,17 @@ export async function POST(req: NextRequest) {
             const branchesMap = await fetchBranchesMap(base, branchIds);
             const productSupplierLinks = sid ? await fetchProductSupplierLinks(base, sid) : new Map();
 
-            // ── DEBUG: Log what productSupplierLinks contains ──
-            console.log("[DEBUG open_po] supplierId (sid):", sid);
-            console.log("[DEBUG open_po] productSupplierLinks size:", productSupplierLinks.size);
-            for (const [k, v] of Array.from(productSupplierLinks.entries())) {
-                console.log(`[DEBUG open_po] PSL entry: pid=${k}, discount_type=`, JSON.stringify(v?.discount_type));
+            // Developer comment: Collect unit_of_measurement IDs from products and fetch their unit definitions from vos_database.units
+            const uomIdsToFetch: (number | string | null | undefined)[] = [];
+            for (const prod of Array.from(productsMap.values())) {
+                if (typeof prod.unit_of_measurement === "number" || typeof prod.unit_of_measurement === "string") {
+                    uomIdsToFetch.push(prod.unit_of_measurement);
+                } else if (prod.unit_of_measurement && typeof prod.unit_of_measurement === "object") {
+                    uomIdsToFetch.push(prod.unit_of_measurement.unit_id);
+                }
             }
+            const unitsMap = await fetchUnitsMapByIds(base, uomIdsToFetch);
+
             // Removed redundant RFID fetching (already handled above)
             
             const porPriceMap = new Map<number, number>();
@@ -1082,8 +1161,6 @@ export async function POST(req: NextRequest) {
             const poDType = po?.discount_type as Record<string, unknown> | null;
             const poDiscountName = toStr(poDType?.discount_type || poDType?.name, "");
             const poDiscountPercent = resolveDiscountPercent(poDType);
-
-            console.log("[DEBUG open_po] PO-level discount:", { poDType: JSON.stringify(poDType), poDiscountName, poDiscountPercent });
 
             const porIdsByKey = buildPorIdsByKey(porRows);
 
@@ -1147,13 +1224,16 @@ export async function POST(req: NextRequest) {
                 const lineDiscount = Number((lineGrossAmt * (itemDiscPct / 100)).toFixed(2));
                 const lineNet = Number((lineGrossAmt - lineDiscount).toFixed(2));
 
+                // Developer comment: Resolve explicit UOM (e.g. FULL, EMPTY, BOX, PCS) for each received item in the receipt summary table
+                const resolvedUom = resolveProductUom(p, unitsMap);
+
                 const item: PostingPOItem = {
                     id: String(porId),
                     porId: String(porId),
                     productId: String(pid),
                     name: toStr(p.product_name, `Product #${pid}`),
                     barcode: productDisplayCode(p, pid),
-                    uom: "—",
+                    uom: resolvedUom,
                     expectedQty: expected,
                     taggedQty: rfids.length,
                     receivedQty,
@@ -1220,13 +1300,16 @@ export async function POST(req: NextRequest) {
                     const lineDiscount = Number((lineGrossAmt * (itemDiscPct / 100)).toFixed(2));
                     const lineNet = Number((lineGrossAmt - lineDiscount).toFixed(2));
 
+                    // Developer comment: Resolve explicit UOM (e.g. FULL, EMPTY, BOX, PCS) for pending/extra items
+                    const resolvedUom = resolveProductUom(p, unitsMap);
+
                     const item: PostingPOItem = {
                         id: `extra-${pid}-${bid}`,
                         porId: `extra-${pid}-${bid}`,
                         productId: String(pid),
                         name: toStr(p.product_name, `Product #${pid}`),
                         barcode: productDisplayCode(p, pid),
-                        uom: "—",
+                        uom: resolvedUom,
                         expectedQty: expected,
                         taggedQty: 0,
                         receivedQty: 0,
@@ -1319,7 +1402,8 @@ export async function POST(req: NextRequest) {
                 status: receivingStatusFrom(porRows, {
                     isClosed,
                     fullyReceived,
-                    hasAnyPosted: !fully && hasAnyPosted,
+                    // Developer comment: Allow PARTIAL_POSTED status whenever some receipts are posted and some remain unposted (not all posted)
+                    hasAnyPosted: hasAnyPosted && !allPosted,
                 }),
                 totalAmount: detailTotal,
                 currency: "PHP",

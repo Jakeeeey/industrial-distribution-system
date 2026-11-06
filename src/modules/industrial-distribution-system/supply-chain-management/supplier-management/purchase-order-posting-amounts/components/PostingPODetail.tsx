@@ -52,8 +52,9 @@ export function PostingPODetail() {
 
     const status = String(selectedPO.status || "").toUpperCase();
     const isClosed = status === "CLOSED";
+    // Developer comment: In Post Amounts, unposted receipts are those where inventory is posted (isPosted === 1) but amounts are NOT yet posted (is_posted_amounts !== 1)
     const unposted = isClosed ? [] : (selectedPO.receipts ?? []).filter(
-        (r) => Number(r.isPosted) === 1 || r.isPosted === true
+        (r) => (Number(r.isPosted) === 1 || r.isPosted === true) && Number(r.is_posted_amounts) !== 1
     );
 
     // Show "Post All" when:

@@ -44,28 +44,54 @@ export function SelectProductsStep({ onContinue }: { onContinue: () => void }) {
         onContinue();
     };
 
+    // Consolidate draftItems by productId-branchId so multi-serial receiving records appear as one item with aggregate Phys. Tagged quantity
+    const consolidatedDraftItems = React.useMemo(() => {
+        const draftItems = selectedPO?.draftData || [];
+        const map = new Map<string, { porId: number | string; productId: number; branchId: number; receivedQuantity: number }>();
+        draftItems.forEach(d => {
+            const key = `${d.productId}-${d.branchId}`;
+            const existing = map.get(key);
+            if (existing) {
+                existing.receivedQuantity += Number(d.receivedQuantity || 0);
+            } else {
+                map.set(key, {
+                    porId: d.porId,
+                    productId: d.productId,
+                    branchId: d.branchId,
+                    receivedQuantity: Number(d.receivedQuantity || 0)
+                });
+            }
+        });
+        return Array.from(map.values());
+    }, [selectedPO]);
+
+    // Create a mapping to easily find product names and details from allocations
+    const productInfoMap = React.useMemo(() => {
+        const map = new Map<string, { name: string, barcode: string, branchName: string }>();
+        if (!selectedPO?.allocations) return map;
+
+        selectedPO.allocations.forEach(alloc => {
+            alloc.items.forEach(item => {
+                // item.porId could match draft.porId
+                map.set(String(item.porId), {
+                    name: item.name,
+                    barcode: item.barcode,
+                    branchName: alloc.branch.name
+                });
+                // fallback by productId and branchId
+                map.set(`${item.productId}-${alloc.branch.id}`, {
+                    name: item.name,
+                    barcode: item.barcode,
+                    branchName: alloc.branch.name
+                });
+            });
+        });
+        return map;
+    }, [selectedPO]);
+
     if (!selectedPO) return null;
 
     const draftItems = selectedPO.draftData || [];
-
-    // Create a mapping to easily find product names and details from allocations
-    const productInfoMap = new Map<string, { name: string, barcode: string, branchName: string }>();
-    selectedPO.allocations.forEach(alloc => {
-        alloc.items.forEach(item => {
-            // item.porId could match draft.porId
-            productInfoMap.set(String(item.porId), {
-                name: item.name,
-                barcode: item.barcode,
-                branchName: alloc.branch.name
-            });
-            // fallback by productId and branchId
-            productInfoMap.set(`${item.productId}-${alloc.branch.id}`, {
-                name: item.name,
-                barcode: item.barcode,
-                branchName: alloc.branch.name
-            });
-        });
-    });
 
     return (
         <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
@@ -90,14 +116,14 @@ export function SelectProductsStep({ onContinue }: { onContinue: () => void }) {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
-                            {draftItems.length === 0 ? (
+                            {consolidatedDraftItems.length === 0 ? (
                                 <tr>
                                     <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground italic">
                                         No pending received items available. Go to PO Receiving to tag items first.
                                     </td>
                                 </tr>
                             ) : (
-                                draftItems.map((draft) => {
+                                consolidatedDraftItems.map((draft) => {
                                     const porIdStr = String(draft.porId);
                                     let info = productInfoMap.get(porIdStr);
                                     if (!info) info = productInfoMap.get(`${draft.productId}-${draft.branchId}`);

@@ -2,12 +2,13 @@
 
 import * as React from "react";
 import { useReceivingProductsManual } from "../providers/ReceivingProductsManualProvider";
-import { ReceiptDetailsStep } from "./steps/ReceiptDetailsStep";
 import { ProductVerificationStep } from "./steps/ProductVerificationStep";
 import { RefillManualProductsStep } from "./steps/RefillManualProductsStep";
-import { ReviewReceiptStep } from "./steps/ReviewReceiptStep";
+import { RefillReceiptHistoryModal } from "./RefillReceiptHistoryModal";
 
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { History } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Step dot styling for POs
@@ -27,19 +28,20 @@ function StepDot({ active }: { active: boolean }) {
  * Dedicated workbench view for receiving Refilled POs.
  * Features a cylinder refill theme matching the Normal PO theme.
  */
-export function ReceivingWorkbenchRefillManual({ receiverName }: { receiverName?: string }) {
+export function ReceivingWorkbenchRefillManual({ }: { receiverName?: string }) {
     const { selectedPO, receiptSaved } = useReceivingProductsManual();
     const [step, setStep] = React.useState(0);
+    const [historyModalOpen, setHistoryModalOpen] = React.useState(false);
 
     // Reset to step 0 if PO is deselected
     React.useEffect(() => {
         if (!selectedPO) setStep(0);
     }, [selectedPO]);
 
-    // Keep on review step (index 3) to show success state when saved
+    // Go back to step 0 when saved, since it's decoupled now
     React.useEffect(() => {
         if (receiptSaved) {
-            setStep(3);
+            setStep(0);
         }
     }, [receiptSaved]);
 
@@ -61,6 +63,8 @@ export function ReceivingWorkbenchRefillManual({ receiverName }: { receiverName?
 
     return (
         <Card className="p-4 h-full flex flex-col overflow-hidden shadow-sm border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950">
+            <RefillReceiptHistoryModal open={historyModalOpen} onClose={() => setHistoryModalOpen(false)} />
+            
             <div className="flex items-start justify-between gap-3 shrink-0 border-b pb-3">
                 <div>
                     <div className="text-base font-black text-slate-900 dark:text-slate-100 flex items-center gap-2 tracking-tight">
@@ -72,24 +76,28 @@ export function ReceivingWorkbenchRefillManual({ receiverName }: { receiverName?
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                    <StepDot active={step === 0} />
-                    <StepDot active={step === 1} />
-                    <StepDot active={step === 2} />
-                    <StepDot active={step === 3} />
+                <div className="flex items-center gap-4">
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => setHistoryModalOpen(true)}
+                        className="h-8 text-[9px] font-black uppercase tracking-widest gap-2 text-slate-500 border-slate-200 hover:text-primary hover:bg-primary/5"
+                    >
+                        <History className="w-3.5 h-3.5" />
+                        Receipt History
+                    </Button>
+                    <div className="flex items-center gap-2">
+                        <StepDot active={step === 0} />
+                        <StepDot active={step === 1} />
+                    </div>
                 </div>
             </div>
 
             <div className="mt-4 flex-1 overflow-hidden flex flex-col">
                 {step === 0 ? (
-                    <ReceiptDetailsStep onContinue={() => setStep(1)} />
+                    <ProductVerificationStep onContinue={() => setStep(1)} />
                 ) : step === 1 ? (
-                    <ProductVerificationStep onContinue={() => setStep(2)} />
-                ) : step === 2 ? (
-                    // RefillManualProductsStep — standard themed step with tagged serials view & rapid scan
-                    <RefillManualProductsStep onContinue={() => setStep(3)} onBack={() => setStep(1)} />
-                ) : step === 3 ? (
-                    <ReviewReceiptStep onBack={() => setStep(2)} receiverName={receiverName} />
+                    <RefillManualProductsStep onContinue={() => {}} onBack={() => setStep(0)} />
                 ) : null}
             </div>
         </Card>

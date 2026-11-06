@@ -15,8 +15,9 @@ export function ReceiptCard({ receipt }: { receipt: PostingReceipt }) {
 
     if (!selectedPO) return null;
 
-    // Normalise isPosted to boolean — API returns 0 | 1
-    const isPosted = Number(receipt.isPosted) === 1 || receipt.isPosted === true;
+    // Normalise isPosted (inventory) and is_posted_amounts to boolean
+    const isInventoryPosted = Number(receipt.isPosted) === 1 || receipt.isPosted === true;
+    const isAmountsPosted = Number(receipt.is_posted_amounts) === 1 || receipt.is_posted_amounts === true;
 
     const poStatus = String(selectedPO.status || "").toUpperCase();
 
@@ -31,8 +32,8 @@ export function ReceiptCard({ receipt }: { receipt: PostingReceipt }) {
         poStatus === "PARTIAL_POSTED";
     const disabledReason = !poReady
         ? "PO is not ready. Complete receiving first."
-        : isPosted
-        ? "Receipt already posted."
+        : isAmountsPosted
+        ? "Amounts already posted."
         : "";
 
     return (
@@ -50,7 +51,7 @@ export function ReceiptCard({ receipt }: { receipt: PostingReceipt }) {
                     </div>
 
                     {/* Hint when receipt can't be posted yet */}
-                    {!isPosted && !poReady ? (
+                    {!isAmountsPosted && !poReady ? (
                         <div className="mt-2 text-xs text-orange-600 dark:text-orange-400">
                             {disabledReason}
                         </div>
@@ -58,12 +59,12 @@ export function ReceiptCard({ receipt }: { receipt: PostingReceipt }) {
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
-                    <Badge variant={(isPosted || poStatus === "CLOSED") ? "outline" : "secondary"}>
-                        {(isPosted || poStatus === "CLOSED") ? "POSTED" : "FOR POSTING"}
+                    <Badge variant={(isAmountsPosted || poStatus === "CLOSED") ? "outline" : "secondary"}>
+                        {(isAmountsPosted || poStatus === "CLOSED") ? "POSTED" : "FOR POSTING"}
                     </Badge>
 
-                    {/* Post Amount Button: Only if Inventory is Posted and PO is not CLOSED */}
-                    {isPosted && poStatus !== "CLOSED" && (
+                    {/* Post Amount Button: Only if Inventory is Posted, Amounts NOT YET posted, and PO is not CLOSED */}
+                    {isInventoryPosted && !isAmountsPosted && poStatus !== "CLOSED" && (
                         <Button
                             type="button"
                             size="sm"

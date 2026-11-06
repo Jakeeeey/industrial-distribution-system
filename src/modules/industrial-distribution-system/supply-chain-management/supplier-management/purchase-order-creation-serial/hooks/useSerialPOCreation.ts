@@ -2,7 +2,7 @@
 // Purpose: State orchestrator for the Cylinder Refill Serial Tagging module.
 // Revised: Removed all PO creation logic. Now manages PO list selection + serial tagging state.
 //
-// Phase 1 — PO List: user selects an approved refill PO (inventory_status=13).
+// Phase 1 — PO List: user selects an approved refill PO (inventory_status=3).
 // Phase 2 — Tagging Workspace: user enters draft serials, submits, DB is updated.
 
 "use client";
@@ -39,6 +39,7 @@ export type UseSerialTaggingReturn = {
     submitSerials: () => Promise<(TagSerialsResult & { updatedDetail: SerialTaggingPODetail }) | null>;
     // ── Derived ──
     canSubmit: boolean;
+    isFullyCompleted: boolean;
     totalDraftCount: number;
     totalSavedCount: number;
     totalOrderedCount: number;
@@ -138,13 +139,22 @@ export function useSerialTagging(): UseSerialTaggingReturn {
         const sn = serial.trim();
         if (!sn || !rawSelectedPO) return;
         
-        // Prevent duplicates in saved serials (draft duplicates are handled by store)
         const line = rawSelectedPO.lines.find(l => l.lineId === lineId);
         if (!line) return;
+
+        // Developer comment: Exact 1:1 capacity enforcement. Prevent adding serials if line is already at or above orderedQty
+        const currentDrafts = drafts[rawSelectedPO.poId]?.[lineId] || [];
+        const currentCount = line.savedSerials.length + currentDrafts.length;
+        if (currentCount >= line.orderedQty) {
+            toast.error(`Line quantity limit reached (${line.orderedQty}) for ${line.productName}.`);
+            return;
+        }
+
+        // Prevent duplicates in saved serials (draft duplicates are handled by store)
         if (line.savedSerials.some(s => s.serial_number === sn)) return;
         
         store.addDraft(rawSelectedPO.poId, lineId, sn);
-    }, [rawSelectedPO, store]);
+    }, [rawSelectedPO, drafts, store]);
 
     // ── Remove a draft serial from a line (by index within draftSerials) ──────
     const removeDraftSerial = React.useCallback((lineId: number, index: number) => {
@@ -153,15 +163,16 @@ export function useSerialTagging(): UseSerialTaggingReturn {
     }, [rawSelectedPO, store]);
 
     // ── Derived: can we submit? ────────────────────────────────────────────────
-    // All lines must have (savedSerials + draftSerials).length === orderedQty
-    // AND there must be at least one new draft serial to submit.
-    const { canSubmit, totalDraftCount, totalSavedCount, totalOrderedCount } = React.useMemo(() => {
-        if (!selectedPO) return { canSubmit: false, totalDraftCount: 0, totalSavedCount: 0, totalOrderedCount: 0 };
+    // Developer comment: Allow saving partial drafts (canSubmit) as long as there is >= 1 draft serial and no line exceeds orderedQty.
+    // isFullyCompleted checks if every line's total entered serials exactly match ordered quantity.
+    const { canSubmit, isFullyCompleted, totalDraftCount, totalSavedCount, totalOrderedCount } = React.useMemo(() => {
+        if (!selectedPO) return { canSubmit: false, isFullyCompleted: false, totalDraftCount: 0, totalSavedCount: 0, totalOrderedCount: 0 };
 
         let draft = 0;
         let saved = 0;
         let ordered = 0;
         let allFull = true;
+        let hasExcess = false;
 
         for (const line of selectedPO.lines) {
             const total = line.savedSerials.length + line.draftSerials.length;
@@ -169,10 +180,12 @@ export function useSerialTagging(): UseSerialTaggingReturn {
             saved += line.savedSerials.length;
             ordered += line.orderedQty;
             if (total !== line.orderedQty || line.orderedQty === 0) allFull = false;
+            if (total > line.orderedQty) hasExcess = true;
         }
 
         return {
-            canSubmit: allFull && draft > 0,
+            canSubmit: draft > 0 && !hasExcess,
+            isFullyCompleted: allFull && draft > 0,
             totalDraftCount: draft,
             totalSavedCount: saved,
             totalOrderedCount: ordered,
@@ -238,6 +251,6 @@ export function useSerialTagging(): UseSerialTaggingReturn {
         selectedPO, isLoadingDetail, isSubmitting,
         selectPO, backToList,
         addDraftSerial, removeDraftSerial, submitSerials,
-        canSubmit, totalDraftCount, totalSavedCount, totalOrderedCount,
+        canSubmit, isFullyCompleted, totalDraftCount, totalSavedCount, totalOrderedCount,
     };
 }

@@ -39,6 +39,12 @@ export type PendingApprovalPO = {
 
     is_invoice?: boolean | number;
     isInvoice?: boolean | number;
+    approver_id?: unknown;
+    approver_name?: string;
+    preparer_name?: string;
+    date_approved?: string;
+    remark?: string;
+    remarks?: string;
 };
 
 export type PurchaseOrderItem = {
@@ -114,6 +120,8 @@ export type PurchaseOrderDetail = {
     is_invoice?: boolean | number;
     isInvoice?: boolean | number;
     preparer_name?: string;
+    approver_name?: string;
+    approver_id?: unknown;
     encoder_id?: unknown;
 };
 export type Supplier = {

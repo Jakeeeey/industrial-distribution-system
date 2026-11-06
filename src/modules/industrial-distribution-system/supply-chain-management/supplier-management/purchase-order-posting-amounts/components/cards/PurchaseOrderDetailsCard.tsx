@@ -11,6 +11,10 @@ function statusBadgeClasses(status?: string) {
     const s = String(status || "").toUpperCase();
     if (s === "CLOSED" || s === "RECEIVED")
         return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20";
+    if (s === "FOR POSTING")
+        return "bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/20";
+    if (s === "PARTIAL_POSTED")
+        return "bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/20";
     if (s === "PARTIAL")
         return "bg-orange-500/15 text-orange-700 dark:text-orange-300 border border-orange-500/20";
     return "bg-primary/15 text-primary border border-primary/20";

@@ -48,3 +48,6 @@ lint.log
 # personal implementation plan for modules & test
 zdocs/
 ztest/
+/zmine
+*.js
+.agents/rules/ids-guide.md

@@ -1,0 +1,185 @@
+// src/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-movement-and-variance-report/types/stock-movement-variance.types.ts
+// ==============================================================================
+// Type Definitions for Stock Movement and Variance Report (IDS SCM)
+//
+// Source of truth for the calculation contract shared between the BFF route and
+// the client module:
+//   Expected = opening + in − out
+//   Variance = counted − expected
+//
+// Complies with VoSync standards:
+// - Full comments left behind for long-term maintainability
+// - Read-only reporting types only (no posting / charge / payment shapes)
+// ==============================================================================
+
+/**
+ * Filter parameters accepted by the report BFF endpoint.
+ */
+export interface StockMovementVarianceFilters {
+  startDate: string; // YYYY-MM-DD, period opening boundary
+  endDate: string; // YYYY-MM-DD, reporting cutoff
+  branchId?: number | string; // Omitted or empty means every branch in scope
+  categoryId?: number | string;
+  /**
+   * Product master id. This is what the picker actually selects: product NAMES
+   * are not unique in this schema, so a name could never identify one product.
+   */
+  productId?: number | string;
+  /**
+   * The product name the movements view was queried with, resolved by the BFF
+   * from `productId`. Echoed back for display; the ledger view only accepts a
+   * name, so narrowing to the chosen product id happens after reconciliation.
+   */
+  productName?: string;
+}
+
+/**
+ * A single operational movement as returned by the Spring-backed
+ * `view-product-movements` ledger. Field casing is intentionally permissive:
+ * the view has historically returned both camelCase and snake_case variants.
+ */
+export interface RawMovementRow {
+  ts?: string | number;
+  docType?: string;
+  doc_no?: string;
+  docNo?: string;
+  inBase?: number;
+  in_base?: number;
+  outBase?: number;
+  out_base?: number;
+  variance?: number;
+  unitCount?: number;
+  productId?: number | string;
+  product_id?: number | string;
+  branchId?: number | string;
+  branch_id?: number | string;
+  productName?: string;
+  branchName?: string;
+  descr?: string;
+  system_count?: number;
+  physical_count?: number;
+}
+
+/**
+ * A committed physical-count line (Directus `physical_inventory_details`)
+ * with its header context flattened by the BFF.
+ */
+export interface RawCountLine {
+  id: number;
+  phId: number;
+  phNo: string;
+  branchId: number;
+  cutOffDate: string | null;
+  dateEncoded: string | null;
+  productId: number;
+  systemCount: number;
+  physicalCount: number;
+  sourceVariance: number;
+}
+
+/**
+ * Ledger document retained in the drill-down panel as supporting evidence.
+ */
+export interface SupportingDocument {
+  docNo: string;
+  docType: string;
+  ts: string;
+  branchId: number;
+  branchName: string;
+  inBase: number;
+  outBase: number;
+  /** Variance restatement applied by a Physical Inventory document, in base units. */
+  countAdjustment: number;
+  descr: string;
+}
+
+/**
+ * One reconciled product/branch line of the report. All quantities are in BASE
+ * units so that boxed and loose products reconcile against the same ledger.
+ */
+export interface StockMovementVarianceRow {
+  productId: number;
+  productCode: string | null;
+  productName: string;
+  branchId: number;
+  branchName: string;
+  categoryName: string | null;
+  unitCount: number;
+
+  openingBalance: number;
+  periodIn: number;
+  periodOut: number;
+  expectedClosing: number;
+
+  countedClosing: number | null;
+  variance: number | null;
+  variancePercent: number | null;
+
+  // The committed count nearest the cutoff. When it predates the period it is
+  // context only: countInPeriod is false and no variance is computed from it.
+  countDocNo: string | null;
+  countCutoffDate: string | null;
+  countSystemQty: number | null;
+  countSourceVariance: number | null;
+  countInPeriod: boolean;
+
+  supportingDocuments: SupportingDocument[];
+}
+
+/**
+ * KPI summary values rendered above the results table.
+ */
+export interface StockMovementVarianceKpis {
+  totalLines: number;
+  linesWithVariance: number;
+  linesCounted: number;
+  linesUncounted: number;
+  /** Part of linesUncounted whose last committed count is from an earlier period. */
+  linesCountedEarlier: number;
+  netVarianceUnits: number;
+  shortUnits: number;
+  overUnits: number;
+  /** Lines behind each of the two unit totals above, counted on the same test. */
+  shortLines: number;
+  overLines: number;
+}
+
+/**
+ * Full successful report payload returned by the BFF.
+ */
+export interface StockMovementVarianceReportResponse {
+  ok: true;
+  generatedAt: string;
+  filters: StockMovementVarianceFilters;
+  /** Resolved branch name, or null when the scope is every branch. */
+  branchName: string | null;
+  /** How many branches were actually reconciled; fewer than the scope when a ledger call failed. */
+  branchesReconciled: number;
+  rows: StockMovementVarianceRow[];
+  kpis: StockMovementVarianceKpis;
+  warnings: string[];
+}
+
+/**
+ * Error payload returned by the BFF on any failure path.
+ */
+export interface StockMovementVarianceError {
+  ok: false;
+  error: string;
+  message?: string;
+}
+
+/**
+ * Dropdown option shapes for the filter bar.
+ */
+export interface VarianceLookupOption {
+  id: number | string;
+  label: string;
+  secondary?: string;
+}
+
+export interface StockMovementVarianceLookupOptions {
+  branches: VarianceLookupOption[];
+  categories: VarianceLookupOption[];
+  products: VarianceLookupOption[];
+}

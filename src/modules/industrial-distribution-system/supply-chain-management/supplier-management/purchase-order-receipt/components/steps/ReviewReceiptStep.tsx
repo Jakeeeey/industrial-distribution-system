@@ -240,7 +240,9 @@ export function ReviewReceiptStep({ receiverName }: { receiverName?: string; onB
 
     const safeCounts = scannedCountByPorId;
 
-    // All active products (the ones checked/verified)
+    // Developer comment: In Step 1, display all products available for receiving.
+    // In Step 2 (Batch, Lot & Expiry Details), strictly filter to ONLY products that were checked, selected,
+    // and assigned a positive receive quantity in Step 1. Unselected items are completely excluded.
     const allItems = React.useMemo(() => {
         const allocs = Array.isArray(selectedPO?.allocations) ? selectedPO!.allocations : [];
         return allocs.flatMap((a) => {
@@ -252,12 +254,15 @@ export function ReviewReceiptStep({ receiverName }: { receiverName?: string; onB
                     branchName: a?.branch?.name ?? "Unassigned",
                 }))
                 .filter((it) => {
-                    return activePorIds.has(it.porId);
+                    if (step === 1) {
+                        return activePorIds.has(it.porId);
+                    }
+                    // Step 2 filter: strictly only selected products with quantity > 0
+                    const count = safeCounts[it.porId] ?? 0;
+                    return editingIds.has(it.porId) && count > 0;
                 }) as Array<ReceivingPOItem & { branchName: string }>;
         });
-    }, [selectedPO, activePorIds]);
-
-
+    }, [selectedPO, activePorIds, step, safeCounts, editingIds]);
 
     const filteredStep2Items = React.useMemo(() => {
         const query = searchQuery.trim().toLowerCase();
@@ -281,7 +286,10 @@ export function ReviewReceiptStep({ receiverName }: { receiverName?: string; onB
     const progress = React.useMemo(() => {
         const allocs = Array.isArray(selectedPO?.allocations) ? selectedPO!.allocations : [];
         const items = allocs.flatMap((a) => (Array.isArray(a?.items) ? a.items : []));
-        const totalTagged = items.reduce((acc, it: ReceivingPOItem) => acc + (Number(it?.taggedQty) || 0), 0);
+        let totalTagged = items.reduce((acc, it: ReceivingPOItem) => acc + (Number(it?.taggedQty) || 0), 0);
+        if (totalTagged === 0 && selectedPO?.draftData) {
+            totalTagged = selectedPO.draftData.reduce((acc, d) => acc + (Number(d.receivedQuantity) || 0), 0);
+        }
         const totalReceived = items.reduce((acc, it: ReceivingPOItem) => acc + (Number(it?.receivedQty) || 0), 0);
         return { totalTagged, totalReceived };
     }, [selectedPO]);
@@ -673,7 +681,16 @@ export function ReviewReceiptStep({ receiverName }: { receiverName?: string; onB
 
                                             // Determine maxQty from draftData or fallback to expected
                                             const draft = selectedPO?.draftData?.find(d => String(d.porId) === porId);
-                                            const maxQty = draft ? Number(draft.receivedQuantity) : expected;
+                                            const matchingDrafts = selectedPO?.draftData?.filter(d =>
+                                                String(d.porId) === porId ||
+                                                (String(d.productId) === String(it.productId))
+                                            );
+                                            const sumDrafts = matchingDrafts && matchingDrafts.length > 0
+                                                ? matchingDrafts.reduce((acc, d) => acc + Number(d.receivedQuantity || 0), 0)
+                                                : 0;
+                                            const maxQty = (it.taggedQty !== undefined && it.taggedQty > 0)
+                                                ? it.taggedQty
+                                                : (sumDrafts > 0 ? sumDrafts : (draft ? Number(draft.receivedQuantity) : expected));
 
                                             const unitP = Number(it.unitPrice || 0);
                                             const discA = Number(it.discountAmount || 0);

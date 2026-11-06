@@ -96,7 +96,8 @@ export function SerialTaggingWorkspace({ po, loading, hook }: SerialTaggingWorks
     if (!po) return null; // Fallback, shouldn't reach here
 
     const isTagged = po.isTagged;
-    const isReadOnly = isTagged || po.inventoryStatus !== 13;
+    // Developer comment: inventory_status=3 (For Receiving) indicates the PO is approved and ready for serial tagging.
+    const isReadOnly = isTagged || po.inventoryStatus !== 3;
 
     return (
         <div className="min-w-0 border border-border rounded-xl bg-background shadow-sm overflow-hidden flex flex-col h-full">
@@ -155,7 +156,7 @@ export function SerialTaggingWorkspace({ po, loading, hook }: SerialTaggingWorks
                         {po.remark && <div className="text-foreground/90 font-medium">Reason: {po.remark}</div>}
                     </div>
                 )}
-                {po.inventoryStatus !== 13 && po.inventoryStatus !== 8 && po.inventoryStatus !== 4 && !isTagged && (
+                {po.inventoryStatus !== 3 && po.inventoryStatus !== 8 && po.inventoryStatus !== 4 && !isTagged && (
                     <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-300 font-medium flex items-center gap-2">
                         <Info className="h-4 w-4 shrink-0" />
                         This PO is not ready for tagging (Status: {po.inventoryStatusLabel || "Pending"}). Serial entry is disabled until approved.
@@ -260,16 +261,22 @@ export function SerialTaggingWorkspace({ po, loading, hook }: SerialTaggingWorks
             {!isReadOnly && (
                 <div className="p-4 bg-background/95 backdrop-blur-xl border-t border-border flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between shrink-0 z-10">
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        {!hook.canSubmit && hook.totalDraftCount === 0 && (
+                        {hook.totalDraftCount === 0 && (
                             <>
                                 <Info className="h-4 w-4 shrink-0" />
                                 <span>Add serials to enable saving.</span>
                             </>
                         )}
-                        {!hook.canSubmit && hook.totalDraftCount > 0 && (
-                            <span className="text-orange-500 font-medium flex items-center gap-1.5">
-                                <Info className="h-4 w-4 shrink-0" />
-                                All lines must match ordered quantity to save.
+                        {hook.totalDraftCount > 0 && !hook.isFullyCompleted && (
+                            <span className="text-primary font-medium flex items-center gap-1.5">
+                                <Info className="h-4 w-4 shrink-0 text-primary" />
+                                Partial draft save enabled: {hook.totalDraftCount} serial{hook.totalDraftCount !== 1 ? "s" : ""} ready to save. You can resume tagging anytime.
+                            </span>
+                        )}
+                        {hook.totalDraftCount > 0 && hook.isFullyCompleted && (
+                            <span className="text-emerald-600 font-medium flex items-center gap-1.5">
+                                <Info className="h-4 w-4 shrink-0 text-emerald-600" />
+                                All lines match ordered quantity. Ready to complete tagging.
                             </span>
                         )}
                     </div>
@@ -293,7 +300,7 @@ export function SerialTaggingWorkspace({ po, loading, hook }: SerialTaggingWorks
                             ) : (
                                 <>
                                     <Save className="mr-2 h-4 w-4" />
-                                    {(hook.totalSavedCount + hook.totalDraftCount) === hook.totalOrderedCount && hook.totalOrderedCount > 0 ? "Confirm & Save All" : `Save ${hook.totalDraftCount} Drafts`}
+                                    {(hook.totalSavedCount + hook.totalDraftCount) === hook.totalOrderedCount && hook.totalOrderedCount > 0 ? "Confirm & Save All" : `Save ${hook.totalDraftCount} Draft${hook.totalDraftCount !== 1 ? "s" : ""}`}
                                 </>
                             )}
                         </Button>

@@ -121,11 +121,13 @@ async function fetchBranchesMap(base: string, ids: number[]) {
 
 async function getPOList(base: string, statusFilter: string = "ready") {
     // Step 1: Fetch refill POs filtered by tab status to optimize load time
+    // Developer comment: Refill POs are approved to inventory_status=3 (For Receiving). 
+    // They are ready for tagging if status is 3 and is_tagged != 1.
     let statusQuery = "&filter[inventory_status][_nin]=7";
     if (statusFilter === "ready") {
-        statusQuery = "&filter[inventory_status][_eq]=13&filter[is_tagged][_neq]=1";
+        statusQuery = "&filter[inventory_status][_eq]=3&filter[is_tagged][_neq]=1";
     } else if (statusFilter === "for_approval" || statusFilter === "pending") {
-        statusQuery = "&filter[inventory_status][_nin]=13,8,4,7&filter[is_tagged][_neq]=1";
+        statusQuery = "&filter[inventory_status][_nin]=3,8,4,7&filter[is_tagged][_neq]=1";
     } else if (statusFilter === "tagged") {
         statusQuery = "&filter[inventory_status][_nin]=7&filter[is_tagged][_eq]=1";
     } else if (statusFilter === "rejected") {
@@ -350,6 +352,43 @@ async function tagSerials(
         }
     }
 
+    // Developer comment: Backend zero-trust capacity enforcement. Check existing saved serials to prevent over-tagging past ordered_quantity.
+    const allLineIds = linesData.map((l) => Number(l.purchase_order_product_id)).filter(Boolean);
+    if (allLineIds.length > 0) {
+        const existingSerialsUrl =
+            `${base}/items/purchase_order_serial` +
+            `?filter[purchase_order_product_id][_in]=${allLineIds.join(",")}` +
+            `&limit=-1` +
+            `&fields=purchase_order_product_id`;
+        const existingSerialsRes = await directusFetch(existingSerialsUrl);
+        const existingSerialsData = ((await existingSerialsRes.json().catch(() => ({}))).data ?? []) as Record<string, unknown>[];
+        
+        const existingCountByLine = new Map<number, number>();
+        for (const sr of existingSerialsData) {
+            const raw = sr.purchase_order_product_id;
+            const lid = typeof raw === 'object' && raw !== null ? Number((raw as Record<string, unknown>).id || (raw as Record<string, unknown>).purchase_order_product_id) : Number(raw);
+            if (Number.isFinite(lid) && lid > 0) {
+                existingCountByLine.set(lid, (existingCountByLine.get(lid) ?? 0) + 1);
+            }
+        }
+
+        const incomingCountByLine = new Map<number, number>();
+        for (const e of entries) {
+            incomingCountByLine.set(e.lineId, (incomingCountByLine.get(e.lineId) ?? 0) + 1);
+        }
+
+        for (const [lineId, incomingCount] of incomingCountByLine.entries()) {
+            const lineMeta = linesMap.get(lineId);
+            const orderedQty = lineMeta?.ordered_quantity ?? 0;
+            const currentCount = existingCountByLine.get(lineId) ?? 0;
+            if (currentCount + incomingCount > orderedQty) {
+                throw new Error(
+                    `Over-tagging rejected: Line ID ${lineId} has ${currentCount} saved serial(s), adding ${incomingCount} exceeds ordered quantity of ${orderedQty}. Exact 1:1 required.`
+                );
+            }
+        }
+    }
+
     // 2. Fetch v_serial_onhand for validation (via Spring API)
     const uniqueSerials = Array.from(new Set(entries.map((e) => String(e.serial_number).trim())));
     
@@ -360,8 +399,9 @@ async function tagSerials(
 
     const onhandMap = new Map<string, Record<string, unknown>>();
 
+    // Developer comment: Enforce strict case-sensitive matching for serial numbers in PO Creation Serial Tagging
     await Promise.all(uniqueSerials.map(async (sn) => {
-        const url = `${SPRING_API_BASE_URL.replace(/\/$/, "")}/api/v-serial-onhand/all?serialNumber=${encodeURIComponent(sn.toUpperCase())}`;
+        const url = `${SPRING_API_BASE_URL.replace(/\/$/, "")}/api/v-serial-onhand/all?serialNumber=${encodeURIComponent(sn)}`;
         
         try {
             const onhandRes = await fetch(url, {
@@ -378,14 +418,14 @@ async function tagSerials(
                 const data = await onhandRes.json().catch(() => []);
                 const rows = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
                 
-                // Determine expected branch and product from the PO lines for this serial
-                const entryForSn = entries.find(e => String(e.serial_number).trim().toUpperCase() === sn.toUpperCase());
+                // Determine expected branch and product from the PO lines for this serial using exact character casing
+                const entryForSn = entries.find(e => String(e.serial_number).trim() === sn);
                 const expectedBranchId = entryForSn ? linesMap.get(entryForSn.lineId)?.branch_id : undefined;
                 const expectedProductId = entryForSn ? linesMap.get(entryForSn.lineId)?.product_id : undefined;
 
                 // Find the PERFECT match, filtering by exact serial number AND expected branch/product (handles historical/duplicate rows from API)
                 const perfectMatch = rows.find((r: { serialNumber?: string, serial_number?: string, branchId?: string | number, branch_id?: string | number, productId?: string | number, product_id?: string | number }) => {
-                    const matchSn = String(r.serialNumber || r.serial_number || "").trim().toUpperCase() === sn.toUpperCase();
+                    const matchSn = String(r.serialNumber || r.serial_number || "").trim() === sn;
                     const rBranchId = Number(r.branchId ?? r.branch_id);
                     const matchBranch = expectedBranchId !== undefined ? rBranchId === expectedBranchId : true;
                     const rProductId = Number(r.productId ?? r.product_id);
@@ -396,14 +436,12 @@ async function tagSerials(
                 if (perfectMatch) {
                     onhandMap.set(sn, perfectMatch as Record<string, unknown>);
                 } else {
-                    // Fallback to any record matching the serial number (so the validation loop can throw a "different branch/product" error)
+                    // Fallback to exact-matching record (so the validation loop can throw a "different branch/product" error)
                     const basicMatch = rows.find((r: { serialNumber?: string, serial_number?: string }) => 
-                        String(r.serialNumber || r.serial_number || "").trim().toUpperCase() === sn.toUpperCase()
+                        String(r.serialNumber || r.serial_number || "").trim() === sn
                     );
                     if (basicMatch) {
                         onhandMap.set(sn, basicMatch as Record<string, unknown>);
-                    } else if (rows.length > 0) {
-                        onhandMap.set(sn, rows[0] as Record<string, unknown>);
                     }
                 }
             } else {
@@ -478,6 +516,30 @@ async function tagSerials(
     }
 
     const inserted = Array.isArray(insertJson?.data) ? insertJson.data.length : serialRows.length;
+
+    // 4.5 Update cylinder_assets status to 'WITH_SUPPLIER' for each tagged serial.
+    // Run in parallel for performance. Non-blocking.
+    await Promise.all(entries.map(async (e) => {
+        // Developer comment: Preserve exact character casing when updating cylinder_assets to WITH_SUPPLIER
+        const sn = String(e.serial_number).trim();
+        try {
+            const assetCheck = await directusFetch(
+                `${base}/items/cylinder_assets?limit=5&filter[serial_number][_eq]=${encodeURIComponent(sn)}&filter[is_deleted][_eq]=0&fields=id,serial_number`
+            );
+            const assetJson = await assetCheck.json().catch(() => ({}));
+            const asset = (assetJson?.data || []).find((a: Record<string, unknown>) => String(a.serial_number).trim() === sn);
+            if (asset?.id) {
+                await directusFetch(`${base}/items/cylinder_assets/${asset.id}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ cylinder_status: 'WITH_SUPPLIER' })
+                });
+            } else {
+                console.warn(`[tagSerials] Serial ${sn} not found in cylinder_assets — WITH_SUPPLIER not set.`);
+            }
+        } catch (err) {
+            console.error(`[tagSerials] Failed to update cylinder_assets for serial ${sn}:`, err);
+        }
+    }));
 
     // 5. Check if all lines are now fully serialized → patch is_tagged = 1
     const lineIds = linesData.map((l) => Number(l.purchase_order_product_id)).filter(Boolean);
@@ -584,7 +646,7 @@ export async function POST(req: NextRequest) {
 
         const { poId, entries } = parsed.data;
 
-        // Verify the PO exists and has inventory_status=13 (approved for tagging)
+        // Verify the PO exists and has inventory_status=3 (approved / For Receiving)
         const poCheckRes = await directusFetch(
             `${base}/items/purchase_order/${poId}?fields=purchase_order_id,inventory_status,is_refill`
         );
@@ -596,9 +658,10 @@ export async function POST(req: NextRequest) {
         if (Number(poData.is_refill) !== 1) {
             return NextResponse.json({ error: "This PO is not a refill PO." }, { status: 400 });
         }
-        if (Number(poData.inventory_status) !== 13) {
+        // Developer comment: Setting inventory_status=3 (For Receiving) is the standard approved state for POs.
+        if (Number(poData.inventory_status) !== 3) {
             return NextResponse.json(
-                { error: "PO is not approved for serial tagging (inventory_status must be 13)." },
+                { error: "PO is not approved for serial tagging (inventory_status must be 3)." },
                 { status: 400 }
             );
         }

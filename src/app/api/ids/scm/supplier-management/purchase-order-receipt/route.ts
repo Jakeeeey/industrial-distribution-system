@@ -148,6 +148,12 @@ const LOTS_COLLECTION = "lots";
 const UNITS_COLLECTION = "units";
 const PRODUCT_SUPPLIER_COLLECTION = "product_per_supplier";
 
+// Developer Comment: Unit IDs allocated for Cylinder & LPG products from vos_database.units (IDs: 1, 18, 19, 20, 21, 22, 23).
+// Cylinder products strictly use cylinder unit codes and do not have a BOX unit category.
+// Developer Comment: Unit IDs strictly allowed for 'Add Extra' cylinder product receiving from vos_database.units:
+// 18 = EMPTY, 19 = SWAP, 23 = FULL
+const ALLOWED_EXTRA_CYLINDER_UOM_IDS = new Set<number>([18, 19, 23]);
+
 type POStatus = "OPEN" | "PARTIAL" | "CLOSED";
 
 type POItem = {
@@ -161,6 +167,7 @@ type POItem = {
     expectedQty: number;
     originalOrderedQty?: number;
     receivedQty: number;
+    taggedQty?: number;
     requiresRfid: boolean;
     serialCount: number;
     isReceived: boolean;
@@ -170,6 +177,7 @@ type POItem = {
     netAmount: number;
     isExtra?: boolean;
 };
+
 
 
 
@@ -229,11 +237,14 @@ async function fetchApprovedNotReceivedPOs(base: string): Promise<POHeaderRow[]>
 
     if (validSupplierIds.length === 0) return [];
 
+    // Developer comment: Fetch only approved POs eligible for receiving (status 3 = For Receiving, 9 = Partially Received, 12 = En Route).
+    // Excludes rejected (8), pending approval (1), cancelled (7), fully received (6), and posted/for posting (13).
     const baseQs = [
         "limit=-1", "sort=-purchase_order_id",
         "fields=purchase_order_id,purchase_order_no,date,date_encoded,approver_id,date_approved,payment_status,inventory_status,date_received,supplier_name,total_amount,price_type,is_refill,is_tagged",
         "filter[_or][0][is_posted][_neq]=1",
-        "filter[_or][1][is_posted][_null]=true"
+        "filter[_or][1][is_posted][_null]=true",
+        "filter[inventory_status][_in]=3,9,12"
     ].join("&");
 
     const allRows: POHeaderRow[] = [];
@@ -487,10 +498,11 @@ function buildPorIdsByKey(porRows: PORow[]) {
 // buildTagMapsForScopes removed
 
 function isFullyReceived(poId: number, lines: POProductRow[], porRows: PORow[]) {
+    const activeRows = porRows.filter((r) => toNum(r.is_reverted) !== 1 && toNum(r.isPosted) !== 2);
     for (const ln of lines) {
         const expected = toNum(ln.ordered_quantity);
         if (expected <= 0) continue;
-        const received = porRows
+        const received = activeRows
             .filter((r) => toNum(r.product_id) === toNum(ln.product_id) && toNum(r.branch_id) === toNum(ln.branch_id ?? 0))
             .reduce((sum, r) => sum + effectiveReceivedQty(r), 0);
         if (received < expected) return false;
@@ -499,16 +511,19 @@ function isFullyReceived(poId: number, lines: POProductRow[], porRows: PORow[]) 
 }
 
 // Fixed receivingStatusFrom helper for Receipt module compatibility (does not lock reverted status)
-function receivingStatusFrom(poId: number, lines: POProductRow[], porRows: PORow[]): POStatus {
-    const fully = isFullyReceived(poId, lines, porRows);
-    if (fully) {
-        // Even if quantities are fully received, if there are unposted/reverted receipts, it's not truly closed
-        const hasUnposted = porRows.some(r => toNum(r.isPosted) === 0 && (toStr(r.receipt_no) || toNum(r.received_quantity) > 0 || toNum(r.is_reverted) === 1));
-        if (hasUnposted) return "PARTIAL";
-        return "CLOSED";
-    }
-    const hasAnyPosted = porRows.some(r => toNum(r.isPosted) === 1);
-    const hasAnyReceipt = porRows.some(r => effectiveReceivedQty(r) > 0 || toStr(r.receipt_no));
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function receivingStatusFrom(po: any, lines: POProductRow[], porRows: PORow[]): POStatus {
+    if (toNum(po?.inventory_status) === 6) return "CLOSED";
+    
+    const activeRows = porRows.filter((r) => toNum(r.is_reverted) !== 1 && toNum(r.isPosted) !== 2);
+    const fully = isFullyReceived(toNum(po?.purchase_order_id), lines, activeRows);
+    
+    // Even if fully received by quantity, if inventory_status is not 6, it is still PARTIAL
+    // This allows the user to continue tagging or adding receipts until amounts are posted.
+    if (fully) return "PARTIAL";
+
+    const hasAnyPosted = activeRows.some(r => toNum(r.isPosted) === 1);
+    const hasAnyReceipt = activeRows.some(r => effectiveReceivedQty(r) > 0 || toStr(r.receipt_no));
     if (hasAnyPosted || hasAnyReceipt) return "PARTIAL";
     return "OPEN";
 }
@@ -630,7 +645,7 @@ export async function GET() {
             return {
                 id: String(poId), poNumber: toStr(po.purchase_order_no),
                 supplierName: supplierMap.get(toNum(po.supplier_name)) || "—",
-                status: receivingStatusFrom(poId, lines, porRows),
+                status: receivingStatusFrom(po, lines, porRows),
                 inventoryStatus: toNum(po.inventory_status),
                 totalAmount: toNum(po.total_amount), currency: "PHP",
                 itemsCount: new Set(lines.map(l => l.product_id)).size,
@@ -732,10 +747,15 @@ export async function POST(req: NextRequest) {
                 const k = keyLine(poId, pid, bid);
                 const p = productsMap.get(pid);
                 const pors = porIdsByKey.get(k) || [];
-                const receivedQty = pors.reduce((sum, id) => sum + effectiveReceivedQty(porRows.find(r => toNum(r.purchase_order_product_id) === id)!), 0);
+                const allMatchingPorRows = pors.map(id => porRows.find(r => toNum(r.purchase_order_product_id) === id)).filter(Boolean) as PORow[];
+                const receivedQty = allMatchingPorRows.reduce((sum, r) => sum + effectiveReceivedQty(r), 0);
+                
+                // Aggregate unreceipted / draft received quantity available for this allocation
+                const openRows = allMatchingPorRows.filter(r => (!toStr(r.receipt_no) || toNum(r.is_reverted) === 1) && toNum(r.received_quantity) > 0);
+                const taggedDraftQty = openRows.reduce((sum, r) => sum + toNum(r.received_quantity), 0);
 
                 // ✅ Original openRow check restored to map reverted receipts correctly in Receipt RFID
-                const openRow = pors.map(id => porRows.find(r => toNum(r.purchase_order_product_id) === id)).find(r => r && (!toStr(r.receipt_no) || toNum(r.is_reverted) === 1));
+                const openRow = openRows[0];
                 const porIdStr = openRow ? String(openRow.purchase_order_product_id) : `${pid}-${bid}`;
 
                 let lineDiscountTypeStr = "No Discount";
@@ -764,7 +784,7 @@ export async function POST(req: NextRequest) {
                 }
 
                 const orderedQty = toNum(ln.ordered_quantity);
-                const otherRows = pors.map(id => porRows.find(r => toNum(r.purchase_order_product_id) === id)).filter(r => r && r.purchase_order_product_id !== openRow?.purchase_order_product_id);
+                const otherRows = allMatchingPorRows.filter(r => r.purchase_order_product_id !== openRow?.purchase_order_product_id);
                 const previousReceivedQty = otherRows.reduce((sum, r) => sum + effectiveReceivedQty(r), 0);
                 const remainingQty = Math.max(0, orderedQty - previousReceivedQty);
 
@@ -778,6 +798,7 @@ export async function POST(req: NextRequest) {
                     uomCount: Number(p?.unit_of_measurement_count) || 1,
                     expectedQty: remainingQty,
                     receivedQty,
+                    taggedQty: taggedDraftQty,
                     requiresRfid: false,
                     serialCount: serialCountMap.get(toNum(openRow?.purchase_order_product_id)) || 0,
                     isReceived: receivedQty >= orderedQty,
@@ -804,10 +825,14 @@ export async function POST(req: NextRequest) {
                 const bid = Number(parts[2]);
                 const p = productsMap.get(pid);
                 const pors = porIdsByKey.get(k) || [];
-                const receivedQty = pors.reduce((sum, id) => sum + effectiveReceivedQty(porRows.find(r => toNum(r.purchase_order_product_id) === id)!), 0);
+                const allMatchingPorRows = pors.map(id => porRows.find(r => toNum(r.purchase_order_product_id) === id)).filter(Boolean) as PORow[];
+                const receivedQty = allMatchingPorRows.reduce((sum, id) => sum + effectiveReceivedQty(id), 0);
                 
+                const openRows = allMatchingPorRows.filter(r => (!toStr(r.receipt_no) || toNum(r.is_reverted) === 1) && toNum(r.received_quantity) > 0);
+                const taggedDraftQty = openRows.reduce((sum, r) => sum + toNum(r.received_quantity), 0);
+
                 // ✅ Original openRow check restored to map reverted receipts correctly in Receipt RFID
-                const openRow = pors.map(id => porRows.find(r => toNum(r.purchase_order_product_id) === id)).find(r => r && (!toStr(r.receipt_no) || toNum(r.is_reverted) === 1));
+                const openRow = openRows[0];
                 const porIdStr = openRow ? String(openRow.purchase_order_product_id) : `${pid}-${bid}`;
 
                 let lineDiscountTypeStr = "No Discount";
@@ -844,6 +869,7 @@ export async function POST(req: NextRequest) {
                     uomCount: Number(p?.unit_of_measurement_count) || 1,
                     expectedQty: 0,
                     receivedQty,
+                    taggedQty: taggedDraftQty,
                     requiresRfid: false,
                     serialCount: serialCountMap.get(toNum(openRow?.purchase_order_product_id)) || 0,
                     isReceived: receivedQty > 0,
@@ -921,18 +947,11 @@ export async function POST(req: NextRequest) {
             const p = j?.data?.[0];
             if (!p) return bad("Product not found", 404);
             const uomId = Number(p.unit_of_measurement?.unit_id ?? p.unit_of_measurement);
-            if (uomId !== 11 && uomId !== 1) {
-                return bad("Only 'Box' or 'Piece' UOM allowed.", 400);
+            // Developer Comment: Validate against allowed 'Add Extra' cylinder product units strictly: Full (18), Empty (19), and Swap (23).
+            if (!ALLOWED_EXTRA_CYLINDER_UOM_IDS.has(uomId)) {
+                return bad("Invalid product unit. Only Full, Empty, and Swap cylinder products are allowed.", 400);
             }
-
-            if (uomId === 1) {
-                // Check if a Box variant exists for this product name
-                const boxUrl = `${base}/items/${PRODUCTS_COLLECTION}?limit=1&filter[product_name][_eq]=${encodeURIComponent(String(p.product_name))}&filter[unit_of_measurement][_eq]=11&fields=product_id`;
-                const boxJ = await fetchJson<{ data: Record<string, unknown>[] }>(boxUrl).catch(() => null);
-                if (boxJ && Array.isArray(boxJ.data) && boxJ.data.length > 0) {
-                    return bad("A Box variant exists for this product. Please use the Box variant.", 400);
-                }
-            }
+            const uomShortcut = String(p.unit_of_measurement?.unit_shortcut || p.unit_of_measurement?.unit_name || "").toUpperCase();
 
             let discTypeStr = "Standard";
             let discPct = 0;
@@ -958,7 +977,8 @@ export async function POST(req: NextRequest) {
                 unitPrice: toNum(p.cost_per_unit),
                 discountType: discTypeStr,
                 discountPercent: discPct,
-                uom: String(p.unit_of_measurement?.unit_shortcut ?? (uomId === 11 ? "BOX" : "PCS")).toUpperCase(),
+                uom: uomShortcut,
+                uomId: uomId,
                 sku: String(p.barcode || p.product_code)
             });
         }
@@ -1152,12 +1172,25 @@ export async function POST(req: NextRequest) {
                 }
 
                 // Split logic: If original quantity is greater than the new requested quantity,
-                // we create a new open row for the remainder.
+                // we create a new open row for the remainder and reassign the remaining serials.
+                // Developer comments:
+                // When an item is partially received into a receipt (newQty < originalQty),
+                // the remainder units are split into a new draft row (receipt_no: null).
+                // If serials are attached in purchase_order_receiving_serial, only the first newQty
+                // serials stay attached to this receipt row (realPorId). The remaining serials
+                // are reassigned to the new remainder POR row so they remain available for subsequent receipts.
                 const originalQty = toNum(pr.received_quantity);
                 if (originalQty > newQty) {
                     const remainder = originalQty - newQty;
-                    // Create an open row for the remainder
-                    await fetchJson(`${base}/items/${POR_COLLECTION}`, {
+                    const remGross = uPrice * remainder;
+                    const remDisc = Number((remGross * (linePct / 100)).toFixed(2));
+                    const remNet = remGross - remDisc;
+                    const remVatExcl = poIsInvoice ? Number((remNet / 1.12).toFixed(2)) : remNet;
+                    const remVat = poIsInvoice ? Number((remNet - remVatExcl).toFixed(2)) : 0;
+                    const remEwt = poIsInvoice ? Number((remVatExcl * 0.01).toFixed(2)) : 0;
+
+                    // Developer comment: Include all required financial fields per Directus & DDL constraints (discounted_amount is NOT NULL).
+                    const remainderRes = await fetchJson<{ data: { purchase_order_product_id: number } }>(`${base}/items/${POR_COLLECTION}`, {
                         method: "POST",
                         body: JSON.stringify({
                             purchase_order_id: poId,
@@ -1165,13 +1198,46 @@ export async function POST(req: NextRequest) {
                             branch_id: toNum(pr.branch_id),
                             unit_price: uPrice,
                             discount_type: dtId || null,
+                            discounted_amount: remDisc,
+                            vat_amount: remVat,
+                            withholding_amount: remEwt,
+                            total_amount: Number(remGross.toFixed(2)),
                             received_quantity: remainder,
                             receipt_no: null,
                             isPosted: 0,
                             is_reverted: 0,
                             receiving_method: "SERIAL"
                         })
-                    }).catch(() => { });
+                    }).catch((e) => {
+                        console.error("[save_receipt] Failed to create remainder draft POR row:", e);
+                        return null;
+                    });
+
+                    const remainderPorId = toNum(remainderRes?.data?.purchase_order_product_id);
+
+                    // Reassign the remaining serials in purchase_order_receiving_serial to remainderPorId
+                    if (remainderPorId > 0) {
+                        try {
+                            const childSerialsUrl = `${base}/items/purchase_order_receiving_serial?filter[purchase_order_receiving_id][_eq]=${realPorId}&sort=receiving_item_id&fields=receiving_item_id,serial_number`;
+                            const childRes = await fetchJson<{ data: Array<{ receiving_item_id: number; serial_number: string }> }>(childSerialsUrl).catch(() => null);
+                            const childList = childRes?.data || [];
+
+                            if (childList.length > newQty) {
+                                // Keep the first newQty serials on realPorId; move the rest to remainderPorId
+                                const serialsToMove = childList.slice(newQty);
+                                for (const s of serialsToMove) {
+                                    await fetchJson(`${base}/items/purchase_order_receiving_serial/${s.receiving_item_id}`, {
+                                        method: "PATCH",
+                                        body: JSON.stringify({ purchase_order_receiving_id: remainderPorId })
+                                    }).catch((err) => {
+                                        console.error(`[save_receipt] Failed to reassign serial ${s.serial_number} to remainderPorId ${remainderPorId}:`, err);
+                                    });
+                                }
+                            }
+                        } catch (serialSplitErr) {
+                            console.error("[save_receipt] Error partitioning serials during partial receipt split:", serialSplitErr);
+                        }
+                    }
                 }
 
                 const lineGross = uPrice * newQty;
@@ -1350,7 +1416,9 @@ export async function POST(req: NextRequest) {
                 if (!p) return null;
 
                 const uomId = Number(p.unit_of_measurement?.unit_id ?? p.unit_of_measurement);
-                if (uomId !== 11 && uomId !== 1) return null;
+                // Developer Comment: Filter extra products strictly to Empty (18), Swap (19), and Full (23) cylinder variants.
+                if (!ALLOWED_EXTRA_CYLINDER_UOM_IDS.has(uomId)) return null;
+                const uomShortcut = String(p.unit_of_measurement?.unit_shortcut || p.unit_of_measurement?.unit_name || "").toUpperCase();
 
                 const dt = link.discount_type as Record<string, unknown> | null | undefined;
                 let discTypeStr = "No Discount";
@@ -1370,7 +1438,7 @@ export async function POST(req: NextRequest) {
                     barcode: String(p.barcode || p.product_code),
                     unitPrice: toNum(p.cost_per_unit),
                     uomId: uomId,
-                    uom: String(p.unit_of_measurement?.unit_shortcut ?? (uomId === 11 ? "BOX" : "PCS")).toUpperCase(),
+                    uom: uomShortcut,
                     discountType: discTypeStr,
                     discountPercent: discPct
                 };
@@ -1386,28 +1454,8 @@ export async function POST(req: NextRequest) {
                 discountPercent: number;
             }>;
 
-            // Box Priority Logic: group by name, keep Box if exists, else Piece
-            const groupedByName = new Map<string, typeof rawResults>();
-            for (const item of rawResults) {
-                const arr = groupedByName.get(item.name) || [];
-                arr.push(item);
-                groupedByName.set(item.name, arr);
-            }
-
-            const results: typeof rawResults = [];
-            groupedByName.forEach((items) => {
-                const boxItem = items.find(i => i.uomId === 11);
-                if (boxItem) {
-                    results.push(boxItem);
-                } else {
-                    const pieceItem = items.find(i => i.uomId === 1);
-                    if (pieceItem) {
-                        results.push(pieceItem);
-                    }
-                }
-            });
-
-            return ok(results.map(r => ({
+            // Developer Comment: Return cylinder product results directly without box grouping
+            return ok(rawResults.map(r => ({
                 productId: r.productId,
                 name: r.name,
                 sku: r.sku,
