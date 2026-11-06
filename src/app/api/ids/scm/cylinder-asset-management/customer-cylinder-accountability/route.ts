@@ -352,10 +352,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     });
 
     // 6. Fetch Products catalog for distinguishing Serialized Cylinder Asset Issuances vs Refill Swaps
-    // AG-FILTER: not narrowed by isActive/is_serialized — isCylinderIssuanceProduct
-    // and the custody gates read these flags per row, so a scoped map would make an
-    // ineligible product look unknown and take the opposite branch.
-    const prodQuery = `${directusBase}/items/products?fields=product_id,product_code,product_name,description,is_serialized&limit=-1`;
+    // AG-FILTER: narrowed to is_serialized = 1 — this report is serialized cylinders only.
+    // Both consumers gate on `!prod` first (rows 396 and 928), so an ineligible product and
+    // an unknown one already took the same branch; isCylinderIssuanceProduct only ever
+    // receives a product that survived that gate.
+    const prodQuery = `${directusBase}/items/products?fields=product_id,product_code,product_name,description,is_serialized&filter[is_serialized][_eq]=1&limit=-1`;
     const rawProducts = await fetchRows<ProductRow>(prodQuery, headers);
     const productCatalogMap = new Map<number, ProductRow>();
     rawProducts.forEach((p) => productCatalogMap.set(Number(p.product_id), p));
@@ -762,8 +763,12 @@ async function handleCustomerDetailDrillDown(
     const branchName = branchId ? branchMap.get(branchId) || `Branch #${branchId}` : "Main Branch";
 
     // 4. Fetch Products catalog for labels and classification
+    // AG-FILTER: is_serialized = 1, matching the report path. The custody gate (928) and the
+    // serial fallback (780) already treated a non-serialized product as ineligible, so only
+    // the unlinked-manifold-cylinder label at 884 changes: such a row now reads
+    // "Manifold Site Cylinder" instead of naming a product this report excludes.
     const productRows = await fetchRows<ProductRow>(
-      `${directusBase}/items/products?fields=product_id,product_code,product_name,description,is_serialized&limit=-1`,
+      `${directusBase}/items/products?fields=product_id,product_code,product_name,description,is_serialized&filter[is_serialized][_eq]=1&limit=-1`,
       headers
     );
     const productsMap = new Map<number, ProductRow>();

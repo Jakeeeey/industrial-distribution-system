@@ -1,8 +1,8 @@
 // src/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-movement-and-variance-report/services/stock-movement-variance.xlsx.ts
 // ==============================================================================
 // Excel Export Generator for Stock Movement and Variance Report.
-// Multi-tab workbook: Executive Summary, Variance Lines, Supporting Documents
-// and Data Exceptions. Values are written as numbers so supervisors can re-work
+// Multi-tab workbook: Executive Summary, Variance Lines and Supporting
+// Documents. Values are written as numbers so supervisors can re-work
 // the figures without re-parsing formatted strings.
 // ==============================================================================
 
@@ -37,14 +37,11 @@ export function exportStockMovementVarianceToExcel(
     ["KEY INDICATORS", "VALUE"],
     ["Reconciled Product Lines", report.kpis.totalLines],
     ["Lines With a Non-Zero Variance", report.kpis.linesWithVariance],
-    ["Lines Supported by a Committed Count", report.kpis.linesCounted],
-    ["Lines With No Committed Count", report.kpis.linesUncounted],
+    ["Lines Counted Inside This Period", report.kpis.linesCounted],
+    ["Lines With No Count Inside This Period", report.kpis.linesUncounted],
     ["Net Variance (base units)", qty(report.kpis.netVarianceUnits)],
     ["Total Shortage (base units)", qty(report.kpis.shortUnits)],
     ["Total Overage (base units)", qty(report.kpis.overUnits)],
-    ["Lines Carrying a Data Exception", report.kpis.exceptionLines],
-    ["Unmatched Counted Serials", report.kpis.unmatchedSerials],
-    ["Documents Excluded as Void Reversals", report.kpis.voidReversalDocuments],
     [],
     ["SOURCE NOTES", ""],
     ...report.warnings.map((warning) => [warning, ""] as (string | number)[]),
@@ -69,10 +66,9 @@ export function exportStockMovementVarianceToExcel(
     "Variance %",
     "Count Document",
     "Count Cutoff",
+    "Count Used",
     "Count System Qty",
     "Count Recorded Variance",
-    "Adjustment References",
-    "Exceptions",
   ];
 
   const lineRows = report.rows.map((row) => [
@@ -86,13 +82,20 @@ export function exportStockMovementVarianceToExcel(
     qty(row.expectedClosing),
     qty(row.countedClosing),
     qty(row.variance),
-    row.variancePercent === null ? "" : Math.round(row.variancePercent * 100) / 100,
+    // A counted line with no positive expected base has no meaningful percentage,
+    // which is a different fact from a line nobody counted.
+    row.variance === null
+      ? "Not counted"
+      : row.variancePercent === null
+        ? "Not applicable"
+        : Math.round(row.variancePercent * 100) / 100,
     row.countDocNo ?? "",
     row.countCutoffDate ? formatPhDateTime(row.countCutoffDate) : "",
+    // A sheet from an earlier period is still reported, but it measured a
+    // different day, so the reader must be able to see it was not used.
+    row.countDocNo ? (row.countInPeriod ? "In period" : "Earlier period") : "",
     qty(row.countSystemQty),
     qty(row.countSourceVariance),
-    row.adjustmentReferences.join(" | "),
-    row.exceptionCodes.join(" | "),
   ]);
 
   const lineSheet = XLSX.utils.aoa_to_sheet([lineHeader, ...lineRows]);
@@ -129,43 +132,6 @@ export function exportStockMovementVarianceToExcel(
   const docSheet = XLSX.utils.aoa_to_sheet([docHeader, ...docRows]);
   docSheet["!cols"] = docHeader.map((title) => ({ wch: Math.max(14, title.length) }));
   XLSX.utils.book_append_sheet(workbook, docSheet, "Supporting Documents");
-
-  // ── Sheet 4: Exceptions (unmatched serials and excluded reversals) ─────────
-  const excHeader = ["Type", "Product / Branch", "Reference", "Detail"];
-
-  const serialExceptions = report.rows.flatMap((row) =>
-    row.serialExceptions.map((serial) => [
-      "Unmatched serial",
-      row.productName,
-      `${serial.phNo} / ${serial.serialNumber}`,
-      serial.reason,
-    ])
-  );
-
-  const reversalExceptions = report.excludedDocuments.map((doc) => [
-    "Void reversal (excluded)",
-    doc.branchName,
-    `${doc.docType} ${doc.docNo}`,
-    `In ${qty(doc.inBase)} / Out ${qty(doc.outBase)} excluded from every balance`,
-  ]);
-
-  const codeExceptions = report.rows.flatMap((row) =>
-    row.exceptionCodes.map((code) => [
-      "Data exception",
-      row.productName,
-      row.countDocNo ?? "No count document",
-      code,
-    ])
-  );
-
-  const excSheet = XLSX.utils.aoa_to_sheet([
-    excHeader,
-    ...serialExceptions,
-    ...reversalExceptions,
-    ...codeExceptions,
-  ]);
-  excSheet["!cols"] = excHeader.map((title) => ({ wch: Math.max(18, title.length) }));
-  XLSX.utils.book_append_sheet(workbook, excSheet, "Exceptions");
 
   const stamp = new Date().toISOString().slice(0, 10);
   XLSX.writeFile(workbook, `${filenamePrefix}_${stamp}.xlsx`);

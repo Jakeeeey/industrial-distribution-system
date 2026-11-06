@@ -117,6 +117,8 @@ export interface RawProductRow {
   product_id: number;
   product_code: string | null;
   product_name: string | null;
+  // AG-COMMENT: Added description field to support ids-guide rule: shows products.description as product name
+  description?: string | null;
   product_weight: number | null;
   weight: number | null;
   weight_unit_id: number | null;
@@ -201,6 +203,8 @@ export interface RawUnifiedLpgRow {
   net_amount: number | null;
   sales_invoice_id: number | null;
   sales_invoice_no: string | null;
+  // AG-COMMENT: Added transaction_header_id to link child transactions back to authoritative consolidation headers
+  transaction_header_id?: number | null;
   status: string | null;
 }
 
@@ -253,6 +257,27 @@ export interface RawMeterReadingRow {
   sales_invoice_no: string | null;
 }
 
+
+// AG-COMMENT: Added RawLpgTransactionHeaderRow to represent consolidation headers (lpg_transaction_headers)
+export interface RawLpgTransactionHeaderRow {
+  header_id: number;
+  header_no: string | null;
+  customer_id: string | null;
+  customer_site_id: number | null;
+  period_from: string | null;
+  period_to: string | null;
+  status: string | null;
+  is_billed?: unknown;
+}
+
+// AG-COMMENT: Added RawLpgHeaderInvoiceRow to link consolidation headers to sales_invoices (lpg_transaction_header_invoices)
+export interface RawLpgHeaderInvoiceRow {
+  id: number;
+  header_id: number;
+  sales_invoice_id: number;
+  status?: string | null;
+}
+
 export interface RawPostDispatchRow {
   invoice_id: number | null;
   status: string | null;
@@ -266,6 +291,11 @@ export interface ConsumptionSourceData {
   returnDetails: RawReturnDetailRow[];
   returnLinks: RawReturnLinkRow[];
   products: RawProductRow[];
+  // Master rows for the non-serialized products this window references. The
+  // `products` read is scoped to is_serialized = 1, so these exist only so
+  // LPG and non-cylinder lines keep their names and sizes — never to widen
+  // the cylinder scope, which still evaluates is_serialized per row.
+  productLabels: RawProductRow[];
   units: RawUnitRow[];
   weightUnits: RawWeightUnitRow[];
   categories: RawCategoryRow[];
@@ -279,6 +309,9 @@ export interface ConsumptionSourceData {
   wiwoDetails: RawWiwoDetailRow[];
   meterReadings: RawMeterReadingRow[];
   postDispatch: RawPostDispatchRow[];
+  // AG-COMMENT: Added transactionHeaders and headerInvoices to support consolidation header links
+  transactionHeaders: RawLpgTransactionHeaderRow[];
+  headerInvoices: RawLpgHeaderInvoiceRow[];
 }
 
 // ------------------------------------------------------------
@@ -319,6 +352,9 @@ export interface CustomerOrderConsumptionRow {
   branchName: string;
   channel: ConsumptionChannel;
   billingMode: BillingMode | null; // LPG rows only
+  // AG-COMMENT: Added siteId and siteName to prevent multi-site row collision in LPG reporting
+  siteId?: number | null;
+  siteName?: string | null;
   productId: number;
   productCode: string;
   productName: string;

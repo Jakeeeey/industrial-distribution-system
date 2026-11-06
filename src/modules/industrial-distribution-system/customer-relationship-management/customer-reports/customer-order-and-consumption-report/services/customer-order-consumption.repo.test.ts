@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { fetchCustomerOrderConsumptionSources } from "./customer-order-consumption.repo";
-import { filters, invoice, unifiedLpg } from "./customer-order-consumption.test-fixtures";
+import {
+  filters,
+  invoice,
+  invoiceDetail,
+  product,
+  unifiedLpg,
+} from "./customer-order-consumption.test-fixtures";
 
 // The repo resolves its endpoint from the environment before anything else,
 // so the URL variable has to exist. A dummy value is enough: the test injects
@@ -233,16 +239,19 @@ test("the whole collection set needed by both channels is returned", async () =>
     "categories",
     "classifications",
     "customers",
+    "headerInvoices",
     "invoiceDetails",
     "invoices",
     "lpgSites",
     "meterReadings",
     "postDispatch",
+    "productLabels",
     "products",
     "returnDetails",
     "returnLinks",
     "returns",
     "salesmen",
+    "transactionHeaders",
     "unifiedLpg",
     "units",
     "weightUnits",
@@ -282,4 +291,34 @@ test("the product read carries the serialization flag and category", async () =>
     categoryFields.includes("is_industrial"),
     "the cylinder scope also needs the category eligibility flag"
   );
+});
+
+test("the scope read is filtered to serialized products and the rest resolve by id", async () => {
+  const cylinder = product();
+  const looseGas = product({ product_id: 200, product_code: "LPG-BULK", product_name: "Bulk LPG", is_serialized: 0 });
+
+  const { forCollection, options } = harness({
+    sales_invoice: [invoice({ invoice_id: 1 })],
+    sales_invoice_details: [
+      invoiceDetail({ detail_id: 1, product_id: 100 }),
+      invoiceDetail({ detail_id: 2, product_id: 200 }),
+    ],
+    // The same collection answers twice: the scope read asks for cylinders,
+    // the follow-up asks for the ids the scope read cannot know about.
+    products: (filter) => (filter.is_serialized ? [cylinder] : [looseGas]),
+  });
+
+  const source = await fetchCustomerOrderConsumptionSources(filters(), options);
+
+  const scopeCalls = forCollection("products").filter((item) => item.filter.is_serialized);
+  assert.equal(scopeCalls.length, 1, "the master read is the only whole-collection read");
+  assert.deepEqual(scopeCalls[0]?.filter.is_serialized, { _eq: 1 });
+  assert.equal(scopeCalls[0]?.fields.includes("is_serialized"), true);
+
+  const labelCalls = forCollection("products").filter((item) => item.filter.product_id);
+  assert.equal(labelCalls.length, 1);
+  assert.deepEqual(labelCalls[0]?.filter.product_id, { _in: [200] }, "100 is already in scope");
+
+  assert.deepEqual(source.productLabels, [looseGas]);
+  assert.equal(source.productLabels[0]?.is_serialized, 0, "the label pass proves a product is not a cylinder");
 });

@@ -315,10 +315,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         `${directusBase}/items/customer?fields=customer_code,customer_name,store_name,contact_number,brgy,city,province&limit=-1`,
         headers
       ),
-      // AG-FILTER: not narrowed by isActive/is_serialized — the row gates read these
-      // flags from this map, so a scoped map would make an ineligible product unknown.
+      // AG-FILTER: narrowed to is_serialized = 1 — this report is serialized cylinders only.
+      // Consumers either gate on `!prod` or fall back to a default serialized cylinder
+      // (24647/24678), so an ineligible product and an unknown one take the same branch.
+      // The `prod &&` gates were rewritten to `!prod ||` in the same change.
       fetchRows<ProductRow>(
-        `${directusBase}/items/products?fields=product_id,product_code,product_name,description,product_weight,is_serialized&limit=-1`,
+        `${directusBase}/items/products?fields=product_id,product_code,product_name,description,product_weight,is_serialized&filter[is_serialized][_eq]=1&limit=-1`,
         headers
       ),
       // AG-COMMENT: Restrict branch queries strictly to Industrial Division (division_id = 1)
@@ -862,8 +864,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const productsList: CustomerProductCylinderRow[] = [];
       productSubMap.forEach((pRow) => {
         const prod = productCatalogMap.get(pRow.productId);
-        // AG-COMMENT: Strictly exclude non-serialized products from customer product rows
-        if (prod && Number(prod.is_serialized) !== 1) return;
+        // AG-COMMENT: Strictly exclude non-serialized products from customer product rows.
+        // An id absent from the serialized catalog is excluded too, never assumed eligible.
+        if (!prod || Number(prod.is_serialized) !== 1) return;
         pRow.openingBase = Math.max(0, pRow.closingBase - pRow.depositsDelivered + pRow.depositsPulledOut);
         productsList.push(pRow);
       });
@@ -948,8 +951,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       row.products.forEach((p) => {
         const prod = productCatalogMap.get(p.productId);
         // AG-COMMENT: Active base chart displays active physical custody.
-        // Strictly exclude non-serialized products and products with 0 active holdings.
-        if (prod && Number(prod.is_serialized) !== 1) return;
+        // Strictly exclude non-serialized products, unknown products, and products with
+        // 0 active holdings — this must stay in lockstep with the row gate above.
+        if (!prod || Number(prod.is_serialized) !== 1) return;
         if (p.closingBase <= 0) return;
         const cur = productTotals.get(p.productName) || 0;
         productTotals.set(p.productName, cur + p.closingBase);
@@ -1049,10 +1053,12 @@ async function handleCustomerDetailDrillDown(
         `${directusBase}/items/cylinder_assets?fields=id,serial_number,product_id,cylinder_status,cylinder_condition,current_customer_code,current_branch_id,modified_date,created_date&filter[is_deleted][_neq]=1&limit=-1`,
         headers
       ),
-      // AG-FILTER: not narrowed by isActive/is_serialized — the row gates read these
-      // flags from this map, so a scoped map would make an ineligible product unknown.
+      // AG-FILTER: narrowed to is_serialized = 1 — this report is serialized cylinders only.
+      // Consumers either gate on `!prod` or fall back to a default serialized cylinder
+      // (24647/24678), so an ineligible product and an unknown one take the same branch.
+      // The `prod &&` gates were rewritten to `!prod ||` in the same change.
       fetchRows<ProductRow>(
-        `${directusBase}/items/products?fields=product_id,product_code,product_name,description,product_weight,is_serialized&limit=-1`,
+        `${directusBase}/items/products?fields=product_id,product_code,product_name,description,product_weight,is_serialized&filter[is_serialized][_eq]=1&limit=-1`,
         headers
       ),
       fetchRows<LpgCustomerSiteCylinderRow>(

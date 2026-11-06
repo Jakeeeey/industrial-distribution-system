@@ -10,14 +10,11 @@
 import * as React from "react";
 import { motion } from "framer-motion";
 import {
-  AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
   ClipboardCheck,
   Hash,
   Scale,
-  ScanLine,
-  Undo2,
 } from "lucide-react";
 import { useStockMovementVarianceReport } from "../hooks/useStockMovementVarianceReport";
 import { formatQty, formatSigned } from "../services/stock-movement-variance.calc";
@@ -73,8 +70,8 @@ export function StockMovementVarianceKPIs() {
 
   if (!kpis) {
     return (
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        {Array.from({ length: 8 }, (_, index) => (
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {Array.from({ length: 5 }, (_, index) => (
           <div key={index} className="h-[78px] animate-pulse rounded-xl border bg-muted/40" />
         ))}
       </div>
@@ -82,7 +79,7 @@ export function StockMovementVarianceKPIs() {
   }
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
       <KpiCard
         icon={Hash}
         label="Reconciled lines"
@@ -102,7 +99,7 @@ export function StockMovementVarianceKPIs() {
         icon={ArrowDownRight}
         label="Total shortage"
         value={formatSigned(kpis.shortUnits)}
-        hint={`${formatQty(kpis.linesWithVariance)} lines off balance`}
+        hint={`${formatQty(kpis.shortLines)} lines short`}
         tone={kpis.shortUnits < 0 ? "negative" : "neutral"}
       />
 
@@ -110,40 +107,20 @@ export function StockMovementVarianceKPIs() {
         icon={ArrowUpRight}
         label="Total overage"
         value={formatSigned(kpis.overUnits)}
-        hint="Counted above recorded stock"
+        hint={`${formatQty(kpis.overLines)} lines over`}
         tone={kpis.overUnits > 0 ? "warning" : "neutral"}
       />
 
       <KpiCard
         icon={ClipboardCheck}
-        label="Lines with a committed count"
+        label="Lines counted in this period"
         value={`${formatQty(kpis.linesCounted)} / ${formatQty(kpis.totalLines)}`}
-        hint={`${formatQty(kpis.linesUncounted)} uncounted — variance unavailable`}
+        hint={
+          kpis.linesCountedEarlier > 0
+            ? `${formatQty(kpis.linesUncounted)} uncounted (${formatQty(kpis.linesCountedEarlier)} last counted in an earlier period)`
+            : `${formatQty(kpis.linesUncounted)} uncounted — variance unavailable`
+        }
         tone={kpis.linesUncounted > 0 ? "warning" : "positive"}
-      />
-
-      <KpiCard
-        icon={AlertTriangle}
-        label="Lines with data exceptions"
-        value={formatQty(kpis.exceptionLines)}
-        hint="Require supervisor review"
-        tone={kpis.exceptionLines > 0 ? "negative" : "positive"}
-      />
-
-      <KpiCard
-        icon={ScanLine}
-        label="Unmatched counted serials"
-        value={formatQty(kpis.unmatchedSerials)}
-        hint="Serials absent from the asset register"
-        tone={kpis.unmatchedSerials > 0 ? "warning" : "neutral"}
-      />
-
-      <KpiCard
-        icon={Undo2}
-        label="Documents excluded as void"
-        value={formatQty(kpis.voidReversalDocuments)}
-        hint="Reversals the ledger does not apply"
-        tone={kpis.voidReversalDocuments > 0 ? "warning" : "neutral"}
       />
     </div>
   );

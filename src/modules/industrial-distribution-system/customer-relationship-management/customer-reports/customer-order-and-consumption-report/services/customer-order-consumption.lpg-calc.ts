@@ -13,7 +13,9 @@
 import type {
   CustomerOrderConsumptionFilters,
   RawInvoiceRow,
+  RawLpgHeaderInvoiceRow,
   RawLpgSiteRow,
+  RawLpgTransactionHeaderRow,
   RawMeterReadingRow,
   RawUnifiedLpgRow,
   RawWiwoDetailRow,
@@ -45,6 +47,7 @@ interface SupplyAccumulatorInput {
   customerCode: string;
   branchId: number | null;
   productId: number;
+  siteId?: number | null;
 }
 
 export interface LpgCalcInput {
@@ -55,6 +58,9 @@ export interface LpgCalcInput {
   wiwoHeaders: RawWiwoHeaderRow[];
   wiwoDetails: RawWiwoDetailRow[];
   meterReadings: RawMeterReadingRow[];
+  // AG-COMMENT: Added transactionHeaders and headerInvoices to support consolidation header invoice recovery
+  transactionHeaders?: RawLpgTransactionHeaderRow[];
+  headerInvoices?: RawLpgHeaderInvoiceRow[];
   /** Window-fetched invoices — the only branch evidence an LPG row can reach. */
   invoices: RawInvoiceRow[];
   allowedCustomerCodes: Set<string> | null;
@@ -77,26 +83,54 @@ function customerOf(
  * is reported rather than guessed, because inventing a branch would breach
  * the cross-branch restriction the ticket sets.
  */
+// AG-COMMENT: Branch recovery now attempts resolution via consolidation header link (transactionHeaderId) when direct invoice link is absent.
 function resolveBranch(
-  salesInvoiceId: number | null,
-  invoicesById: Map<number, RawInvoiceRow>
-): { branchId: number | null; reason: string | null } {
-  if (salesInvoiceId == null) {
-    return { branchId: null, reason: "not billed to an invoice yet" };
+  salesInvoiceId: number | null | undefined,
+  invoicesById: Map<number, RawInvoiceRow>,
+  transactionHeaderId?: number | null,
+  headerInvoicesByHeaderId?: Map<number, number>
+): { branchId: number | null; reason: string | null; resolvedInvoiceId: number | null } {
+  let invoiceId = salesInvoiceId ?? null;
+  if (invoiceId == null && transactionHeaderId != null && headerInvoicesByHeaderId) {
+    invoiceId = headerInvoicesByHeaderId.get(transactionHeaderId) ?? null;
   }
-  const invoice = invoicesById.get(salesInvoiceId);
+  if (invoiceId == null) {
+    return { branchId: null, reason: "not billed to an invoice yet", resolvedInvoiceId: null };
+  }
+  const invoice = invoicesById.get(invoiceId);
   if (!invoice) {
-    return { branchId: null, reason: `linked invoice ${salesInvoiceId} is outside the fetched window` };
+    return { branchId: null, reason: `linked invoice ${invoiceId} is outside the fetched window`, resolvedInvoiceId: invoiceId };
   }
   if (invoice.branch_id == null) {
-    return { branchId: null, reason: `invoice ${invoice.invoice_no ?? salesInvoiceId} has no branch` };
+    return { branchId: null, reason: `invoice ${invoice.invoice_no ?? invoiceId} has no branch`, resolvedInvoiceId: invoiceId };
   }
-  return { branchId: invoice.branch_id, reason: null };
+  return { branchId: invoice.branch_id, reason: null, resolvedInvoiceId: invoiceId };
 }
 
 /** POSTED is the only state that makes an LPG row a real supply event. */
+// AG-COMMENT: Both POSTED and BILLED represent completed billing statuses
 function isPosted(status: string | null | undefined): boolean {
-  return normalizeStatus(status) === "posted";
+  const norm = normalizeStatus(status);
+  return norm === "posted" || norm === "billed";
+}
+
+
+// AG-COMMENT: Evaluates whether an LPG transaction falls within the reporting window.
+// Prefers transaction_date; if transaction_date is absent or null, falls back to billing period.
+function isLpgWithinWindow(
+  dateValue: string | null | undefined,
+  periodFrom: string | null | undefined,
+  periodTo: string | null | undefined,
+  startDate: string,
+  endDate: string
+): boolean {
+  if (dateValue) {
+    return withinWindow(dateValue, startDate, endDate);
+  }
+  if (periodFrom && periodTo) {
+    return withinWindow(periodFrom, startDate, endDate) || withinWindow(periodTo, startDate, endDate);
+  }
+  return withinWindow(periodFrom || periodTo, startDate, endDate);
 }
 
 export function accumulateLpg(input: LpgCalcInput): void {
@@ -135,6 +169,15 @@ export function accumulateLpg(input: LpgCalcInput): void {
   // Multi-select pickers: an empty selection means "no gate", not "no rows".
   const onlyCustomers = selectionSet(filters.customerCodes)
   const onlyBranches = selectionSet(filters.branchIds)
+  // AG-COMMENT: Salesman filter for LPG transactions
+  const onlySalesmen = selectionSet(filters.salesmanIds)
+
+  const headerInvoicesByHeaderId = new Map<number, number>()
+  for (const hi of input.headerInvoices ?? []) {
+    if (hi.sales_invoice_id) {
+      headerInvoicesByHeaderId.set(hi.header_id, hi.sales_invoice_id)
+    }
+  }
 
   const acceptCustomer = (customerCode: string | null): boolean => {
     if (!customerCode) return false
@@ -148,6 +191,9 @@ export function accumulateLpg(input: LpgCalcInput): void {
   const branchGate = (branchId: number | null): boolean =>
     !onlyBranches || (branchId != null && onlyBranches.has(toNumber(branchId)))
 
+  const salesmanGate = (salesmanId: number | null | undefined): boolean =>
+    !onlySalesmen || (salesmanId != null && onlySalesmen.has(toNumber(salesmanId)))
+
   const record = (
     supply: SupplyAccumulatorInput,
     site: RawLpgSiteRow | undefined,
@@ -160,6 +206,9 @@ export function accumulateLpg(input: LpgCalcInput): void {
       branchId: supply.branchId,
       channel: "LPG",
       productId: supply.productId,
+      // AG-COMMENT: Site grain isolates multiple sites under the same customer
+      siteId: supply.siteId ?? site?.id ?? null,
+      siteName: site?.site_name ?? null,
     })
     acc.billingMode = site?.billing_mode ?? null
     acc.quantityUnit = "kg"
@@ -179,7 +228,7 @@ export function accumulateLpg(input: LpgCalcInput): void {
 
   for (const row of input.unifiedLpg) {
     if (!isPosted(row.status)) continue
-    if (!withinWindow(row.transaction_date, filters.startDate, filters.endDate)) continue
+    if (!isLpgWithinWindow(row.transaction_date, row.billing_period_from, row.billing_period_to, filters.startDate, filters.endDate)) continue
 
     const site = sitesById.get(row.lpg_site_id)
     const customerCode = customerOf(row.customer_code, site)
@@ -214,9 +263,9 @@ export function accumulateLpg(input: LpgCalcInput): void {
       continue
     }
 
-    const { branchId, reason } = resolveBranch(row.sales_invoice_id, invoicesById)
+    const { branchId, reason, resolvedInvoiceId } = resolveBranch(row.sales_invoice_id, invoicesById, row.transaction_header_id, headerInvoicesByHeaderId)
     if (reason) {
-      const unbilled = row.sales_invoice_id == null
+      const unbilled = resolvedInvoiceId == null
       exceptions.push(
         exception({
           code: unbilled ? "UNBILLED_LPG_TRANSACTION" : "BRANCH_UNKNOWN",
@@ -233,6 +282,8 @@ export function accumulateLpg(input: LpgCalcInput): void {
     // With a branch filter active an unattributable row cannot be placed,
     // so it is dropped after being reported instead of leaking into "all".
     if (!branchGate(branchId)) continue
+    const resolvedInvoice = resolvedInvoiceId != null ? invoicesById.get(resolvedInvoiceId) : undefined
+    if (!salesmanGate(resolvedInvoice?.salesman_id)) continue
 
     const meteredKg = toNumber(row.metered_kg)
     const wiwoKg = toNumber(row.wiwo_kg)
@@ -293,14 +344,14 @@ export function accumulateLpg(input: LpgCalcInput): void {
   for (const header of input.wiwoHeaders) {
     if (consumedWiwoIds.has(header.id)) continue
     if (!isPosted(header.wiwo_status)) continue
-    if (!withinWindow(header.transaction_date, filters.startDate, filters.endDate)) continue
+    if (!isLpgWithinWindow(header.transaction_date, null, null, filters.startDate, filters.endDate)) continue
 
     const site = sitesById.get(header.lpg_site_id)
     const customerCode = customerOf(header.customer_code, site)
     if (!acceptCustomer(customerCode)) continue
     const code = customerCode as string
 
-    const { branchId, reason } = resolveBranch(header.sales_invoice_id, invoicesById)
+    const { branchId, reason, resolvedInvoiceId } = resolveBranch(header.sales_invoice_id, invoicesById)
     if (reason && normalizeStatus(header.wiwo_type) !== "deployment_only") {
       exceptions.push(
         exception({
@@ -316,6 +367,8 @@ export function accumulateLpg(input: LpgCalcInput): void {
       )
     }
     if (!branchGate(branchId)) continue
+    const resolvedInvoice = resolvedInvoiceId != null ? invoicesById.get(resolvedInvoiceId) : undefined
+    if (!salesmanGate(resolvedInvoice?.salesman_id)) continue
 
     // A deployment-only swap moves cylinders without metering gas, so it is
     // listed as a document but must not add consumption kg.
@@ -390,14 +443,14 @@ export function accumulateLpg(input: LpgCalcInput): void {
   for (const reading of input.meterReadings) {
     if (consumedMeterIds.has(reading.id)) continue
     if (!isPosted(reading.reading_status)) continue
-    if (!withinWindow(reading.reading_date, filters.startDate, filters.endDate)) continue
+    if (!isLpgWithinWindow(reading.reading_date, reading.billing_period_from, reading.billing_period_to, filters.startDate, filters.endDate)) continue
 
     const site = sitesById.get(reading.lpg_site_id)
     const customerCode = customerOf(reading.customer_code, site)
     if (!acceptCustomer(customerCode)) continue
     const code = customerCode as string
 
-    const { branchId, reason } = resolveBranch(reading.sales_invoice_id, invoicesById)
+    const { branchId, reason, resolvedInvoiceId } = resolveBranch(reading.sales_invoice_id, invoicesById)
     if (reason) {
       exceptions.push(
         exception({
@@ -413,6 +466,8 @@ export function accumulateLpg(input: LpgCalcInput): void {
       )
     }
     if (!branchGate(branchId)) continue
+    const resolvedInvoice = resolvedInvoiceId != null ? invoicesById.get(resolvedInvoiceId) : undefined
+    if (!salesmanGate(resolvedInvoice?.salesman_id)) continue
 
     // kg_consumed is already converted by the reading's own factor, so the
     // raw meter_unit (M3/LITER) is never multiplied here.

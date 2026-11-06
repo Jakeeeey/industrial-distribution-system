@@ -10,19 +10,22 @@
 // performed per branch and never across branches, because a count sheet and a
 // movement ledger line only ever belong to one warehouse.
 //
+// Product scope: only products flagged `is_serialized` are reconciled. The
+// movements view accepts no such parameter, so both sources are gated by the
+// same id set read from the product master; the counts and the ledger can never
+// disagree about what is in scope.
+//
 // Sources of truth
 // - Spring-backed `view-product-movements` ledger (posted in/out per document).
 //   Reachable only through SPRING_API_BASE_URL; Directus has no equivalent view.
 //   The view keys on branch NAME, so each branch costs one ledger call.
 // - Directus `physical_inventory` + `physical_inventory_details`: committed counts
 //   carrying system_count, physical_count and the reporting cutoff.
-// - Directus `physical_inventory_details_serial`: counted serials for exceptioning.
-// - Directus `cylinder_assets`: the asset register used to validate serials.
 // - Directus `sales_invoice`: transaction_status, used to detect voids.
 //
 // Known source-data limitations, surfaced to the caller instead of hidden:
 // - The movements view does not apply later voids, so voided invoices are
-//   identified here and excluded, then reported as VOID_REVERSAL exceptions.
+//   identified here and excluded from every balance.
 // - There is no opening-balance table anywhere in the schema. The opening figure
 //   is therefore reconstructed from full movement history before the period,
 //   which is only exact for products whose ledger is complete.
@@ -48,7 +51,6 @@ import type {
   StockMovementVarianceFilters,
   StockMovementVarianceReportResponse,
   StockMovementVarianceRow,
-  SupportingDocument,
 } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-movement-and-variance-report/types/stock-movement-variance.types";
 
 export const runtime = "nodejs";
@@ -57,7 +59,10 @@ export const dynamic = "force-dynamic";
 const COOKIE_NAME = "vos_access_token";
 
 /** How many branch ledger calls may be in flight at once. */
-const LEDGER_CONCURRENCY = 4;
+const LEDGER_CONCURRENCY = 2;
+
+/** Attempts per branch ledger call before the branch is reported as unreadable. */
+const LEDGER_ATTEMPTS = 4;
 
 /**
  * Retrieves the Directus endpoint and static token from environment.
@@ -134,6 +139,41 @@ async function mapPool<In, Out>(
 
   await Promise.all(workers);
   return results;
+}
+
+/** A rate limit or a gateway fault is worth waiting out; anything else is final. */
+function isRetryable(status: number): boolean {
+  return status === 429 || status === 502 || status === 503 || status === 504;
+}
+
+/** Honours Retry-After when the gateway sends it, otherwise backs off exponentially. */
+function retryWaitMs(res: Response, attempt: number): number {
+  const announced = Number(res.headers.get("retry-after"));
+  if (Number.isFinite(announced) && announced > 0) return Math.min(announced * 1000, 15000);
+  return Math.min(500 * 2 ** attempt, 5000);
+}
+
+/**
+ * Reads the movements ledger for one branch. The gateway rate-limits concurrent
+ * branch calls, so a 429 is retried rather than reported as an unreadable branch.
+ */
+async function fetchLedger(url: string, token: string): Promise<Response> {
+  let res = await fetch(url, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+    cache: "no-store",
+  });
+
+  for (let attempt = 0; attempt < LEDGER_ATTEMPTS - 1 && isRetryable(res.status); attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, retryWaitMs(res, attempt)));
+    res = await fetch(url, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      cache: "no-store",
+    });
+  }
+
+  return res;
 }
 
 /** Unwraps a Directus relation value that may be an id or a nested object. */
@@ -291,6 +331,32 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       }
     }
 
+    // ── 1c. Serialized product scope ─────────────────────────────────────────
+    // Cylinder stock is what this report reconciles, so only products flagged
+    // `is_serialized` are eligible. The ledger view cannot express this, so the
+    // gate is read once from the product master and applied to both sources.
+    const serializedRows = await directusList<{ product_id: number }>(
+      directusBase,
+      directusToken,
+      "products",
+      `fields=product_id&filter[is_serialized][_eq]=1&limit=-1`
+    );
+
+    const serializedProductIds = new Set(
+      serializedRows.map((row) => Number(row.product_id)).filter((id) => Number.isFinite(id))
+    );
+
+    if (serializedProductIds.size === 0) {
+      // Reporting zero lines here would blame the period for a master-data state.
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "No product is flagged as serialized, so there is nothing for this report to reconcile.",
+        },
+        { status: 404 }
+      );
+    }
+
     // ── 2. Committed physical counts up to the cutoff (spec §4 verified records)
     // Draft and cancelled count sheets are excluded: only a committed count is a
     // verified record. One cutoff governs movements and counts (spec §8).
@@ -299,7 +365,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const cutoffInclusive = encodeURIComponent(`${endDate} 23:59:59`);
 
     const countFieldQuery =
-      `fields=id,physical_count,system_count,variance,offset_match,date_encoded,` +
+      `fields=id,physical_count,system_count,variance,date_encoded,` +
       `ph_id.id,ph_id.ph_no,ph_id.cutOff_date,ph_id.date_encoded,ph_id.branch_id,` +
       `product_id.product_id,product_id.product_code,product_id.product_name,` +
       `product_id.description,` +
@@ -316,45 +382,24 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       physical_count?: number | string;
       system_count?: number | string;
       variance?: number | string;
-      offset_match?: number | string | null;
       date_encoded?: string | null;
       ph_id?: { id?: number; ph_no?: string; cutOff_date?: string; date_encoded?: string; branch_id?: number };
       product_id?: unknown;
     }
 
-    const countRows = await directusList<RawCountRow>(
-      directusBase,
-      directusToken,
-      "physical_inventory_details",
-      countFieldQuery
-    );
-
-    // ── 3. Counted serials, for the unmatched-serial exception (spec §8) ──────
-    const detailIds = countRows.map((row) => row.id).filter((id) => Number.isFinite(id));
-    interface RawSerialRow {
-      pi_detail_id?: unknown;
-      serial_number?: string;
-    }
-
-    const serialRows = (
-      await mapPool(chunk(detailIds, 200), 4, (batch) =>
-        directusList<RawSerialRow>(
-          directusBase,
-          directusToken,
-          "physical_inventory_details_serial",
-          `fields=pi_detail_id,serial_number&filter[pi_detail_id][_in]=${batch.join(",")}&limit=-1`
-        )
+    // Cut to the serialized scope here so the product-master seeding below never
+    // spends a round trip on a product this report excludes.
+    const countRows = (
+      await directusList<RawCountRow>(
+        directusBase,
+        directusToken,
+        "physical_inventory_details",
+        countFieldQuery
       )
-    ).flat();
-
-    const serialsByDetail = new Map<number, string[]>();
-    for (const row of serialRows) {
-      const detailId = relationId(row.pi_detail_id);
-      if (detailId === null || !row.serial_number) continue;
-      const list = serialsByDetail.get(detailId) ?? [];
-      list.push(String(row.serial_number));
-      serialsByDetail.set(detailId, list);
-    }
+    ).filter((row) => {
+      const pid = relationId(row.product_id);
+      return pid !== null && serializedProductIds.has(pid);
+    });
 
     const counts: RawCountLine[] = countRows
       .map((row) => {
@@ -372,8 +417,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           systemCount: Number(row.system_count ?? 0),
           physicalCount: Number(row.physical_count ?? 0),
           sourceVariance: Number(row.variance ?? 0),
-          offsetMatch: row.offset_match === null || row.offset_match === undefined ? null : Number(row.offset_match),
-          serials: serialsByDetail.get(row.id) ?? [],
         } satisfies RawCountLine;
       })
       .filter((line): line is RawCountLine => line !== null);
@@ -386,12 +429,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       else countsByBranch.set(line.branchId, [line]);
     }
 
-    // ── 4. Posted movements from the Spring ledger view, one call per branch ──
+    // ── 3. Posted movements from the Spring ledger view, one call per branch ──
     const ledgerByBranch = new Map<number, RawMovementRow[]>();
 
     interface LedgerResult {
       rows: RawMovementRow[] | null;
       error?: string;
+      /** How many rows the view returned before the serialized scope cut them. */
+      sourceRowCount: number;
     }
 
     const ledgerResults = await mapPool(
@@ -403,20 +448,23 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         if (ledgerProductName) movementsUrl.searchParams.set("productName", ledgerProductName);
 
         try {
-          const res = await fetch(movementsUrl.toString(), {
-            method: "GET",
-            headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-            cache: "no-store",
-          });
+          const res = await fetchLedger(movementsUrl.toString(), token);
 
-          if (!res.ok) return { rows: null, error: `status ${res.status}` };
+          if (!res.ok) return { rows: null, error: `status ${res.status}`, sourceRowCount: 0 };
 
           const parsed = JSON.parse(await res.text());
-          if (!Array.isArray(parsed)) return { rows: null, error: "a non-list payload" };
+          if (!Array.isArray(parsed)) {
+            return { rows: null, error: "a non-list payload", sourceRowCount: 0 };
+          }
 
           // The view is trusted to honour branchName, but a stray row from another
           // warehouse would corrupt both branches, so rows are re-keyed defensively.
           const rows = (parsed as RawMovementRow[]).filter((row) => {
+            const pid = relationId(
+              row.productId ?? (row as Record<string, unknown>).product_id
+            );
+            if (pid === null || !serializedProductIds.has(pid)) return false;
+
             const name = movementBranchName(row);
             if (!name) {
               if (!row.branchId) row.branchId = branch.id;
@@ -426,9 +474,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
             return name.trim().toUpperCase() === branch.name.trim().toUpperCase();
           });
 
-          return { rows };
+          return { rows, sourceRowCount: parsed.length };
         } catch (err) {
-          return { rows: null, error: err instanceof Error ? err.message : "unknown error" };
+          return {
+            rows: null,
+            error: err instanceof Error ? err.message : "unknown error",
+            sourceRowCount: 0,
+          };
         }
       }
     );
@@ -451,7 +503,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       ledgerByBranch.set(branch.id, result.rows);
       reconciled.push(branch);
       movements.push(...result.rows);
-      if (result.rows.length === 0) {
+      if (result.sourceRowCount === 0) {
+        // Only a genuinely empty ledger is worth flagging: a branch whose whole
+        // history is non-serialized legitimately contributes no lines here.
         warnings.push(
           `The movements ledger returned no rows for "${branch.name}", so its expected balances are zero.`
         );
@@ -465,7 +519,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // ── 5. Void detection: reversals the ledger view never applied ────────────
+    // ── 4. Void detection: reversals the ledger view never applied ────────────
     // The movements view includes sales invoices regardless of their later void,
     // so voided documents are resolved here and excluded from every balance.
     const salesInvoiceDocNos = Array.from(
@@ -501,7 +555,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       );
     });
 
-    // ── 6. Product master for units, codes and categories ────────────────────
+    // ── 5. Product master for units, codes and categories ────────────────────
     const movementProductIds = new Set<number>();
     for (const row of movements) {
       const pid = relationId(row.productId ?? (row as Record<string, unknown>).product_id);
@@ -571,35 +625,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       );
     });
 
-    // ── 7. Serial register used to validate counted serials ──────────────────
-    const countedSerials = Array.from(
-      new Set(counts.flatMap((line) => line.serials.map((s) => s.trim()).filter(Boolean)))
-    );
-
-    const knownSerials = new Set<string>();
-    await mapPool(chunk(countedSerials, 200), 4, async (batch) => {
-      const rows = await directusList<{ serial_number?: string }>(
-        directusBase,
-        directusToken,
-        "cylinder_assets",
-        `fields=serial_number&filter[serial_number][_in]=${encodeURIComponent(
-          batch.join(",")
-        )}&limit=-1`
-      );
-      for (const row of rows) {
-        if (row.serial_number) knownSerials.add(String(row.serial_number).toUpperCase());
-      }
-    }).catch((err) => {
-      warnings.push(
-        `Serial validation against the asset register was incomplete: ${
-          err instanceof Error ? err.message : "unknown error"
-        }.`
-      );
-    });
-
-    // ── 8. Reconcile each branch, then merge ─────────────────────────────────
+    // ── 6. Reconcile each branch, then merge ─────────────────────────────────
     const rows: StockMovementVarianceRow[] = [];
-    const excluded: SupportingDocument[] = [];
 
     for (const branch of reconciled) {
       const branchFilters: StockMovementVarianceFilters = {
@@ -609,18 +636,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         categoryId: categoryIdRaw || undefined,
       };
 
-      const result = buildVarianceRows({
-        movements: ledgerByBranch.get(branch.id) ?? [],
-        counts: countsByBranch.get(branch.id) ?? [],
-        productMeta,
-        filters: branchFilters,
-        scopeBranchName: branch.name,
-        voidedDocuments,
-        knownSerials,
-      });
-
-      rows.push(...result.rows);
-      excluded.push(...result.excluded);
+      rows.push(
+        ...buildVarianceRows({
+          movements: ledgerByBranch.get(branch.id) ?? [],
+          counts: countsByBranch.get(branch.id) ?? [],
+          productMeta,
+          filters: branchFilters,
+          scopeBranchName: branch.name,
+          voidedDocuments,
+        })
+      );
     }
 
     // Category filtering happens after reconciliation: the ledger view exposes no
@@ -650,9 +675,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       },
       branchName: singleBranch ? scope[0].name : null,
       branchesReconciled: reconciled.length,
-      excludedDocuments: excluded,
       rows: finalRows,
-      kpis: summariseKpis(finalRows, excluded),
+      kpis: summariseKpis(finalRows),
       warnings,
     };
 

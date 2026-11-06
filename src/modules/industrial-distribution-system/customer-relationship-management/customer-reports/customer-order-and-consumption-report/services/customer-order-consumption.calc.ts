@@ -16,6 +16,7 @@ import type {
   RawCategoryRow,
   RawClassificationRow,
   RawCustomerRow,
+  RawLpgSiteRow,
   RawProductRow,
   RawSalesmanRow,
   RawUnitRow,
@@ -37,6 +38,7 @@ import {
 // Lookup indexes
 // ------------------------------------------------------------
 export interface ConsumptionContext {
+  /** Serialized products from the scope read, with label-only rows merged in. */
   products: Map<number, RawProductRow>;
   units: Map<number, RawUnitRow>;
   weightUnits: Map<number, RawWeightUnitRow>;
@@ -45,6 +47,8 @@ export interface ConsumptionContext {
   classifications: Map<number, RawClassificationRow>;
   branches: Map<number, RawBranchRow>;
   salesmen: Map<number, RawSalesmanRow>;
+  // AG-COMMENT: Indexed LPG sites for site name and billing mode lookup
+  lpgSites: Map<number, RawLpgSiteRow>;
 }
 
 /**
@@ -53,7 +57,11 @@ export interface ConsumptionContext {
  */
 export function buildContext(source: ConsumptionSourceData): ConsumptionContext {
   return {
-    products: new Map(source.products.map((row) => [row.product_id, row])),
+    // Label rows only carry ids the serialized scope read did not return; the
+    // scope rows win a collision because they come last.
+    products: new Map(
+      [...source.productLabels, ...source.products].map((row) => [row.product_id, row])
+    ),
     units: new Map(source.units.map((row) => [row.unit_id, row])),
     weightUnits: new Map(source.weightUnits.map((row) => [row.id, row])),
     categories: new Map(source.categories.map((row) => [row.category_id, row])),
@@ -63,6 +71,8 @@ export function buildContext(source: ConsumptionSourceData): ConsumptionContext 
     ),
     branches: new Map(source.branches.map((row) => [row.id, row])),
     salesmen: new Map(source.salesmen.map((row) => [row.id, row])),
+    // AG-COMMENT: Populate LPG sites index
+    lpgSites: new Map(source.lpgSites.map((site) => [site.id, site])),
   };
 }
 
@@ -115,9 +125,10 @@ function categorySizeKg(
 
 /**
  * Scope gate for the CYLINDER channel: a product must be serialized AND
- * belong to an industrial category. A product that was not fetched is
- * unknown; a product whose category row is absent cannot be proven
- * industrial, so both are reported instead of silently dropped.
+ * belong to an industrial category. Non-serialized masters still reach the
+ * context through the label pass, so "excluded" is a proven answer and
+ * "missing" means no master row exists at all. A product whose category row
+ * is absent cannot be proven industrial, so it is reported, not dropped.
  */
 export type CylinderProductScope =
   | "included"
@@ -250,6 +261,9 @@ export interface RowAccumulator {
   channel: ConsumptionChannel;
   billingMode: string | null;
   productId: number;
+  // AG-COMMENT: Site identification to isolate multi-site customer operations
+  siteId?: number | null;
+  siteName?: string | null;
   orderKeys: Set<string>;
   grossQty: number;
   returnedQty: number;
@@ -264,18 +278,20 @@ export interface RowAccumulator {
   months: Map<string, MonthlyTrendPoint>;
 }
 
-/** Grain of the result set: customer x branch x channel x product. */
+/** Grain of the result set: customer x branch x channel x product x site. */
 export function accumulatorKey(input: {
   customerCode: string;
   branchId: number | null;
   channel: ConsumptionChannel;
   productId: number;
+  siteId?: number | null;
 }): string {
   return [
     input.customerCode,
     input.branchId ?? "NA",
     input.channel,
     input.productId,
+    input.siteId ?? "ALL",
   ].join("|");
 }
 
@@ -283,7 +299,9 @@ export function createAccumulator(
   customerCode: string,
   branchId: number | null,
   channel: ConsumptionChannel,
-  productId: number
+  productId: number,
+  siteId?: number | null,
+  siteName?: string | null
 ): RowAccumulator {
   return {
     customerCode,
@@ -291,6 +309,8 @@ export function createAccumulator(
     channel,
     billingMode: null,
     productId,
+    siteId: siteId ?? null,
+    siteName: siteName ?? null,
     orderKeys: new Set(),
     grossQty: 0,
     returnedQty: 0,
@@ -318,6 +338,8 @@ export function ensureAccumulator(
     branchId: number | null;
     channel: ConsumptionChannel;
     productId: number;
+    siteId?: number | null;
+    siteName?: string | null;
   }
 ): RowAccumulator {
   const key = accumulatorKey(input);
@@ -327,7 +349,9 @@ export function ensureAccumulator(
     input.customerCode,
     input.branchId,
     input.channel,
-    input.productId
+    input.productId,
+    input.siteId,
+    input.siteName
   );
   index.set(key, created);
   return created;
@@ -406,10 +430,16 @@ export function finalizeRow(
     billingMode: acc.billingMode as CustomerOrderConsumptionRow["billingMode"],
     productId: acc.productId,
     productCode: product?.product_code ?? (acc.productId ? String(acc.productId) : "—"),
-    productName: product?.product_name ?? (acc.productId ? `Product ${acc.productId}` : "Site supply"),
+    // AG-COMMENT: Shows products.description as product name per ids-guide rule
+    productName:
+      (product?.description?.trim() || product?.product_name?.trim()) ??
+      (acc.productId ? `Product ${acc.productId}` : "Site supply"),
     gasType: resolveGasType(acc.productId, context),
     sizeKg: resolveSizeKg(acc.productId, context),
     quantityUnit: acc.quantityUnit,
+    // AG-COMMENT: Carries resolved siteId and siteName into row representation
+    siteId: acc.siteId ?? null,
+    siteName: acc.siteName ?? null,
     orderCount,
     grossQty: acc.grossQty,
     returnedQty: acc.returnedQty,

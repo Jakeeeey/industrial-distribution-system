@@ -7,27 +7,30 @@
 //     Variance = counted − expected
 //
 // Measurement rules that keep the arithmetic honest:
-// - Balances are measured at a single cutoff (spec §8). When a committed count
-//   governs the line, the cutoff is that count's own cutoff date, because
-//   comparing a mid-period count against a period-end expectation would report
-//   later, unrelated movement as variance.
+// - A committed count only governs a line when its cutoff falls inside the
+//   reported period, and then the whole line is measured at that cutoff:
+//   movements booked after the count are excluded from "in" and "out" and are
+//   not listed as supporting documents, because comparing a mid-period count
+//   against a period-end expectation would report later, unrelated movement as
+//   variance.
+// - A count from an earlier period is shown as context only. Using it as the
+//   period's count would publish the drift accumulated since that count —
+//   including the count's own months — as this period's variance.
 // - Physical Inventory documents restate the system balance by their variance;
 //   they never contribute to "in" or "out".
 // - Quantities reconcile in BASE units (qty × unit_of_measurement_count) so boxed
 //   and loose products reconcile against the same ledger.
-// - Documents voided after posting are excluded from every balance and reported as
-//   exceptions, because the movements view does not apply the reversal itself.
+// - Documents voided after posting are excluded from every balance, because the
+//   movements view does not apply the reversal itself.
 // ==============================================================================
 
 import type {
   RawCountLine,
   RawMovementRow,
-  SerialException,
   StockMovementVarianceFilters,
   StockMovementVarianceKpis,
   StockMovementVarianceRow,
   SupportingDocument,
-  VarianceExceptionCode,
 } from "../types/stock-movement-variance.types";
 
 const PH_OFFSET_MS = 8 * 60 * 60 * 1000; // Philippines is UTC+8 with no DST
@@ -215,30 +218,54 @@ function normaliseMovement(row: RawMovementRow, meta?: ProductMeta): LedgerEntry
 }
 
 /**
- * Selects the governing committed count for a product: the latest count whose
- * cutoff is at or before the reporting cutoff. Ties break on the higher header id.
+ * Selects the count that governs a product's line.
+ *
+ * A count governs only when its cutoff falls inside the reported period: it is
+ * the period's closing measurement, and §4 compares it with the balance the
+ * ledger says the system held at that same instant.
+ *
+ * A committed count whose cutoff precedes the period still gets reported, but
+ * only as context (`inPeriod: false`). Treating it as the period's count would
+ * compare, for example, a June count against the ledger balance on 1 October and
+ * publish nine months of unrelated movement as variance.
  */
 function pickGoverningCount(
   lines: RawCountLine[],
+  startMs: number,
   endMs: number
-): { line: RawCountLine; cutoffMs: number | null } | null {
-  const eligible = lines
-    .map((line) => ({
-      line,
-      cutoffMs: toUtcMs(line.cutOffDate ?? "") ?? toUtcMs(line.dateEncoded ?? "") ?? null,
-    }))
-    .filter((entry) => entry.cutoffMs === null || entry.cutoffMs <= endMs);
+): { line: RawCountLine; cutoffMs: number | null; inPeriod: boolean } | null {
+  const scored = lines.map((line) => ({
+    line,
+    cutoffMs: toUtcMs(line.cutOffDate ?? "") ?? toUtcMs(line.dateEncoded ?? "") ?? null,
+  }));
 
-  if (eligible.length === 0) return null;
+  // An undated sheet cannot be placed inside the period, so it never governs.
+  const inPeriod = scored.filter(
+    (entry) =>
+      entry.cutoffMs !== null && entry.cutoffMs >= startMs && entry.cutoffMs <= endMs
+  );
+  if (inPeriod.length > 0) {
+    return { ...sortNewestFirst(inPeriod)[0], inPeriod: true };
+  }
 
-  eligible.sort((a, b) => {
+  const prior = scored.filter(
+    (entry) => entry.cutoffMs === null || entry.cutoffMs < startMs
+  );
+  if (prior.length === 0) return null;
+
+  return { ...sortNewestFirst(prior)[0], inPeriod: false };
+}
+
+/** Newest cutoff first, breaking ties on the higher header id. */
+function sortNewestFirst(
+  entries: { line: RawCountLine; cutoffMs: number | null }[]
+): { line: RawCountLine; cutoffMs: number | null }[] {
+  return [...entries].sort((a, b) => {
     const aMs = a.cutoffMs ?? Number.NEGATIVE_INFINITY;
     const bMs = b.cutoffMs ?? Number.NEGATIVE_INFINITY;
     if (aMs !== bMs) return bMs - aMs;
     return b.line.phId - a.line.phId;
   });
-
-  return eligible[0];
 }
 
 export interface VarianceCalculationInput {
@@ -250,30 +277,21 @@ export interface VarianceCalculationInput {
   scopeBranchName?: string;
   /** Document numbers voided after posting; excluded from every balance. */
   voidedDocuments: Set<string>;
-  /** Serials known to the asset register, used to validate counted serials. */
-  knownSerials: Set<string>;
 }
 
 /**
  * Core reconciliation. Returns one row per product that has either movement
- * history or a committed count inside the branch scope, plus the audit trail of
- * every document excluded because a later void reversed it.
+ * history or a committed count inside the branch scope.
  */
-export function buildVarianceRows(
-  input: VarianceCalculationInput
-): { rows: StockMovementVarianceRow[]; excluded: SupportingDocument[] } {
-  const { movements, counts, productMeta, filters, scopeBranchName, voidedDocuments, knownSerials } =
-    input;
+export function buildVarianceRows(input: VarianceCalculationInput): StockMovementVarianceRow[] {
+  const { movements, counts, productMeta, filters, scopeBranchName, voidedDocuments } = input;
 
   const startMs = dayBoundaryUtcMs(filters.startDate, false);
   const endMs = dayBoundaryUtcMs(filters.endDate, true);
-  if (startMs === null || endMs === null) {
-    return { rows: [], excluded: [] };
-  }
+  if (startMs === null || endMs === null) return [];
 
   // Normalise the whole ledger once so the per-product loops below stay linear.
   const ledgerByProduct = new Map<number, LedgerEntry[]>();
-  const voidedByProduct = new Map<number, SupportingDocument[]>();
 
   for (const row of movements) {
     const rawProductId = num(
@@ -282,22 +300,9 @@ export function buildVarianceRows(
     const entry = normaliseMovement(row, productMeta[rawProductId]);
     if (!entry) continue;
 
-    if (voidedDocuments.has(entry.docNo.toUpperCase())) {
-      const list = voidedByProduct.get(entry.productId) ?? [];
-      list.push({
-        docNo: entry.docNo,
-        docType: entry.docType,
-        ts: entry.timeMs === null ? "" : new Date(entry.timeMs).toISOString(),
-        branchId: entry.branchId || num(filters.branchId),
-        branchName: entry.branchName || scopeBranchName || "",
-        inBase: entry.inBase,
-        outBase: entry.outBase,
-        countAdjustment: entry.restatement,
-        descr: String(row.descr ?? ""),
-      });
-      voidedByProduct.set(entry.productId, list);
-      continue;
-    }
+    // The view still lists a document that was voided later, so its whole effect
+    // is removed here rather than allowed into any balance.
+    if (voidedDocuments.has(entry.docNo.toUpperCase())) continue;
 
     const list = ledgerByProduct.get(entry.productId) ?? [];
     list.push(entry);
@@ -315,16 +320,14 @@ export function buildVarianceRows(
   const productIds = new Set<number>([...ledgerByProduct.keys(), ...countsByProduct.keys()]);
 
   const rows: StockMovementVarianceRow[] = [];
-  const excluded: SupportingDocument[] = [];
 
   for (const productId of productIds) {
     const meta = productMeta[productId];
     const productMovements = ledgerByProduct.get(productId) ?? [];
     const productCounts = countsByProduct.get(productId) ?? [];
-    const voidedDocs = voidedByProduct.get(productId) ?? [];
-    excluded.push(...voidedDocs);
 
-    const governing = pickGoverningCount(productCounts, endMs);
+    const governing = pickGoverningCount(productCounts, startMs, endMs);
+    const countApplies = governing?.inPeriod === true;
 
     // Opening = every settled change strictly before the reporting period.
     let openingBalance = 0;
@@ -334,21 +337,18 @@ export function buildVarianceRows(
     }
 
     // Measurement boundary: the count cutoff when a count governs the line.
-    const boundaryMs = governing?.cutoffMs ?? endMs;
-    const governingDocNo = governing?.line.phNo.toUpperCase() ?? "";
+    const boundaryMs = countApplies ? (governing?.cutoffMs ?? endMs) : endMs;
+    const governingDocNo = countApplies ? governing?.line.phNo.toUpperCase() ?? "" : "";
 
     let periodIn = 0;
     let periodOut = 0;
     let priorRestatements = 0;
-    let movementAfterBoundary = 0;
 
     for (const entry of productMovements) {
       if (entry.timeMs === null || entry.timeMs < startMs || entry.timeMs > endMs) continue;
 
-      if (entry.timeMs > boundaryMs) {
-        movementAfterBoundary += 1;
-        continue;
-      }
+      // Anything past the boundary belongs to the next reconciliation, not this one.
+      if (entry.timeMs > boundaryMs) continue;
 
       if (entry.isCount) {
         // The governing count is the thing under test, so it is not pre-applied.
@@ -363,54 +363,25 @@ export function buildVarianceRows(
     const expectedClosing = openingBalance + periodIn - periodOut + priorRestatements;
 
     const unitCount = meta?.unitCount ?? productMovements[0]?.unitCount ?? 1;
-    const countedClosing = governing ? num(governing.line.physicalCount) * unitCount : null;
+    const countedClosing =
+      countApplies && governing ? num(governing.line.physicalCount) * unitCount : null;
     const variance = countedClosing === null ? null : countedClosing - expectedClosing;
-
-    const exceptionCodes: VarianceExceptionCode[] = [];
-    if (!governing) exceptionCodes.push("NO_COUNT");
 
     const countSourceVariance = governing ? num(governing.line.sourceVariance) * unitCount : null;
 
-    // The count module recorded its own variance; if our expectation disagrees, the
-    // two sources of truth are out of step and a supervisor must look at it.
-    if (
-      governing &&
-      variance !== null &&
-      countSourceVariance !== null &&
-      Math.abs(variance - countSourceVariance) > 0.5
-    ) {
-      exceptionCodes.push("VARIANCE_DRIFT");
-    }
-
-    if (movementAfterBoundary > 0) exceptionCodes.push("POST_CUTOFF_MOVEMENT");
-    if (voidedDocs.length > 0) exceptionCodes.push("VOID_REVERSAL");
-
-    const serialExceptions: SerialException[] = [];
-    if (governing) {
-      for (const serial of governing.line.serials) {
-        if (!serial.trim()) continue;
-        if (!knownSerials.has(serial.trim().toUpperCase())) {
-          serialExceptions.push({
-            serialNumber: serial,
-            phNo: governing.line.phNo,
-            reason: "Counted serial is not present in the asset register or movement history",
-          });
-        }
-      }
-      if (serialExceptions.length > 0) exceptionCodes.push("UNMATCHED_SERIAL");
-    }
-
-    // Adjustment references: offset matches recorded against a count line (spec §7).
-    const adjustmentReferences = Array.from(
-      new Set(
-        productCounts
-          .filter((line) => line.offsetMatch !== null)
-          .map((line) => `${line.phNo}#${line.id}`)
-      )
-    );
-
     const supportingDocuments: SupportingDocument[] = productMovements
-      .filter((entry) => entry.timeMs !== null && entry.timeMs >= startMs && entry.timeMs <= endMs)
+      .filter(
+        (entry) =>
+          entry.timeMs !== null &&
+          entry.timeMs >= startMs &&
+          entry.timeMs <= endMs &&
+          // A movement booked after the closing count did not participate in the
+          // comparison, so it is not listed under this line either.
+          entry.timeMs <= boundaryMs &&
+          // The count under test is reported in its own section; listing it here
+          // would show a restatement that the Expected figure deliberately ignores.
+          entry.docNo.toUpperCase() !== governingDocNo
+      )
       .sort((a, b) => (a.timeMs ?? 0) - (b.timeMs ?? 0))
       .map((entry) => ({
         docNo: entry.docNo,
@@ -451,18 +422,13 @@ export function buildVarianceRows(
       expectedClosing,
       countedClosing,
       variance,
-      variancePercent:
-        variance !== null && expectedClosing !== 0
-          ? (variance / Math.abs(expectedClosing)) * 100
-          : null,
+      variancePercent: percentOfExpected(variance, expectedClosing),
       countDocNo: governing?.line.phNo ?? null,
       countCutoffDate: governing?.line.cutOffDate ?? governing?.line.dateEncoded ?? null,
       countSystemQty: governing ? num(governing.line.systemCount) * unitCount : null,
       countSourceVariance,
-      exceptionCodes,
-      adjustmentReferences,
+      countInPeriod: countApplies,
       supportingDocuments,
-      serialExceptions,
     });
   }
 
@@ -475,7 +441,7 @@ export function buildVarianceRows(
     return a.productName.localeCompare(b.productName);
   });
 
-  return { rows, excluded };
+  return rows;
 }
 
 /** Placeholder branch label when only an id is known. */
@@ -487,31 +453,35 @@ function displayBranchName(branchId: number | undefined): string {
  * Aggregates the KPI strip from the reconciled rows.
  */
 export function summariseKpis(
-  rows: StockMovementVarianceRow[],
-  excludedDocuments: SupportingDocument[]
+  rows: StockMovementVarianceRow[]
 ): StockMovementVarianceKpis {
   let short = 0;
   let over = 0;
   let net = 0;
   let withVariance = 0;
+  let shortLines = 0;
+  let overLines = 0;
   let counted = 0;
   let uncounted = 0;
-  let exceptionLines = 0;
-  let unmatchedSerials = 0;
+  let countedEarlier = 0;
 
   for (const row of rows) {
     if (row.variance === null) {
       uncounted += 1;
+      if (row.countDocNo !== null) countedEarlier += 1;
     } else {
       counted += 1;
       net += row.variance;
-      if (row.variance < 0) short += row.variance;
-      if (row.variance > 0) over += row.variance;
+      if (row.variance < 0) {
+        short += row.variance;
+        shortLines += 1;
+      }
+      if (row.variance > 0) {
+        over += row.variance;
+        overLines += 1;
+      }
       if (Math.abs(row.variance) > 0.5) withVariance += 1;
     }
-
-    if (row.exceptionCodes.length > 0) exceptionLines += 1;
-    unmatchedSerials += row.serialExceptions.length;
   }
 
   return {
@@ -519,12 +489,12 @@ export function summariseKpis(
     linesWithVariance: withVariance,
     linesCounted: counted,
     linesUncounted: uncounted,
+    linesCountedEarlier: countedEarlier,
     netVarianceUnits: net,
     shortUnits: short,
     overUnits: over,
-    exceptionLines,
-    unmatchedSerials,
-    voidReversalDocuments: excludedDocuments.length,
+    shortLines,
+    overLines,
   };
 }
 
@@ -600,4 +570,31 @@ export function formatSigned(value: number | null | undefined): string {
   if (rounded === 0) return "0";
   const sign = rounded > 0 ? "+" : "−";
   return `${sign}${Math.abs(rounded).toLocaleString()}`;
+}
+
+/**
+ * A share of expected stock is only meaningful against a positive base. Zero has
+ * no denominator, and a negative balance — the ledger has issued more of the
+ * product than it ever received — inflates a small difference into a figure like
+ * 550%, which reads as a defect rather than as an overdrawn line. The unit
+ * variance still carries those lines and is the number to act on.
+ */
+function percentOfExpected(
+  variance: number | null,
+  expectedClosing: number
+): number | null {
+  if (variance === null || expectedClosing <= 0) return null;
+  return (variance / expectedClosing) * 100;
+}
+
+/**
+ * Renders the percentage the same way on every surface, keeping an uncounted
+ * line ("—") distinguishable from a counted line with no usable base ("n/a").
+ */
+export function formatVariancePercent(
+  row: Pick<StockMovementVarianceRow, "variance" | "variancePercent">
+): string {
+  if (row.variance === null) return "—";
+  if (row.variancePercent === null) return "n/a";
+  return `${Math.round(row.variancePercent * 10) / 10}%`;
 }

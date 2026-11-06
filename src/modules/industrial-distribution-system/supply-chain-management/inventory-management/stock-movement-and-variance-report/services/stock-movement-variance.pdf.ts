@@ -2,12 +2,12 @@
 // ==============================================================================
 // PDF Export Generator for Stock Movement and Variance Report.
 // Audit-oriented landscape document: title block, scope and rule statement,
-// KPI band, reconciled lines, and a data-exception appendix.
+// KPI band and reconciled lines.
 // ==============================================================================
 
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { formatPhDateTime } from "./stock-movement-variance.calc";
+import { formatPhDateTime, formatVariancePercent } from "./stock-movement-variance.calc";
 import type { StockMovementVarianceReportResponse } from "../types/stock-movement-variance.types";
 
 /** Renders a base-unit figure, keeping uncounted lines explicit. */
@@ -35,6 +35,7 @@ export function exportStockMovementVarianceToPdf(
   const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
 
   const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
 
   // ── Header Branding ─────────────────────────────────────────────────────────
   doc.setFont("helvetica", "bold");
@@ -78,24 +79,28 @@ export function exportStockMovementVarianceToPdf(
     body: [
       ["Reconciled product lines", String(report.kpis.totalLines)],
       ["Lines with a non-zero variance", String(report.kpis.linesWithVariance)],
-      ["Lines supported by a committed count", String(report.kpis.linesCounted)],
-      ["Lines with no committed count", String(report.kpis.linesUncounted)],
+      ["Lines counted inside this period", String(report.kpis.linesCounted)],
+      ["Lines with no count inside this period", String(report.kpis.linesUncounted)],
       ["Net variance (base units)", signed(report.kpis.netVarianceUnits)],
       ["Total shortage (base units)", signed(report.kpis.shortUnits)],
       ["Total overage (base units)", signed(report.kpis.overUnits)],
-      ["Lines carrying a data exception", String(report.kpis.exceptionLines)],
-      ["Unmatched counted serials", String(report.kpis.unmatchedSerials)],
-      ["Documents excluded as void reversals", String(report.kpis.voidReversalDocuments)],
     ],
     theme: "grid",
     styles: { fontSize: 8, cellPadding: 3 },
     headStyles: { fillColor: [30, 58, 108] },
-    columnStyles: { 0: { cellWidth: 200 }, 1: { cellWidth: 110, halign: "right" } },
+    // "Key indicator" stays flexible: with both columns pinned, autoTable has
+    // nothing to stretch and reports the leftover page width it could not place.
+    columnStyles: { 0: { cellWidth: "auto" }, 1: { cellWidth: 110, halign: "right" } },
   });
 
   // ── Reconciled Lines ────────────────────────────────────────────────────────
+  // The quantity and reference columns are pinned so no long product name can push
+  // the figures apart, while Product takes "auto" and absorbs whatever page width
+  // is left. Pin every column and autoTable reports the leftover as width it could
+  // not place, even though nothing was ever clipped.
   autoTable(doc, {
     startY: (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 14,
+    margin: { left: 24, right: 24 },
     head: [
       [
         "Product",
@@ -109,7 +114,6 @@ export function exportStockMovementVarianceToPdf(
         "Var %",
         "Count Doc",
         "Cutoff",
-        "Exceptions",
       ],
     ],
     body: report.rows.map((row) => [
@@ -121,73 +125,58 @@ export function exportStockMovementVarianceToPdf(
       qty(row.expectedClosing),
       qty(row.countedClosing),
       signed(row.variance),
-      row.variancePercent === null ? "—" : `${Math.round(row.variancePercent * 10) / 10}%`,
-      row.countDocNo ?? "—",
+      formatVariancePercent(row),
+      // An asterisk, not a second column: a count sheet from before the period is
+      // printed for reference, and the reader must not take it as the measurement.
+      row.countDocNo ? (row.countInPeriod ? row.countDocNo : `${row.countDocNo} *`) : "—",
       row.countCutoffDate ? formatPhDateTime(row.countCutoffDate) : "—",
-      row.exceptionCodes.join(", ") || "None",
     ]),
     theme: "striped",
     styles: { fontSize: 7, cellPadding: 2.5 },
     headStyles: { fillColor: [30, 58, 108] },
     columnStyles: {
-      0: { cellWidth: 150 },
-      1: { cellWidth: 80 },
-      2: { halign: "right" },
-      3: { halign: "right" },
-      4: { halign: "right" },
-      5: { halign: "right" },
-      6: { halign: "right" },
-      7: { halign: "right" },
-      8: { halign: "right" },
-      10: { cellWidth: 62 },
-      11: { cellWidth: 90 },
+      0: { cellWidth: "auto" },
+      1: { cellWidth: 110 },
+      2: { cellWidth: 46, halign: "right" },
+      3: { cellWidth: 40, halign: "right" },
+      4: { cellWidth: 40, halign: "right" },
+      5: { cellWidth: 50, halign: "right" },
+      6: { cellWidth: 46, halign: "right" },
+      7: { cellWidth: 50, halign: "right" },
+      8: { cellWidth: 48, halign: "right" },
+      9: { cellWidth: 76 },
+      10: { cellWidth: 72 },
     },
   });
 
-  // ── Exception Appendix ──────────────────────────────────────────────────────
-  const serialRows = report.rows.flatMap((row) =>
-    row.serialExceptions.map((serial) => [
-      "Unmatched serial",
-      row.productName,
-      `${serial.phNo} / ${serial.serialNumber}`,
-      serial.reason,
-    ])
-  );
-
-  const reversalRows = report.excludedDocuments.map((item) => [
-    "Void reversal",
-    item.branchName || "—",
-    `${item.docType} ${item.docNo}`,
-    `Excluded: in ${qty(item.inBase)} / out ${qty(item.outBase)}`,
-  ]);
-
-  autoTable(doc, {
-    startY: (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 14,
-    head: [["Exception", "Subject", "Reference", "Detail"]],
-    body:
-      serialRows.length + reversalRows.length > 0
-        ? [...serialRows, ...reversalRows]
-        : [["None", "-", "-", "No serial or reversal exceptions were raised"]],
-    theme: "grid",
-    styles: { fontSize: 7, cellPadding: 2.5 },
-    headStyles: { fillColor: [126, 44, 44] },
-    columnStyles: { 0: { cellWidth: 90 }, 2: { cellWidth: 150 } },
-  });
-
   // ── Source notes footer ─────────────────────────────────────────────────────
-  const footerY =
-    (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 18;
-  const boundedFooterY = Math.min(footerY, doc.internal.pageSize.getHeight() - 24);
+  // The note used to be cut at a character count read off the page width, which let a
+  // long warning run past the right edge. Wrapping it on the printed width and then
+  // reserving room for every line keeps the whole note inside the page.
+  const staleCountLines = report.rows.filter(
+    (row) => row.countDocNo !== null && !row.countInPeriod
+  ).length;
+  const note = [
+    report.warnings.length > 0
+      ? report.warnings.join("   |   ")
+      : "All required source data resolved for this period.",
+    staleCountLines > 0
+      ? `* ${staleCountLines} count(s) taken before this period: shown for reference, not used, so variance is blank.`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("   |   ");
 
   doc.setFont("helvetica", "italic");
   doc.setFontSize(7);
-  doc.text(
-    report.warnings.length > 0
-      ? report.warnings.join("   |   ").slice(0, Math.floor(pageWidth))
-      : "All required source data resolved for this period.",
-    32,
-    boundedFooterY
+  const noteLines = doc.splitTextToSize(note, pageWidth - 48) as string[];
+  const noteLineHeight = 9;
+
+  const footerY = Math.min(
+    (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 18,
+    pageHeight - 24 - (noteLines.length - 1) * noteLineHeight
   );
+  doc.text(noteLines, 24, footerY);
 
   const stamp = new Date().toISOString().slice(0, 10);
   doc.save(`${filenamePrefix}_${stamp}.pdf`);
