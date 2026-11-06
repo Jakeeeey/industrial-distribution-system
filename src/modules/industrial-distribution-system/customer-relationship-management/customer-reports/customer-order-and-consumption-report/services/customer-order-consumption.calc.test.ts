@@ -157,6 +157,22 @@ test("cylinderProductScope requires a serialized product in an industrial catego
   assert.equal(cylinderProductScope(999, ctx), "missing", "an unfetched master is unknowable, not excluded");
 });
 
+test("a product only the label pass found is excluded, not missing", () => {
+  const ctx = contextFor(
+    source(
+      masters({
+        products: [product({ product_id: 100, is_serialized: 1 })],
+        productLabels: [
+          product({ product_id: 200, product_name: "Bulk LPG", is_serialized: 0 }),
+        ],
+      })
+    )
+  );
+  assert.equal(cylinderProductScope(200, ctx), "excluded");
+  assert.equal(ctx.products.get(200)?.product_name, "Bulk LPG", "its name still reaches the table");
+  assert.equal(cylinderProductScope(999, ctx), "missing", "no master row at all stays unknown");
+});
+
 test("the category size is ignored when the product is not serialized", () => {
   const ctx = contextFor(
     source(

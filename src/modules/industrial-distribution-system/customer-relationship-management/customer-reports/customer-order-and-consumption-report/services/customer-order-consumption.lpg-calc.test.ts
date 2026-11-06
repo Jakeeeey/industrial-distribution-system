@@ -17,7 +17,9 @@ import {
 import type {
   CustomerOrderConsumptionRow,
   RawInvoiceRow,
+  RawLpgHeaderInvoiceRow,
   RawLpgSiteRow,
+  RawLpgTransactionHeaderRow,
   RawMeterReadingRow,
   RawUnifiedLpgRow,
   RawWiwoDetailRow,
@@ -34,6 +36,8 @@ interface RunInput {
   meterReadings?: RawMeterReadingRow[];
   invoices?: RawInvoiceRow[];
   lpgSites?: RawLpgSiteRow[];
+  transactionHeaders?: RawLpgTransactionHeaderRow[];
+  headerInvoices?: RawLpgHeaderInvoiceRow[];
   allowedCustomerCodes?: Set<string> | null;
   withDocuments?: boolean;
 }
@@ -59,6 +63,8 @@ function run(input: RunInput): {
     wiwoHeaders: input.wiwoHeaders ?? [],
     wiwoDetails: input.wiwoDetails ?? [],
     meterReadings: input.meterReadings ?? [],
+    transactionHeaders: input.transactionHeaders ?? [],
+    headerInvoices: input.headerInvoices ?? [],
     invoices: input.invoices ?? [],
     allowedCustomerCodes: input.allowedCustomerCodes ?? null,
     accumulators,
@@ -377,4 +383,78 @@ test("keeps both channels apart for the same customer and product", () => {
   const row = finalizeRow([...accumulators.values()][0] as RowAccumulator, context);
   assert.equal(row.channel, "LPG");
   assert.equal(row.kgIsProxy, false);
+});
+
+
+test("resolves branch via consolidation header invoice link when transaction sales_invoice_id is null", () => {
+  const { rows, exceptions } = run({
+    unifiedLpg: [
+      unifiedLpg({
+        id: 701,
+        sales_invoice_id: null,
+        transaction_header_id: 88,
+        billable_kg: 75,
+      }),
+    ],
+    headerInvoices: [
+      {
+        id: 1,
+        header_id: 88,
+        sales_invoice_id: 20,
+      },
+    ],
+    invoices: [
+      invoice({
+        invoice_id: 20,
+        branch_id: 10,
+        salesman_id: 5,
+      }),
+    ],
+  });
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]?.branchId, 10);
+  assert.equal(rows[0]?.grossKg, 75);
+  // Verify no unbilled exception was thrown
+  assert.equal(exceptions.filter((e) => e.code === "UNBILLED_LPG_TRANSACTION").length, 0);
+});
+
+test("gates LPG transactions when salesman filter is active", () => {
+  const matched = run({
+    filters: filters({ salesmanIds: [5] }),
+    unifiedLpg: [unifiedLpg({ sales_invoice_id: 1 })],
+    invoices: [invoice({ invoice_id: 1, salesman_id: 5 })],
+  });
+  assert.equal(matched.rows.length, 1, "matches salesman 5");
+
+  const unmatched = run({
+    filters: filters({ salesmanIds: [99] }),
+    unifiedLpg: [unifiedLpg({ sales_invoice_id: 1 })],
+    invoices: [invoice({ invoice_id: 1, salesman_id: 5 })],
+  });
+  assert.equal(unmatched.rows.length, 0, "excludes transaction from salesman 5 when filter is 99");
+});
+
+test("isolates multiple sites under the same customer into separate rows", () => {
+  const siteA = lpgSite({ id: 200, site_name: "Plant North", billing_mode: "METERED" });
+  const siteB = lpgSite({ id: 201, site_name: "Plant South", billing_mode: "KILO" });
+
+  const { rows } = run({
+    lpgSites: [siteA, siteB],
+    unifiedLpg: [
+      unifiedLpg({ id: 1, lpg_site_id: 200, billable_kg: 100 }),
+      unifiedLpg({ id: 2, lpg_site_id: 201, billable_kg: 50 }),
+    ],
+    invoices: [invoice()],
+  });
+
+  assert.equal(rows.length, 2, "must produce 2 rows for 2 distinct sites");
+  const rowNorth = rows.find((r) => r.siteId === 200);
+  const rowSouth = rows.find((r) => r.siteId === 201);
+  assert.ok(rowNorth, "found Plant North row");
+  assert.ok(rowSouth, "found Plant South row");
+  assert.equal(rowNorth?.grossKg, 100);
+  assert.equal(rowNorth?.billingMode, "METERED");
+  assert.equal(rowSouth?.grossKg, 50);
+  assert.equal(rowSouth?.billingMode, "KILO");
 });

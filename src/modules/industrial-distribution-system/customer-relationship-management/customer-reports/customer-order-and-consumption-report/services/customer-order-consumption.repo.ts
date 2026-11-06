@@ -1,6 +1,7 @@
 // ============================================================
 // customer-order-consumption.repo.ts
-// I/O layer ONLY — one Directus read per collection, no aggregation.
+// I/O layer ONLY — masters read whole, documents and follow-ups scoped by id,
+// no aggregation.
 //
 // Collections read:
 //   sales_invoice, sales_invoice_details, sales_return,
@@ -20,7 +21,9 @@ import type {
   RawCustomerRow,
   RawInvoiceDetailRow,
   RawInvoiceRow,
+  RawLpgHeaderInvoiceRow,
   RawLpgSiteRow,
+  RawLpgTransactionHeaderRow,
   RawMeterReadingRow,
   RawPostDispatchRow,
   RawProductRow,
@@ -113,10 +116,13 @@ export async function fetchCustomerOrderConsumptionSources(
       }),
       read<RawClassificationRow>("customer_classification", { fields: "id,classification_name" }),
       read<RawSalesmanRow>("salesman", { fields: "id,salesman_code,salesman_name" }),
-      // AG-FILTER: read whole — cylinderProductScope evaluates is_serialized from
-      // this map, and a missing product is reported as an exception, not excluded.
+      // AG-FILTER: cylinder scope read — only a serialized product can be a
+      // cylinder, so the master read carries is_serialized = 1. Non-serialized
+      // products referenced by the window are resolved by id further down so
+      // their labels survive; cylinderProductScope still evaluates the flag.
       read<RawProductRow>("products", {
-        fields: "product_id,product_code,product_name,product_weight,weight,weight_unit_id,is_serialized,product_category",
+        fields: "product_id,product_code,product_name,description,product_weight,weight,weight_unit_id,is_serialized,product_category",
+        filter: { is_serialized: { _eq: 1 } },
       }),
       read<RawLpgSiteRow>("lpg_customer_lpg_sites", {
         fields: "id,customer_code,site_name,billing_mode",
@@ -214,9 +220,9 @@ export async function fetchCustomerOrderConsumptionSources(
     filters.customerCodes
   );
 
-  const [unifiedLpg, wiwoHeaders, meterReadings] = await Promise.all([
+  const [unifiedLpg, wiwoHeaders, meterReadings, transactionHeaders, headerInvoices] = await Promise.all([
     read<RawUnifiedLpgRow>("lpg_metered_wiwo_transactions", {
-      fields: "id,transaction_no,transaction_type,lpg_site_id,customer_code,sales_order_id,sales_order_no,meter_reading_id,wiwo_header_id,transaction_date,billing_period_from,billing_period_to,metered_kg,wiwo_kg,variance_kg,variance_reason_code,billable_source,billable_kg,price_per_kg,gross_amount,discount_amount,net_amount,sales_invoice_id,sales_invoice_no,status",
+      fields: "id,transaction_no,transaction_header_id,transaction_type,lpg_site_id,customer_code,sales_order_id,sales_order_no,meter_reading_id,wiwo_header_id,transaction_date,billing_period_from,billing_period_to,metered_kg,wiwo_kg,variance_kg,variance_reason_code,billable_source,billable_kg,price_per_kg,gross_amount,discount_amount,net_amount,sales_invoice_id,sales_invoice_no,status",
       filter: { status: { _eq: "POSTED" }, ...windowFilter("transaction_date", filters, false), ...lpgScope },
     }),
     read<RawWiwoHeaderRow>("lpg_wiwo_headers", {
@@ -226,6 +232,16 @@ export async function fetchCustomerOrderConsumptionSources(
     read<RawMeterReadingRow>("lpg_meter_readings", {
       fields: "id,lpg_site_id,customer_code,reading_no,reading_date,billing_period_from,billing_period_to,meter_unit,kg_consumed,price_per_kg,gross_amount,net_amount,reading_status,sales_invoice_id,sales_invoice_no",
       filter: { reading_status: { _eq: "POSTED" }, ...windowFilter("reading_date", filters, false), ...lpgScope },
+    }),
+    // AG-COMMENT: Read consolidation headers and header invoice links to reconcile consolidation invoice branch & salesman
+    read<RawLpgTransactionHeaderRow>("lpg_transaction_headers", {
+      fields: "header_id,header_no,customer_id,customer_site_id,period_from,period_to,status,is_billed",
+      // The enum is DRAFT | POSTED | CANCELLED; `is_billed` is the billed flag.
+      // A cancelled consolidation must not lend its invoice to a branch.
+      filter: { status: { _eq: "POSTED" } },
+    }),
+    read<RawLpgHeaderInvoiceRow>("lpg_transaction_header_invoices", {
+      fields: "id,header_id,sales_invoice_id,status",
     }),
   ]);
 
@@ -240,6 +256,34 @@ export async function fetchCustomerOrderConsumptionSources(
   );
   const wiwoDetails = flatten(wiwoDetailBatches) as RawWiwoDetailRow[];
 
+  // ---- Names for products outside the cylinder scope ----
+  // The master read returns serialized products only, so a non-cylinder sale
+  // or an LPG line would render as "Product 4127". Resolved by the ids this
+  // window actually references, never as a second whole-collection read.
+  const scopedProductIds = new Set(products.map((row) => row.product_id));
+  const outsideScopeIds = [
+    ...new Set(
+      [
+        ...invoiceDetails.map((row) => row.product_id),
+        ...returnDetails.map((row) => row.product_id),
+        ...wiwoDetails.map((row) => row.product_id),
+      ].filter(
+        (id): id is number =>
+          typeof id === "number" && id > 0 && !scopedProductIds.has(id)
+      )
+    ),
+  ];
+
+  const labelBatches = await Promise.all(
+    chunk(outsideScopeIds).map((ids) =>
+      read<RawProductRow>("products", {
+        fields: "product_id,product_code,product_name,description,product_weight,weight,weight_unit_id,is_serialized,product_category",
+        filter: { product_id: { _in: ids } },
+      })
+    )
+  );
+  const productLabels = flatten(labelBatches) as RawProductRow[];
+
   // ---- Branch recovery for LPG rows ----
   // An LPG transaction billed before the window still belongs to the report;
   // its invoice is fetched by id so the branch is real instead of unknown.
@@ -250,6 +294,8 @@ export async function fetchCustomerOrderConsumptionSources(
         ...unifiedLpg.map((row) => row.sales_invoice_id),
         ...wiwoHeaders.map((row) => row.sales_invoice_id),
         ...meterReadings.map((row) => row.sales_invoice_id),
+        // AG-COMMENT: Include sales_invoices linked via consolidation header invoices for branch and salesman resolution
+        ...headerInvoices.map((row) => row.sales_invoice_id),
       ].filter((id): id is number => id != null && !windowInvoiceIds.has(id))
     ),
   ];
@@ -270,6 +316,7 @@ export async function fetchCustomerOrderConsumptionSources(
     returnDetails,
     returnLinks,
     products,
+    productLabels,
     units,
     weightUnits,
     categories,
@@ -285,5 +332,8 @@ export async function fetchCustomerOrderConsumptionSources(
     // The window filter above already dropped any row outside it, and the
     // extra invoices only exist to resolve a branch.
     postDispatch,
+    // AG-COMMENT: Return consolidation headers and header invoices for branch & invoice reconciliation
+    transactionHeaders,
+    headerInvoices,
   };
 }

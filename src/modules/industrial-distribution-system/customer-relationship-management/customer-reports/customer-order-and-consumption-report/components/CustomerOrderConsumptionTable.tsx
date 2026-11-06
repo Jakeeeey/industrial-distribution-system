@@ -361,7 +361,8 @@ export function CustomerOrderConsumptionTable(): React.ReactElement | null {
               ) : (
                 visible.map((row) => (
                   <TableRow
-                    key={`${row.customerCode}|${row.branchId}|${row.channel}|${row.productId}`}
+                    // AG-COMMENT: Include siteId in key to prevent multi-site collision
+                    key={`${row.customerCode}|${row.branchId}|${row.channel}|${row.productId}|${row.siteId ?? 0}`}
                     className="group cursor-pointer focus-visible:bg-muted/60"
                     tabIndex={0}
                     aria-label={`Open supporting documents for ${row.customerName}`}
@@ -396,6 +397,7 @@ export function CustomerOrderConsumptionTable(): React.ReactElement | null {
                     <TableCell className="max-w-[220px]">
                       <p className="truncate">{row.productName}</p>
                       <p className="truncate text-xs text-muted-foreground">
+                        {row.siteName ? `${row.siteName} · ` : ""}
                         {row.productCode}
                         {row.gasType ? ` · ${row.gasType}` : ""}
                       </p>

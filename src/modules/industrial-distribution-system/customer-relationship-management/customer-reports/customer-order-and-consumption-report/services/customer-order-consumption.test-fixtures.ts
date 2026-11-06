@@ -116,6 +116,8 @@ export function product(patch: Partial<RawProductRow> = {}): RawProductRow {
     product_id: 100,
     product_code: "LPG-12",
     product_name: "LPG 12KG",
+    // AG-COMMENT: Description for ids-guide product name rule
+    description: "LPG 12KG",
     product_weight: 12,
     weight: null,
     weight_unit_id: 1,
@@ -269,6 +271,7 @@ export function source(
     returnDetails: [],
     returnLinks: [],
     products: [],
+    productLabels: [],
     units: [],
     weightUnits: [],
     categories: [],
@@ -282,6 +285,9 @@ export function source(
     wiwoDetails: [],
     meterReadings: [],
     postDispatch: [],
+    // AG-COMMENT: Added transactionHeaders and headerInvoices fixtures
+    transactionHeaders: [],
+    headerInvoices: [],
     ...patch,
   };
 }

@@ -83,8 +83,11 @@ export async function GET(_req: NextRequest): Promise<NextResponse> {
     // The three option lists are all narrowed to the Industrial side of the
     // platform, matching how every other SCM picker behaves: branches and
     // products by active status, branches additionally by division_id,
-    // categories by is_industrial. Products are deliberately NOT narrowed to
-    // is_serialized — this report reconciles every countable product.
+    // categories by is_industrial. Products are also narrowed to
+    // is_serialized = 1, so the picker only offers cylinder products.
+    // The report body applies the same is_serialized scope, so every line it
+    // reconciles is one this picker could name. The id-keyed name lookups in the
+    // report route stay unfiltered because they label rows that already exist.
     const branchQuery =
       `fields=id,branch_name,branch_code&filter[isActive][_eq]=1` +
       `&filter[division_id][_eq]=1&sort=branch_name&limit=-1`;
@@ -111,7 +114,7 @@ export async function GET(_req: NextRequest): Promise<NextResponse> {
         directusBase,
         directusToken,
         "products",
-        `fields=product_id,product_code,product_name,description&filter[isActive][_eq]=1&sort=product_name&limit=-1`
+        `fields=product_id,product_code,product_name,description&filter[isActive][_eq]=1&filter[is_serialized][_eq]=1&sort=product_name&limit=-1`
       ),
     ]);
 

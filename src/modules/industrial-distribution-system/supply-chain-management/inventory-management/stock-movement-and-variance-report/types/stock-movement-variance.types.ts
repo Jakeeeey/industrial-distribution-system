@@ -75,8 +75,6 @@ export interface RawCountLine {
   systemCount: number;
   physicalCount: number;
   sourceVariance: number;
-  offsetMatch: number | null;
-  serials: string[];
 }
 
 /**
@@ -94,27 +92,6 @@ export interface SupportingDocument {
   countAdjustment: number;
   descr: string;
 }
-
-/**
- * Serial recorded on a physical count that cannot be matched to an asset or a
- * movement record. Spec §8 requires these as separate exception details.
- */
-export interface SerialException {
-  serialNumber: string;
-  phNo: string;
-  reason: string;
-}
-
-/**
- * Data-exception codes surfaced on a report row. Reporting never repairs these;
- * corrective action stays in the originating module (spec §6).
- */
-export type VarianceExceptionCode =
-  | "NO_COUNT" // No committed physical count covers this product at the cutoff
-  | "UNMATCHED_SERIAL" // Counted serial not resolvable to an asset or movement
-  | "VOID_REVERSAL" // Movement document later voided; view does not reverse it
-  | "VARIANCE_DRIFT" // Computed variance disagrees with the variance posted by the count
-  | "POST_CUTOFF_MOVEMENT"; // Movements exist after the count cutoff that move the balance
 
 /**
  * One reconciled product/branch line of the report. All quantities are in BASE
@@ -138,15 +115,15 @@ export interface StockMovementVarianceRow {
   variance: number | null;
   variancePercent: number | null;
 
+  // The committed count nearest the cutoff. When it predates the period it is
+  // context only: countInPeriod is false and no variance is computed from it.
   countDocNo: string | null;
   countCutoffDate: string | null;
   countSystemQty: number | null;
   countSourceVariance: number | null;
+  countInPeriod: boolean;
 
-  exceptionCodes: VarianceExceptionCode[];
-  adjustmentReferences: string[];
   supportingDocuments: SupportingDocument[];
-  serialExceptions: SerialException[];
 }
 
 /**
@@ -157,12 +134,14 @@ export interface StockMovementVarianceKpis {
   linesWithVariance: number;
   linesCounted: number;
   linesUncounted: number;
+  /** Part of linesUncounted whose last committed count is from an earlier period. */
+  linesCountedEarlier: number;
   netVarianceUnits: number;
   shortUnits: number;
   overUnits: number;
-  exceptionLines: number;
-  unmatchedSerials: number;
-  voidReversalDocuments: number;
+  /** Lines behind each of the two unit totals above, counted on the same test. */
+  shortLines: number;
+  overLines: number;
 }
 
 /**
@@ -176,8 +155,6 @@ export interface StockMovementVarianceReportResponse {
   branchName: string | null;
   /** How many branches were actually reconciled; fewer than the scope when a ledger call failed. */
   branchesReconciled: number;
-  /** Documents excluded because a later void reversed them. Kept for audit visibility. */
-  excludedDocuments: SupportingDocument[];
   rows: StockMovementVarianceRow[];
   kpis: StockMovementVarianceKpis;
   warnings: string[];
