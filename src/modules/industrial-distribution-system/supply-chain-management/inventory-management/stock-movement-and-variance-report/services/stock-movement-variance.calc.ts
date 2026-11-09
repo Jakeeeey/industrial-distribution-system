@@ -9,10 +9,13 @@
 // Measurement rules that keep the arithmetic honest:
 // - A committed count only governs a line when its cutoff falls inside the
 //   reported period, and then the whole line is measured at that cutoff:
-//   movements booked after the count are excluded from "in" and "out" and are
-//   not listed as supporting documents, because comparing a mid-period count
-//   against a period-end expectation would report later, unrelated movement as
-//   variance.
+//   movements booked after the count are excluded from "in" and "out", because
+//   comparing a mid-period count against a period-end expectation would report
+//   later, unrelated movement as variance. They are still listed separately in
+//   the drawer, so excluded stock is never mistaken for no stock.
+// - That cutoff is read as Philippines wall clock, like the ledger timestamps.
+//   Directus suffixes its naive datetime columns with a synthetic "Z", and an
+//   8-hour-late cutoff quietly re-admits the post-count movement it should cut.
 // - A count from an earlier period is shown as context only. Using it as the
 //   period's count would publish the drift accumulated since that count —
 //   including the count's own months — as this period's variance.
@@ -116,6 +119,31 @@ export function toUtcMs(ts: string | number | undefined | null): number | null {
 }
 
 /**
+ * Reads a Directus user-entered date column as the instant it represents.
+ *
+ * Directus serialises naive MySQL `datetime` columns with a synthetic trailing
+ * "Z", so a count cutoff keyed in as 11:02 Philippines time arrives as
+ * "2026-10-13T11:02:00.000Z". toUtcMs rightly trusts a suffixed value as real
+ * UTC, which would place that cutoff eight hours late and let movement booked
+ * after the count into Expected. The suffix is dropped here and the wall-clock
+ * components re-read, so the cutoff and the ledger share one frame.
+ *
+ * Directus' own UTC columns (`committed_at` and friends) are NOT read through
+ * this, because for them the suffix is real.
+ */
+export function directusWallClockToUtcMs(
+  value: string | number | null | undefined
+): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const stripped = raw.replace(/(?:Z|[+-]\d{2}:?\d{2})$/, "");
+  return toUtcMs(stripped) ?? toUtcMs(raw);
+}
+
+/**
  * Converts a YYYY-MM-DD filter value into its PH-local instant, either at the
  * very start or the very end of that day.
  */
@@ -169,8 +197,12 @@ interface LedgerEntry {
   productId: number;
   branchId: number;
   timeMs: number | null;
+  /** Blank when the source document was posted without a number. */
   docNo: string;
   docType: string;
+  supplierName: string;
+  /** Purchase order resolved by the BFF for an unnumbered receipt. */
+  receiptRef: string;
   inBase: number;
   outBase: number;
   restatement: number;
@@ -178,6 +210,36 @@ interface LedgerEntry {
   unitCount: number;
   productName: string;
   branchName: string;
+}
+
+/**
+ * Names a ledger document for display. Some purchase receipts are posted with
+ * an empty number, and a blank cell reads as missing data rather than as an
+ * unnumbered document. The BFF resolves the purchase order behind such a
+ * receipt and that number is printed as-is; failing that, the counterparty is
+ * used. Only purchase receipts name a supplier: the view carries the same
+ * supplier on every row, including transfers and adjustments, where it means
+ * nothing.
+ */
+export function documentLabel(
+  doc: Pick<LedgerEntry, "docNo" | "docType" | "supplierName" | "receiptRef">
+): string {
+  if (doc.docNo) return doc.docNo;
+  if (doc.receiptRef) return doc.receiptRef;
+  const type = doc.docType.toLowerCase();
+  if (doc.docType === "PURCHASE RECEIPT" && doc.supplierName) {
+    return `Unnumbered receipt from ${doc.supplierName}`;
+  }
+  return `Unnumbered ${type || "document"}`;
+}
+
+/**
+ * Second-precision identity shared by the movements view and the receiving
+ * rows: the view stamps a receipt with the same wall clock the stock was
+ * received at, to the second, and both sides are Philippines local time.
+ */
+export function receiptMatchKey(branchId: number, productId: number, stamp: unknown): string {
+  return `${branchId}|${productId}|${String(stamp ?? "").replace("T", " ").slice(0, 19)}`;
 }
 
 /**
@@ -203,8 +265,10 @@ function normaliseMovement(row: RawMovementRow, meta?: ProductMeta): LedgerEntry
     productId,
     branchId: num(pick<number>(row as Record<string, unknown>, "branchId", "branch_id")),
     timeMs: toUtcMs(row.ts),
-    docNo: docNo || "(no document number)",
+    docNo,
     docType: docType || "UNKNOWN",
+    supplierName: String(row.supplierName ?? "").trim(),
+    receiptRef: String(row.receiptRef ?? "").trim(),
     inBase: isCount ? 0 : rawIn,
     outBase: isCount ? 0 : rawOut,
     restatement,
@@ -236,7 +300,8 @@ function pickGoverningCount(
 ): { line: RawCountLine; cutoffMs: number | null; inPeriod: boolean } | null {
   const scored = lines.map((line) => ({
     line,
-    cutoffMs: toUtcMs(line.cutOffDate ?? "") ?? toUtcMs(line.dateEncoded ?? "") ?? null,
+    cutoffMs:
+      directusWallClockToUtcMs(line.cutOffDate) ?? directusWallClockToUtcMs(line.dateEncoded),
   }));
 
   // An undated sheet cannot be placed inside the period, so it never governs.
@@ -369,31 +434,49 @@ export function buildVarianceRows(input: VarianceCalculationInput): StockMovemen
 
     const countSourceVariance = governing ? num(governing.line.sourceVariance) * unitCount : null;
 
-    const supportingDocuments: SupportingDocument[] = productMovements
+    const toDocument = (entry: LedgerEntry): SupportingDocument => ({
+      docNo: entry.docNo,
+      label: documentLabel(entry),
+      docType: entry.docType,
+      ts: new Date(entry.timeMs ?? 0).toISOString(),
+      branchId: entry.branchId || num(filters.branchId),
+      branchName: entry.branchName || scopeBranchName || "",
+      inBase: entry.inBase,
+      outBase: entry.outBase,
+      countAdjustment: entry.restatement,
+      descr: entry.isCount ? "Count restatement" : "",
+    });
+
+    const byTime = (a: LedgerEntry, b: LedgerEntry) => (a.timeMs ?? 0) - (b.timeMs ?? 0);
+
+    const supportingDocuments = productMovements
       .filter(
         (entry) =>
           entry.timeMs !== null &&
           entry.timeMs >= startMs &&
           entry.timeMs <= endMs &&
           // A movement booked after the closing count did not participate in the
-          // comparison, so it is not listed under this line either.
+          // comparison, so it is not listed here either.
           entry.timeMs <= boundaryMs &&
           // The count under test is reported in its own section; listing it here
           // would show a restatement that the Expected figure deliberately ignores.
           entry.docNo.toUpperCase() !== governingDocNo
       )
-      .sort((a, b) => (a.timeMs ?? 0) - (b.timeMs ?? 0))
-      .map((entry) => ({
-        docNo: entry.docNo,
-        docType: entry.docType,
-        ts: new Date(entry.timeMs ?? 0).toISOString(),
-        branchId: entry.branchId || num(filters.branchId),
-        branchName: entry.branchName || scopeBranchName || "",
-        inBase: entry.inBase,
-        outBase: entry.outBase,
-        countAdjustment: entry.restatement,
-        descr: entry.isCount ? "Count restatement" : "",
-      }));
+      .sort(byTime)
+      .map(toDocument);
+
+    // The governing count is the newest in-period sheet, so nothing else in this
+    // window can be a count — these are movement documents only.
+    const documentsAfterCount = productMovements
+      .filter(
+        (entry) =>
+          countApplies &&
+          entry.timeMs !== null &&
+          entry.timeMs > boundaryMs &&
+          entry.timeMs <= endMs
+      )
+      .sort(byTime)
+      .map(toDocument);
 
     const branchId =
       productMovements.find((entry) => entry.branchId > 0)?.branchId ??
@@ -424,11 +507,17 @@ export function buildVarianceRows(input: VarianceCalculationInput): StockMovemen
       variance,
       variancePercent: percentOfExpected(variance, expectedClosing),
       countDocNo: governing?.line.phNo ?? null,
-      countCutoffDate: governing?.line.cutOffDate ?? governing?.line.dateEncoded ?? null,
+      // Published as the resolved instant, not the source string, so the cutoff
+      // the screen shows is exactly the one Expected was measured at.
+      countCutoffDate:
+        governing && governing.cutoffMs !== null
+          ? new Date(governing.cutoffMs).toISOString()
+          : null,
       countSystemQty: governing ? num(governing.line.systemCount) * unitCount : null,
       countSourceVariance,
       countInPeriod: countApplies,
       supportingDocuments,
+      documentsAfterCount,
     });
   }
 
@@ -519,8 +608,9 @@ export function filterRows(
 
 /**
  * Formats any source timestamp as a Philippines wall-clock reading. The ledger
- * and Directus both store PH local time without an offset, so displaying the
- * raw value (or its UTC form) would misdate every document by eight hours.
+ * view returns PH local time with no offset, and Directus wall-clock columns
+ * are resolved into true UTC instants before they reach a row, so everything
+ * displayed here is already in one frame.
  */
 export function formatPhDateTime(value: string | number | null | undefined): string {
   const ms = toUtcMs(value);
