@@ -56,6 +56,12 @@ export interface RawMovementRow {
   productName?: string;
   branchName?: string;
   descr?: string;
+  supplierName?: string;
+  /**
+   * Not a view field: the BFF fills this with the purchase order number when
+   * the view posts a receipt with no number of its own.
+   */
+  receiptRef?: string;
   system_count?: number;
   physical_count?: number;
 }
@@ -81,7 +87,10 @@ export interface RawCountLine {
  * Ledger document retained in the drill-down panel as supporting evidence.
  */
 export interface SupportingDocument {
+  /** Raw ledger number; empty when the document was posted without one. */
   docNo: string;
+  /** What the screen and exports print: the number, or a description of it. */
+  label: string;
   docType: string;
   ts: string;
   branchId: number;
@@ -124,6 +133,12 @@ export interface StockMovementVarianceRow {
   countInPeriod: boolean;
 
   supportingDocuments: SupportingDocument[];
+  /**
+   * In-period movement booked after the governing count's cutoff. It is real
+   * stock but deliberately excluded from Expected, so the drawer names it
+   * separately instead of letting the line look like it received nothing.
+   */
+  documentsAfterCount: SupportingDocument[];
 }
 
 /**

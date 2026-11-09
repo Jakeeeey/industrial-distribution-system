@@ -42,6 +42,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   buildVarianceRows,
   productDisplayName,
+  receiptMatchKey,
   summariseKpis,
   type ProductMeta,
 } from "@/modules/industrial-distribution-system/supply-chain-management/inventory-management/stock-movement-and-variance-report/services/stock-movement-variance.calc";
@@ -197,6 +198,92 @@ function movementBranchName(row: RawMovementRow): string {
 interface BranchScope {
   id: number;
   name: string;
+}
+
+/**
+ * The movements view posts some purchase receipts with an empty number and
+ * exposes no document id at all, so those rows are traced back through
+ * `purchase_order_receiving` on branch + product + the exact second the stock
+ * was received, and the parent purchase order is named instead. A match that
+ * points at more than one order is left unnamed rather than guessed, because
+ * a wrong reference on a receipt is worse than none.
+ */
+async function attachReceiptReferences(
+  movements: RawMovementRow[],
+  directusBase: string,
+  directusToken: string,
+  branchIds: number[]
+): Promise<void> {
+  const blanks = movements.filter((row) => {
+    const docType = String(row.docType ?? "").toUpperCase();
+    const docNo = String(row.docNo ?? row.doc_no ?? "").trim();
+    return docType === "PURCHASE RECEIPT" && !docNo;
+  });
+  if (blanks.length === 0 || branchIds.length === 0) return;
+
+  const stamps = blanks
+    .map((row) => String(row.ts ?? "").replace("T", " ").slice(0, 19))
+    .filter(Boolean)
+    .sort();
+  if (stamps.length === 0) return;
+
+  const receiving = await directusList<{
+    purchase_order_id?: number;
+    product_id?: number;
+    branch_id?: number;
+    received_date?: string;
+  }>(
+    directusBase,
+    directusToken,
+    "purchase_order_receiving",
+    "fields=purchase_order_id,product_id,branch_id,received_date" +
+      "&filter[receipt_no][_null]=true" +
+      `&filter[branch_id][_in]=${branchIds.join(",")}` +
+      `&filter[received_date][_between]=${encodeURIComponent(
+        `${stamps[0].replace(" ", "T")},${stamps[stamps.length - 1].replace(" ", "T")}`
+      )}` +
+      "&limit=-1"
+  );
+
+  const ordersByKey = new Map<string, Set<number>>();
+  for (const row of receiving) {
+    const orderId = Number(row.purchase_order_id);
+    if (!orderId) continue;
+    const key = receiptMatchKey(Number(row.branch_id), Number(row.product_id), row.received_date);
+    const bucket = ordersByKey.get(key);
+    if (bucket) bucket.add(orderId);
+    else ordersByKey.set(key, new Set([orderId]));
+  }
+
+  const orderIds = [...new Set(receiving.map((row) => Number(row.purchase_order_id)))].filter(
+    (id) => id > 0
+  );
+  const orders =
+    orderIds.length === 0
+      ? []
+      : await directusList<{ purchase_order_id?: number; purchase_order_no?: string }>(
+          directusBase,
+          directusToken,
+          "purchase_order",
+          `fields=purchase_order_id,purchase_order_no&filter[purchase_order_id][_in]=${orderIds.join(
+            ","
+          )}&limit=-1`
+        );
+  const numberById = new Map(
+    orders.map((order) => [Number(order.purchase_order_id), String(order.purchase_order_no ?? "")])
+  );
+
+  for (const row of blanks) {
+    const key = receiptMatchKey(
+      relationId(row.branchId ?? (row as Record<string, unknown>).branch_id) ?? 0,
+      relationId(row.productId ?? (row as Record<string, unknown>).product_id) ?? 0,
+      row.ts
+    );
+    const matches = ordersByKey.get(key);
+    if (!matches || matches.size !== 1) continue;
+    const number = numberById.get([...matches][0]);
+    if (number) row.receiptRef = number;
+  }
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -554,6 +641,24 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         `Voided-document check was incomplete: ${err instanceof Error ? err.message : "unknown error"}.`
       );
     });
+
+    // ── 4b. Citable reference for receipts posted without a number ───────────
+    try {
+      await attachReceiptReferences(
+        movements,
+        directusBase,
+        directusToken,
+        reconciled.map((branch) => branch.id)
+      );
+    } catch (err) {
+      // A missing reference must not break the reconciliation; the drawer then
+      // falls back to naming the supplier.
+      warnings.push(
+        `Unnumbered receipts could not be traced to their purchase orders: ${
+          err instanceof Error ? err.message : "unknown error"
+        }.`
+      );
+    }
 
     // ── 5. Product master for units, codes and categories ────────────────────
     const movementProductIds = new Set<number>();

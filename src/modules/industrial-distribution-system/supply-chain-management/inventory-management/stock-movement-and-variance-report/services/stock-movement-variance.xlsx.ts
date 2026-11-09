@@ -106,7 +106,7 @@ export function exportStockMovementVarianceToExcel(
   const docHeader = [
     "Product",
     "Branch",
-    "Document No",
+    "Document",
     "Document Type",
     "Timestamp (Philippines)",
     "In (base)",
@@ -119,7 +119,7 @@ export function exportStockMovementVarianceToExcel(
     row.supportingDocuments.map((doc) => [
       row.productName,
       doc.branchName || row.branchName,
-      doc.docNo,
+      doc.label,
       doc.docType,
       formatPhDateTime(doc.ts),
       qty(doc.inBase),
