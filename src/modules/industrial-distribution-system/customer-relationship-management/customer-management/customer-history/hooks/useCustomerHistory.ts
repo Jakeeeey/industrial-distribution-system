@@ -13,6 +13,7 @@ export function useCustomerHistory() {
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
     const [searchQuery, setSearchQuery] = useState("");
+    const [debouncedQuery, setDebouncedQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
     const [storeTypeFilter, setStoreTypeFilter] = useState("all");
     const [classificationFilter, setClassificationFilter] = useState("all");
@@ -45,6 +46,11 @@ export function useCustomerHistory() {
         fetchFilters();
     }, []);
 
+    useEffect(() => {
+        const id = setTimeout(() => setDebouncedQuery(searchQuery), 350);
+        return () => clearTimeout(id);
+    }, [searchQuery]);
+
     const fetchData = useCallback(async (showLoading = false) => {
         try {
             if (showLoading || !hasLoadedRef.current) {
@@ -56,7 +62,7 @@ export function useCustomerHistory() {
             const params = new URLSearchParams({
                 page: page.toString(),
                 pageSize: pageSize.toString(),
-                q: searchQuery,
+                q: debouncedQuery,
                 status: statusFilter,
                 storeType: storeTypeFilter,
                 classification: classificationFilter,
@@ -70,7 +76,8 @@ export function useCustomerHistory() {
 
             const data: CustomerHistoryResponse = await res.json();
             setRecords(data.customers || []);
-            setTotalCount(data.metadata?.total_count || 0);
+            // total_count is the whole collection; filter_count is what the active filters match.
+            setTotalCount(data.metadata?.filter_count ?? data.metadata?.total_count ?? 0);
             hasLoadedRef.current = true;
         } catch (err) {
             setIsError(true);
@@ -79,17 +86,30 @@ export function useCustomerHistory() {
         } finally {
             setIsLoading(false);
         }
-    }, [page, pageSize, searchQuery, statusFilter, storeTypeFilter, classificationFilter]);
+    }, [page, pageSize, debouncedQuery, statusFilter, storeTypeFilter, classificationFilter]);
 
     useEffect(() => {
         setPage(1);
-    }, [searchQuery, statusFilter, storeTypeFilter, classificationFilter]);
+    }, [debouncedQuery, statusFilter, storeTypeFilter, classificationFilter]);
 
     useEffect(() => {
         fetchData(true);
     }, [fetchData]);
 
     const refetch = useCallback(() => fetchData(true), [fetchData]);
+
+    const hasActiveFilters =
+        searchQuery !== "" ||
+        statusFilter !== "all" ||
+        storeTypeFilter !== "all" ||
+        classificationFilter !== "all";
+
+    const resetFilters = useCallback(() => {
+        setSearchQuery("");
+        setStatusFilter("all");
+        setStoreTypeFilter("all");
+        setClassificationFilter("all");
+    }, []);
 
     return {
         records,
@@ -105,12 +125,14 @@ export function useCustomerHistory() {
         classificationFilter,
         storeTypes,
         classifications,
+        hasActiveFilters,
         setPage,
         setPageSize,
         setSearchQuery,
         setStatusFilter,
         setStoreTypeFilter,
         setClassificationFilter,
+        resetFilters,
         refetch
     };
 }

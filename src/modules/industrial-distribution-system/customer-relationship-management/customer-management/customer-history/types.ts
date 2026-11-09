@@ -31,6 +31,14 @@ export interface CustomerHistoryRecord {
     division_id?: number | null;
     department_id?: number | null;
     location?: string | null;
+    house_no?: string | null;
+    unit_building?: string | null;
+    street?: string | null;
+    purok_sitio?: string | null;
+    subdivision?: string | null;
+    zip_code?: string | null;
+    region?: string | null;
+    credit_limit?: string | number | null;
     salesman_name?: string;
     salesman_code?: string | null;
 }

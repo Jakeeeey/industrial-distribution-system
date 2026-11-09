@@ -1,168 +1,216 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import {
     Dialog,
     DialogContent,
     DialogHeader,
     DialogTitle,
-    DialogDescription
+    DialogDescription,
+    DialogClose,
 } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { formatCurrency } from "@/lib/utils";
 import { CustomerHistoryRecord } from "../types";
-import { User, Phone, MapPin, Building, ShieldCheck, Mail, Calendar } from "lucide-react";
 
 interface HistoryDetailsModalProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     record: CustomerHistoryRecord | null;
+    storeTypeLabel?: string;
+    classificationLabel?: string;
 }
 
-export function HistoryDetailsModal({ open, onOpenChange, record }: HistoryDetailsModalProps) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+    return (
+        <section className="overflow-hidden rounded-lg border border-border/60 bg-background">
+            <h3 className="border-b bg-muted/30 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {title}
+            </h3>
+            <dl className="divide-y divide-border/50">{children}</dl>
+        </section>
+    );
+}
+
+function Row({ label, children }: { label: string; children?: React.ReactNode }) {
+    const isEmpty =
+        children === undefined || children === null || children === "" || children === "—";
+    return (
+        <div className="flex items-baseline gap-4 px-4 py-2.5">
+            <dt className="w-32 shrink-0 text-xs text-muted-foreground">{label}</dt>
+            <dd className="min-w-0 flex-1 break-words text-sm font-medium text-foreground">
+                {isEmpty ? <span className="font-normal text-muted-foreground/60">—</span> : children}
+            </dd>
+        </div>
+    );
+}
+
+// Directus serialises naive datetimes with a trailing "Z"; reading the date part
+// as wall clock keeps the label from shifting a day in PH time.
+function formatRecordDate(value?: string | null) {
+    if (!value) return null;
+    const date = new Date(`${value.slice(0, 10)}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+    });
+}
+
+function CustomerAvatar({ imageId, name }: { imageId?: string | null; name: string }) {
+    const [imageFailed, setImageFailed] = useState(false);
+    const initials = name?.trim().slice(0, 2).toUpperCase() || "—";
+
+    if (imageId && !imageFailed) {
+        return (
+            <img
+                src={`${process.env.NEXT_PUBLIC_API_BASE_URL}/assets/${imageId}`}
+                alt=""
+                onError={() => setImageFailed(true)}
+                className="h-12 w-12 shrink-0 rounded-lg border border-border/60 object-cover"
+            />
+        );
+    }
+
+    return (
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-background text-sm font-semibold text-muted-foreground">
+            {initials}
+        </div>
+    );
+}
+
+export function HistoryDetailsModal({
+    open,
+    onOpenChange,
+    record,
+    storeTypeLabel,
+    classificationLabel,
+}: HistoryDetailsModalProps) {
+    // The parent keeps the last selection while the dialog fades out, so this
+    // guard never blanks the body mid-animation.
     if (!record) return null;
+
+    const data = record;
+    const addressParts = [
+        [data.house_no, data.unit_building].filter(Boolean).join(" "),
+        data.street,
+        data.purok_sitio,
+        data.subdivision,
+        data.brgy,
+        data.city,
+        data.province,
+        data.zip_code,
+    ].filter(Boolean);
+    const creditLimit =
+        data.credit_limit === null || data.credit_limit === undefined || data.credit_limit === ""
+            ? null
+            : Number(data.credit_limit);
+    const createdOn = formatRecordDate(data.date_entered);
+    const coords = (data.location || "").trim();
+    const coordPair = coords.split(",").map((c) => c.trim()).filter(Boolean);
+    const mapsUrl =
+        coordPair.length === 2 && coordPair.every((c) => !Number.isNaN(Number(c)))
+            ? `https://www.google.com/maps?q=${coordPair[0]},${coordPair[1]}`
+            : null;
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-[700px] bg-background border shadow-2xl rounded-2xl overflow-hidden p-0 gap-0">
-                <DialogHeader className="p-6 bg-muted/30 border-b">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <DialogTitle className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                                <Building className="h-5 w-5 text-primary" />
-                                {record.customer_name}
-                            </DialogTitle>
-                            <DialogDescription className="text-xs text-muted-foreground mt-1">
-                                Customer Code: <span className="font-semibold">{record.customer_code}</span>
-                            </DialogDescription>
+            <DialogContent className="flex max-h-[85vh] w-full flex-col gap-0 overflow-hidden rounded-xl border-border/70 p-0 shadow-2xl sm:max-w-[640px]">
+                <DialogHeader className="flex-row items-start gap-4 border-b bg-muted/20 p-5 pr-12 text-left">
+                    <CustomerAvatar key={data.id} imageId={data.customer_image} name={data.customer_name} />
+                    <div className="min-w-0 flex-1">
+                        <DialogTitle className="break-words text-base font-semibold leading-snug tracking-tight">
+                            {data.customer_name}
+                        </DialogTitle>
+                        <DialogDescription className="mt-1 truncate text-xs">
+                            {data.customer_code || `PENDING-${data.id}`} · {data.type}
+                        </DialogDescription>
+                        <div className="mt-2">
+                            <StatusBadge tone={data.isActive === 1 ? "success" : "neutral"}>
+                                {data.isActive === 1 ? "Active" : "Inactive"}
+                            </StatusBadge>
                         </div>
-                        <Badge
-                            variant="outline"
-                            className={
-                                record.isActive
-                                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-                                    : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
-                            }
-                        >
-                            {record.isActive ? "ACTIVE" : "INACTIVE"}
-                        </Badge>
                     </div>
                 </DialogHeader>
 
-                <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
-                    {/* General Details */}
-                    <div>
-                        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">General Information</h4>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                                <span className="text-[10px] text-muted-foreground block">Customer Type</span>
-                                <div className="text-sm font-medium flex items-center gap-1.5">
-                                    <User className="h-3.5 w-3.5 text-muted-foreground/75" />
-                                    {record.type}
-                                </div>
-                            </div>
-                            <div className="space-y-1">
-                                <span className="text-[10px] text-muted-foreground block">Store Name</span>
-                                <div className="text-sm font-medium">{record.store_name || "-"}</div>
-                            </div>
-                            <div className="space-y-1">
-                                <span className="text-[10px] text-muted-foreground block">Store Signage</span>
-                                <div className="text-sm font-medium">{record.store_signage || "-"}</div>
-                            </div>
-                            <div className="space-y-1">
-                                <span className="text-[10px] text-muted-foreground block">Assigned Salesman</span>
-                                <div className="text-sm font-medium text-blue-600 dark:text-blue-400">
-                                    {record.salesman_name || "Unassigned"}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-background p-5">
+                    <Section title="Business">
+                        <Row label="Store Name">{data.store_name}</Row>
+                        <Row label="Signage">{data.store_signage}</Row>
+                        <Row label="Store Type">{storeTypeLabel}</Row>
+                        <Row label="Classification">{classificationLabel}</Row>
+                        <Row label="Salesman">
+                            {data.salesman_name && data.salesman_name !== "N/A"
+                                ? data.salesman_code
+                                    ? `${data.salesman_name} (${data.salesman_code})`
+                                    : data.salesman_name
+                                : null}
+                        </Row>
+                    </Section>
 
-                    <Separator />
-
-                    {/* Address & Contacts */}
-                    <div>
-                        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Address & Contacts</h4>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1 col-span-2">
-                                <span className="text-[10px] text-muted-foreground block">Full Address</span>
-                                <div className="text-sm font-medium flex items-start gap-1.5">
-                                    <MapPin className="h-4 w-4 text-muted-foreground/75 mt-0.5 shrink-0" />
-                                    <span>
-                                        {[record.brgy, record.city, record.province].filter(Boolean).join(", ") || "No address provided"}
+                    <Section title="Contact & Location">
+                        <Row label="Address">
+                            {addressParts.length > 0 ? addressParts.join(", ") : null}
+                        </Row>
+                        <Row label="Mobile">{data.contact_number}</Row>
+                        <Row label="Landline">{data.tel_number}</Row>
+                        <Row label="Email">{data.customer_email}</Row>
+                        <Row label="Coordinates">
+                            {mapsUrl ? (
+                                <span className="flex flex-wrap items-center gap-2">
+                                    <span className="font-mono text-xs text-muted-foreground">
+                                        {coords}
                                     </span>
-                                </div>
-                            </div>
-                            <div className="space-y-1">
-                                <span className="text-[10px] text-muted-foreground block">Contact Number</span>
-                                <div className="text-sm font-medium flex items-center gap-1.5">
-                                    <Phone className="h-3.5 w-3.5 text-muted-foreground/75" />
-                                    {record.contact_number || "-"}
-                                </div>
-                            </div>
-                            <div className="space-y-1">
-                                <span className="text-[10px] text-muted-foreground block">Email Address</span>
-                                <div className="text-sm font-medium flex items-center gap-1.5">
-                                    <Mail className="h-3.5 w-3.5 text-muted-foreground/75" />
-                                    {record.customer_email || "-"}
-                                </div>
-                            </div>
-                            <div className="space-y-1">
-                                <span className="text-[10px] text-muted-foreground block">Telephone Number</span>
-                                <div className="text-sm font-medium">{record.tel_number || "-"}</div>
-                            </div>
-                            <div className="space-y-1">
-                                <span className="text-[10px] text-muted-foreground block">Geotag Coordinates</span>
-                                <div className="text-sm font-medium">{record.location ? String(record.location) : "-"}</div>
-                            </div>
-                        </div>
-                    </div>
+                                    <a
+                                        href={mapsUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+                                    >
+                                        View on map
+                                    </a>
+                                </span>
+                            ) : (
+                                coords
+                            )}
+                        </Row>
+                    </Section>
 
-                    <Separator />
+                    <Section title="Billing">
+                        <Row label="TIN">{data.customer_tin}</Row>
+                        <Row label="Tax Codes">
+                            <span className="flex flex-wrap gap-1.5">
+                                <StatusBadge tone={data.isVAT ? "info" : "neutral"}>
+                                    {data.isVAT ? "VAT" : "Non-VAT"}
+                                </StatusBadge>
+                                <StatusBadge tone={data.isEWT ? "info" : "neutral"}>
+                                    {data.isEWT ? "EWT" : "No EWT"}
+                                </StatusBadge>
+                            </span>
+                        </Row>
+                        <Row label="Payment Terms">
+                            {data.payment_term ? `${data.payment_term} days` : null}
+                        </Row>
+                        <Row label="Price List">{data.price_type}</Row>
+                        <Row label="Credit Limit">
+                            {creditLimit !== null && Number.isFinite(creditLimit)
+                                ? formatCurrency(creditLimit)
+                                : null}
+                        </Row>
+                    </Section>
+                </div>
 
-                    {/* Financial / Compliance */}
-                    <div>
-                        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Compliance & Terms</h4>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                                <span className="text-[10px] text-muted-foreground block">Customer TIN</span>
-                                <div className="text-sm font-medium">{record.customer_tin || "-"}</div>
-                            </div>
-                            <div className="space-y-1">
-                                <span className="text-[10px] text-muted-foreground block">Payment Term</span>
-                                <div className="text-sm font-medium">{record.payment_term ? `${record.payment_term} Days` : "-"}</div>
-                            </div>
-                            <div className="space-y-1">
-                                <span className="text-[10px] text-muted-foreground block">Price Type</span>
-                                <div className="text-sm font-medium">{record.price_type || "-"}</div>
-                            </div>
-                            <div className="space-y-1">
-                                <span className="text-[10px] text-muted-foreground block">Tax Status</span>
-                                <div className="flex gap-2 mt-1">
-                                    <Badge variant={record.isVAT ? "default" : "secondary"} className="text-[9px] uppercase tracking-wider font-black">
-                                        {record.isVAT ? "VAT" : "NON-VAT"}
-                                    </Badge>
-                                    <Badge variant={record.isEWT ? "default" : "secondary"} className="text-[9px] uppercase tracking-wider font-black">
-                                        {record.isEWT ? "EWT" : "NO-EWT"}
-                                    </Badge>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <Separator />
-
-                    {/* System audit info */}
-                    <div className="bg-muted/40 rounded-xl p-4 flex items-center justify-between text-xs text-muted-foreground border">
-                        <div className="flex items-center gap-2">
-                            <ShieldCheck className="h-4 w-4 text-emerald-500" />
-                            <span>System Verified Log Record</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 font-mono text-[10px]">
-                            <Calendar className="h-3.5 w-3.5" />
-                            {record.date_entered ? new Date(record.date_entered).toLocaleDateString() : "-"}
-                        </div>
-                    </div>
+                <div className="flex items-center justify-between gap-4 border-t bg-muted/20 px-5 py-3">
+                    <p className="text-xs text-muted-foreground">
+                        {createdOn ? `Record created ${createdOn}` : "No creation date recorded"}
+                    </p>
+                    <DialogClose asChild>
+                        <Button variant="outline" size="sm" className="h-8 rounded-lg text-sm">
+                            Close
+                        </Button>
+                    </DialogClose>
                 </div>
             </DialogContent>
         </Dialog>
