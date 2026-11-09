@@ -30,8 +30,16 @@ export function useBranchOperationalPerformanceFilterOptions() {
             ...data.custodians,
           ]);
         }
-      } catch (e) {
-        console.error("[useFilterOptions] Error loading lookups:", e);
+      } catch (e: unknown) {
+        // Ignore expected AbortError when component unmounts or re-renders
+        if (controller.signal.aborted) {
+          return;
+        }
+        const isAbort =
+          typeof e === "object" && e !== null && (e as { name?: string }).name === "AbortError";
+        if (!isAbort) {
+          console.error("[useFilterOptions] Error loading lookups:", e);
+        }
       } finally {
         if (active) setIsLoading(false);
       }
