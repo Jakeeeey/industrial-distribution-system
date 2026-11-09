@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useStockMovementVarianceReport } from "../hooks/useStockMovementVarianceReport";
+import type { SupportingDocument } from "../types/stock-movement-variance.types";
 import { formatPhDateTime, formatQty, formatSigned } from "../services/stock-movement-variance.calc";
 
 /** Compact labelled figure used across the panel header. */
@@ -44,6 +45,32 @@ function Metric({
         {value}
       </p>
     </div>
+  );
+}
+
+/** One ledger document. `muted` marks movement that Expected deliberately ignores. */
+function DocumentRow({ doc, muted }: { doc: SupportingDocument; muted?: boolean }) {
+  return (
+    <li
+      className={cn(
+        "rounded-lg border px-2.5 py-2",
+        muted ? "border-dashed bg-background" : "bg-muted/20"
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate text-[11px] font-medium">{doc.label}</span>
+        <span className="shrink-0 text-[10px] text-muted-foreground">{doc.docType}</span>
+      </div>
+      <div className="mt-1 flex items-center gap-3 text-[10px] tabular-nums text-muted-foreground">
+        <span className="flex items-center gap-1">
+          <FileClock className="h-3 w-3" />
+          {formatPhDateTime(doc.ts)}
+        </span>
+        {doc.inBase ? <span className="text-emerald-600">in {formatQty(doc.inBase)}</span> : null}
+        {doc.outBase ? <span className="text-orange-600">out {formatQty(doc.outBase)}</span> : null}
+        {doc.countAdjustment ? <span>restated {formatSigned(doc.countAdjustment)}</span> : null}
+      </div>
+    </li>
   );
 }
 
@@ -186,37 +213,40 @@ export function StockMovementVarianceDrawer() {
                 <span>Documents ({selectedRow.supportingDocuments.length})</span>
               </p>
 
-              {selectedRow.supportingDocuments.length === 0 ? (
+              {selectedRow.supportingDocuments.length === 0 &&
+              selectedRow.documentsAfterCount.length === 0 ? (
                 <p className="text-[11px] text-muted-foreground">
                   No posted movement is included in this line&apos;s Expected figure.
                 </p>
               ) : (
-                <ul className="space-y-1.5">
-                  {selectedRow.supportingDocuments.map((doc, index) => (
-                    <li
-                      key={`${doc.docNo}-${index}`}
-                      className="rounded-lg border bg-muted/20 px-2.5 py-2"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="truncate text-[11px] font-medium">{doc.docNo}</span>
-                        <span className="shrink-0 text-[10px] text-muted-foreground">
-                          {doc.docType}
-                        </span>
-                      </div>
-                      <div className="mt-1 flex items-center gap-3 text-[10px] tabular-nums text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <FileClock className="h-3 w-3" />
-                          {formatPhDateTime(doc.ts)}
-                        </span>
-                        {doc.inBase ? <span className="text-emerald-600">in {formatQty(doc.inBase)}</span> : null}
-                        {doc.outBase ? <span className="text-orange-600">out {formatQty(doc.outBase)}</span> : null}
-                        {doc.countAdjustment ? (
-                          <span>restated {formatSigned(doc.countAdjustment)}</span>
-                        ) : null}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  {selectedRow.supportingDocuments.length > 0 && (
+                    <ul className="space-y-1.5">
+                      {selectedRow.supportingDocuments.map((doc, index) => (
+                        <DocumentRow key={`${doc.docNo}-${index}`} doc={doc} />
+                      ))}
+                    </ul>
+                  )}
+
+                  {/* Stock that arrived after the sheet was cut is named here rather
+                      than left out, so the line does not read as having received
+                      nothing. It stays outside Expected and the variance. */}
+                  {selectedRow.documentsAfterCount.length > 0 && (
+                    <div className="mt-3">
+                      <p className="mb-1 text-[11px] font-semibold text-muted-foreground">
+                        After the count ({selectedRow.documentsAfterCount.length})
+                      </p>
+                      <p className="mb-2 text-[11px] text-muted-foreground">
+                        Booked after this count, so it is real stock but outside Expected.
+                      </p>
+                      <ul className="space-y-1.5">
+                        {selectedRow.documentsAfterCount.map((doc, index) => (
+                          <DocumentRow key={`${doc.docNo}-${index}`} doc={doc} muted />
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </motion.aside>
