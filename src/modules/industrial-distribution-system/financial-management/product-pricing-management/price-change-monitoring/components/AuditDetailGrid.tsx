@@ -38,7 +38,7 @@ import {
   movementBadgeClass,
   getPriceTypeColor,
 } from "../utils/matrixUtils";
-import { mapPriceTypeName } from "../../product-pricing/utils/constants";
+import { mapPriceTypeName } from "../../price-change-request/utils/constants";
 import { Separator } from "@/components/ui/separator";
 import {
   Sheet,

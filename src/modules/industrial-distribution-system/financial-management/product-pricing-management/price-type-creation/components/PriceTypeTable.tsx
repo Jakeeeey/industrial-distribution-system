@@ -11,8 +11,8 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Edit2, Trash2 } from "lucide-react";
-import type { PriceType } from "../../product-pricing/types";
-import { mapPriceTypeName } from "../../product-pricing/utils/constants";
+import type { PriceType } from "../../price-change-request/types";
+import { mapPriceTypeName } from "../../price-change-request/utils/constants";
 
 interface PriceTypeTableProps {
     priceTypes: PriceType[];

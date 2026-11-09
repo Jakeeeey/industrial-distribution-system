@@ -142,7 +142,7 @@ export async function createPriceChangeRequests(items: {
         created: number;
         skipped_duplicates?: number;
         skipped_existing_pending?: number;
-    }>(`/api/ids/fm/product-pricing/price-change-requests/bulk`, {
+    }>(`/api/ids/fm/product-pricing/product-pricing-approval/bulk`, {
         method: "POST",
         body: JSON.stringify({ items }),
     });
@@ -173,7 +173,7 @@ export async function createCostChangeRequests(
 }
 
 export async function getPendingPriceRequests() {
-    return http<{ data: PriceChangeRequest[] }>("/api/ids/fm/product-pricing/price-change-requests?status=PENDING&limit=-1");
+    return http<{ data: PriceChangeRequest[] }>("/api/ids/fm/product-pricing/product-pricing-approval?status=PENDING&limit=-1");
 }
 
 export async function getPendingCostRequests() {

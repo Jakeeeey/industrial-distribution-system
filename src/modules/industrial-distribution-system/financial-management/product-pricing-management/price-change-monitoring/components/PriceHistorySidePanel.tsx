@@ -19,7 +19,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import type { ViewPriceMonitoringRow, PriceTypeGroup } from "../types";
 import { formatCurrency, getPriceTypeColor } from "../utils/matrixUtils";
-import { mapPriceTypeName } from "../../product-pricing/utils/constants";
+import { mapPriceTypeName } from "../../price-change-request/utils/constants";
 
 // ---------------------------------------------------------------------------
 // Props

@@ -3,7 +3,7 @@
 
 import React from "react";
 import type { MatrixRow, PriceType, Unit } from "../types";
-import { mapPriceTypeName } from "../../product-pricing/utils/constants";
+import { mapPriceTypeName } from "../../price-change-request/utils/constants";
 import {
     Table,
     TableBody,

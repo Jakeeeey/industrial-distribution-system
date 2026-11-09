@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import * as api from "../../product-pricing/providers/pricingApi";
-import type { PriceType } from "../../product-pricing/types";
+import * as api from "../../price-change-request/providers/pricingApi";
+import type { PriceType } from "../../price-change-request/types";
 import { toast } from "sonner";
 
 export function usePriceTypeActions() {

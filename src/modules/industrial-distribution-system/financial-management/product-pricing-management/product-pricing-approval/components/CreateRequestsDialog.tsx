@@ -12,9 +12,9 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 
 import { Check, ChevronsUpDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { mapPriceTypeName } from "../../product-pricing/utils/constants";
+import { mapPriceTypeName } from "../../price-change-request/utils/constants";
 
-import * as api from "../providers/pcrApi";
+import * as api from "../providers/productPricingApprovalApi";
 
 type PriceTypeOption = { price_type_id: number; price_type_name?: string };
 type ProductPriceField = "price_per_unit" | "priceA" | "priceB" | "priceC" | "priceD" | "priceE";

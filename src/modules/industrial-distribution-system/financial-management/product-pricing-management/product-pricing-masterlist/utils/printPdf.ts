@@ -1,7 +1,7 @@
 // src/modules/financial-management/printables-management/product-pricing-masterlist/utils/printPdf.ts
 
 import type { MatrixRow, PriceType, Unit, Supplier } from "../types";
-import { mapPriceTypeName } from "../../product-pricing/utils/constants";
+import { mapPriceTypeName } from "../../price-change-request/utils/constants";
 import { PdfEngine } from "@/components/pdf-layout-design/PdfEngine";
 import { PdfTemplate } from "@/components/pdf-layout-design/services/pdf-template";
 import { PdfData } from "@/components/pdf-layout-design/types";

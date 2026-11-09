@@ -3,7 +3,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import type { ListQuery, PriceChangeRequestRow, CostChangeRequestRow } from "../types";
-import * as api from "../providers/pcrApi";
+import * as api from "../providers/productPricingApprovalApi";
 
 function getErrorMessage(error: unknown, fallback: string): string {
     if (error instanceof Error && error.message) return error.message;

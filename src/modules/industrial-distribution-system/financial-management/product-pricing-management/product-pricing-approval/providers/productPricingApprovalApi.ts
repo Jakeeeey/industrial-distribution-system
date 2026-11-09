@@ -1,3 +1,8 @@
+// =============================================================================
+// Product Pricing Approval — API Provider
+// Calls: /api/ids/fm/product-pricing/product-pricing-approval
+// Refactored from price-change-requests to product-pricing-approval.
+// =============================================================================
 import type {
     ActionPayload,
     CreatePCRPayload,
@@ -73,12 +78,12 @@ export async function listRequests(query: ListQuery) {
     sp.set("page_size", String(query.page_size ?? 50));
 
     return http<{ data: PriceChangeRequestRow[]; meta: ListMeta | null }>(
-        `/api/ids/fm/product-pricing/price-change-requests?${sp.toString()}`,
+        `/api/ids/fm/product-pricing/product-pricing-approval?${sp.toString()}`,
     );
 }
 
 export async function createRequest(payload: CreatePCRPayload) {
-    return http<{ data: PriceChangeRequestRow }>(`/api/ids/fm/product-pricing/price-change-requests`, {
+    return http<{ data: PriceChangeRequestRow }>(`/api/ids/fm/product-pricing/product-pricing-approval`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -86,7 +91,7 @@ export async function createRequest(payload: CreatePCRPayload) {
 }
 
 export async function actionRequest(payload: ActionPayload) {
-    return http<{ data: PriceChangeRequestRow }>(`/api/ids/fm/product-pricing/price-change-requests/actions`, {
+    return http<{ data: PriceChangeRequestRow }>(`/api/ids/fm/product-pricing/product-pricing-approval/actions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

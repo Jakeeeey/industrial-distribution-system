@@ -5,7 +5,7 @@
 
 import * as XLSX from "xlsx";
 import type { ViewPriceMonitoringRow } from "../types";
-import { mapPriceTypeName } from "../../product-pricing/utils/constants"
+import { mapPriceTypeName } from "../../price-change-request/utils/constants";
 // ---------------------------------------------------------------------------
 // CSV column definition
 // ---------------------------------------------------------------------------

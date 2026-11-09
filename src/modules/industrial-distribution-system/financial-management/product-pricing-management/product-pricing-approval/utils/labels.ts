@@ -1,5 +1,5 @@
 import type { PriceChangeRequestRow, CostChangeRequestRow } from "../types";
-import { mapPriceTypeName } from "../../product-pricing/utils/constants";
+import { mapPriceTypeName } from "../../price-change-request/utils/constants";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null;

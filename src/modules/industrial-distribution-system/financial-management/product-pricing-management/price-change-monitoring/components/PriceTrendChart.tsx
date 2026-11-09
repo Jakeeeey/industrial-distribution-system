@@ -29,7 +29,7 @@ import {
   getPriceTypeColor,
   groupByPriceType,
 } from "../utils/matrixUtils";
-import { mapPriceTypeName } from "../../product-pricing/utils/constants";
+import { mapPriceTypeName } from "../../price-change-request/utils/constants";
 
 // ---------------------------------------------------------------------------
 // Props

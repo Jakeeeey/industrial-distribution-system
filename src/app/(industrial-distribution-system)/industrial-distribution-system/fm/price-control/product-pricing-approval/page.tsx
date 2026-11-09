@@ -1,3 +1,5 @@
+// src/app/(industrial-distribution-system)/industrial-distribution-system/fm/price-control/product-pricing-approval/page.tsx
+// Refactored from price-change-requests to product-pricing-approval
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -12,8 +14,8 @@ import { NavUser } from "@/components/shared/app-sidebar/nav-user";
 
 import { cookies } from "next/headers";
 
-// ✅ Wire the module you asked for
-import { ProductPricingModule } from "@/modules/industrial-distribution-system/financial-management/product-pricing-management/product-pricing";
+// ✅ Product Pricing Approval module
+import { ProductPricingApprovalModule } from "@/modules/industrial-distribution-system/financial-management/product-pricing-management/product-pricing-approval";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -129,7 +131,7 @@ export default async function Page() {
                 <BreadcrumbSeparator className="hidden md:block shrink-0" />
                 <BreadcrumbItem className="min-w-0 overflow-hidden">
                   <BreadcrumbPage className="truncate max-w-[56vw] sm:max-w-[60vw] md:max-w-none">
-                    Product Pricing
+                    Product Pricing Approval
                   </BreadcrumbPage>
                 </BreadcrumbItem>
               </BreadcrumbList>
@@ -144,7 +146,7 @@ export default async function Page() {
 
       {/* ✅ Only content scrolls inside RIGHT column */}
       <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4">
-        <ProductPricingModule />
+        <ProductPricingApprovalModule />
       </main>
     </div>
   );

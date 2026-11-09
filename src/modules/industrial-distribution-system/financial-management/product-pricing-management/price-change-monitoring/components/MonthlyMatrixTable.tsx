@@ -11,7 +11,7 @@ import {
   getPriceTypeColor,
   MONTH_LABELS,
 } from "../utils/matrixUtils";
-import { mapPriceTypeName } from "../../product-pricing/utils/constants";
+import { mapPriceTypeName } from "../../price-change-request/utils/constants";
 
 
 // Breakpoint hook is imported from @/hooks/use-mobile

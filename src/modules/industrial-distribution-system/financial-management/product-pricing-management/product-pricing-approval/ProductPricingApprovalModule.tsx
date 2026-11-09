@@ -1,3 +1,5 @@
+// src/modules/industrial-distribution-system/financial-management/product-pricing-management/product-pricing-approval/ProductPricingApprovalModule.tsx
+// Refactored from PriceChangeRequestsModule to ProductPricingApprovalModule
 "use client";
 
 import * as React from "react";
@@ -12,10 +14,10 @@ import { RejectDialog } from "./components/RejectDialog";
 
 import { usePCRList } from "./hooks/usePCR";
 import { usePCRActions } from "./hooks/usePCRActions";
-import { getLookups, SupplierOption } from "./providers/pcrApi";
+import { getLookups, SupplierOption } from "./providers/productPricingApprovalApi";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 
-export function PriceChangeRequestsModule() {
+export function ProductPricingApprovalModule() {
     const [suppliers, setSuppliers] = React.useState<SupplierOption[]>([]);
     React.useEffect(() => {
         getLookups().then(res => setSuppliers(res.suppliers)).catch(() => {});
@@ -26,7 +28,7 @@ export function PriceChangeRequestsModule() {
             <Card className="rounded-2xl">
                 <CardHeader className="flex flex-row items-center justify-between gap-3">
                     <div className="space-y-1">
-                        <CardTitle>Price Change Approvals</CardTitle>
+                        <CardTitle>Product Pricing Approval</CardTitle>
                         <div className="text-sm text-muted-foreground">
                             Approve or reject price updates.
                         </div>
@@ -298,3 +300,5 @@ function RequestManager({ type, suppliers }: { type: "price" | "cost", suppliers
         </div>
     );
 }
+
+export default ProductPricingApprovalModule;

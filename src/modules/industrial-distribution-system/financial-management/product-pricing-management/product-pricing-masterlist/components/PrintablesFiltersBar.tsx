@@ -3,7 +3,7 @@
 
 import * as React from "react";
 import type { FilterState, Category, Brand, Unit, Supplier, PriceType } from "../types";
-import { mapPriceTypeName } from "../../product-pricing/utils/constants";
+import { mapPriceTypeName } from "../../price-change-request/utils/constants";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
