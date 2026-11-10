@@ -95,8 +95,9 @@ async function fetchSpring<T = unknown>(url: string, token?: string): Promise<T[
 export async function getBranchOperationalLookups(): Promise<ReportLookupsResponse> {
   const base = getDirectusBase();
 
+  // Filter branches with isActive=1 and division_id=1
   const [branchesRes, custRes] = await Promise.all([
-    fetchDirectus<{ data: RawBranch[] }>(`${base}/items/branches?filter[isActive][_eq]=1&limit=-1&fields=id,branch_name,branch_code`),
+    fetchDirectus<{ data: RawBranch[] }>(`${base}/items/branches?filter[isActive][_eq]=1&filter[division_id][_eq]=1&limit=-1&fields=id,branch_name,branch_code`),
     fetchDirectus<{ data: RawCustomer[] }>(`${base}/items/customer?filter[isActive][_eq]=1&limit=200&fields=customer_code,customer_name,store_name`),
   ]);
 
@@ -157,7 +158,8 @@ export async function getBranchOperationalDashboard(
     fetchDirectus<{ data: RawPostDispatchBudgeting[] }>(
       `${base}/items/post_dispatch_budgeting?limit=-1&fields=id,post_dispatch_plan_id,coa_id,amount,remarks`
     ),
-    fetchDirectus<{ data: RawBranch[] }>(`${base}/items/branches?limit=-1&fields=id,branch_name,branch_code`),
+    // AG-COMMENT: Restrict branch queries strictly to Industrial Division (division_id = 1)
+    fetchDirectus<{ data: RawBranch[] }>(`${base}/items/branches?filter[division_id][_eq]=1&limit=-1&fields=id,branch_name,branch_code`),
     fetchDirectus<{ data: RawProduct[] }>(`${base}/items/products?filter[is_serialized][_eq]=1&limit=-1&fields=product_id,product_name,product_code,estimated_unit_cost,cost_per_unit`),
     fetchDirectus<{ data: RawCustomer[] }>(`${base}/items/customer?limit=-1&fields=customer_code,customer_name,store_name`),
     fetchSpring<RawMovementRow>(springMovementsUrl, jwtToken),

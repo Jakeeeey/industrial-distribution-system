@@ -55,7 +55,14 @@ export interface RawBranch {
   id: number;
   branch_code: string;
   branch_name: string;
+  division_id?: number;
   isActive?: number;
+}
+
+export interface RawSupplier {
+  id: number | string;
+  supplier_name: string;
+  supplier_shortcut?: string | null;
 }
 
 export interface RawCustomer {
@@ -77,6 +84,7 @@ export interface AggregationSourceData {
   units: RawUnit[];
   branches: RawBranch[];
   customers: RawCustomer[];
+  suppliers?: RawSupplier[];
   transits?: RawStockTransferTransit[];
   movements: SerialMovementItem[];
 }
@@ -138,6 +146,16 @@ export function aggregateCylinderStockReport(
   const customerMap = new Map<string, RawCustomer>();
   customers.forEach((c) => customerMap.set(c.customer_code, c));
 
+  // Build supplier lookup map for relational entity resolution
+  // Indexed by both number and string representations to handle any format differences
+  const supplierMap = new Map<number | string, RawSupplier>();
+  if (source.suppliers) {
+    source.suppliers.forEach((s) => {
+      supplierMap.set(Number(s.id), s);
+      supplierMap.set(String(s.id), s);
+    });
+  }
+
   // Map latest movements by serial number
   const latestMovementsBySerial = new Map<string, SerialMovementItem>();
   movements.forEach((m) => {
@@ -174,6 +192,12 @@ export function aggregateCylinderStockReport(
       ? asset.current_branch_id.id
       : (asset.current_branch_id ? Number(asset.current_branch_id) : null);
     const branch = branchId ? branchMap.get(branchId) : undefined;
+    const nestedBranch = typeof asset.current_branch_id === "object" && asset.current_branch_id !== null
+      ? asset.current_branch_id
+      : undefined;
+
+    const resolvedBranchName = branch?.branch_name || nestedBranch?.branch_name || (branchId ? `Branch #${branchId}` : "Unassigned Branch");
+    const resolvedBranchCode = branch?.branch_code || nestedBranch?.branch_code || "N/A";
 
     const custCode = asset.current_customer_code ? String(asset.current_customer_code).trim() : null;
     const customer = custCode ? customerMap.get(custCode) : undefined;
@@ -183,26 +207,31 @@ export function aggregateCylinderStockReport(
 
     // Custodian logic: Custody is separate from warehouse branch stock
     let custodianType: "Warehouse" | "Customer" | "Supplier" = "Warehouse";
-    let custodianName = branch?.branch_name || (branchId ? `Branch #${branchId}` : "Warehouse Floor");
+    let custodianName = resolvedBranchName !== "Unassigned Branch" ? resolvedBranchName : (branchId ? `Branch #${branchId}` : "Warehouse Floor");
+    let resolvedSupplierName: string | null = null;
 
     if (custCode || rawStatus === "WITH_CUSTOMER") {
       custodianType = "Customer";
       custodianName = customer?.customer_name || customer?.store_name || custCode || "Customer Custody";
     } else if (asset.current_supplier_id || rawStatus === "WITH_SUPPLIER") {
       custodianType = "Supplier";
-      custodianName = `Supplier #${asset.current_supplier_id || "External Refiller"}`;
+      // Support matching by number or string ID
+      const rawSuppId = asset.current_supplier_id;
+      const supplierObj = rawSuppId != null ? (supplierMap.get(Number(rawSuppId)) || supplierMap.get(String(rawSuppId))) : undefined;
+      resolvedSupplierName = supplierObj?.supplier_name || null;
+      custodianName = resolvedSupplierName || (rawSuppId ? `Supplier #${rawSuppId}` : "External Refiller");
     }
 
     const expDate = asset.expiration_date ? String(asset.expiration_date).split("T")[0] : null;
     const isExpired = expDate ? expDate < todayStr : false;
     const isNearExpiry = expDate && !isExpired ? expDate <= in30Days : false;
 
-    // Available Usable rule: Good condition, inside warehouse, status AVAILABLE/FULL/EMPTY
+    // Available Usable rule: Good condition and ready for distribution/operations.
+    // If not damaged/scrap/quarantine and status is AVAILABLE or stock variant (FULL/EMPTY)
     const isAvailableUsable =
       rawCondition === "GOOD" &&
-      custodianType === "Warehouse" &&
-      branchId !== null &&
-      ["AVAILABLE", "FULL", "EMPTY"].includes(rawStatus);
+      ["AVAILABLE", "FULL", "EMPTY"].includes(rawStatus) &&
+      custodianType !== "Customer";
 
     // Resolve Unit and Variant State
     const unit = product?.unit_of_measurement ? unitMap.get(product.unit_of_measurement) : undefined;
@@ -234,12 +263,12 @@ export function aggregateCylinderStockReport(
       cylinderStatus: rawStatus,
       cylinderCondition: rawCondition,
       branchId,
-      branchName: branch?.branch_name || "Unassigned Branch",
-      branchCode: branch?.branch_code || "N/A",
+      branchName: resolvedBranchName,
+      branchCode: resolvedBranchCode,
       customerCode: custCode,
       customerName: customer?.customer_name || null,
       supplierId: asset.current_supplier_id ? Number(asset.current_supplier_id) : null,
-      supplierName: null,
+      supplierName: resolvedSupplierName,
       custodianType,
       custodianName,
       tareWeight: asset.tare_weight !== null ? Number(asset.tare_weight) : (product?.weight || null),
@@ -293,31 +322,43 @@ export function aggregateCylinderStockReport(
     const varAgg = variantCountMap.get(r.variantState)!;
     varAgg.total++;
 
+    // Track custody
     if (r.custodianType === "Customer") {
       kpis.withCustomer++;
     } else if (r.custodianType === "Supplier") {
       kpis.withSupplier++;
-    } else {
-      // In warehouse
-      if (r.isAvailableUsable) {
-        kpis.usableAvailable++;
-        varAgg.available++;
-      }
+    }
 
-      if (r.cylinderStatus === "FULL") {
-        kpis.fullStock++;
-      } else if (r.cylinderStatus === "EMPTY") {
-        kpis.emptyStock++;
-      } else if (r.cylinderStatus === "LOADED") {
-        kpis.loadedStock++;
-      } else if (r.cylinderStatus === "RESERVED") {
-        kpis.reservedStock++;
-      } else if (
-        ["DAMAGED", "LOST", "RETIRED", "UNRECEIVED/REPLACED"].includes(r.cylinderStatus) ||
-        ["FOR_REPAIR", "DAMAGED", "SCRAP"].includes(r.cylinderCondition)
-      ) {
-        kpis.quarantinedDefective++;
-      }
+    // Usable Available: Good condition, operational, and not locked with external customers
+    if (r.isAvailableUsable) {
+      kpis.usableAvailable++;
+      varAgg.available++;
+    }
+
+    // Standardize variant identification:
+    // Matches the core Inventory Control logic (e.g. status/variantState "FULL" or "EMPTY")
+    const isFullVariant =
+      r.variantState.toUpperCase().includes("FULL") ||
+      r.cylinderStatus === "FULL";
+    const isEmptyVariant =
+      r.variantState.toUpperCase().includes("EMPTY") ||
+      r.cylinderStatus === "EMPTY";
+
+    if (isFullVariant) {
+      kpis.fullStock++;
+    } else if (isEmptyVariant) {
+      kpis.emptyStock++;
+    }
+
+    if (r.cylinderStatus === "LOADED") {
+      kpis.loadedStock++;
+    } else if (r.cylinderStatus === "RESERVED") {
+      kpis.reservedStock++;
+    } else if (
+      ["DAMAGED", "LOST", "RETIRED", "UNRECEIVED/REPLACED"].includes(r.cylinderStatus) ||
+      ["FOR_REPAIR", "DAMAGED", "SCRAP"].includes(r.cylinderCondition)
+    ) {
+      kpis.quarantinedDefective++;
     }
   }
 

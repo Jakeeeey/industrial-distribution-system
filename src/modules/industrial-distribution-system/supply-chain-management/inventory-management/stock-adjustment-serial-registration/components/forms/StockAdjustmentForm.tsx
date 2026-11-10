@@ -411,6 +411,7 @@ export function StockAdjustmentForm({
     productId: number;
     branchId?: number;
     unitName?: string;
+    condition?: string;
     initialSerials?: string[];
   } | null>(null);
   const [isScannerPreparing, setIsScannerPreparing] = useState(false);
@@ -886,8 +887,14 @@ export function StockAdjustmentForm({
     const initialSerials = item?.serial_numbers || [];
     const itemBranchId = parseNumericId(item?.branch_id) || parseNumericId(watchedBranchId) || parseNumericId(form.getValues("branch_id"));
 
-    // AG-COMMENT: Store productId, unitName, branchId, and initialSerials directly in scannerContext
-    setScannerContext({ index, productName, productId, branchId: itemBranchId, unitName, initialSerials });
+    // AG-COMMENT: Determine condition from unit_name or unit_order (EMPTY vs FULL)
+    const isItemEmpty =
+      unitName?.trim().toUpperCase() === "EMPTY" ||
+      item?.unit_order === 18;
+    const condition = isItemEmpty ? "EMPTY" : "FULL";
+
+    // AG-COMMENT: Store productId, unitName, branchId, condition, and initialSerials directly in scannerContext
+    setScannerContext({ index, productName, productId, branchId: itemBranchId, unitName, condition, initialSerials });
 
     setIsScannerPreparing(true);
     toast.info(`Opening Serial Input`, {
@@ -1555,7 +1562,7 @@ export function StockAdjustmentForm({
       </form>
 
       {/* AG-COMMENT: For Stock OUT, open SerialPickerModal which fetches AVAILABLE on-hand serials
-          from v_serial_onhand (status = 'Full') for the selected branch+product.
+          from v_serial_onhand for the selected branch+product+condition (Full or Empty).
           For Stock IN, open SerialInputModal which allows scanning/registering new serials.
           This ensures Stock OUT never exposes a registration interface. */}
       {scannerContext && (
@@ -1566,6 +1573,7 @@ export function StockAdjustmentForm({
             productName={scannerContext.productName}
             productId={scannerContext.productId || parseNumericId(form.getValues(`items.${scannerContext.index}.product_id`))}
             branchId={scannerContext.branchId || parseNumericId(watchedBranchId) || parseNumericId(form.getValues("branch_id"))}
+            condition={scannerContext.condition || (scannerContext.unitName?.toUpperCase() === "EMPTY" ? "EMPTY" : "FULL")}
             initialSerials={scannerContext.initialSerials || []}
             excludeSerials={form.getValues("items")
               ?.filter((_, idx) => idx !== scannerContext.index)

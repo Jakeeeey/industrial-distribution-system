@@ -240,7 +240,8 @@ export function DeliverPerformanceCharts() {
                     iconSize={8}
                   />
                   <Bar dataKey="fulfilled" name="Fulfilled" fill="#10b981" stackId="a" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="withConcerns" name="With Concerns" fill="#f59e0b" stackId="a" />
+                  <Bar dataKey="pendingClearance" name="Pending Clearance" fill="#f59e0b" stackId="a" />
+                  <Bar dataKey="withConcerns" name="With Concerns" fill="#f97316" stackId="a" />
                   <Bar dataKey="withReturns" name="With Returns" fill="#6366f1" stackId="a" />
                   <Bar dataKey="notFulfilled" name="Not Fulfilled" fill="#f43f5e" stackId="a" radius={[3, 3, 0, 0]} />
                 </BarChart>

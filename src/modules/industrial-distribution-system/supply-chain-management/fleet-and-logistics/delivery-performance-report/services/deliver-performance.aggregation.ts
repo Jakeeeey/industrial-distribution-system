@@ -51,7 +51,7 @@ interface RawAggParams {
   }>;
   details: Array<{
     detail_id: number;
-    invoice_no: number;
+    invoice_no: number | string;
     product_id: number;
     quantity: number;
   }>;
@@ -70,10 +70,23 @@ export function aggregateDeliveryPerformanceData(params: RawAggParams) {
   const branchMap = new Map<number, string>();
   lookups.branches.forEach((b) => branchMap.set(b.id, b.branch_name));
 
+  // Helper to normalize customer codes by removing internal whitespace and uppercasing.
+  // Handles variances such as "MAIN - 31582" vs "MAIN-31582".
+  const normalizeCustomerCode = (code?: string | null): string =>
+    (code || "").replace(/\s+/g, "").toUpperCase();
+
   const customerMap = new Map<string, string>();
-  lookups.customers.forEach((c) =>
-    customerMap.set(c.customer_code, c.store_name || c.customer_name || c.customer_code)
-  );
+  lookups.customers.forEach((c) => {
+    // Prefer registered customer_name, followed by store_name, then raw customer_code
+    const displayName = (c.customer_name?.trim() || c.store_name?.trim() || c.customer_code?.trim() || "");
+    if (displayName) {
+      if (c.customer_code) {
+        // Index under normalized code and raw trimmed code for resilient matching
+        customerMap.set(normalizeCustomerCode(c.customer_code), displayName);
+        customerMap.set(c.customer_code.trim(), displayName);
+      }
+    }
+  });
 
   const driverMap = new Map<number, string>();
   lookups.drivers.forEach((d) => driverMap.set(d.user_id, d.name));
@@ -81,10 +94,16 @@ export function aggregateDeliveryPerformanceData(params: RawAggParams) {
   const planMap = new Map<number, (typeof plans)[0]>();
   plans.forEach((p) => planMap.set(p.id, p));
 
-  const detailsQtyMap = new Map<number, number>();
+  // Build dual-indexed details quantity map (indexed by numeric invoice id and invoice code string)
+  // to ensure robust line-item quantity aggregation regardless of FK storage format.
+  const detailsQtyMap = new Map<string, number>();
   details.forEach((d) => {
-    const prev = detailsQtyMap.get(d.invoice_no) || 0;
-    detailsQtyMap.set(d.invoice_no, prev + Number(d.quantity || 0));
+    const qty = Number(d.quantity || 0);
+    const key = String(d.invoice_no).trim();
+    if (key) {
+      const prev = detailsQtyMap.get(key) || 0;
+      detailsQtyMap.set(key, prev + qty);
+    }
   });
 
   // Map pdis by invoice_id
@@ -98,15 +117,20 @@ export function aggregateDeliveryPerformanceData(params: RawAggParams) {
     const pdi = pdiMap.get(inv.invoice_id);
     const plan = pdi ? planMap.get(pdi.post_dispatch_plan_id) : undefined;
 
+    const isCleared = Boolean(pdi?.isCleared);
     let status: DeliveryFulfillmentStatus = "Not Fulfilled";
+
     if (pdi?.status) {
-      if (
-        pdi.status === "Fulfilled" ||
-        pdi.status === "Fulfilled With Concerns" ||
-        pdi.status === "Fulfilled With Returns" ||
-        pdi.status === "Not Fulfilled"
-      ) {
-        status = pdi.status;
+      if (pdi.status === "Fulfilled") {
+        // AG-RULE: Align delivery status with Post-Delivery Audit clearance.
+        // Prevent premature 'Fulfilled' status while custodian audit remains pending.
+        status = isCleared ? "Fulfilled" : "Delivered - Pending Clearance";
+      } else if (pdi.status === "Fulfilled With Concerns") {
+        status = "Fulfilled With Concerns";
+      } else if (pdi.status === "Fulfilled With Returns") {
+        status = "Fulfilled With Returns";
+      } else if (pdi.status === "Not Fulfilled") {
+        status = "Not Fulfilled";
       }
     }
 
@@ -119,6 +143,21 @@ export function aggregateDeliveryPerformanceData(params: RawAggParams) {
 
     const driverName = plan?.driver_id ? driverMap.get(plan.driver_id) || `Driver #${plan.driver_id}` : "Unassigned";
 
+    // Match customer name using normalized code, trimmed code, or fallback gracefully
+    const rawCustCode = inv.customer_code || "";
+    const normalizedCustCode = normalizeCustomerCode(rawCustCode);
+    const resolvedCustomerName =
+      customerMap.get(normalizedCustCode) ||
+      customerMap.get(rawCustCode.trim()) ||
+      rawCustCode ||
+      "Unknown Customer";
+
+    // Retrieve aggregated dispatched quantity by checking both numeric invoice_id and invoice_no string
+    const resolvedQty =
+      detailsQtyMap.get(String(inv.invoice_id)) ||
+      (inv.invoice_no ? detailsQtyMap.get(String(inv.invoice_no).trim()) : 0) ||
+      0;
+
     return {
       id: pdi?.id || inv.invoice_id,
       planId: plan?.id || 0,
@@ -128,18 +167,18 @@ export function aggregateDeliveryPerformanceData(params: RawAggParams) {
       dispatchDate: inv.dispatch_date ? inv.dispatch_date.split("T")[0] : "N/A",
       arrivalDate: arrivalDate ? arrivalDate.split("T")[0] : null,
       customerCode: inv.customer_code || "N/A",
-      customerName: customerMap.get(inv.customer_code) || inv.customer_code || "Unknown Customer",
+      customerName: resolvedCustomerName,
       branchId: inv.branch_id || (plan?.starting_point ?? null),
       branchName: branchMap.get(inv.branch_id) || "Main Branch",
       driverId: plan?.driver_id || null,
       driverName,
       status,
-      isCleared: Boolean(pdi?.isCleared),
+      isCleared,
       remarks: pdi?.remarks || null,
       grossAmount: Number(inv.gross_amount || inv.total_amount || 0),
       discountAmount: Number(inv.discount_amount || 0),
       netAmount: Number(inv.net_amount || inv.total_amount || 0),
-      totalQuantity: detailsQtyMap.get(inv.invoice_id) || 0,
+      totalQuantity: resolvedQty,
       totalDistance: Number(plan?.total_distance || 0),
       isOnTime,
     };
@@ -164,6 +203,7 @@ export function aggregateDeliveryPerformanceData(params: RawAggParams) {
         r.waybillNo.toLowerCase().includes(q) ||
         r.invoiceNo.toLowerCase().includes(q) ||
         r.customerName.toLowerCase().includes(q) ||
+        r.customerCode.toLowerCase().includes(q) ||
         r.driverName.toLowerCase().includes(q) ||
         (r.remarks && r.remarks.toLowerCase().includes(q))
     );
@@ -172,6 +212,7 @@ export function aggregateDeliveryPerformanceData(params: RawAggParams) {
   // 3. Compute High-Level KPIs
   const totalDeliveries = filteredRecords.length;
   let fulfilledCount = 0;
+  let pendingClearanceCount = 0;
   let fulfilledWithConcernsCount = 0;
   let fulfilledWithReturnsCount = 0;
   let notFulfilledCount = 0;
@@ -186,6 +227,7 @@ export function aggregateDeliveryPerformanceData(params: RawAggParams) {
     totalDistance += r.totalDistance;
 
     if (r.status === "Fulfilled") fulfilledCount++;
+    else if (r.status === "Delivered - Pending Clearance") pendingClearanceCount++;
     else if (r.status === "Fulfilled With Concerns") fulfilledWithConcernsCount++;
     else if (r.status === "Fulfilled With Returns") fulfilledWithReturnsCount++;
     else if (r.status === "Not Fulfilled") notFulfilledCount++;
@@ -193,13 +235,14 @@ export function aggregateDeliveryPerformanceData(params: RawAggParams) {
     if (r.isOnTime && r.status !== "Not Fulfilled") onTimeDeliveries++;
   });
 
-  const totalSuccessful = fulfilledCount + fulfilledWithConcernsCount + fulfilledWithReturnsCount;
+  const totalSuccessful = fulfilledCount + pendingClearanceCount + fulfilledWithConcernsCount + fulfilledWithReturnsCount;
   const fulfillmentRate = totalDeliveries > 0 ? Number(((fulfilledCount / totalDeliveries) * 100).toFixed(1)) : 0;
   const onTimeRate = totalSuccessful > 0 ? Number(((onTimeDeliveries / totalSuccessful) * 100).toFixed(1)) : 100;
 
   const kpis: DeliverPerformanceKPIs = {
     totalDeliveries,
     fulfilledCount,
+    pendingClearanceCount,
     fulfilledWithConcernsCount,
     fulfilledWithReturnsCount,
     notFulfilledCount,
@@ -220,6 +263,7 @@ export function aggregateDeliveryPerformanceData(params: RawAggParams) {
         date: dateKey,
         label: dateKey,
         fulfilled: 0,
+        pendingClearance: 0,
         withConcerns: 0,
         withReturns: 0,
         notFulfilled: 0,
@@ -232,6 +276,7 @@ export function aggregateDeliveryPerformanceData(params: RawAggParams) {
     entry.totalNetAmount += r.netAmount;
 
     if (r.status === "Fulfilled") entry.fulfilled++;
+    else if (r.status === "Delivered - Pending Clearance") entry.pendingClearance++;
     else if (r.status === "Fulfilled With Concerns") entry.withConcerns++;
     else if (r.status === "Fulfilled With Returns") entry.withReturns++;
     else if (r.status === "Not Fulfilled") entry.notFulfilled++;
@@ -251,11 +296,18 @@ export function aggregateDeliveryPerformanceData(params: RawAggParams) {
       color: "#10b981", // Emerald
     },
     {
+      name: "Pending Clearance",
+      status: "Delivered - Pending Clearance",
+      count: pendingClearanceCount,
+      percentage: totalDeliveries ? Number(((pendingClearanceCount / totalDeliveries) * 100).toFixed(1)) : 0,
+      color: "#f59e0b", // Amber
+    },
+    {
       name: "With Concerns",
       status: "Fulfilled With Concerns",
       count: fulfilledWithConcernsCount,
       percentage: totalDeliveries ? Number(((fulfilledWithConcernsCount / totalDeliveries) * 100).toFixed(1)) : 0,
-      color: "#f59e0b", // Amber
+      color: "#f97316", // Orange
     },
     {
       name: "With Returns",

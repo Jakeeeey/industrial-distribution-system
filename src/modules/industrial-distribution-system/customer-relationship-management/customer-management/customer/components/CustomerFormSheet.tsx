@@ -34,7 +34,7 @@ import { CustomerWithRelations, PaymentTerm, ReferenceOption } from "../types";
 import { BankAccountManager } from "./BankAccountManager";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { mapPriceTypeName } from "@/modules/industrial-distribution-system/financial-management/product-pricing-management/product-pricing/utils/constants";
+import { mapPriceTypeName } from "@/modules/industrial-distribution-system/financial-management/product-pricing-management/price-change-request/utils/constants";
 
 // ============================================================================
 // TYPES & INTERFACES

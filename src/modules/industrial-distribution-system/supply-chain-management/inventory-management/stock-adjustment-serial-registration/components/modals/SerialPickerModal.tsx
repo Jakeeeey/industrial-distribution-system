@@ -60,6 +60,8 @@ interface SerialPickerModalProps {
   productName: string;
   productId: number | unknown;
   branchId: number | unknown;
+  /** Cylinder condition filter ('FULL' or 'EMPTY') */
+  condition?: "FULL" | "EMPTY" | string;
   /** Already-assigned serials for THIS product item (pre-selected when editing) */
   initialSerials?: string[];
   /** Serials already used by OTHER items in the same adjustment (excluded from selection) */
@@ -70,11 +72,11 @@ interface SerialPickerModalProps {
 /**
  * AG-COMMENT: SerialPickerModal — Stock OUT serial selection interface.
  *
- * Presents a searchable, checkable grid of FULL on-hand serials sourced from
- * vos_database.v_serial_onhand for the selected branch + product.
+ * Presents a searchable, checkable grid of on-hand serials sourced from
+ * vos_database.v_serial_onhand for the selected branch + product + condition.
  *
  * Rules:
- *  - Only serials with status = 'Full' are shown (filter enforced on API side)
+ *  - Supports both 'Full' and 'Empty' cylinders based on the selected item condition
  *  - Registration is NEVER offered — this modal is strictly for picking
  *  - Serials already picked by other line-items are excluded
  *  - Previously saved serials for THIS item are pre-selected
@@ -88,6 +90,7 @@ export function SerialPickerModal({
   productName,
   productId,
   branchId,
+  condition = "FULL",
   initialSerials = [],
   excludeSerials = [],
   onSave,
@@ -100,10 +103,12 @@ export function SerialPickerModal({
 
   const resolvedBranchId = useMemo(() => parseNumericId(branchId), [branchId]);
   const resolvedProductId = useMemo(() => parseNumericId(productId), [productId]);
+  const activeCondition = useMemo(() => String(condition || "FULL").toUpperCase(), [condition]);
 
-  const fetchAvailableSerials = useCallback(async (bId?: number, pId?: number) => {
+  const fetchAvailableSerials = useCallback(async (bId?: number, pId?: number, cond?: string) => {
     const activeBranch = bId ?? resolvedBranchId;
     const activeProduct = pId ?? resolvedProductId;
+    const targetCond = cond ?? activeCondition;
 
     if (!activeBranch) {
       setFetchError("Branch must be selected before picking serials.");
@@ -121,11 +126,39 @@ export function SerialPickerModal({
         branchId: String(activeBranch),
         productId: String(activeProduct),
       });
-      const res = await fetch(
+      if (targetCond) {
+        params.set("status", targetCond);
+      }
+      
+      let res = await fetch(
         `/api/ids/scm/inventory-management/stock-adjustment-serial-registration/onhand-serials?${params.toString()}`
       );
+
+      // AG-COMMENT: If Spring Boot returns 401 Unauthorized, automatically attempt to refresh the session token and retry
+      if (res.status === 401) {
+        try {
+          const refreshRes = await fetch("/api/auth/refresh", {
+            method: "POST",
+            cache: "no-store",
+          });
+          if (refreshRes.ok) {
+            // Re-attempt fetch with newly refreshed session cookie
+            res = await fetch(
+              `/api/ids/scm/inventory-management/stock-adjustment-serial-registration/onhand-serials?${params.toString()}`
+            );
+          }
+        } catch (refreshErr) {
+          console.warn("Silent token refresh failed:", refreshErr);
+        }
+      }
+
       const result = await res.json();
-      if (!res.ok) throw new Error(result.error || "Failed to fetch available serials");
+      if (!res.ok) {
+        if (res.status === 401) {
+          throw new Error("Your session has expired. Please refresh your browser or log in again.");
+        }
+        throw new Error(result.error || "Failed to fetch available serials");
+      }
       setAllSerials(result.data || []);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to fetch available serials";
@@ -134,7 +167,7 @@ export function SerialPickerModal({
     } finally {
       setIsLoading(false);
     }
-  }, [resolvedBranchId, resolvedProductId]);
+  }, [resolvedBranchId, resolvedProductId, activeCondition]);
 
   // AG-COMMENT: Re-initialise selections and re-fetch whenever the modal opens or target IDs update
   useEffect(() => {
@@ -216,13 +249,13 @@ export function SerialPickerModal({
               </DialogTitle>
             </div>
             <p className="text-white/80 text-sm font-medium">
-              Selecting FULL on-hand serials for:{" "}
+              Selecting <span className="font-bold uppercase tracking-wide">{activeCondition}</span> on-hand serials for:{" "}
               <span className="text-white font-bold underline decoration-white/30 underline-offset-4">
                 {productName}
               </span>
             </p>
             <p className="text-white/60 text-xs mt-1">
-              Only Full serials currently on-hand at this branch are shown.
+              Only {activeCondition.toLowerCase()} serials currently on-hand at this branch are shown.
             </p>
           </DialogHeader>
         </div>
@@ -304,7 +337,7 @@ export function SerialPickerModal({
                 <PackageSearch className="h-12 w-12 text-muted-foreground" />
                 <p className="text-sm font-bold text-muted-foreground">
                   {allSerials.length === 0
-                    ? "No FULL on-hand serials found for this product at the selected branch."
+                    ? `No ${activeCondition} on-hand serials found for this product at the selected branch.`
                     : "No serials match your search."}
                 </p>
                 {allSerials.length === 0 && (
@@ -316,10 +349,11 @@ export function SerialPickerModal({
               </div>
             </div>
           ) : (
-            /* AG-COMMENT: Grid of selectable serial cards with full native scrollability */
+            /* AG-COMMENT: Grid of selectable serial cards with dynamic status badge */
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 pb-6">
               {filteredSerials.map((serial) => {
                 const isSelected = selected.has(serial.serial_number);
+                const isSerialEmpty = String(serial.status || activeCondition).trim().toUpperCase() === "EMPTY";
                 return (
                   <button
                     key={serial.id}
@@ -349,9 +383,15 @@ export function SerialPickerModal({
                       {serial.serial_number}
                     </span>
 
-                    {/* Status badge — always 'Full' for this picker */}
-                    <span className="text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">
-                      {serial.status || "Full"}
+                    {/* Status badge — dynamically colored for Full vs Empty */}
+                    <span
+                      className={`text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded ${
+                        isSerialEmpty
+                          ? "bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200/50 dark:border-blue-800/40"
+                          : "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
+                      }`}
+                    >
+                      {serial.status || activeCondition}
                     </span>
                   </button>
                 );

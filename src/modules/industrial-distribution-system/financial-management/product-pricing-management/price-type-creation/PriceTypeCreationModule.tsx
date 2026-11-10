@@ -5,9 +5,9 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PriceTypeTable } from "./components/PriceTypeTable";
 import { PriceTypeFormDialog } from "./components/PriceTypeFormDialog";
-import { usePriceTypes } from "../product-pricing/hooks/usePriceTypes";
+import { usePriceTypes } from "../price-change-request/hooks/usePriceTypes";
 import { usePriceTypeActions } from "./hooks/usePriceTypeActions";
-import type { PriceType } from "../product-pricing/types";
+import type { PriceType } from "../price-change-request/types";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function PriceTypeCreationModule() {
