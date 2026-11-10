@@ -37,6 +37,17 @@ export function DeliverPerformanceTable() {
             Fulfilled
           </Badge>
         );
+      case "Delivered - Pending Clearance":
+        return (
+          <Badge
+            variant="outline"
+            className="gap-1 border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+            title="Delivered - Pending Custodian Audit Clearance"
+          >
+            <Clock className="h-3 w-3" />
+            Pending Clearance
+          </Badge>
+        );
       case "Fulfilled With Concerns":
         return (
           <Badge
@@ -116,8 +127,24 @@ export function DeliverPerformanceTable() {
                   <TableCell className="font-medium text-xs text-foreground">{r.waybillNo}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{r.invoiceNo}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{r.dispatchDate}</TableCell>
-                  <TableCell className="text-xs text-foreground font-medium max-w-[200px] truncate">
-                    {r.customerName}
+                  {/* Customer Column: Displays registered Customer Name as primary bold text with Customer Code underneath */}
+                  <TableCell className="max-w-[220px]">
+                    <div className="flex flex-col min-w-0">
+                      <span
+                        className="text-xs font-semibold text-foreground truncate"
+                        title={r.customerName}
+                      >
+                        {r.customerName}
+                      </span>
+                      {r.customerCode && r.customerCode !== r.customerName && (
+                        <span
+                          className="text-[11px] font-mono text-muted-foreground truncate"
+                          title={r.customerCode}
+                        >
+                          {r.customerCode}
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground truncate">{r.branchName}</TableCell>
                   <TableCell className="text-xs text-muted-foreground truncate">{r.driverName}</TableCell>

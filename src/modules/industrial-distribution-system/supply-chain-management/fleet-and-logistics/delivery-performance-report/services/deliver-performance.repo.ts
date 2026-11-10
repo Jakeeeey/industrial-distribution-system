@@ -75,7 +75,13 @@ interface LookupCacheData {
   branches: Array<{ id: number; branch_code: string; branch_name: string }>;
   customers: Array<{ customer_code: string; customer_name: string; store_name: string }>;
   drivers: Array<{ user_id: number; name: string }>;
-  statuses: readonly ["Fulfilled", "Fulfilled With Concerns", "Fulfilled With Returns", "Not Fulfilled"];
+  statuses: readonly [
+    "Fulfilled",
+    "Delivered - Pending Clearance",
+    "Fulfilled With Concerns",
+    "Fulfilled With Returns",
+    "Not Fulfilled"
+  ];
   timestamp: number;
 }
 
@@ -92,13 +98,15 @@ export async function repoFetchLookups() {
   }
 
   const [branches, customers, users] = await Promise.all([
+    // AG-RULE: Filter branches strictly to Industrial Division (division_id = 1)
     fetchDirectusCollection<{ id: number; branch_code: string; branch_name: string }>(
       "branches",
-      "limit=-1&fields=id,branch_code,branch_name&sort=branch_name"
+      "limit=-1&filter[division_id][_eq]=1&fields=id,branch_code,branch_name&sort=branch_name"
     ),
+    // Query all customers without artificial limit to avoid lookup misses for customer names
     fetchDirectusCollection<{ customer_code: string; customer_name: string; store_name: string }>(
       "customer",
-      "limit=500&fields=customer_code,customer_name,store_name&sort=customer_name"
+      "limit=-1&fields=customer_code,customer_name,store_name&sort=customer_name"
     ),
     fetchDirectusCollection<{ user_id: number; user_fname: string; user_lname: string }>(
       "user",
@@ -115,6 +123,7 @@ export async function repoFetchLookups() {
     })),
     statuses: [
       "Fulfilled",
+      "Delivered - Pending Clearance",
       "Fulfilled With Concerns",
       "Fulfilled With Returns",
       "Not Fulfilled",
@@ -229,18 +238,24 @@ export async function repoFetchPostDispatchPlans(planIds: number[]) {
 }
 
 /**
- * Query invoice line item quantities
+ * Query invoice line item quantities.
+ * Supports querying by both numeric invoice_id and formatted invoice_no strings to ensure
+ * reliable detail line matching across various Directus schema conventions.
  */
-export async function repoFetchInvoiceDetails(invoiceIds: number[]) {
-  if (!invoiceIds.length) return [];
+export async function repoFetchInvoiceDetails(invoiceIdentifiers: Array<number | string>) {
+  if (!invoiceIdentifiers.length) return [];
 
-  const chunks = chunkArray(invoiceIds, 100);
+  // Deduplicate and filter valid values
+  const uniqueKeys = Array.from(new Set(invoiceIdentifiers.map((v) => String(v).trim()))).filter(Boolean);
+  if (!uniqueKeys.length) return [];
+
+  const chunks = chunkArray(uniqueKeys, 100);
   const results = await Promise.all(
     chunks.map(async (chunk) => {
       const idsStr = chunk.join(",");
       return fetchDirectusCollection<{
         detail_id: number;
-        invoice_no: number;
+        invoice_no: number | string;
         product_id: number;
         quantity: number;
         unit_price: number;

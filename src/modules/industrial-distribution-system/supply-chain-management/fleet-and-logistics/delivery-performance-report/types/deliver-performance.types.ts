@@ -4,8 +4,11 @@
 // Covers reporting records, KPI metrics, chart datasets, and lookups.
 // ==============================================================================
 
+// AG-RULE: Extended DeliveryFulfillmentStatus to include 'Delivered - Pending Clearance'
+// to accurately represent trips delivered physically but awaiting Post-Delivery Audit clearance.
 export type DeliveryFulfillmentStatus =
   | "Fulfilled"
+  | "Delivered - Pending Clearance"
   | "Fulfilled With Returns"
   | "Not Fulfilled"
   | "Fulfilled With Concerns";
@@ -38,6 +41,7 @@ export interface DeliveryRecordItem {
 export interface DeliverPerformanceKPIs {
   totalDeliveries: number;
   fulfilledCount: number;
+  pendingClearanceCount: number;
   fulfilledWithConcernsCount: number;
   fulfilledWithReturnsCount: number;
   notFulfilledCount: number;
@@ -52,6 +56,7 @@ export interface DeliveryTrendPoint {
   date: string;
   label: string;
   fulfilled: number;
+  pendingClearance: number;
   withConcerns: number;
   withReturns: number;
   notFulfilled: number;

@@ -44,6 +44,7 @@ export async function fetchDeliverPerformanceReport(
       kpis: {
         totalDeliveries: 0,
         fulfilledCount: 0,
+        pendingClearanceCount: 0,
         fulfilledWithConcernsCount: 0,
         fulfilledWithReturnsCount: 0,
         notFulfilledCount: 0,
@@ -68,12 +69,19 @@ export async function fetchDeliverPerformanceReport(
     };
   }
 
+  // Pass both numeric invoice_ids and invoice_no codes to guarantee line items match
   const invoiceIds = salesInvoices.map((s) => s.invoice_id);
+  const invoiceIdentifiers = Array.from(
+    new Set([
+      ...invoiceIds,
+      ...salesInvoices.map((s) => s.invoice_no).filter(Boolean),
+    ])
+  );
 
   // 3. Concurrently fetch delivery invoices and line details
   const [pdis, details] = await Promise.all([
     repoFetchPostDispatchInvoices(invoiceIds),
-    repoFetchInvoiceDetails(invoiceIds),
+    repoFetchInvoiceDetails(invoiceIdentifiers),
   ]);
 
   // 4. Fetch trip plans from unique post_dispatch_plan_ids
