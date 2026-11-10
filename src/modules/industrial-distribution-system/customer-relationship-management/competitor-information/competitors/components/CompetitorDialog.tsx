@@ -25,7 +25,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollableSearchableSelect } from "./ScrollableSearchableSelect";
 import { Separator } from "@/components/ui/separator";
 
-import type { Competitor, CompetitorFormData, PsgcItem } from "../types";
+import type { Competitor, CompetitorFormData, PsgcItem, SystemUser } from "../types";
 import { usePsgc } from "../hooks/usePsgc";
 
 interface CompetitorFormValues {
@@ -49,6 +49,38 @@ function toOptions(items: PsgcItem[]) {
 
 function getNameByCode(items: PsgcItem[], code: string) {
     return items.find((item) => item.code === code)?.name || "";
+}
+
+/**
+ * Renders an audit trail field with bold small title and tabular value
+ */
+function AuditField({ label, value }: { label: string; value: string }) {
+    return (
+        <div className="space-y-1">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">{label}</p>
+            <p className="text-sm font-medium text-foreground/80 tabular-nums">{value}</p>
+        </div>
+    );
+}
+
+/**
+ * Formats a user entity (SystemUser, user ID, or null) into a human-readable name or fallback
+ */
+function formatUserDisplay(user: SystemUser | number | string | null | undefined): string {
+    if (!user) return "—";
+    if (typeof user === "object") {
+        const fullName = [user.user_fname, user.user_lname].filter(Boolean).join(" ").trim();
+        return fullName || (user.user_email ? String(user.user_email) : `User #${user.user_id}`);
+    }
+    return `User #${user}`;
+}
+
+/**
+ * Formats audit timestamp for clean wall-clock display
+ */
+function formatAuditTime(value: string | null | undefined): string {
+    if (!value) return "—";
+    return value.replace("T", " ").slice(0, 19);
 }
 
 export function CompetitorDialog({
@@ -190,7 +222,7 @@ export function CompetitorDialog({
                 <Separator className="bg-primary/10" />
 
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(handleSubmit)} className="p-6 space-y-6">
+                    <form onSubmit={form.handleSubmit(handleSubmit)} className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <FormField
                                 control={form.control}
@@ -343,6 +375,24 @@ export function CompetitorDialog({
                                 </FormItem>
                             )}
                         />
+
+                        {/* Audit Trail — displayed for existing records */}
+                        {isEdit && competitor && (
+                            <div className="bg-card p-5 rounded-xl border-2 dark:border-white/10 shadow-sm space-y-4 animate-in fade-in">
+                                <div className="flex items-center gap-2 pb-2 border-b border-white/5">
+                                    <h3 className="text-xs font-bold uppercase tracking-widest text-primary/80">
+                                        Audit Trail
+                                    </h3>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <AuditField label="Created By" value={formatUserDisplay(competitor.created_by)} />
+                                    <AuditField label="Created At (PH time)" value={formatAuditTime(competitor.created_at)} />
+                                    <AuditField label="Last Updated By" value={formatUserDisplay(competitor.updated_by)} />
+                                    <AuditField label="Last Updated At (PH time)" value={formatAuditTime(competitor.updated_at)} />
+                                </div>
+                            </div>
+                        )}
 
                         <DialogFooter className="pt-2 gap-3 pb-2">
                             <Button

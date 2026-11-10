@@ -104,6 +104,11 @@ export function createColumns(
             cell: ({ row }) => formatDateTime(row.original.created_at ?? null),
         },
         {
+            accessorKey: "updated_at",
+            header: ({ column }) => <SortableHeader column={column} label="Last Updated" />,
+            cell: ({ row }) => formatDateTime(row.original.updated_at ?? null),
+        },
+        {
             id: "actions",
             header: "Action",
             enableSorting: false,

@@ -11,7 +11,6 @@ const STATIC_TOKEN =
 	process.env.DIRECTUS_TOKEN ||
 	process.env.NEXT_PUBLIC_DIRECTUS_STATIC_TOKEN;
 
-const COOKIE_NAME = "vos_access_token";
 const LIMIT = 1000;
 
 function decodeJwtPayload(token: string) {
@@ -28,15 +27,23 @@ function decodeJwtPayload(token: string) {
 	}
 }
 
+/**
+ * Resolves the authenticated user's ID from multiple possible session cookie tokens
+ * (vos_access_token, springboot_token, token) for reliable audit trail tracking.
+ */
 async function resolveUserId() {
 	const cookieStore = await cookies();
-	const token = cookieStore.get(COOKIE_NAME)?.value;
+	const token =
+		cookieStore.get("vos_access_token")?.value ||
+		cookieStore.get("springboot_token")?.value ||
+		cookieStore.get("token")?.value;
 	if (!token) return null;
 	const payload = decodeJwtPayload(token) || {};
 
 	const directId = payload.id || payload.user_id || payload.sub;
-	if (typeof directId === "number" || typeof directId === "string") {
-		return directId;
+	const numId = Number(directId);
+	if (Number.isInteger(numId) && numId > 0) {
+		return numId;
 	}
 
 	const email =
@@ -54,16 +61,15 @@ async function resolveUserId() {
 	);
 
 	const user = res?.data?.[0];
-	return user?.user_id || null;
+	return user?.user_id ? Number(user.user_id) : null;
 }
 
-function getTimestamp() {
-	const now = new Date();
-	const pad = (value: number) => String(value).padStart(2, "0");
-	return [
-		`${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`,
-		`${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`,
-	].join(" ");
+/**
+ * Returns Philippine wall clock (+8) formatted as naive YYYY-MM-DD HH:mm:ss string,
+ * matching Directus DATETIME schema expectations without timezone skew.
+ */
+function getManilaTimeString(): string {
+	return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Manila" });
 }
 
 async function dFetch(path: string, options?: RequestInit) {
@@ -151,15 +157,18 @@ export async function GET() {
 			const createdByDisplay = createdByKey
 				? userMap.get(createdByKey) || createdBy
 				: createdBy;
+			const updatedByDisplay = updatedByKey
+				? userMap.get(updatedByKey) || updatedBy
+				: updatedBy;
 
 			return {
 				...record,
 				created_by: createdByDisplay,
-				updated_by: updatedByKey
-					? userMap.get(updatedByKey) || updatedBy
-					: updatedBy,
+				updated_by: updatedByDisplay,
 				created_at:
-					record.created_at || record.date_created || record.createdAt,
+					record.created_at || record.date_created || record.createdAt || null,
+				updated_at:
+					record.updated_at || record.date_updated || record.updatedAt || null,
 			};
 		});
 
@@ -175,7 +184,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
 	const body = await req.json();
 	const userId = await resolveUserId();
-	const timestamp = getTimestamp();
+	const timestamp = getManilaTimeString();
 
 	const created = await dFetch(`/items/competitors`, {
 		method: "POST",
@@ -183,6 +192,8 @@ export async function POST(req: NextRequest) {
 			...body,
 			created_by: userId,
 			created_at: timestamp,
+			updated_by: userId,
+			updated_at: timestamp,
 		}),
 	});
 
@@ -193,10 +204,21 @@ export async function PATCH(req: NextRequest) {
 	const body = await req.json();
 	const { id, ...rest } = body;
 
+	// Protect creation audit trail from client mutation
+	delete rest.created_at;
+	delete rest.created_by;
+	delete rest.updated_at;
+	delete rest.updated_by;
+
+	const userId = await resolveUserId();
+	const timestamp = getManilaTimeString();
+
 	await dFetch(`/items/competitors/${id}`, {
 		method: "PATCH",
 		body: JSON.stringify({
 			...rest,
+			updated_by: userId,
+			updated_at: timestamp,
 		}),
 	});
 

@@ -14,8 +14,10 @@ export interface Competitor {
 	province?: string | null;
 	city?: string | null;
 	barangay?: string | null;
+	// Audit Trail columns
 	created_at?: string | null;
 	created_by?: SystemUser | number | string | null;
+	updated_at?: string | null;
 	updated_by?: SystemUser | number | string | null;
 }
 

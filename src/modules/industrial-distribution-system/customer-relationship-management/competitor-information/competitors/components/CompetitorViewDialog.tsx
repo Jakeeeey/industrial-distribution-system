@@ -13,13 +13,33 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
-import type { Competitor } from "../types";
-import { formatDateTime, toWebsiteHref } from "../utils/formatters";
+import type { Competitor, SystemUser } from "../types";
+import { toWebsiteHref } from "../utils/formatters";
 
 interface CompetitorViewDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     competitor?: Competitor | null;
+}
+
+/**
+ * Formats a user entity into a displayable string
+ */
+function formatUserDisplay(user: SystemUser | number | string | null | undefined): string {
+    if (!user) return "—";
+    if (typeof user === "object") {
+        const fullName = [user.user_fname, user.user_lname].filter(Boolean).join(" ").trim();
+        return fullName || (user.user_email ? String(user.user_email) : `User #${user.user_id}`);
+    }
+    return `User #${user}`;
+}
+
+/**
+ * Formats timestamps for wall-clock audit presentation
+ */
+function formatAuditTime(value: string | null | undefined): string {
+    if (!value) return "—";
+    return value.replace("T", " ").slice(0, 19);
 }
 
 export function CompetitorViewDialog({
@@ -67,11 +87,6 @@ export function CompetitorViewDialog({
             value: competitor?.barangay,
             icon: MapPin,
         },
-        {
-            label: "Created at",
-            value: formatDateTime(competitor?.created_at ?? null),
-            icon: Clock,
-        },
     ];
 
     return (
@@ -97,7 +112,7 @@ export function CompetitorViewDialog({
 
                 <Separator className="bg-primary/10" />
 
-                <div className="p-6">
+                <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {fields.map((field) => {
                             const Icon = field.icon;
@@ -120,6 +135,37 @@ export function CompetitorViewDialog({
                             );
                         })}
                     </div>
+
+                    {/* Audit Trail Section */}
+                    {competitor && (
+                        <div className="rounded-xl border-2 bg-muted/20 p-5 space-y-4">
+                            <div className="flex items-center gap-2 pb-2 border-b border-white/5">
+                                <Clock className="h-4 w-4 text-primary" />
+                                <h4 className="text-xs font-bold uppercase tracking-widest text-primary/80">
+                                    Audit Trail
+                                </h4>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Created By</p>
+                                    <p className="text-sm font-semibold text-foreground/90">{formatUserDisplay(competitor.created_by)}</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Created At (PH time)</p>
+                                    <p className="text-sm font-semibold text-foreground/90 tabular-nums">{formatAuditTime(competitor.created_at)}</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Last Updated By</p>
+                                    <p className="text-sm font-semibold text-foreground/90">{formatUserDisplay(competitor.updated_by)}</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Last Updated At (PH time)</p>
+                                    <p className="text-sm font-semibold text-foreground/90 tabular-nums">{formatAuditTime(competitor.updated_at)}</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <DialogFooter className="px-6 pb-6">
