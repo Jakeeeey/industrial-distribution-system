@@ -1,95 +1,111 @@
 "use client";
 
 import * as React from "react";
-import type { Branch, User } from "../types";
+import type { Branch, BranchSortKey, BranchStatusFilter, PaginationMeta } from "../types";
 import { fetchBranches } from "../providers/fetchProvider";
 
+const SEARCH_DEBOUNCE_MS = 350;
+
+const EMPTY_META: PaginationMeta = { total: 0, page: 1, limit: 10, totalPages: 1 };
+
+/**
+ * Custom hook to manage branch management state, filtering, sorting, and pagination.
+ * Resets page to 1 on filter or search updates to ensure results stay within valid bounds.
+ */
 export function useBranchManagement() {
     const [branches, setBranches] = React.useState<Branch[]>([]);
-    const [users, setUsers] = React.useState<User[]>([]);
+    const [meta, setMeta] = React.useState<PaginationMeta>(EMPTY_META);
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState<string | null>(null);
 
     // Filters
-    const [searchQuery, setSearchQuery] = React.useState("");
-    const [filterType, setFilterType] = React.useState<"All" | "Active" | "Inactive" | "Moving" | "Not Moving" | "Badstock">("All");
+    const [searchQuery, setSearchQueryRaw] = React.useState("");
+    const [filterType, setFilterTypeRaw] = React.useState<BranchStatusFilter>("All");
+    const [sortKey, setSortKeyRaw] = React.useState<BranchSortKey>("name");
 
     // Pagination
     const [currentPage, setCurrentPage] = React.useState(1);
-    const itemsPerPage = 10;
+    const [itemsPerPage, setItemsPerPageRaw] = React.useState(10);
+    const [reloadToken, setReloadToken] = React.useState(0);
 
-    const loadData = React.useCallback(async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const data = await fetchBranches();
-            setBranches(data.branches || []);
-            setUsers(data.users || []);
-        } catch (e) {
-            setError(e instanceof Error ? e.message : "Failed to load data");
-        } finally {
-            setLoading(false);
-        }
+    const [deferredQuery, setDeferredQuery] = React.useState("");
+    React.useEffect(() => {
+        const t = setTimeout(() => {
+            setDeferredQuery(searchQuery);
+            setCurrentPage(1);
+        }, SEARCH_DEBOUNCE_MS);
+        return () => clearTimeout(t);
+    }, [searchQuery]);
+
+    // Batched filter updates that reset currentPage to 1 synchronously
+    const setSearchQuery = React.useCallback((q: string) => {
+        setSearchQueryRaw(q);
+    }, []);
+
+    const setFilterType = React.useCallback((status: BranchStatusFilter) => {
+        setFilterTypeRaw(status);
+        setCurrentPage(1);
+    }, []);
+
+    const setSortKey = React.useCallback((sort: BranchSortKey) => {
+        setSortKeyRaw(sort);
+        setCurrentPage(1);
+    }, []);
+
+    const setItemsPerPage = React.useCallback((limit: number) => {
+        setItemsPerPageRaw(limit);
+        setCurrentPage(1);
     }, []);
 
     React.useEffect(() => {
-        loadData();
-    }, [loadData]);
+        let cancelled = false;
+        (async () => {
+            setLoading(true);
+            setError(null);
+            try {
+                const data = await fetchBranches({
+                    page: currentPage,
+                    limit: itemsPerPage,
+                    sort: sortKey,
+                    status: filterType,
+                    q: deferredQuery,
+                });
+                if (cancelled) return;
+                setBranches(data.branches || []);
+                setMeta(data.meta);
+            } catch (e) {
+                if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load data");
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [currentPage, itemsPerPage, sortKey, filterType, deferredQuery, reloadToken]);
 
-    // Reset to page 1 when search or filter changes
+    // Deleting the last row of the final page would otherwise strand the table on an empty page.
     React.useEffect(() => {
-        setCurrentPage(1);
-    }, [searchQuery, filterType]);
+        if (currentPage > meta.totalPages && meta.totalPages > 0) {
+            setCurrentPage(meta.totalPages);
+        }
+    }, [currentPage, meta.totalPages]);
 
-    const filteredBranches = React.useMemo(() => {
-        return branches.filter((b) => {
-            // Filter by status
-            const active = b.isActive === 1 || b.isActive === true;
-            const moving = b.isMoving === 1 || b.isMoving === true;
-            const badstock = b.isBadStock === 1 || b.isBadStock === true;
-
-            if (filterType === "Active") {
-                if (!active || badstock) return false;
-            } else if (filterType === "Inactive") {
-                if (active || badstock) return false;
-            } else if (filterType === "Moving") {
-                if (!moving || badstock) return false;
-            } else if (filterType === "Not Moving") {
-                if (moving || badstock) return false;
-            } else if (filterType === "Badstock") {
-                if (!badstock) return false;
-            }
-
-            // Search
-            if (searchQuery) {
-                const query = searchQuery.toLowerCase();
-                return (
-                    b.branch_name.toLowerCase().includes(query) ||
-                    b.branch_code.toLowerCase().includes(query) ||
-                    (b.state_province || "").toLowerCase().includes(query) ||
-                    (b.city || "").toLowerCase().includes(query)
-                );
-            }
-
-            return true;
-        });
-    }, [branches, searchQuery, filterType]);
-
-    const totalPages = Math.ceil(filteredBranches.length / itemsPerPage);
+    const refresh = React.useCallback(() => setReloadToken((t) => t + 1), []);
 
     return {
-        branches: filteredBranches,
-        users,
+        branches,
+        meta,
         loading,
         error,
         searchQuery,
         setSearchQuery,
         filterType,
         setFilterType,
+        sortKey,
+        setSortKey,
         currentPage,
         setCurrentPage,
-        totalPages,
         itemsPerPage,
-        refresh: loadData,
+        setItemsPerPage,
+        refresh,
     };
 }

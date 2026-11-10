@@ -37,23 +37,36 @@ import {
     ComboboxItem,
 } from "@/components/ui/combobox";
 
-import type { User, Province, City, Barangay, Branch } from "../types";
+import type { User, Province, City, Barangay, Branch, BranchAudit } from "../types";
 import {
     fetchProvinces,
     fetchCities,
     fetchBarangays,
     saveBranch,
     updateBranch,
+    fetchBranchUsers,
+    fetchBranchAudit,
 } from "../providers/fetchProvider";
 
+/**
+ * Validation schema for Branch registration and edits.
+ * Includes format and length validation for Philippine contact numbers.
+ */
 const formSchema = z.object({
     branch_name: z.string().min(1, "Branch Name is required"),
     branch_code: z.string().min(1, "Branch Code is required"),
     branch_head: z.string().min(1, "Branch Head is required"),
     branch_description: z.string().min(1, "Branch Description is required"),
-    phone_number: z.string().min(1, "Contact Number is required"),
+    phone_number: z
+        .string()
+        .min(1, "Contact Number is required")
+        .regex(/^[+0-9\s\-()]+$/, "Invalid contact number format. Only numbers, +, -, (), and spaces are allowed.")
+        .refine((val) => {
+            const digits = val.replace(/\D/g, "");
+            return digits.length >= 7 && digits.length <= 13;
+        }, "Contact number must be between 7 and 13 digits (e.g. 09171234567 or (02) 8123-4567)"),
     state_province: z.string().min(1, "Province is required"),
-    city: z.string().min(1, "City is required"),
+    city: z.string().min(1, "City / Municipality is required"),
     brgy: z.string().min(1, "Barangay is required"),
     postal_code: z.string().min(1, "Zip Code is required"),
     isMoving: z.boolean(),
@@ -63,18 +76,12 @@ const formSchema = z.object({
 interface BranchModalProps {
     isOpen: boolean;
     onClose: () => void;
-    users: User[];
     onSuccess: () => void;
     editingBranch?: Branch | null;
 }
 
 type FormValues = z.infer<typeof formSchema>;
 
-/**
- * ✅ Removes the browser’s black outline (focus outline)
- * ✅ Uses theme tokens: ring-ring + border-ring
- *    -> ring color automatically follows your theme’s primary/accent (via CSS vars)
- */
 const inputBase = "h-9 bg-background border-input transition-all";
 const inputFocus =
     "outline-none focus:outline-none focus-visible:outline-none " +
@@ -89,38 +96,143 @@ const selectFocus =
     "focus:ring-2 focus:ring-ring focus:ring-offset-0 " +
     "focus:border-ring";
 
-export function BranchModal({ isOpen, onClose, users, onSuccess, editingBranch }: BranchModalProps) {
+interface SearchableSelectOption {
+    value: string;
+    label: string;
+}
+
+interface SearchableSelectProps {
+    value: string;
+    onValueChange: (value: string) => void;
+    options: SearchableSelectOption[];
+    placeholder?: string;
+    disabled?: boolean;
+    loading?: boolean;
+    emptyText?: string;
+    className?: string;
+}
+
+/**
+ * Reusable searchable combobox select with clear triggers, focus select,
+ * and reliable query reset on blur/close.
+ */
+function SearchableSelect({
+    value,
+    onValueChange,
+    options,
+    placeholder = "Select...",
+    disabled = false,
+    loading = false,
+    emptyText = "No options found.",
+    className,
+}: SearchableSelectProps) {
+    const [query, setQuery] = React.useState("");
+    const [open, setOpen] = React.useState(false);
+
+    // Selected option label displayed when dropdown is closed
+    const selectedOption = React.useMemo(
+        () => options.find((o) => o.value.toLowerCase() === value.toLowerCase()),
+        [options, value]
+    );
+    const selectedLabel = selectedOption?.label ?? "";
+
+    // Reset filter query when dropdown closes so next open shows the entire list
+    const handleOpenChange = React.useCallback((nextOpen: boolean) => {
+        setOpen(nextOpen);
+        if (!nextOpen) {
+            setQuery("");
+        }
+    }, []);
+
+    // Filter options based on typed input
+    const filteredOptions = React.useMemo(() => {
+        const q = query.trim().toLowerCase();
+        if (!q) return options;
+        return options.filter((o) => o.label.toLowerCase().includes(q));
+    }, [options, query]);
+
+    return (
+        <Combobox
+            value={value}
+            onValueChange={(val) => {
+                onValueChange(val ?? "");
+                setQuery("");
+            }}
+            open={open}
+            onOpenChange={handleOpenChange}
+            openOnInputClick
+            disabled={disabled || loading}
+        >
+            <ComboboxInput
+                placeholder={loading ? "Loading..." : placeholder}
+                value={open ? query : selectedLabel}
+                onChange={(e) => setQuery(e.target.value)}
+                onFocus={(e) => {
+                    if (!open) setOpen(true);
+                    (e.target as HTMLInputElement).select();
+                }}
+                disabled={disabled || loading}
+                showTrigger
+                showClear={!!value && !disabled && !loading}
+                className={cn(selectBase, selectFocus, className)}
+            />
+            <ComboboxContent 
+                className="z-[9999] min-w-[220px] max-h-[280px] overflow-hidden shadow-2xl bg-popover border border-white/10"
+                onPointerDown={(e) => e.stopPropagation()}
+            >
+                <ComboboxList 
+                    className="max-h-[260px] overflow-y-auto"
+                    onWheel={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
+                >
+                    {loading ? (
+                        <div className="py-6 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                            Loading options...
+                        </div>
+                    ) : filteredOptions.length === 0 ? (
+                        <div className="py-6 text-center text-xs text-muted-foreground">
+                            {emptyText}
+                        </div>
+                    ) : (
+                        filteredOptions.map((opt) => (
+                            <ComboboxItem 
+                                key={opt.value} 
+                                value={opt.value}
+                                className="cursor-pointer text-xs py-2 px-3 hover:bg-primary/10 transition-colors"
+                            >
+                                {opt.label}
+                            </ComboboxItem>
+                        ))
+                    )}
+                </ComboboxList>
+            </ComboboxContent>
+        </Combobox>
+    );
+}
+
+function AuditField({ label, value }: { label: string; value: string }) {
+    return (
+        <div className="space-y-1">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">{label}</p>
+            <p className="text-sm font-medium text-foreground/80 tabular-nums">{value}</p>
+        </div>
+    );
+}
+
+export function BranchModal({ isOpen, onClose, onSuccess, editingBranch }: BranchModalProps) {
     const [provinces, setProvinces] = React.useState<Province[]>([]);
     const [cities, setCities] = React.useState<City[]>([]);
     const [barangays, setBarangays] = React.useState<Barangay[]>([]);
+
+    const [isLoadingProvinces, setIsLoadingProvinces] = React.useState(false);
+    const [isLoadingCities, setIsLoadingCities] = React.useState(false);
+    const [isLoadingBarangays, setIsLoadingBarangays] = React.useState(false);
+
+    const [users, setUsers] = React.useState<User[]>([]);
+    const [isLoadingUsers, setIsLoadingUsers] = React.useState(false);
     const [isSubmitting, setIsSubmitting] = React.useState(false);
-
-    const [branchHeadQuery, setBranchHeadQuery] = React.useState("");
-    const [provinceQuery, setProvinceQuery] = React.useState("");
-    const [cityQuery, setCityQuery] = React.useState("");
-    const [barangayQuery, setBarangayQuery] = React.useState("");
-
-    const filteredUsers = React.useMemo(() => {
-        if (!branchHeadQuery) return users;
-        return users.filter(u => 
-            `${u.user_fname} ${u.user_lname}`.toLowerCase().includes(branchHeadQuery.toLowerCase())
-        );
-    }, [users, branchHeadQuery]);
-
-    const filteredProvinces = React.useMemo(() => {
-        if (!provinceQuery) return provinces;
-        return provinces.filter(p => p.name.toLowerCase().includes(provinceQuery.toLowerCase()));
-    }, [provinces, provinceQuery]);
-
-    const filteredCities = React.useMemo(() => {
-        if (!cityQuery) return cities;
-        return cities.filter(c => c.name.toLowerCase().includes(cityQuery.toLowerCase()));
-    }, [cities, cityQuery]);
-
-    const filteredBarangays = React.useMemo(() => {
-        if (!barangayQuery) return barangays;
-        return barangays.filter(b => b.name.toLowerCase().includes(barangayQuery.toLowerCase()));
-    }, [barangays, barangayQuery]);
+    const [audit, setAudit] = React.useState<BranchAudit | null>(null);
 
     const form = useForm<FormValues>({
         resolver: zodResolver(formSchema),
@@ -139,125 +251,227 @@ export function BranchModal({ isOpen, onClose, users, onSuccess, editingBranch }
         },
     });
 
-    // Fetch provinces only once when modal opens
+    // Top-level memoized options for all dropdowns to avoid hook execution order issues
+    const userOptions = React.useMemo(() => {
+        return users.map((u) => ({
+            value: String(u.user_id),
+            label: [u.user_fname, u.user_lname].filter(Boolean).join(" ").trim() || `User #${u.user_id}`,
+        }));
+    }, [users]);
+
+    const provinceOptions = React.useMemo(() => {
+        return provinces.map((p) => ({
+            value: p.name,
+            label: p.name,
+        }));
+    }, [provinces]);
+
+    const cityOptions = React.useMemo(() => {
+        return cities.map((c) => ({
+            value: c.name,
+            label: c.name,
+        }));
+    }, [cities]);
+
+    const barangayOptions = React.useMemo(() => {
+        return barangays.map((b) => ({
+            value: b.name,
+            label: b.name,
+        }));
+    }, [barangays]);
+
+    // Fetch provinces when modal opens
     React.useEffect(() => {
         if (isOpen && provinces.length === 0) {
-            fetchProvinces().then(setProvinces);
+            setIsLoadingProvinces(true);
+            fetchProvinces()
+                .then(setProvinces)
+                .finally(() => setIsLoadingProvinces(false));
         }
     }, [isOpen, provinces.length]);
 
-    // Handle form reset and editing branch data loading
+    // Fetch managers when modal opens
     React.useEffect(() => {
-        if (isOpen) {
-            if (editingBranch) {
-                // Pre-load cities and barangays if editing
-                const loadLocationData = async () => {
-                    const province = provinces.find(p => p.name === editingBranch.state_province);
-                    if (province) {
-                        const cityData = await fetchCities(province.code);
-                        setCities(cityData);
-
-                        const city = cityData.find((c: City) => c.name === editingBranch.city);
-                        if (city) {
-                            const brgyData = await fetchBarangays(city.code);
-                            setBarangays(brgyData);
-                        }
-                    }
-                };
-
-                form.reset({
-                    branch_name: editingBranch.branch_name,
-                    branch_code: editingBranch.branch_code,
-                    branch_head: editingBranch.branch_head.toString(),
-                    branch_description: editingBranch.branch_description,
-                    phone_number: editingBranch.phone_number || "",
-                    state_province: editingBranch.state_province || "",
-                    city: editingBranch.city || "",
-                    brgy: editingBranch.brgy || "",
-                    postal_code: editingBranch.postal_code || "",
-                    isMoving: editingBranch.isMoving === 1 || editingBranch.isMoving === true,
-                    isActive: editingBranch.isActive === 1 || editingBranch.isActive === true,
-                });
-
-                if (provinces.length > 0) {
-                    loadLocationData();
-                }
-            } else {
-                form.reset({
-                    branch_name: "",
-                    branch_code: "",
-                    branch_head: "",
-                    branch_description: "",
-                    phone_number: "",
-                    state_province: "",
-                    city: "",
-                    brgy: "",
-                    postal_code: "",
-                    isMoving: false,
-                    isActive: true,
-                });
-            }
+        if (isOpen && users.length === 0) {
+            setIsLoadingUsers(true);
+            fetchBranchUsers()
+                .then(setUsers)
+                .catch(() => setUsers([]))
+                .finally(() => setIsLoadingUsers(false));
         }
-    }, [isOpen, editingBranch, provinces, form]);
+    }, [isOpen, users.length]);
 
-    // Handle Province Change -> Load Cities
-    const onProvinceChange = async (provinceCode: string | null) => {
-        const provinceName = provinces.find((p) => p.code === provinceCode)?.name || "";
-        form.setValue("state_province", provinceName);
-        form.setValue("city", "");
-        form.setValue("brgy", "");
-        form.setValue("postal_code", "");
+    // Fetch audit trail for existing branch
+    React.useEffect(() => {
+        if (!isOpen || !editingBranch) {
+            setAudit(null);
+            return;
+        }
+        let cancelled = false;
+        fetchBranchAudit(editingBranch.id)
+            .then((data) => { if (!cancelled) setAudit(data); })
+            .catch(() => { if (!cancelled) setAudit(null); });
+        return () => { cancelled = true; };
+    }, [isOpen, editingBranch]);
+
+    // Initialise or reset form values strictly when modal opens or target editingBranch changes
+    React.useEffect(() => {
+        if (!isOpen) return;
+
+        if (editingBranch) {
+            const initialHead = editingBranch.branch_head != null ? String(editingBranch.branch_head) : "";
+            form.reset({
+                branch_name: editingBranch.branch_name || "",
+                branch_code: editingBranch.branch_code || "",
+                branch_head: initialHead,
+                branch_description: editingBranch.branch_description || "",
+                phone_number: editingBranch.phone_number || "",
+                state_province: editingBranch.state_province || "",
+                city: editingBranch.city || "",
+                brgy: editingBranch.brgy || "",
+                postal_code: editingBranch.postal_code || "",
+                isMoving: editingBranch.isMoving === 1 || editingBranch.isMoving === true,
+                isActive: editingBranch.isActive === 1 || editingBranch.isActive === true,
+            });
+        } else {
+            form.reset({
+                branch_name: "",
+                branch_code: "",
+                branch_head: "",
+                branch_description: "",
+                phone_number: "",
+                state_province: "",
+                city: "",
+                brgy: "",
+                postal_code: "",
+                isMoving: false,
+                isActive: true,
+            });
+            setCities([]);
+            setBarangays([]);
+        }
+    }, [isOpen, editingBranch, form]);
+
+    // Pre-populate cities and barangays cascade for an existing branch being edited
+    React.useEffect(() => {
+        if (!isOpen || !editingBranch || provinces.length === 0) return;
+
+        let cancelled = false;
+        const loadLocationCascade = async () => {
+            const currentProvinceName = editingBranch.state_province;
+            if (!currentProvinceName) return;
+
+            const provObj = provinces.find(
+                (p) => p.name.toLowerCase() === currentProvinceName.toLowerCase()
+            );
+            if (!provObj) return;
+
+            setIsLoadingCities(true);
+            try {
+                const cityData = await fetchCities(provObj.code);
+                if (cancelled) return;
+                setCities(cityData);
+
+                const currentCityName = editingBranch.city;
+                if (!currentCityName) return;
+
+                const cityObj = cityData.find(
+                    (c) => c.name.toLowerCase() === currentCityName.toLowerCase()
+                );
+                if (!cityObj) return;
+
+                setIsLoadingBarangays(true);
+                try {
+                    const brgyData = await fetchBarangays(cityObj.code);
+                    if (cancelled) return;
+                    setBarangays(brgyData);
+                } finally {
+                    if (!cancelled) setIsLoadingBarangays(false);
+                }
+            } finally {
+                if (!cancelled) setIsLoadingCities(false);
+            }
+        };
+
+        loadLocationCascade();
+        return () => {
+            cancelled = true;
+        };
+    }, [isOpen, editingBranch, provinces]);
+
+    // Handle Province selection -> load corresponding cities
+    const onProvinceChange = async (provinceName: string) => {
+        form.setValue("state_province", provinceName, { shouldValidate: true, shouldDirty: true });
+        form.setValue("city", "", { shouldValidate: true, shouldDirty: true });
+        form.setValue("brgy", "", { shouldValidate: true, shouldDirty: true });
+        form.setValue("postal_code", "", { shouldValidate: true, shouldDirty: true });
         setCities([]);
         setBarangays([]);
 
-        if (!provinceCode) {
-            form.setValue("state_province", "");
-            return;
-        }
+        if (!provinceName) return;
 
-        if (provinceCode) {
-            const data = await fetchCities(provinceCode);
+        const prov = provinces.find((p) => p.name.toLowerCase() === provinceName.toLowerCase());
+        if (!prov) return;
+
+        setIsLoadingCities(true);
+        try {
+            const data = await fetchCities(prov.code);
             setCities(data);
+        } finally {
+            setIsLoadingCities(false);
         }
     };
 
-    // Handle City Change -> Load Barangays
-    const onCityChange = async (cityCode: string | null) => {
-        const cityName = cities.find((c) => c.code === cityCode)?.name || "";
-        form.setValue("city", cityName);
-        form.setValue("brgy", "");
-        form.setValue("postal_code", "");
+    // Handle City selection -> load corresponding barangays
+    const onCityChange = async (cityName: string) => {
+        form.setValue("city", cityName, { shouldValidate: true, shouldDirty: true });
+        form.setValue("brgy", "", { shouldValidate: true, shouldDirty: true });
+        form.setValue("postal_code", "", { shouldValidate: true, shouldDirty: true });
         setBarangays([]);
 
-        if (!cityCode) {
-            form.setValue("city", "");
-            return;
-        }
+        if (!cityName) return;
 
-        if (cityCode) {
-            const data = await fetchBarangays(cityCode);
+        const cityObj = cities.find((c) => c.name.toLowerCase() === cityName.toLowerCase());
+        if (!cityObj) return;
+
+        setIsLoadingBarangays(true);
+        try {
+            const data = await fetchBarangays(cityObj.code);
             setBarangays(data);
+        } finally {
+            setIsLoadingBarangays(false);
         }
     };
 
-    // Handle Barangay Change -> Remove Auto-populate Zip Code
-    const onBarangayChange = (barangayCode: string | null) => {
-        if (!barangayCode) {
-            form.setValue("brgy", "");
-            return;
-        }
-        const brgyName = barangays.find((b) => b.code === barangayCode)?.name || "";
-        form.setValue("brgy", brgyName);
+    // Handle Barangay selection
+    const onBarangayChange = (barangayName: string) => {
+        form.setValue("brgy", barangayName, { shouldValidate: true, shouldDirty: true });
+    };
+
+    const formatAuditTime = (value: string | null) => (value ? value.replace("T", " ").slice(0, 19) : "—");
+    const formatAuditUser = (id: number | null) => {
+        if (id === null || id === undefined) return "—";
+        const user = users.find((u) => u.user_id === id);
+        return user ? [user.user_fname, user.user_lname].filter(Boolean).join(" ").trim() || `User #${id}` : `User #${id}`;
     };
 
     async function onSubmit(values: FormValues) {
         setIsSubmitting(true);
         try {
-            const selectedUser = users.find(u =>
-                `${u.user_fname} ${u.user_lname}` === values.branch_head ||
-                u.user_id.toString() === values.branch_head
-            );
-            const branchHeadId = selectedUser ? selectedUser.user_id : parseInt(values.branch_head) || 0;
+            // Resolve numeric branch head ID
+            let branchHeadId = parseInt(values.branch_head, 10);
+            if (isNaN(branchHeadId) || branchHeadId <= 0) {
+                const found = users.find(
+                    (u) => [u.user_fname, u.user_lname].filter(Boolean).join(" ").trim() === values.branch_head
+                );
+                branchHeadId = found ? found.user_id : 0;
+            }
+
+            if (!branchHeadId) {
+                toast.error("Please select a valid Branch Head");
+                setIsSubmitting(false);
+                return;
+            }
 
             if (editingBranch) {
                 await updateBranch(editingBranch.id, {
@@ -274,7 +488,6 @@ export function BranchModal({ isOpen, onClose, users, onSuccess, editingBranch }
             }
             onSuccess();
             onClose();
-            form.reset();
         } catch (error) {
             toast.error(error instanceof Error ? error.message : `Failed to ${editingBranch ? "update" : "register"} branch`);
         } finally {
@@ -288,7 +501,6 @@ export function BranchModal({ isOpen, onClose, users, onSuccess, editingBranch }
             .filter(Boolean);
 
         if (messages.length > 0) {
-            // Uniq messages to avoid double toasts for same error type if any
             const uniqueMessages = Array.from(new Set(messages));
             uniqueMessages.forEach((msg) => toast.error(msg as string));
         }
@@ -322,7 +534,7 @@ export function BranchModal({ isOpen, onClose, users, onSuccess, editingBranch }
                                         render={({ field }) => (
                                             <FormItem className="space-y-1.5">
                                                 <FormLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
-                                                    Branch Name
+                                                    Branch Name *
                                                 </FormLabel>
                                                 <FormControl>
                                                     <Input
@@ -342,7 +554,7 @@ export function BranchModal({ isOpen, onClose, users, onSuccess, editingBranch }
                                         render={({ field }) => (
                                             <FormItem className="space-y-1.5">
                                                 <FormLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
-                                                    Branch Code
+                                                    Branch Code *
                                                 </FormLabel>
                                                 <FormControl>
                                                     <Input
@@ -362,54 +574,17 @@ export function BranchModal({ isOpen, onClose, users, onSuccess, editingBranch }
                                         render={({ field }) => (
                                             <FormItem className="space-y-1.5">
                                                 <FormLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
-                                                    Branch Head
+                                                    Branch Head *
                                                 </FormLabel>
                                                 <FormControl>
-                                                    {(() => {
-                                                        const selectedUser = users.find(u => 
-                                                            u.user_id.toString() === field.value || 
-                                                            `${u.user_fname} ${u.user_lname}` === field.value
-                                                        );
-                                                        const displayValue = selectedUser ? `${selectedUser.user_fname} ${selectedUser.user_lname}` : "";
-                                                        
-                                                        return (
-                                                            <Combobox
-                                                                value={displayValue}
-                                                                onValueChange={field.onChange}
-                                                                onInputValueChange={(val) => setBranchHeadQuery(val)}
-                                                            >
-                                                                <ComboboxInput 
-                                                                    placeholder="Assign a manager" 
-                                                                    className={cn(selectBase, selectFocus)} 
-                                                                />
-                                                                <ComboboxContent 
-                                                                    className="z-[9999] !pointer-events-auto h-[300px] !overflow-hidden"
-                                                                    onPointerDown={(e) => e.stopPropagation()}
-                                                                >
-                                                                    <ComboboxList 
-                                                                        className="h-full !overflow-y-auto !pointer-events-auto"
-                                                                        onWheel={(e) => e.stopPropagation()}
-                                                                        onPointerDown={(e) => e.stopPropagation()}
-                                                                    >
-                                                                        {filteredUsers.length === 0 ? (
-                                                                            <div className="py-6 text-center text-sm text-muted-foreground">
-                                                                                No managers found.
-                                                                            </div>
-                                                                        ) : (
-                                                                            filteredUsers.map((user) => (
-                                                                                <ComboboxItem 
-                                                                                    key={user.user_id} 
-                                                                                    value={`${user.user_fname} ${user.user_lname}`}
-                                                                                >
-                                                                                    {user.user_fname} {user.user_lname}
-                                                                                </ComboboxItem>
-                                                                            ))
-                                                                        )}
-                                                                    </ComboboxList>
-                                                                </ComboboxContent>
-                                                            </Combobox>
-                                                        );
-                                                    })()}
+                                                    <SearchableSelect
+                                                        value={field.value}
+                                                        onValueChange={field.onChange}
+                                                        options={userOptions}
+                                                        placeholder="Assign a manager"
+                                                        loading={isLoadingUsers}
+                                                        emptyText="No managers found."
+                                                    />
                                                 </FormControl>
                                                 <FormMessage className="text-[10px]" />
                                             </FormItem>
@@ -422,12 +597,17 @@ export function BranchModal({ isOpen, onClose, users, onSuccess, editingBranch }
                                         render={({ field }) => (
                                             <FormItem className="space-y-1.5">
                                                 <FormLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
-                                                    Contact Number
+                                                    Contact Number *
                                                 </FormLabel>
                                                 <FormControl>
                                                     <Input
-                                                        placeholder="Enter phone/mobile"
+                                                        placeholder="e.g. 09171234567 or (02) 8123-4567"
                                                         {...field}
+                                                        onChange={(e) => {
+                                                            // Sanitize contact number input
+                                                            const sanitized = e.target.value.replace(/[^0-9+\s\-()]/g, "");
+                                                            field.onChange(sanitized);
+                                                        }}
                                                         className={cn(inputBase, inputFocus)}
                                                     />
                                                 </FormControl>
@@ -443,7 +623,7 @@ export function BranchModal({ isOpen, onClose, users, onSuccess, editingBranch }
                                             render={({ field }) => (
                                                 <FormItem className="space-y-1.5">
                                                     <FormLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
-                                                        Branch Description
+                                                        Branch Description *
                                                     </FormLabel>
                                                     <FormControl>
                                                         <Textarea
@@ -475,44 +655,17 @@ export function BranchModal({ isOpen, onClose, users, onSuccess, editingBranch }
                                         render={({ field }) => (
                                             <FormItem className="space-y-1.5">
                                                 <FormLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
-                                                    Province
+                                                    Province *
                                                 </FormLabel>
                                                 <FormControl>
-                                                    <Combobox
+                                                    <SearchableSelect
                                                         value={field.value}
-                                                        onValueChange={(val) => {
-                                                            const code = provinces.find(p => p.name === val)?.code;
-                                                            onProvinceChange(code || null);
-                                                        }}
-                                                        onInputValueChange={(val) => setProvinceQuery(val)}
-                                                    >
-                                                        <ComboboxInput 
-                                                            placeholder="Select Province" 
-                                                            className={cn(selectBase, selectFocus)} 
-                                                        />
-                                                        <ComboboxContent 
-                                                            className="z-[9999] !pointer-events-auto h-[300px] !overflow-hidden"
-                                                            onPointerDown={(e) => e.stopPropagation()}
-                                                        >
-                                                            <ComboboxList 
-                                                                className="h-full !overflow-y-auto !pointer-events-auto"
-                                                                onWheel={(e) => e.stopPropagation()}
-                                                                onPointerDown={(e) => e.stopPropagation()}
-                                                            >
-                                                                {filteredProvinces.length === 0 ? (
-                                                                    <div className="py-6 text-center text-sm text-muted-foreground">
-                                                                        No provinces found.
-                                                                    </div>
-                                                                ) : (
-                                                                    filteredProvinces.map((p) => (
-                                                                        <ComboboxItem key={p.code} value={p.name}>
-                                                                            {p.name}
-                                                                        </ComboboxItem>
-                                                                    ))
-                                                                )}
-                                                            </ComboboxList>
-                                                        </ComboboxContent>
-                                                    </Combobox>
+                                                        onValueChange={onProvinceChange}
+                                                        options={provinceOptions}
+                                                        placeholder="Select Province"
+                                                        loading={isLoadingProvinces}
+                                                        emptyText="No provinces found."
+                                                    />
                                                 </FormControl>
                                                 <FormMessage className="text-[10px]" />
                                             </FormItem>
@@ -525,45 +678,24 @@ export function BranchModal({ isOpen, onClose, users, onSuccess, editingBranch }
                                         render={({ field }) => (
                                             <FormItem className="space-y-1.5">
                                                 <FormLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
-                                                    City / Municipality
+                                                    City / Municipality *
                                                 </FormLabel>
                                                 <FormControl>
-                                                    <Combobox
+                                                    <SearchableSelect
                                                         value={field.value}
-                                                        onValueChange={(val) => {
-                                                            const code = cities.find(c => c.name === val)?.code;
-                                                            onCityChange(code || null);
-                                                        }}
-                                                        onInputValueChange={(val) => setCityQuery(val)}
-                                                    >
-                                                        <ComboboxInput 
-                                                            placeholder="Select City" 
-                                                            disabled={!cities.length}
-                                                            className={cn(selectBase, selectFocus)} 
-                                                        />
-                                                        <ComboboxContent 
-                                                            className="z-[9999] !pointer-events-auto h-[300px] !overflow-hidden"
-                                                            onPointerDown={(e) => e.stopPropagation()}
-                                                        >
-                                                            <ComboboxList 
-                                                                className="h-full !overflow-y-auto !pointer-events-auto"
-                                                                onWheel={(e) => e.stopPropagation()}
-                                                                onPointerDown={(e) => e.stopPropagation()}
-                                                            >
-                                                                {filteredCities.length === 0 ? (
-                                                                    <div className="py-6 text-center text-sm text-muted-foreground">
-                                                                        No cities found.
-                                                                    </div>
-                                                                ) : (
-                                                                    filteredCities.map((c) => (
-                                                                        <ComboboxItem key={c.code} value={c.name}>
-                                                                            {c.name}
-                                                                        </ComboboxItem>
-                                                                    ))
-                                                                )}
-                                                            </ComboboxList>
-                                                        </ComboboxContent>
-                                                    </Combobox>
+                                                        onValueChange={onCityChange}
+                                                        options={cityOptions}
+                                                        placeholder={
+                                                            !form.watch("state_province")
+                                                                ? "Select Province first"
+                                                                : isLoadingCities
+                                                                ? "Loading cities..."
+                                                                : "Select City / Municipality"
+                                                        }
+                                                        disabled={!form.watch("state_province") || isLoadingCities}
+                                                        loading={isLoadingCities}
+                                                        emptyText="No cities found."
+                                                    />
                                                 </FormControl>
                                                 <FormMessage className="text-[10px]" />
                                             </FormItem>
@@ -576,45 +708,24 @@ export function BranchModal({ isOpen, onClose, users, onSuccess, editingBranch }
                                         render={({ field }) => (
                                             <FormItem className="space-y-1.5">
                                                 <FormLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
-                                                    Barangay
+                                                    Barangay *
                                                 </FormLabel>
                                                 <FormControl>
-                                                    <Combobox
+                                                    <SearchableSelect
                                                         value={field.value}
-                                                        onValueChange={(val) => {
-                                                            const code = barangays.find(b => b.name === val)?.code;
-                                                            onBarangayChange(code || null);
-                                                        }}
-                                                        onInputValueChange={(val) => setBarangayQuery(val)}
-                                                    >
-                                                        <ComboboxInput 
-                                                            placeholder="Select Barangay" 
-                                                            disabled={!barangays.length}
-                                                            className={cn(selectBase, selectFocus)} 
-                                                        />
-                                                        <ComboboxContent 
-                                                            className="z-[9999] !pointer-events-auto h-[300px] !overflow-hidden"
-                                                            onPointerDown={(e) => e.stopPropagation()}
-                                                        >
-                                                            <ComboboxList 
-                                                                className="h-full !overflow-y-auto !pointer-events-auto"
-                                                                onWheel={(e) => e.stopPropagation()}
-                                                                onPointerDown={(e) => e.stopPropagation()}
-                                                            >
-                                                                {filteredBarangays.length === 0 ? (
-                                                                    <div className="py-6 text-center text-sm text-muted-foreground">
-                                                                        No barangays found.
-                                                                    </div>
-                                                                ) : (
-                                                                    filteredBarangays.map((b) => (
-                                                                        <ComboboxItem key={b.code} value={b.name}>
-                                                                            {b.name}
-                                                                        </ComboboxItem>
-                                                                    ))
-                                                                )}
-                                                            </ComboboxList>
-                                                        </ComboboxContent>
-                                                    </Combobox>
+                                                        onValueChange={onBarangayChange}
+                                                        options={barangayOptions}
+                                                        placeholder={
+                                                            !form.watch("city")
+                                                                ? "Select City first"
+                                                                : isLoadingBarangays
+                                                                ? "Loading barangays..."
+                                                                : "Select Barangay"
+                                                        }
+                                                        disabled={!form.watch("city") || isLoadingBarangays}
+                                                        loading={isLoadingBarangays}
+                                                        emptyText="No barangays found."
+                                                    />
                                                 </FormControl>
                                                 <FormMessage className="text-[10px]" />
                                             </FormItem>
@@ -627,7 +738,7 @@ export function BranchModal({ isOpen, onClose, users, onSuccess, editingBranch }
                                         render={({ field }) => (
                                             <FormItem className="space-y-1.5">
                                                 <FormLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
-                                                    Zip Code
+                                                    Zip Code *
                                                 </FormLabel>
                                                 <FormControl>
                                                     <Input
@@ -683,6 +794,24 @@ export function BranchModal({ isOpen, onClose, users, onSuccess, editingBranch }
                                     )}
                                 />
                             </div>
+
+                            {/* Audit Trail — existing records only */}
+                            {editingBranch && (
+                                <div className="bg-card p-5 rounded-lg border dark:border-white/10 shadow-sm space-y-4">
+                                    <div className="flex items-center gap-2 pb-2 border-b border-white/5">
+                                        <h3 className="text-xs font-bold uppercase tracking-widest text-primary/80">
+                                            Audit Trail
+                                        </h3>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <AuditField label="Created By" value={formatAuditUser(audit?.created_by ?? null)} />
+                                        <AuditField label="Created At (PH time)" value={formatAuditTime(audit?.created_at ?? null)} />
+                                        <AuditField label="Last Updated By" value={formatAuditUser(audit?.updated_by ?? null)} />
+                                        <AuditField label="Last Updated At (PH time)" value={formatAuditTime(audit?.updated_at ?? null)} />
+                                    </div>
+                                </div>
+                            )}
                         </form>
                     </Form>
                 </div>

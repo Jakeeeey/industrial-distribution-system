@@ -9,20 +9,36 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
-import { Edit2, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+    Edit2,
+    ChevronLeft,
+    ChevronRight,
+    ChevronsLeft,
+    ChevronsRight,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { Branch, User } from "../types";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import type { Branch } from "../types";
+import { PAGE_SIZE_OPTIONS } from "../types";
 
 interface BranchTableProps {
     branches: Branch[];
-    users: User[];
     loading: boolean;
     onEdit: (branch: Branch) => void;
     currentPage: number;
     totalPages: number;
+    totalCount: number;
+    itemsPerPage: number;
     onPageChange: (page: number) => void;
+    onItemsPerPageChange: (itemsPerPage: number) => void;
 }
 
 function BranchTableSkeleton() {
@@ -75,19 +91,15 @@ function BranchTableSkeleton() {
 
 export function BranchTable({
     branches,
-    users,
     loading,
     onEdit,
     currentPage,
     totalPages,
-    onPageChange
+    totalCount,
+    itemsPerPage,
+    onPageChange,
+    onItemsPerPageChange
 }: BranchTableProps) {
-    const userMap = React.useMemo(() => {
-        const map = new Map<number, User>();
-        users.forEach((u) => map.set(u.user_id, u));
-        return map;
-    }, [users]);
-
     if (loading) {
         return <BranchTableSkeleton />;
     }
@@ -95,6 +107,9 @@ export function BranchTable({
     if (branches.length === 0) {
         return <div className="p-8 text-center text-muted-foreground text-sm font-medium">No branches found.</div>;
     }
+
+    const rangeFrom = (currentPage - 1) * itemsPerPage + 1;
+    const rangeTo = Math.min(currentPage * itemsPerPage, totalCount);
 
     return (
         <div className="flex flex-col gap-4">
@@ -113,9 +128,8 @@ export function BranchTable({
                     </TableHeader>
                     <TableBody>
                         {branches.map((branch) => {
-                            const head = userMap.get(branch.branch_head);
-                            const contactPerson = head ? `${head.user_fname} ${head.user_lname}` : "N/A";
-                            const emailAddress = head ? head.user_email : null;
+                            const contactPerson = branch.branch_head_name || "N/A";
+                            const emailAddress = branch.branch_head_email;
                             const phoneNumber = branch.phone_number;
 
                             return (
@@ -161,8 +175,8 @@ export function BranchTable({
                                         )}
                                     </TableCell>
                                     <TableCell className="text-right pr-6">
-                                        <div className="flex justify-end gap-2">
-                                            {branch.isMoving ? (
+                                        <div className="flex justify-end items-center gap-1.5 flex-wrap">
+                                            {branch.isMoving === 1 || branch.isMoving === true ? (
                                                 <Badge variant="outline" className="text-[9px] uppercase font-black tracking-tighter bg-amber-500/10 text-amber-500 border-amber-500/20">
                                                     Moving
                                                 </Badge>
@@ -171,11 +185,14 @@ export function BranchTable({
                                                     Not Moving
                                                 </Badge>
                                             )}
-                                            {branch.isBadStock ? (
+                                            {/* Badstock indicator: Shown alongside Active/Inactive so status remains clear */}
+                                            {branch.isBadStock === 1 || branch.isBadStock === true || String(branch.branch_code).endsWith("-BS") ? (
                                                 <Badge variant="destructive" className="text-[9px] uppercase font-black tracking-tighter shadow-sm">
                                                     Badstock
                                                 </Badge>
-                                            ) : branch.isActive === 1 || branch.isActive === true ? (
+                                            ) : null}
+                                            {/* Active / Inactive status indicator */}
+                                            {branch.isActive === 1 || branch.isActive === true ? (
                                                 <Badge variant="default" className="text-[9px] uppercase font-black tracking-tighter !bg-emerald-600 !text-white hover:!bg-emerald-700 dark:!bg-emerald-500 shadow-sm shadow-emerald-500/20 border-none">
                                                     Active
                                                 </Badge>
@@ -206,12 +223,42 @@ export function BranchTable({
             </div>
 
             {/* Pagination Controls */}
-            {totalPages > 1 && (
-                <div className="flex items-center justify-between px-2 py-4">
-                    <p className="text-xs text-muted-foreground font-medium">
-                        Showing page <span className="text-foreground">{currentPage}</span> of <span className="text-foreground">{totalPages}</span>
-                    </p>
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-2 py-4">
+                <p className="text-xs text-muted-foreground font-medium">
+                    <span className="text-foreground">{rangeFrom}–{rangeTo}</span> of{" "}
+                    <span className="text-foreground">{totalCount}</span> branches
+                </p>
+
+                <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground font-medium">Rows per page</span>
+                        <Select
+                            value={String(itemsPerPage)}
+                            onValueChange={(value: string) => onItemsPerPageChange(Number(value))}
+                        >
+                            <SelectTrigger className="h-8 w-[72px] rounded-lg border-white/10 bg-card/50 text-xs focus:ring-2 focus:ring-ring/40">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent side="top">
+                                <SelectItem value="10">10</SelectItem>
+                                <SelectItem value="25">25</SelectItem>
+                                <SelectItem value="50">50</SelectItem>
+                                <SelectItem value="100">100</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => onPageChange(1)}
+                            disabled={currentPage === 1}
+                            aria-label="Go to first page"
+                            className="h-8 w-8 rounded-lg border-white/10 bg-card/50 hover:bg-primary/10 hover:text-primary transition-all disabled:opacity-30"
+                        >
+                            <ChevronsLeft className="h-4 w-4" />
+                        </Button>
                         <Button
                             variant="outline"
                             size="sm"
@@ -225,7 +272,6 @@ export function BranchTable({
                         <div className="flex items-center gap-1">
                             {Array.from({ length: totalPages }, (_, i) => i + 1)
                                 .filter(page => {
-                                    // Show first, last, and pages around current
                                     return page === 1 || page === totalPages || Math.abs(page - currentPage) <= 1;
                                 })
                                 .map((page, index, array) => {
@@ -258,10 +304,19 @@ export function BranchTable({
                             Next
                             <ChevronRight className="h-4 w-4 ml-1" />
                         </Button>
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => onPageChange(totalPages)}
+                            disabled={currentPage === totalPages}
+                            aria-label="Go to last page"
+                            className="h-8 w-8 rounded-lg border-white/10 bg-card/50 hover:bg-primary/10 hover:text-primary transition-all disabled:opacity-30"
+                        >
+                            <ChevronsRight className="h-4 w-4" />
+                        </Button>
                     </div>
                 </div>
-            )
-            }
-        </div >
+            </div>
+        </div>
     );
 }

@@ -14,29 +14,26 @@ import {
 import { useBranchManagement } from "./hooks/useBranchManagement";
 import { BranchTable } from "./components/BranchTable";
 import { BranchModal } from "./components/BranchModal";
-import type { Branch } from "./types";
+import type { Branch, BranchSortKey, BranchStatusFilter } from "./types";
 
 export default function BranchManagementModule() {
     const {
         branches,
-        users,
+        meta,
         loading,
         error,
         searchQuery,
         setSearchQuery,
         filterType,
         setFilterType,
+        sortKey,
+        setSortKey,
         refresh,
         currentPage,
         setCurrentPage,
-        totalPages,
         itemsPerPage,
+        setItemsPerPage,
     } = useBranchManagement();
-
-    const slicedBranches = React.useMemo(() => {
-        const start = (currentPage - 1) * itemsPerPage;
-        return branches.slice(start, start + itemsPerPage);
-    }, [branches, currentPage, itemsPerPage]);
 
     const [isModalOpen, setIsModalOpen] = React.useState(false);
     const [editingBranch, setEditingBranch] = React.useState<Branch | null>(null);
@@ -87,7 +84,7 @@ export default function BranchManagementModule() {
                 </div>
 
                 <div className="flex items-center gap-3 w-full md:w-auto">
-                    <Select value={filterType} onValueChange={(value: "All" | "Active" | "Inactive" | "Moving" | "Not Moving" | "Badstock") => setFilterType(value)}>
+                    <Select value={filterType} onValueChange={(value: BranchStatusFilter) => setFilterType(value)}>
                         <SelectTrigger className="w-[160px] h-12 bg-background border border-input rounded-xl font-medium focus:ring-2 focus:ring-ring/40 focus:border-ring transition-all outline-none group shadow-sm hover:border-primary/50">
                             <SlidersHorizontal className="mr-2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                             <SelectValue placeholder="All Status" />
@@ -104,7 +101,7 @@ export default function BranchManagementModule() {
 
                     <div className="h-10 w-px bg-border mx-1 hidden md:block" />
 
-                    <Select defaultValue="name">
+                    <Select value={sortKey} onValueChange={(value: BranchSortKey) => setSortKey(value)}>
                         <SelectTrigger className="w-[180px] h-12 bg-background border border-input rounded-xl font-medium focus:ring-2 focus:ring-ring/40 focus:border-ring transition-all outline-none shadow-sm hover:border-primary/50">
                             <SlidersHorizontal className="mr-2 h-4 w-4 text-muted-foreground" />
                             <SelectValue placeholder="Sort By" />
@@ -130,13 +127,15 @@ export default function BranchManagementModule() {
                     </div>
                 ) : (
                     <BranchTable
-                        branches={slicedBranches}
-                        users={users}
+                        branches={branches}
                         loading={loading}
                         onEdit={handleEdit}
                         currentPage={currentPage}
-                        totalPages={totalPages}
+                        totalPages={meta.totalPages}
+                        totalCount={meta.total}
+                        itemsPerPage={itemsPerPage}
                         onPageChange={setCurrentPage}
+                        onItemsPerPageChange={setItemsPerPage}
                     />
                 )}
             </div>
@@ -149,7 +148,6 @@ export default function BranchManagementModule() {
                     setEditingBranch(null);
                 }}
                 editingBranch={editingBranch}
-                users={users}
                 onSuccess={refresh}
             />
         </div>
