@@ -15,6 +15,7 @@ import {
   type RawProduct,
   type RawBranch,
   type RawCustomer,
+  type RawSupplier,
 } from "./cylinder-stock-report.aggregation";
 import type { CylinderStockFilterInput } from "../types/cylinder-stock-report.schema";
 import type {
@@ -155,8 +156,11 @@ const CYLINDER_VARIANT_NAMES = ["EMPTY", "SWAP", "REFILL", "DEPOSIT", "OUTRIGHT"
  */
 export async function fetchCylinderStockLookups(): Promise<CylinderStockLookupsResponse> {
   return getCachedOrFetch("cylinder_lookups", async () => {
+    // division_id = 1 constraint mirrors the Inventory Control module
     const [branches, products, units] = await Promise.all([
-      fetchDirectus<RawBranch>("items/branches?fields=id,branch_code,branch_name,isActive&limit=-1"),
+      fetchDirectus<RawBranch>(
+        "items/branches?fields=id,branch_code,branch_name,isActive,division_id&filter[division_id][_eq]=1&filter[isActive][_neq]=0&limit=-1"
+      ),
       fetchDirectus<RawProduct>(
         "items/products?fields=product_id,product_code,product_name,is_serialized,description,weight,isActive&limit=-1"
       ),
@@ -198,10 +202,14 @@ export async function fetchCylinderStockLookups(): Promise<CylinderStockLookupsR
 export async function fetchCylinderStockReport(
   filters: CylinderStockFilterInput
 ): Promise<CylinderStockReportResponse> {
-  // 1. Fetch static reference tables from cache (branches, units, customers, products)
-  const [branches, units, customers, products] = await Promise.all([
-    getCachedOrFetch("branches_all", () =>
-      fetchDirectus<RawBranch>("items/branches?fields=id,branch_code,branch_name,isActive&limit=-1")
+  // 1. Fetch static reference tables from cache (branches, units, customers, products, suppliers)
+  // Note: Fetch all active branches so that assets referencing branches outside division 1 (or transfers)
+  // still resolve their verified branch name & code instead of displaying "Unassigned Branch".
+  const [branches, units, customers, products, suppliers] = await Promise.all([
+    getCachedOrFetch("branches_all_lookup", () =>
+      fetchDirectus<RawBranch>(
+        "items/branches?fields=id,branch_code,branch_name,isActive,division_id&limit=-1"
+      )
     ),
     getCachedOrFetch("units_all", () =>
       fetchDirectus<RawUnit>("items/units?fields=unit_id,unit_name,unit_shortcut,sku_code&limit=-1")
@@ -214,11 +222,14 @@ export async function fetchCylinderStockReport(
         "items/products?fields=product_id,product_code,product_name,is_serialized,weight,product_weight,unit_of_measurement,uom_ids,description,isActive&limit=-1"
       )
     ),
+    getCachedOrFetch("suppliers_all", () =>
+      fetchDirectus<RawSupplier>("items/suppliers?fields=id,supplier_name,supplier_shortcut&limit=-1")
+    ),
   ]);
 
-  // 2. Fetch cylinder assets (optionally pre-filtered by branchId if specified)
+  // 2. Fetch cylinder assets with relational branch expansion so branch name is never lost
   let assetPath =
-    "items/cylinder_assets?fields=id,product_id,serial_number,cylinder_status,cylinder_condition,current_branch_id,current_customer_code,current_supplier_id,acquisition_date,expiration_date,tare_weight,cost,remarks,is_deleted,created_date,modified_date&filter[is_deleted][_neq]=1&limit=-1";
+    "items/cylinder_assets?fields=id,product_id,serial_number,cylinder_status,cylinder_condition,current_branch_id.id,current_branch_id.branch_name,current_branch_id.branch_code,current_customer_code,current_supplier_id,acquisition_date,expiration_date,tare_weight,cost,remarks,is_deleted,created_date,modified_date&filter[is_deleted][_neq]=1&limit=-1";
 
   if (filters.branchId) {
     assetPath += `&filter[current_branch_id][_eq]=${filters.branchId}`;
@@ -233,6 +244,7 @@ export async function fetchCylinderStockReport(
     units,
     branches,
     customers,
+    suppliers,
     movements: [], // Empty upfront for blazing-fast initial load
   };
 

@@ -9,7 +9,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { useCylinderStockReport } from "../providers/CylinderStockReportProvider";
 import { Input } from "@/components/ui/input";
-import { Search, RotateCcw } from "lucide-react";
+import { Search, RotateCcw, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect, type SearchableOption } from "./searchable-select";
 
@@ -26,13 +26,18 @@ export function CylinderStockFilters() {
     setSearchTerm(filters.search || "");
   }
 
-  // Debounce search update by 300ms to eliminate rapid-fire API requests while typing
+  // Derive debouncing state directly during render: user has typed characters that haven't been submitted yet
+  const isDebouncing = searchTerm !== (filters.search || "");
+
+  // Debounce search update by 400ms to eliminate rapid-fire API requests while typing
   useEffect(() => {
+    if (searchTerm === (filters.search || "")) {
+      return;
+    }
+
     const timer = setTimeout(() => {
-      if (searchTerm !== (filters.search || "")) {
-        updateFilter("search", searchTerm);
-      }
-    }, 300);
+      updateFilter("search", searchTerm);
+    }, 400);
 
     return () => clearTimeout(timer);
   }, [searchTerm, filters.search, updateFilter]);
@@ -101,9 +106,13 @@ export function CylinderStockFilters() {
 
   return (
     <div className="flex flex-wrap items-center gap-2 p-2.5 bg-muted/20 border rounded-lg mb-3">
-      {/* Debounced Search Input */}
+      {/* Debounced Search Input with Debounce Status Feedback */}
       <div className="relative flex-1 min-w-[180px] max-w-[280px]">
-        <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+        {isDebouncing ? (
+          <Loader2 className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground animate-spin" />
+        ) : (
+          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+        )}
         <Input
           placeholder="Search serial, SKU, custodian..."
           value={searchTerm}
