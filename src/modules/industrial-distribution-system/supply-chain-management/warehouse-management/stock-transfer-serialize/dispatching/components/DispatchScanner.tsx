@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import {
-  Truck, ScanLine, Loader2, CheckCircle2, Activity, Target, Package, Minus, Plus,
+  Truck, ScanLine, Loader2, CheckCircle2, Activity, Target, Package, Minus, Plus, AlertCircle, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,8 @@ interface DispatchScannerProps {
       itemReasons?: Record<number, { reason: string; remarks?: string }>;
     }
   ) => void;
+  scanError?: { serial: string; message: string } | null;
+  setScanError?: (err: { serial: string; message: string } | null) => void;
 }
 
 export function DispatchScanner({
@@ -35,15 +37,31 @@ export function DispatchScanner({
   handleSerialInput,
   updateManualQty,
   dispatchOrder,
+  scanError,
+  setScanError,
 }: DispatchScannerProps) {
   const [serialInput, setSerialInput] = useState('');
   const [showDiscrepancyModal, setShowDiscrepancyModal] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // AG-COMMENT: Ticket 1 - Keep scanner input focused at all times for hardware barcode scanners
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, [selectedGroup?.orderNo, scanError]);
 
   const onSerialSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!serialInput.trim()) return;
     handleSerialInput(serialInput.trim());
     setSerialInput('');
+    inputRef.current?.focus();
+  };
+
+  const onInputChange = (val: string) => {
+    setSerialInput(val);
+    if (scanError && setScanError) {
+      setScanError(null);
+    }
   };
 
   const metrics = useMemo(() => {
@@ -116,14 +134,34 @@ export function DispatchScanner({
           <div className="relative flex-1">
             <ScanLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-primary" />
             <Input
+              ref={inputRef}
               placeholder="Scan barcode or type serial number and press Enter..."
               value={serialInput}
-              onChange={(e) => setSerialInput(e.target.value)}
+              onChange={(e) => onInputChange(e.target.value)}
               className="h-10 bg-background pl-9 font-mono text-sm border-muted-foreground/20 focus-visible:ring-primary/20 shadow-sm transition-all focus:border-primary/50"
               autoFocus
             />
           </div>
         </form>
+
+        {/* AG-COMMENT: Ticket 1 - Visual inline scanner error banner */}
+        {scanError && (
+          <div className="mt-2.5 flex items-center justify-between rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive animate-in fade-in slide-in-from-top-1 duration-200">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+              <span className="font-medium">{scanError.message}</span>
+            </div>
+            {setScanError && (
+              <button
+                type="button"
+                onClick={() => setScanError(null)}
+                className="rounded p-0.5 text-destructive/70 hover:text-destructive hover:bg-destructive/15 transition-colors"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Scrollable body: table only ── */}

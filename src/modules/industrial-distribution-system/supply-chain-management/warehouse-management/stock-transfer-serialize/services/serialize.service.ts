@@ -9,27 +9,44 @@ import type { UpdateSerializeTransferValues } from "../types/serialize.schema";
  * Service to orchestrate serialized stock transfer business logic.
  */
 
+// AG-COMMENT: Custom validation error class to distinguish serial validation failures from server errors
+export class SerialValidationError extends Error {
+  statusCode: number;
+  constructor(message: string, statusCode: number = 422) {
+    super(message);
+    this.name = "SerialValidationError";
+    this.statusCode = statusCode;
+  }
+}
+
 /**
  * Validates a serial number against the on-hand inventory view.
+ * Enforces strict case-sensitive matching against physical serial records.
  */
 export async function lookupSerial(serialNumber: string, branchId?: number, token?: string): Promise<SerialLookupResponse> {
-  const matches = await repo.fetchSerialAvailability(serialNumber, branchId, token);
+  const trimmed = serialNumber.trim();
+  const matches = await repo.fetchSerialAvailability(trimmed, branchId, token);
   
   if (matches.length === 0) {
-    throw new Error(`Serial number ${serialNumber} not found in inventory.`);
+    throw new SerialValidationError(`Serial number '${trimmed}' not found in inventory.`);
   }
 
   const match = matches[0];
+  // AG-COMMENT: Ticket 1 - Enforce exact case matching on physical record
+  if (match.serial_number !== trimmed) {
+    throw new SerialValidationError(`Invalid Serial Number: '${trimmed}' does not match inventory tag case.`);
+  }
+
   const productId = match.product_id;
 
   if (!productId) {
-    throw new Error(`Serial ${serialNumber} exists but has no associated product ID.`);
+    throw new SerialValidationError(`Serial '${trimmed}' exists but has no associated product ID.`);
   }
 
   // Fetch full product details
   const product = await fetchProductById(productId);
   if (!product) {
-    throw new Error(`Product details for serial ${serialNumber} not found.`);
+    throw new SerialValidationError(`Product details for serial '${trimmed}' not found.`);
   }
 
   return {
@@ -121,18 +138,20 @@ export async function listTransferGroups(params: {
 }
 
 /**
- * Verifies a serial number against dispatched items for receiving.
+ * Verifies a serial number against dispatched items for receiving with exact-case verification.
  */
 export async function verifyReceiveSerial(serialNumber: string, transferIds: number[]): Promise<{ stockTransferId: number, serialNumber: string }> {
+  const trimmed = serialNumber.trim();
   const recordedSerials = await repo.fetchRecordedSerials(transferIds);
   
+  // AG-COMMENT: Ticket 1 - Enforce exact case matching against dispatched serial records
   const match = recordedSerials.find(s => 
-    s.serial_number.trim().toUpperCase() === serialNumber.trim().toUpperCase() && 
+    s.serial_number.trim() === trimmed && 
     s.scan_type === 'DISPATCH'
   );
 
   if (!match) {
-    throw new Error(`Serial number ${serialNumber} was not dispatched for this order.`);
+    throw new SerialValidationError(`Serial number '${trimmed}' was not dispatched for this order.`);
   }
 
   return { stockTransferId: match.stock_transfer_id, serialNumber: match.serial_number };

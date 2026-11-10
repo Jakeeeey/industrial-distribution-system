@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Clock, Hash, AlertCircle } from 'lucide-react';
+import { Clock, Hash, AlertCircle, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -16,9 +16,11 @@ interface ScanLog {
 
 interface ReceiveAuditLogProps {
   recentScans: ScanLog[];
+  onRemoveSerial?: (serialNumber: string) => void;
+  disabled?: boolean;
 }
 
-export function ReceiveAuditLog({ recentScans }: ReceiveAuditLogProps) {
+export function ReceiveAuditLog({ recentScans, onRemoveSerial, disabled = false }: ReceiveAuditLogProps) {
   return (
     <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-l border-border bg-muted/10 min-h-0">
       <div className="flex items-center justify-between border-b border-border bg-background/60 px-5 py-4">
@@ -45,9 +47,9 @@ export function ReceiveAuditLog({ recentScans }: ReceiveAuditLogProps) {
               <div
                 key={scan.timestamp + idx}
                 className={cn(
-                  'animate-in slide-in-from-right-4 rounded-xl border p-3.5 transition-all duration-300',
+                  'group animate-in slide-in-from-right-4 rounded-xl border p-3.5 transition-all duration-300',
                   scan.status === 'SUCCESS'
-                    ? 'border-emerald-500/20 bg-background shadow-sm'
+                    ? 'border-emerald-500/20 bg-background shadow-sm hover:border-emerald-500/40'
                     : 'border-destructive/20 bg-destructive/5',
                 )}
               >
@@ -55,11 +57,26 @@ export function ReceiveAuditLog({ recentScans }: ReceiveAuditLogProps) {
                   <span className="font-mono text-[11px] font-semibold text-foreground">
                     {scan.serialNumber}
                   </span>
-                  {scan.status === 'SUCCESS' ? (
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]" />
-                  ) : (
-                    <AlertCircle className="h-3.5 w-3.5 text-destructive" />
-                  )}
+                  <div className="flex items-center gap-1.5">
+                    {/* AG-COMMENT: Ticket 2 - Action button to remove/unscan verified serial */}
+                    {onRemoveSerial && scan.status === 'SUCCESS' && (
+                      <button
+                        type="button"
+                        title={`Remove serial ${scan.serialNumber}`}
+                        aria-label={`Remove serial ${scan.serialNumber}`}
+                        disabled={disabled}
+                        onClick={() => onRemoveSerial(scan.serialNumber)}
+                        className="opacity-60 group-hover:opacity-100 hover:opacity-100 p-0.5 rounded text-muted-foreground hover:bg-destructive/15 hover:text-destructive transition-all disabled:pointer-events-none disabled:opacity-30"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    {scan.status === 'SUCCESS' ? (
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]" />
+                    ) : (
+                      <AlertCircle className="h-3.5 w-3.5 text-destructive" />
+                    )}
+                  </div>
                 </div>
                 <p className="line-clamp-1 text-[10px] font-medium text-muted-foreground">
                   {scan.productName || scan.errorType}

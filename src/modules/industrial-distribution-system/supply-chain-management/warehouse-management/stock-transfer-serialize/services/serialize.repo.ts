@@ -12,13 +12,15 @@ const SPRING_API_BASE_URL = process.env.SPRING_API_BASE_URL;
 /**
  * Fetches current serial availability from v_serial_onhand view (Spring Boot API).
  */
+// AG-COMMENT: Ticket 1 - Enforce exact-case query and exact-string comparison without forcing to upper case
 export async function fetchSerialAvailability(serialNumber: string, branchId?: number, token?: string): Promise<StockTransferSerialRow[]> {
   if (!SPRING_API_BASE_URL) {
     console.error("[Serialize Repo] SPRING_API_BASE_URL is not defined");
     return [];
   }
 
-  const url = `${SPRING_API_BASE_URL.replace(/\/$/, "")}/api/v-serial-onhand/all?serialNumber=${encodeURIComponent(serialNumber.trim().toUpperCase())}`;
+  const rawSerial = serialNumber.trim();
+  const url = `${SPRING_API_BASE_URL.replace(/\/$/, "")}/api/v-serial-onhand/all?serialNumber=${encodeURIComponent(rawSerial)}`;
   
   try {
     const res = await fetch(url, {
@@ -41,7 +43,7 @@ export async function fetchSerialAvailability(serialNumber: string, branchId?: n
     const data = await res.json();
     const items = Array.isArray(data) ? data : (data.data || data.content || []);
     
-    // Filter by branchId if provided, as the API might return for all branches
+    // Filter by branchId if provided, enforcing exact case-sensitive serial comparison
     interface SerialOnhandRaw {
       serialNumber?: string;
       serial_number?: string;
@@ -54,7 +56,8 @@ export async function fetchSerialAvailability(serialNumber: string, branchId?: n
     }
 
     const filtered = items.filter((i: SerialOnhandRaw) => {
-      const matchSerial = String(i.serialNumber || i.serial_number || "").trim().toUpperCase() === serialNumber.trim().toUpperCase();
+      const itemSerial = String(i.serialNumber || i.serial_number || "").trim();
+      const matchSerial = itemSerial === rawSerial;
       const matchBranch = branchId ? i.branch_id === branchId || i.branchId === branchId : true;
       return matchSerial && matchBranch;
     }).map((i: SerialOnhandRaw) => ({

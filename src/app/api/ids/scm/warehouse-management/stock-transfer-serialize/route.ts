@@ -54,6 +54,10 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   } catch (err) {
+    // AG-COMMENT: Ticket 1 - Catch SerialValidationError and return structured status (422/400) without 500 noise
+    if (err instanceof service.SerialValidationError) {
+      return NextResponse.json({ error: err.message, code: "SERIAL_VALIDATION_ERROR" }, { status: err.statusCode });
+    }
     console.error("[Stock Transfer Serialize API] GET Error:", err);
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }

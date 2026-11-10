@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSerializeBase } from './use-serialize-base';
 import { serializeLifecycleService } from '../services/api-serialize';
+import { soundFX } from '../../active-picking/utils/audioProvider';
 import { toast } from 'sonner';
 import type { OrderGroup, OrderGroupItem, ProductRow } from '../../stock-transfer/types/stock-transfer.types';
 import type { SerialScanLog, SerialOrderGroupItem } from '../types/serialize.types';
@@ -13,6 +14,9 @@ export function useSerializeDispatch() {
   const base = useSerializeBase({ 
     statuses: ['For Picking', 'Picking', 'Picked'] 
   });
+
+  // AG-COMMENT: Ticket 1 - Track scan error banner state for visual feedback
+  const [scanError, setScanError] = useState<{ serial: string; message: string } | null>(null);
 
   const [scannedSerialsState, setScannedSerialsState] = useState<Record<string, SerialScanLog[]>>(() => {
     if (typeof window === 'undefined') return {};
@@ -103,84 +107,146 @@ export function useSerializeDispatch() {
   };
 
   const handleSerialInput = async (serial: string) => {
-    console.log("[Serialize Dispatch Hook] handleSerialInput called with:", serial);
     if (!base.selectedOrderNo || !selectedGroup) {
-      console.warn("[Serialize Dispatch Hook] No selected order or group.");
+      soundFX.error();
       toast.error("Please select an order first.");
       return;
     }
 
     const serialTrimmed = serial.trim();
     if (serialTrimmed.length < 1) {
-      console.warn("[Serialize Dispatch Hook] Serial is empty.");
       return;
     }
+
+    // Clear any previous scan error
+    setScanError(null);
+
+    // Identify serialized products in this order for context in case of error
+    const firstSerializedItem = selectedGroup.items.find(i => {
+      const p = i.product_id as ProductRow;
+      return typeof p === 'object' && p?.is_serialized === 1;
+    });
+    const defaultProductName = firstSerializedItem 
+      ? ((firstSerializedItem.product_id as ProductRow)?.product_name || "serialized item") 
+      : "order item";
 
     try {
       const currentScans = scannedSerialsState[base.selectedOrderNo!] || [];
       if (currentScans.some(s => s.status === 'SUCCESS' && s.serialNumber === serialTrimmed)) {
-        console.warn("[Serialize Dispatch Hook] Serial already scanned:", serialTrimmed);
-        toast.warning("Serial already scanned in this order.");
+        soundFX.duplicate();
+        const dupMsg = `Serial '${serialTrimmed}' already scanned in this order.`;
+        setScanError({ serial: serialTrimmed, message: dupMsg });
+        toast.warning(dupMsg);
         return;
       }
 
-      console.log("[Serialize Dispatch Hook] Fetching serial from API...");
       // Validate against v_serial_onhand via API
       const rawBranch = selectedGroup.sourceBranch;
       const branchIdNum = typeof rawBranch === 'object' && rawBranch !== null 
         ? (rawBranch as Record<string, unknown>).id as number 
         : rawBranch as number;
       
-      console.log("[Serialize Dispatch Hook] Branch ID:", branchIdNum);
-      const match = await serializeLifecycleService.lookupSerial(serialTrimmed, branchIdNum || undefined);
-      console.log("[Serialize Dispatch Hook] Lookup match found:", match);
+      const lookupResult = await serializeLifecycleService.lookupSerial(serialTrimmed, branchIdNum || undefined);
       
+      // AG-COMMENT: Ticket 1 - Check structured result without throwing raw errors to eliminate Next.js Console Error overlay
+      if (!lookupResult.success) {
+        soundFX.error();
+        const errBannerMsg = `Invalid Serial Number: '${serialTrimmed}' not found for ${defaultProductName}`;
+        setScanError({ serial: serialTrimmed, message: errBannerMsg });
+        toast.error(errBannerMsg);
+        return;
+      }
+
+      const match = lookupResult.data;
+      
+      // AG-COMMENT: Ticket 1 - Enforce exact case matching on client side as an extra safeguard
+      if (match.serialNumber !== serialTrimmed) {
+        soundFX.error();
+        const caseMsg = `Invalid Serial Number: '${serialTrimmed}' case does not match physical tag '${match.serialNumber}' for ${match.productName}`;
+        setScanError({ serial: serialTrimmed, message: caseMsg });
+        toast.error(caseMsg);
+        return;
+      }
+
       const itemInOrder = selectedGroup.items.find(i => {
         const pid = (typeof i.product_id === 'object' ? i.product_id.product_id : i.product_id) as number;
         return pid === match.productId;
       });
 
-      console.log("[Serialize Dispatch Hook] Item in order:", itemInOrder);
-
       if (!itemInOrder) {
-        throw new Error(`Serial ${serialTrimmed} (${match.productName}) is not in this order.`);
+        soundFX.error();
+        const notInOrderMsg = `Invalid Serial Number: '${serialTrimmed}' (${match.productName}) is not in this order.`;
+        setScanError({ serial: serialTrimmed, message: notInOrderMsg });
+        toast.error(notInOrderMsg);
+        return;
       } 
 
       const product = itemInOrder.product_id as ProductRow;
       const isSerializedVal = typeof product === 'object' && product !== null ? product.is_serialized : undefined;
-      console.log("[Serialize Dispatch Hook] Product is_serialized:", isSerializedVal);
 
       if (isSerializedVal === 0) {
-        throw new Error(`Product ${match.productName} is not serialized. Use manual input.`);
+        soundFX.error();
+        const nonSerMsg = `Product ${match.productName} is not serialized. Use manual input.`;
+        setScanError({ serial: serialTrimmed, message: nonSerMsg });
+        toast.error(nonSerMsg);
+        return;
       }
 
       const targetQty = itemInOrder.allocated_quantity || 0;
       const currentScannedQty = (itemInOrder as SerialOrderGroupItem).scannedSerialQty || 0;
-      console.log("[Serialize Dispatch Hook] Quantities -> Scanned:", currentScannedQty, "Target:", targetQty);
 
       if (currentScannedQty >= targetQty) {
-        throw new Error(`Quantity limit reached for ${match.productName}.`);
+        soundFX.error();
+        const limitMsg = `Quantity limit reached for ${match.productName}.`;
+        setScanError({ serial: serialTrimmed, message: limitMsg });
+        toast.error(limitMsg);
+        return;
       }
 
       const newScan: SerialScanLog = {
-        serialNumber: serialTrimmed,
+        serialNumber: match.serialNumber,
         productId: match.productId,
         productName: match.productName,
         timestamp: Date.now(),
         status: 'SUCCESS'
       };
 
-      console.log("[Serialize Dispatch Hook] Adding scan log to state:", newScan);
       setScannedSerialsState(prev => ({
         ...prev,
         [base.selectedOrderNo!]: [newScan, ...(prev[base.selectedOrderNo!] || [])]
       }));
 
-      toast.success(`Serial ${serialTrimmed} added.`);
+      // AG-COMMENT: Ticket 1 - Play success tone upon valid scan
+      soundFX.success();
+      toast.success(`Serial ${match.serialNumber} added.`);
     } catch (err) {
-      console.error("[Serialize Dispatch Hook] Error in handleSerialInput:", err);
-      toast.error(err instanceof Error ? err.message : String(err));
+      soundFX.error();
+      const fallbackMsg = err instanceof Error ? err.message : String(err);
+      setScanError({ serial: serialTrimmed, message: fallbackMsg });
+      toast.error(fallbackMsg);
     }
+  };
+
+  // AG-COMMENT: Ticket 2 - Action to remove / unscan an inadvertently scanned serial from dispatch queue
+  const handleRemoveSerial = (serialNumber: string) => {
+    if (!base.selectedOrderNo) return;
+    const orderNo = base.selectedOrderNo;
+
+    setScannedSerialsState(prev => {
+      const orderScans = prev[orderNo] || [];
+      const updated = orderScans.filter(s => s.serialNumber !== serialNumber);
+      return {
+        ...prev,
+        [orderNo]: updated,
+      };
+    });
+
+    if (scanError?.serial === serialNumber) {
+      setScanError(null);
+    }
+
+    soundFX.duplicate();
+    toast.info(`Serial '${serialNumber}' removed from dispatch.`);
   };
 
   const dispatchOrder = async (
@@ -254,8 +320,11 @@ export function useSerializeDispatch() {
     orderGroups,
     selectedGroup,
     handleSerialInput,
+    handleRemoveSerial,
     updateManualQty,
     dispatchOrder,
+    scanError,
+    setScanError,
     recentScans: (base.selectedOrderNo ? scannedSerialsState[base.selectedOrderNo] : []) || [],
   };
 }

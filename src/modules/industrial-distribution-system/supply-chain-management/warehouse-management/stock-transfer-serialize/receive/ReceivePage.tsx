@@ -19,8 +19,11 @@ export default function ReceivePage() {
     loadMore,
     hasMore,
     handleSerialInput,
+    handleRemoveSerial,
     updateManualQty,
     receiveOrder,
+    scanError,
+    setScanError,
     recentScans,
     getBranchName,
   } = useSerializeReceive();
@@ -47,10 +50,16 @@ export default function ReceivePage() {
         handleSerialInput={handleSerialInput}
         updateManualQty={updateManualQty}
         receiveOrder={receiveOrder}
+        scanError={scanError}
+        setScanError={setScanError}
       />
 
       {/* ── Right Panel: Audit Log ── */}
-      <ReceiveAuditLog recentScans={recentScans} />
+      <ReceiveAuditLog 
+        recentScans={recentScans} 
+        onRemoveSerial={handleRemoveSerial}
+        disabled={processing}
+      />
     </div>
   );
 }

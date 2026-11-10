@@ -19,8 +19,11 @@ export default function DispatchingPage() {
     loadMore,
     hasMore,
     handleSerialInput,
+    handleRemoveSerial,
     updateManualQty,
     dispatchOrder,
+    scanError,
+    setScanError,
     recentScans,
     getBranchName,
   } = useSerializeDispatch();
@@ -47,10 +50,16 @@ export default function DispatchingPage() {
         handleSerialInput={handleSerialInput}
         updateManualQty={updateManualQty}
         dispatchOrder={dispatchOrder}
+        scanError={scanError}
+        setScanError={setScanError}
       />
 
       {/* ── Right Panel: Audit Log ── */}
-      <DispatchAuditLog recentScans={recentScans} />
+      <DispatchAuditLog 
+        recentScans={recentScans} 
+        onRemoveSerial={handleRemoveSerial}
+        disabled={processing}
+      />
     </div>
   );
 }
