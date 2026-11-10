@@ -426,7 +426,8 @@ export function CreateReturnModal({
   };
 
   const handleSubmit = async () => {
-    // Validate: supplier and branch must be selected
+    // AG-COMMENT: Granular client validations with specific item names to eliminate ambiguous errors
+    // 1. Supplier and branch must be selected
     if (!selection.supplierId || !selection.branchId) {
       toast.error("Validation Error", {
         description: "Please select a Supplier and Branch before confirming.",
@@ -434,7 +435,7 @@ export function CreateReturnModal({
       return;
     }
 
-    // Validate: cart must not be empty
+    // 2. Cart must not be empty
     if (cart.length === 0) {
       toast.error("Validation Error", {
         description: "Please add at least one product to return.",
@@ -442,12 +443,46 @@ export function CreateReturnModal({
       return;
     }
 
-    // Validate: all items must have a return type
-    const missingReturnType = cart.some((item) => !item.return_type_id);
-    if (missingReturnType) {
+    // 3. All items must have a valid UOM
+    const missingUom = cart.filter((item) => !item.uom_id);
+    if (missingUom.length > 0) {
+      const names = missingUom.map((i) => `"${i.name}"`).join(", ");
       toast.error("Validation Error", {
-        description:
-          "Please select a 'Return Type' for all items before confirming.",
+        description: `Product ${names} is missing a valid Unit of Measure. Please remove and re-add the item.`,
+      });
+      return;
+    }
+
+    // 4. All items must have a return type
+    const missingReturnType = cart.filter((item) => !item.return_type_id);
+    if (missingReturnType.length > 0) {
+      const names = missingReturnType.map((i) => `"${i.name}"`).join(", ");
+      toast.error("Validation Error", {
+        description: `Please select a 'Return Type' for product: ${names}`,
+      });
+      return;
+    }
+
+    // 5. All items must have at least 1 verified serial number
+    const zeroQtyItems = cart.filter((item) => !item.quantity || Number(item.quantity) <= 0);
+    if (zeroQtyItems.length > 0) {
+      const names = zeroQtyItems.map((i) => `"${i.name}"`).join(", ");
+      toast.error("Validation Error", {
+        description: `Product ${names} has 0 quantity. Please click on the product row and scan or enter verified serial numbers.`,
+      });
+      return;
+    }
+
+    // 6. Serial count must match quantity
+    const mismatchSerialItems = cart.filter(
+      (item) => !item.serials || item.serials.length !== item.quantity,
+    );
+    if (mismatchSerialItems.length > 0) {
+      const names = mismatchSerialItems
+        .map((i) => `"${i.name}" (${i.serials?.length || 0}/${i.quantity} serials)`)
+        .join(", ");
+      toast.error("Validation Error", {
+        description: `Scanned serial count must match quantity for: ${names}`,
       });
       return;
     }
@@ -682,15 +717,7 @@ export function CreateReturnModal({
                     <Label className="font-bold flex items-center gap-2">
                        <Package className="h-4 w-4 text-primary" /> Items
                     </Label>
-                    <div className="flex items-center gap-2">
-
-                      <Button
-                        onClick={() => setShowPicker(true)}
-                        className="h-9 text-xs"
-                      >
-                        <Plus className="mr-2 h-3 w-3" /> Add
-                      </Button>
-                    </div>
+ 
                   </div>
                   {cart.length > 0 ? (
                     <ReturnReviewPanel

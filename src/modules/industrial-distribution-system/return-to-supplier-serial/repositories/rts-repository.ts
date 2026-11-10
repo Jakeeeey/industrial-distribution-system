@@ -90,7 +90,7 @@ async function directusMutate<T>(path: string, method: "POST" | "PATCH" | "DELET
  */
 export async function getRawRtsHeaders() {
   return directusGet<{ data: Record<string, unknown>[] }>(
-    "/items/return_to_supplier?limit=-1&filter[supplier_id][division_id][_eq]=1&filter[branch_id][division_id][_eq]=1&fields=id,doc_no,transaction_date,is_posted,remarks,supplier_id.supplier_name,branch_id.branch_name,total_net_amount,encoder_id,date_posted&sort=-date_created"
+    "/items/return_to_supplier?limit=-1&filter[supplier_id][division_id][_eq]=1&filter[branch_id][division_id][_eq]=1&fields=id,doc_no,transaction_date,is_posted,remarks,supplier_id.id,supplier_id.supplier_name,branch_id.id,branch_id.branch_name,total_net_amount,encoder_id,date_posted&sort=-date_created"
   );
 }
 

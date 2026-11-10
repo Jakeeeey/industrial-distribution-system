@@ -77,15 +77,24 @@ export function ReturnDetailsModal({
       setIsEditable(isPending);
       setRemarks(data.remarks || "");
 
-      const supplierObj = refs.suppliers.find(
-        (s) => s.supplier_name === data.supplier,
-      );
-      const branchObj = refs.branches.find(
-        (b) => b.branch_name === data.branch,
-      );
+      // AG-COMMENT: Resolve supplier and branch via explicit IDs first, fallback to case-insensitive name matching
+      if (data.supplierId) {
+        setCurrentSupplierId(data.supplierId);
+      } else {
+        const supplierObj = refs.suppliers.find(
+          (s) => s.supplier_name.trim().toLowerCase() === (data.supplier || "").trim().toLowerCase(),
+        );
+        if (supplierObj) setCurrentSupplierId(supplierObj.id);
+      }
 
-      if (supplierObj) setCurrentSupplierId(supplierObj.id);
-      if (branchObj) setCurrentBranchId(branchObj.id);
+      if (data.branchId) {
+        setCurrentBranchId(data.branchId);
+      } else {
+        const branchObj = refs.branches.find(
+          (b) => b.branch_name.trim().toLowerCase() === (data.branch || "").trim().toLowerCase(),
+        );
+        if (branchObj) setCurrentBranchId(branchObj.id);
+      }
 
       const fetchDetails = async () => {
         setLoading(true);
@@ -450,18 +459,57 @@ export function ReturnDetailsModal({
   const handleSave = async (post: boolean = false) => {
     if (!data) return;
 
-    const missingReturnType = items.some((item) => !item.return_type_id);
-    if (missingReturnType) {
+    // AG-COMMENT: Granular client validations with specific item names to eliminate ambiguous errors
+    if (!items || items.length === 0) {
       toast.error("Validation Error", {
-        description: "Please select a 'Return Type' for all items before saving.",
+        description: "Please add at least one product before saving.",
       });
       return;
     }
 
-    const missingUom = items.find((item) => !item.uom_id);
-    if (missingUom) {
+    if (!currentSupplierId || !currentBranchId) {
       toast.error("Validation Error", {
-        description: `Product "${missingUom.name}" is missing a valid Unit of Measure (UOM). Please re-add the item.`,
+        description: "Unable to resolve Supplier or Branch for this transaction. Please refresh the page.",
+      });
+      return;
+    }
+
+    const missingUom = items.filter((item) => !item.uom_id);
+    if (missingUom.length > 0) {
+      const names = missingUom.map((i) => `"${i.name}"`).join(", ");
+      toast.error("Validation Error", {
+        description: `Product ${names} is missing a valid Unit of Measure (UOM).`,
+      });
+      return;
+    }
+
+    const missingReturnType = items.filter((item) => !item.return_type_id);
+    if (missingReturnType.length > 0) {
+      const names = missingReturnType.map((i) => `"${i.name}"`).join(", ");
+      toast.error("Validation Error", {
+        description: `Please select a 'Return Type' for product: ${names}`,
+      });
+      return;
+    }
+
+    const zeroQtyItems = items.filter((item) => !item.quantity || Number(item.quantity) <= 0);
+    if (zeroQtyItems.length > 0) {
+      const names = zeroQtyItems.map((i) => `"${i.name}"`).join(", ");
+      toast.error("Validation Error", {
+        description: `Product ${names} has 0 quantity. Please click on the product row and scan or enter verified serial numbers.`,
+      });
+      return;
+    }
+
+    const mismatchSerialItems = items.filter(
+      (item) => !item.serials || item.serials.length !== item.quantity,
+    );
+    if (mismatchSerialItems.length > 0) {
+      const names = mismatchSerialItems
+        .map((i) => `"${i.name}" (${i.serials?.length || 0}/${i.quantity} serials)`)
+        .join(", ");
+      toast.error("Validation Error", {
+        description: `Scanned serial count must match quantity for: ${names}`,
       });
       return;
     }

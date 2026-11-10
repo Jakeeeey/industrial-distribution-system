@@ -28,8 +28,8 @@ interface RawHeader {
   transaction_date?: string;
   is_posted?: boolean;
   remarks?: string;
-  supplier_id?: { supplier_name: string };
-  branch_id?: { branch_name: string };
+  supplier_id?: { id?: number; supplier_name?: string } | number;
+  branch_id?: { id?: number; branch_name?: string } | number;
   total_net_amount?: string | number;
   encoder_id?: number;
   date_posted?: string;
@@ -115,11 +115,18 @@ export async function fetchTransactions(): Promise<ReturnToSupplier[]> {
     const calculatedGross = parentItems.reduce((sum, item) => sum + Number(item.gross_amount || 0), 0);
     const calculatedDiscount = parentItems.reduce((sum, item) => sum + Number(item.discount_amount || 0), 0);
 
+    // AG-COMMENT: Preserve supplierId and branchId on ReturnToSupplier for robust identification without fragile name-matching
+    const sId = typeof raw.supplier_id === "object" ? raw.supplier_id?.id : raw.supplier_id;
+    const bId = typeof raw.branch_id === "object" ? raw.branch_id?.id : raw.branch_id;
+    const sName = typeof raw.supplier_id === "object" ? raw.supplier_id?.supplier_name : undefined;
+    const bName = typeof raw.branch_id === "object" ? raw.branch_id?.branch_name : undefined;
     return {
       id: Number(raw.id),
       returnNo: raw.doc_no || "N/A",
-      supplier: raw.supplier_id?.supplier_name || "Unknown",
-      branch: raw.branch_id?.branch_name || "Unknown",
+      supplier: sName || "Unknown",
+      branch: bName || "Unknown",
+      supplierId: sId ? Number(sId) : undefined,
+      branchId: bId ? Number(bId) : undefined,
       returnDate: raw.transaction_date,
       status: raw.is_posted ? "Posted" : "Pending",
       remarks: raw.remarks,

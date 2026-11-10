@@ -17,11 +17,31 @@ const API_BASE = "/api/ids/return-to-supplier-serial";
  * Parses a fetch response and throws on error.
  * Extracts the `data` field from the JSON body.
  */
+// AG-COMMENT: Parses fetch response with rich validation error message extraction
 async function handleResponse<T>(res: Response): Promise<T> {
-  const json = await res.json();
+  const json = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const errMsg = json.error || json.message || `HTTP ${res.status}`;
-    throw new Error(errMsg);
+    let errMsg = json.error || json.message;
+    if (json.issues && Array.isArray(json.issues) && json.issues.length > 0) {
+      const issueMsgs = json.issues.map((i: { path?: (string | number)[]; message?: string }) => {
+        const p = Array.isArray(i.path) && i.path.length > 0 ? i.path.join(".") : "";
+        return p ? `${p}: ${i.message}` : (i.message || "Invalid field");
+      });
+      errMsg = `Validation failed: ${issueMsgs.join("; ")}`;
+    } else if (json.details && typeof json.details === "object") {
+      const detailParts: string[] = [];
+      for (const [k, v] of Object.entries(json.details)) {
+        if (Array.isArray(v)) {
+          detailParts.push(`${k}: ${v.join(", ")}`);
+        } else if (typeof v === "string") {
+          detailParts.push(`${k}: ${v}`);
+        }
+      }
+      if (detailParts.length > 0 && (!errMsg || errMsg === "Validation failed")) {
+        errMsg = `Validation failed: ${detailParts.join("; ")}`;
+      }
+    }
+    throw new Error(errMsg || `HTTP ${res.status}`);
   }
   return json.data as T;
 }

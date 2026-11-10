@@ -84,6 +84,16 @@ export function ReturnReviewPanel({
 
   const selectedItem = useMemo(() => items.find(i => i.id === selectedItemId), [items, selectedItemId]);
 
+  // AG-COMMENT: Auto-select item needing serials or first item so serial scanner section is readily accessible
+  React.useEffect(() => {
+    if (!selectedItemId && items.length > 0) {
+      const itemNeedingSerials = items.find((i) => i.quantity === 0);
+      setSelectedItemId(itemNeedingSerials ? itemNeedingSerials.id : items[0].id);
+    } else if (selectedItemId && !items.some((i) => i.id === selectedItemId)) {
+      setSelectedItemId(items.length > 0 ? items[0].id : null);
+    }
+  }, [items, selectedItemId]);
+
   const getDiscountName = (item: CartItem) => {
     if (item.discountTypeId) {
       const match = discountTypes.find((d) => d.id === item.discountTypeId);
@@ -202,8 +212,14 @@ export function ReturnReviewPanel({
                     <TableCell className="text-center">
                       <Badge variant="outline" className="text-[10px] font-bold uppercase">{item.unit}</Badge>
                     </TableCell>
-                    <TableCell className="text-center text-sm font-bold text-primary">
-                      {item.quantity}
+                    <TableCell className="text-center">
+                      {item.quantity === 0 ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                          0 serials
+                        </span>
+                      ) : (
+                        <span className="text-sm font-bold text-primary">{item.quantity}</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-right text-sm font-medium">
                       ₱ {unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -247,7 +263,9 @@ export function ReturnReviewPanel({
                             value={item.return_type_id ? String(item.return_type_id) : ""}
                             onValueChange={(val) => onUpdateItem(item.id, "return_type_id", Number(val))}
                           >
-                            <SelectTrigger className="h-8 w-full text-xs truncate"><SelectValue placeholder="Select Type" /></SelectTrigger>
+                            <SelectTrigger className={cn("h-8 w-full text-xs truncate", !item.return_type_id && "border-amber-400 bg-amber-50/50 text-amber-900 font-medium")}>
+                              <SelectValue placeholder="Select Type *" />
+                            </SelectTrigger>
                             <SelectContent>
                               {returnTypes.map((r) => (
                                 <SelectItem key={r.id} value={String(r.id)}>{r.return_type_name}</SelectItem>

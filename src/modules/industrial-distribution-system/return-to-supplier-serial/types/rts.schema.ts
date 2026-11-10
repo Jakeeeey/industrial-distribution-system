@@ -180,6 +180,8 @@ export interface ReturnToSupplier {
   discountAmount: number;
   encoder_id?: number;
   date_posted?: string;
+  supplierId?: number;
+  branchId?: number;
 }
 
 /** A mapped RTS item record for transaction details. */

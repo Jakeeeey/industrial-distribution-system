@@ -174,13 +174,18 @@ export async function POST(req: NextRequest) {
 
     // [MODIFIED] Removed the 'register-assets' action check. Asset registration is no longer allowed in Return to Supplier.
 
-    // Zod validation
+    // AG-COMMENT: Format detailed validation errors so callers get actionable descriptions instead of generic "Validation failed"
     const parsed = createReturnSchema.safeParse(body);
     if (!parsed.success) {
+      const formattedErrors = parsed.error.issues.map((issue) => {
+        const fieldPath = issue.path.join(".");
+        return fieldPath ? `${fieldPath}: ${issue.message}` : issue.message;
+      });
       return json(
         {
-          error: "Validation failed",
+          error: `Validation failed: ${formattedErrors.join("; ")}`,
           details: parsed.error.flatten().fieldErrors,
+          issues: parsed.error.issues,
         },
         400,
       );
@@ -214,13 +219,18 @@ export async function PATCH(req: NextRequest) {
 
     const body = await req.json().catch(() => ({}));
 
-    // Zod validation
+    // AG-COMMENT: Format detailed validation errors so callers get actionable descriptions instead of generic "Validation failed"
     const parsed = createReturnSchema.safeParse(body);
     if (!parsed.success) {
+      const formattedErrors = parsed.error.issues.map((issue) => {
+        const fieldPath = issue.path.join(".");
+        return fieldPath ? `${fieldPath}: ${issue.message}` : issue.message;
+      });
       return json(
         {
-          error: "Validation failed",
+          error: `Validation failed: ${formattedErrors.join("; ")}`,
           details: parsed.error.flatten().fieldErrors,
+          issues: parsed.error.issues,
         },
         400,
       );
