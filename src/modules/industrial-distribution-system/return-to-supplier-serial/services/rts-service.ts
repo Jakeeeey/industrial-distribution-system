@@ -62,6 +62,7 @@ interface RawProduct {
   unit_of_measurement?: string | number;
   unit_of_measurement_count?: number;
   parent_id?: number | null;
+  is_serialized?: number | boolean;
 }
 
 interface RawInventoryVariant {
@@ -211,6 +212,7 @@ export async function fetchReferences(): Promise<ReferenceData> {
       id: String(raw.product_id),
       productId: Number(raw.product_id),
       code: raw.product_code || "N/A",
+      // AG-COMMENT: Shows products.description as product name per ids-guide rule
       name: raw.description || raw.product_name || "Unknown",
       price: Number(raw.cost_per_unit ?? 0),
       unit: unitMap.get(String(raw.unit_of_measurement)) || "Units",
@@ -284,17 +286,32 @@ export async function fetchInventory(
     const productsJson = await repo.getRawProductsByIds(productIds);
     const productsData = (productsJson.data || []) as unknown as RawProduct[];
 
+    // AG-COMMENT: Map products data to resolve product description as product name and collect serialized product IDs
     const parentMap = new Map<number, number>();
     const priceMap = new Map<number, number>();
+    const nameMap = new Map<number, string>();
+    const serializedProductIds = new Set<number>();
+
     productsData.forEach((p) => {
       const pId = Number(p.product_id);
+      serializedProductIds.add(pId);
       const familyId = (p.parent_id && p.parent_id !== 0) ? Number(p.parent_id) : pId;
       parentMap.set(pId, familyId);
       priceMap.set(pId, Number(p.cost_per_unit ?? 0));
+      // AG-COMMENT: Shows the products.description as product name per ids-guide
+      const resolvedName = p.description || p.product_name || "";
+      if (resolvedName) {
+        nameMap.set(pId, resolvedName);
+      }
     });
 
+    // AG-COMMENT: Only return inventory for serialized products (is_serialized = 1) per ids-guide
+    const serializedViewRows = viewRows.filter((r) => serializedProductIds.has(Number(r.productId)));
+
+    if (serializedViewRows.length === 0) return [];
+
     const families = new Map<number, unknown[]>();
-    viewRows.forEach((row) => {
+    serializedViewRows.forEach((row) => {
       const pId = Number(row.productId);
       const familyId = parentMap.get(pId) || pId;
       if (!families.has(familyId)) families.set(familyId, []);
@@ -320,7 +337,8 @@ export async function fetchInventory(
           id: v.id,
           product_id: Number(v.productId),
           product_code: v.productCode || "N/A",
-          product_name: v.productName || "Unknown",
+          // AG-COMMENT: Shows the products.description as product name per ids-guide
+          product_name: nameMap.get(Number(v.productId)) || v.productName || "Unknown",
           unit_name: v.unitName || "Unit",
           unit_count: safeUnitCount,
           branch_id: Number(v.branchId),

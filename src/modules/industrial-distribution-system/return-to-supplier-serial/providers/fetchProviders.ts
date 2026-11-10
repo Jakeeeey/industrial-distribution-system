@@ -63,6 +63,23 @@ export function clearReferencesCache(): void {
   referencesCachePromise = null;
 }
 
+// AG-COMMENT: Cache and in-flight deduplication for inventory to prevent repeated rapid requests (e.g. 1 req / 2s)
+interface CachedInventory {
+  data: InventoryRecord[];
+  timestamp: number;
+}
+const inventoryCache = new Map<string, CachedInventory>();
+const inventoryInFlight = new Map<string, Promise<InventoryRecord[]>>();
+const INVENTORY_CACHE_TTL_MS = 60 * 1000; // 60 seconds TTL
+
+/**
+ * Clears the inventory cache.
+ */
+export function clearInventoryCache(): void {
+  inventoryCache.clear();
+  inventoryInFlight.clear();
+}
+
 /**
  * Fetches all reference data (suppliers, branches, products, discounts, etc.).
  * Implements a Promise-level singleton cache to prevent connection pool exhaustion.
@@ -86,19 +103,57 @@ export async function getReferences(): Promise<ReferenceData> {
 /**
  * Fetches running inventory for a specific branch and supplier.
  * Returns display-ready records with remainder cascade applied.
+ * Uses in-memory cache and accepts an AbortSignal to cancel old/superseded requests.
  * @param branchId - The branch ID.
  * @param supplierId - The supplier ID.
+ * @param forceRefresh - If true, ignores cache and forces a fresh request.
+ * @param signal - Optional AbortSignal to cancel the HTTP request on socket level.
  * @returns Array of InventoryRecord with floored stock values.
  */
 export async function getInventory(
   branchId: number,
   supplierId: number,
+  forceRefresh = false,
+  signal?: AbortSignal,
 ): Promise<InventoryRecord[]> {
-  const res = await fetch(
-    `${API_BASE}?action=inventory&branchId=${branchId}&supplierId=${supplierId}`,
-    { cache: "no-store" },
-  );
-  return handleResponse<InventoryRecord[]>(res);
+  const key = `${branchId}-${supplierId}`;
+
+  if (!forceRefresh) {
+    const cached = inventoryCache.get(key);
+    if (cached && Date.now() - cached.timestamp < INVENTORY_CACHE_TTL_MS) {
+      return cached.data;
+    }
+    const inFlight = inventoryInFlight.get(key);
+    if (inFlight) {
+      return inFlight;
+    }
+  }
+
+  // AG-COMMENT: If signal is already aborted before fetch begins, fail fast
+  if (signal?.aborted) {
+    throw new DOMException("The user aborted a request.", "AbortError");
+  }
+
+  const fetchPromise = (async () => {
+    try {
+      // AG-COMMENT: Pass signal directly to fetch to terminate the network connection when cancelled
+      const res = await fetch(
+        `${API_BASE}?action=inventory&branchId=${branchId}&supplierId=${supplierId}`,
+        { 
+          cache: "no-store",
+          signal,
+        },
+      );
+      const data = await handleResponse<InventoryRecord[]>(res);
+      inventoryCache.set(key, { data, timestamp: Date.now() });
+      return data;
+    } finally {
+      inventoryInFlight.delete(key);
+    }
+  })();
+
+  inventoryInFlight.set(key, fetchPromise);
+  return fetchPromise;
 }
 
 /**

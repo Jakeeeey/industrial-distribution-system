@@ -14,6 +14,12 @@ interface GlobalScannerOptions {
 export function useGlobalScanner({ onScan, enabled = true }: GlobalScannerOptions) {
   const bufferRef = useRef<string>("");
   const lastKeyTimeRef = useRef<number>(0);
+  // AG-COMMENT: Keep onScan in a ref to avoid constantly binding/unbinding the window keydown listener
+  const onScanRef = useRef(onScan);
+
+  useEffect(() => {
+    onScanRef.current = onScan;
+  }, [onScan]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -37,7 +43,7 @@ export function useGlobalScanner({ onScan, enabled = true }: GlobalScannerOption
 
       if (e.key === "Enter") {
         if (bufferRef.current.length > 2) {
-          onScan(bufferRef.current);
+          onScanRef.current(bufferRef.current);
           bufferRef.current = "";
           e.preventDefault();
         }
@@ -54,18 +60,12 @@ export function useGlobalScanner({ onScan, enabled = true }: GlobalScannerOption
 
         // If it's fast OR we are not in an input, buffer it.
         bufferRef.current += e.key;
-        
-        // Prevent default only if we are reasonably sure it's a scan and NOT in a real input
-        // or if it's super fast.
-        if (!isInput && bufferRef.current.length > 0) {
-           // e.preventDefault(); // Might be too aggressive
-        }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [enabled, onScan]);
+  }, [enabled]);
 
   return null;
 }

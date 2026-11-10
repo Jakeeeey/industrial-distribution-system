@@ -62,11 +62,17 @@ export function ReturnDetailsModal({
   );
   const [currentBranchId, setCurrentBranchId] = useState<number | null>(null);
 
-
+  // AG-COMMENT: Guard detail fetch from running in loops on parent re-renders
+  const lastLoadedDetailIdRef = useRef<number | null>(null);
 
   // 1. Initialize Data
   useEffect(() => {
     if (isOpen && data) {
+      if (lastLoadedDetailIdRef.current === data.id) {
+        return;
+      }
+      lastLoadedDetailIdRef.current = data.id;
+
       const isPending = data.status === "Pending";
       setIsEditable(isPending);
       setRemarks(data.remarks || "");
@@ -119,16 +125,20 @@ export function ReturnDetailsModal({
       };
       fetchDetails();
     } else {
+      lastLoadedDetailIdRef.current = null;
       setItems([]);
       setCurrentSupplierId(null);
       setCurrentBranchId(null);
     }
   }, [isOpen, data, refs.suppliers, refs.branches]);
 
-  // 2. Trigger Inventory Load
+  // AG-COMMENT: Debounce inventory load to avoid rapid fire when switching records
   useEffect(() => {
     if (isOpen && currentSupplierId && currentBranchId) {
-      loadInventory(currentBranchId, currentSupplierId);
+      const timer = setTimeout(() => {
+        loadInventory(currentBranchId, currentSupplierId);
+      }, 150);
+      return () => clearTimeout(timer);
     }
   }, [isOpen, currentSupplierId, currentBranchId, loadInventory]);
 
@@ -178,10 +188,17 @@ export function ReturnDetailsModal({
     const discountMap = new Map<string, (typeof refs.lineDiscounts)[0]>();
     refs.lineDiscounts.forEach((d) => discountMap.set(String(d.id), d));
 
+    // AG-COMMENT: Build unit order map with case-insensitive keys for robust matching
     const unitOrderMap = new Map<string, number>();
     refs.units.forEach((u) => {
-      unitOrderMap.set(u.unit_name, u.order);
-      unitOrderMap.set(u.unit_shortcut, u.order);
+      if (u.unit_name) {
+        unitOrderMap.set(u.unit_name, u.order);
+        unitOrderMap.set(u.unit_name.toUpperCase(), u.order);
+      }
+      if (u.unit_shortcut) {
+        unitOrderMap.set(u.unit_shortcut, u.order);
+        unitOrderMap.set(u.unit_shortcut.toUpperCase(), u.order);
+      }
     });
 
     const enrichedItems = inventory
@@ -219,8 +236,11 @@ export function ReturnDetailsModal({
           }
         }
 
+        // AG-COMMENT: Case-insensitive unit resolution against reference units
         const matchedUnit = refs.units.find(
-          (u) => u.unit_name === item.unit_name,
+          (u) =>
+            u.unit_name?.toUpperCase() === item.unit_name?.toUpperCase() ||
+            u.unit_shortcut?.toUpperCase() === item.unit_name?.toUpperCase(),
         );
 
         return {
@@ -240,11 +260,25 @@ export function ReturnDetailsModal({
           parentId: item.familyId || null,
         };
       })
+      // AG-COMMENT: Allow physical cylinders (FULL/EMPTY) and existing items without hiding items with 0/negative stock
       .filter((p) => {
-        const order = unitOrderMap.get(p.unit) ?? 0;
+        const unitUpper = (p.unit || "").trim().toUpperCase();
+        const isPhysicalCylinder =
+          unitUpper === "FULL" ||
+          unitUpper === "EMPTY" ||
+          unitUpper === "FL" ||
+          unitUpper === "MT" ||
+          unitUpper === "PCS" ||
+          unitUpper === "PIECE";
+        const order = unitOrderMap.get(p.unit) ?? unitOrderMap.get(unitUpper) ?? 0;
+        const isCylinderOrder = order === 0 || order === 2 || order === 3;
+        const isAllowedUnit =
+          isPhysicalCylinder ||
+          isCylinderOrder ||
+          !["REFILL", "SWAP", "DEPOSIT", "OUTRIGHT"].includes(unitUpper);
+
         const isAlreadyInCart = items.some((i) => i.id === p.id);
-        // Manual add in detail modal: only allow order 0 or 2 (Full and Empty cylinders only)
-        return (p.stock > 0 && (order === 0 || order === 2)) || isAlreadyInCart;
+        return isAllowedUnit || isAlreadyInCart;
       });
 
     // Group by familyId

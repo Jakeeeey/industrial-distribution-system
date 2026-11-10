@@ -81,8 +81,8 @@ export async function GET(req: NextRequest) {
           );
         }
 
-        // Extract JWT from cookie for Spring Boot auth
-        const token = req.cookies.get("vos_access_token")?.value;
+        // AG-COMMENT: Extract JWT from cookie with fallback to environment token for Spring Boot auth
+        const token = req.cookies.get("vos_access_token")?.value || process.env.VOS_ACCESS_TOKEN || process.env.vos_access_token;
 
         if (!token) {
           return json(

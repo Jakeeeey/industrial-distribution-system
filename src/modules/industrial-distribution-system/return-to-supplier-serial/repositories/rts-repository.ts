@@ -13,7 +13,8 @@ function getDirectusBase(): string {
     process.env.NEXT_PUBLIC_DIRECTUS_URL ||
     process.env.NEXT_PUBLIC_API_BASE_URL ||
     "";
-  const cleaned = raw.trim().replace(/\/$/, "");
+  // AG-COMMENT: Strip inline comments (e.g. # Dummy Directus) and whitespace
+  const cleaned = raw.split("#")[0].trim().replace(/\/$/, "");
   if (!cleaned) {
     throw new Error("DIRECTUS_URL is not set. Add it to .env.local and restart the dev server.");
   }
@@ -22,7 +23,8 @@ function getDirectusBase(): string {
 
 /** Returns the Directus static token. Throws if not set. */
 function getDirectusToken(): string {
-  const token = (process.env.DIRECTUS_STATIC_TOKEN || process.env.DIRECTUS_TOKEN || "").trim();
+  // AG-COMMENT: Strip inline comments and whitespace
+  const token = (process.env.DIRECTUS_STATIC_TOKEN || process.env.DIRECTUS_TOKEN || "").split("#")[0].trim();
   if (!token) {
     throw new Error("DIRECTUS_STATIC_TOKEN is not set. Add it to .env.local and restart the dev server.");
   }
@@ -142,8 +144,10 @@ export async function getRawReferences() {
   return Promise.all([
     directusGet<{ data: Record<string, unknown>[] }>("/items/suppliers?limit=-1&filter[supplier_type][_eq]=Trade&filter[division_id][_eq]=1"),
     directusGet<{ data: Record<string, unknown>[] }>("/items/branches?limit=-1&filter[division_id][_eq]=1"),
+    // AG-COMMENT: Branch filtered by division_id = 1 per ids-guide
+    // AG-COMMENT: Filter products by is_serialized = 1 per ids-guide rule
     directusGet<{ data: Record<string, unknown>[] }>(
-      "/items/products?limit=-1&fields=product_id,product_name,description,product_code,parent_id,unit_of_measurement,unit_of_measurement_count,cost_per_unit",
+      "/items/products?limit=-1&filter[is_serialized][_eq]=1&fields=product_id,product_name,description,product_code,parent_id,unit_of_measurement,unit_of_measurement_count,cost_per_unit,is_serialized",
     ),
     directusGet<{ data: Record<string, unknown>[] }>("/items/units?limit=-1&fields=unit_id,unit_name,unit_shortcut,order"),
     directusGet<{ data: Record<string, unknown>[] }>("/items/line_discount?limit=-1"),
@@ -160,9 +164,21 @@ export async function getRawReferences() {
  * Fetches raw product details (prices, parents) for a set of product IDs.
  */
 export async function getRawProductsByIds(productIds: number[]) {
-  const productFilter = JSON.stringify({ product_id: { _in: productIds } });
+  // AG-COMMENT: Guard against empty list to avoid malformed Directus query
+  if (!productIds || productIds.length === 0) {
+    return { data: [] };
+  }
+
+  // AG-COMMENT: Filter by product_id in list AND is_serialized = 1 per ids-guide rule
+  const productFilter = JSON.stringify({
+    _and: [
+      { product_id: { _in: productIds } },
+      { is_serialized: { _eq: 1 } },
+    ],
+  });
+
   return directusGet<{ data: Record<string, unknown>[] }>(
-    `/items/products?limit=-1&fields=product_id,parent_id,cost_per_unit&filter=${encodeURIComponent(productFilter)}`,
+    `/items/products?limit=-1&fields=product_id,parent_id,cost_per_unit,description,product_name,is_serialized&filter=${encodeURIComponent(productFilter)}`,
   );
 }
 
@@ -171,18 +187,24 @@ export async function getRawProductsByIds(productIds: number[]) {
  * This is kept in the repository as it is an external infrastructure call.
  */
 export async function getSpringInventory(branchId: number, supplierId: number, token: string): Promise<InventoryViewRow[]> {
-  const SPRING_URL = process.env.SPRING_API_BASE_URL;
+  // AG-COMMENT: Strip inline comments and whitespace from Spring URL
+  const SPRING_URL = (process.env.SPRING_API_BASE_URL || "").split("#")[0].trim();
   if (!SPRING_URL) throw new Error("SPRING_API_BASE_URL is not defined");
 
-  const startDate = "2000-01-01";
+  const effectiveToken = (token || process.env.VOS_ACCESS_TOKEN || process.env.vos_access_token || "").split("#")[0].trim();
+
+  // AG-COMMENT: Scoped date range with branchId and divisionId to ensure fast response & small payload.
+  // Previously, branchId was not included in targetUrl, forcing Spring Boot to return 111+ MB of
+  // company-wide data which triggered ECONNRESET or 400 Bad Request / 500 Internal Server Error.
+  const startDate = "2020-01-01";
   const endDate = "2099-12-31";
-  const targetUrl = `${SPRING_URL.replace(/\/$/, "")}/api/view-running-inventory-by-unit/all?startDate=${startDate}&endDate=${endDate}`;
+  const targetUrl = `${SPRING_URL.replace(/\/$/, "")}/api/view-running-inventory-by-unit/all?startDate=${startDate}&endDate=${endDate}&branchId=${branchId}&divisionId=1`;
 
   const springRes = await fetch(targetUrl, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${effectiveToken}`,
     },
     cache: "no-store",
   });

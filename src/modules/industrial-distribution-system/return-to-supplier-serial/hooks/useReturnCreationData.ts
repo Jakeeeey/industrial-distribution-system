@@ -4,7 +4,7 @@
 // useReturnCreationData — Manages reference data + inventory for Create/Edit
 // =============================================================================
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
 import { getReferences, getInventory } from "../providers/fetchProviders";
 import type {
@@ -41,9 +41,11 @@ export function useReturnCreationData(isActive: boolean, initialRefs?: Reference
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Sync state if preloaded references update
+  // Sync state if preloaded references update (guard with ref to prevent render loops)
+  const initialRefsRef = useRef<ReferenceData | undefined>(initialRefs);
   useEffect(() => {
-    if (initialRefs) {
+    if (initialRefs && initialRefs !== initialRefsRef.current) {
+      initialRefsRef.current = initialRefs;
       setRefs(initialRefs);
     }
   }, [initialRefs]);
@@ -77,28 +79,77 @@ export function useReturnCreationData(isActive: boolean, initialRefs?: Reference
     };
   }, [isActive, initialRefs]);
 
+  // AG-COMMENT: Track last loaded branchId-supplierId key to avoid redundant fetch requests
+  const lastLoadedKeyRef = useRef<string>("");
+  // AG-COMMENT: AbortController ref to cancel previous in-flight requests and prevent simultaneous queries
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   /**
    * Fetches display-ready inventory for a specific branch + supplier.
-   * The server applies the remainder cascade — data arrives floored.
+   * Automatically aborts any existing in-flight request before launching a new one.
+   * Stable callback reference (empty deps) prevents triggering infinite re-render loops in consumers.
    */
   const loadInventory = useCallback(
-    async (branchId: number, supplierId: number) => {
+    async (branchId: number, supplierId: number, forceRefresh = false) => {
+      // AG-COMMENT: Guard against missing or invalid IDs to prevent triggering 400 Bad Request
+      if (!branchId || !supplierId || isNaN(branchId) || isNaN(supplierId)) {
+        return;
+      }
+
+      const key = `${branchId}-${supplierId}`;
+      // AG-COMMENT: If this key has already been queried, skip unless forceRefresh is requested
+      if (!forceRefresh && lastLoadedKeyRef.current === key) {
+        return;
+      }
+
+      // AG-COMMENT: Immediately abort previous in-flight request to stop simultaneous queries
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
+      lastLoadedKeyRef.current = key;
       setIsLoading(true);
       setError(null);
       try {
-        const data = await getInventory(branchId, supplierId);
-        setInventory(data);
+        const data = await getInventory(branchId, supplierId, forceRefresh, controller.signal);
+        if (!controller.signal.aborted) {
+          setInventory(data);
+        }
       } catch (err: unknown) {
+        // AG-COMMENT: Silently ignore AbortError since a newer request superseded it
+        if (err instanceof Error && (err.name === "AbortError" || err.message.includes("aborted"))) {
+          return;
+        }
+        if (controller.signal.aborted) {
+          return;
+        }
         const msg = err instanceof Error ? err.message : "Failed to load inventory.";
         setError(msg);
         toast.error("Inventory Error", { description: msg });
         setInventory([]);
       } finally {
-        setIsLoading(false);
+        if (!controller.signal.aborted) {
+          setIsLoading(false);
+        }
       }
     },
     [],
   );
+
+  // AG-COMMENT: Reset last loaded key and abort requests when modal closes
+  useEffect(() => {
+    if (!isActive) {
+      lastLoadedKeyRef.current = "";
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    }
+  }, [isActive]);
 
   return { refs, inventory, loadInventory, isLoading, error };
 }

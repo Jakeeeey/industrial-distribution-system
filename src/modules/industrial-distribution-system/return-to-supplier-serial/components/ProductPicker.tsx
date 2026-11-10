@@ -122,6 +122,12 @@ export function ProductPicker({
       .filter(Boolean);
   }, [products, search]);
 
+  // AG-COMMENT: O(1) item map to avoid O(N) linear scans on every variant render
+  const addedItemMap = useMemo(
+    () => new Map(addedProducts.map((i) => [i.id, i])),
+    [addedProducts],
+  );
+
   const totalAmount = addedProducts.reduce(
     (sum, item) => sum + (item.customPrice || item.price) * item.quantity,
     0,
@@ -222,9 +228,7 @@ export function ProductPicker({
                     </div>
                     <div className="p-3 space-y-2">
                       {(group.variants as unknown as { id: string; stock: number; name: string; code: string; unit: string; price: number; uom_id: number; unitCount: number; supplierDiscount: number; discountType?: string }[]).map((variant) => {
-                        const cartItem = addedProducts.find(
-                          (i) => i.id === variant.id,
-                        );
+                        const cartItem = addedItemMap.get(variant.id);
 
                         return (
                           <div
