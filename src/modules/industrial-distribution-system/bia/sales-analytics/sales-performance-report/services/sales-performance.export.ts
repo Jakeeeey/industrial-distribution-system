@@ -45,7 +45,7 @@ export function exportSalesPerformanceToExcel(
   const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
   XLSX.utils.book_append_sheet(wb, wsSummary, "Executive Summary");
 
-  // Tab 2: Detailed Line Items
+  // Tab 2: Detailed Line Items (Export complete filtered dataset)
   const detailHeaders = [
     "Invoice No",
     "Order ID",
@@ -69,7 +69,10 @@ export function exportSalesPerformanceToExcel(
     "Status",
   ];
 
-  const detailRows = report.records.map((r) => [
+  // DEV-RULE: Prioritize allRecords so Excel export contains the complete filtered dataset across all pages
+  const exportItems = (report.allRecords && report.allRecords.length > 0) ? report.allRecords : report.records;
+
+  const detailRows = exportItems.map((r) => [
     r.invoiceNo,
     r.orderId,
     r.invoiceDate,

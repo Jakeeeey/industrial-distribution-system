@@ -149,6 +149,7 @@ export interface SalesPerformanceLookupsResponse {
  */
 export interface SalesPerformanceReportResponse {
   records: SalesPerformanceRecord[];
+  allRecords?: SalesPerformanceRecord[];
   totalRecords: number;
   kpis: SalesPerformanceKPIs;
   charts: SalesPerformanceChartsData;

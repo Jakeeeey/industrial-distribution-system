@@ -79,10 +79,31 @@ async function fetchDirectus<T>(path: string): Promise<T[]> {
   }
 }
 
+function isIndustrialBranch(b: RawBranch): boolean {
+  // DEV-RULE: Strictly filter branches by division_id === 1 (Industrial Division)
+  if (b.division_id == null || Number(b.division_id) !== 1) {
+    return false;
+  }
+  const name = (b.branch_name || "").toUpperCase();
+  const code = (b.branch_code || "").toUpperCase();
+  if (
+    name.includes("VAN") ||
+    name.includes("CHARIOT") ||
+    code.includes("VAN") ||
+    code.includes("-VB") ||
+    code.includes("-VC")
+  ) {
+    return false;
+  }
+  return true;
+}
+
 export async function fetchSalesPerformanceLookups(): Promise<SalesPerformanceLookupsResponse> {
-  // DEV-RULE: Exclusively fetch serialized gas cylinder products and entities without restrictive filter errors
+  // DEV-RULE: Exclusively fetch authorized active industrial branches (division_id = 1) and serialized gas products
   const [branches, customers, products, salesmen] = await Promise.all([
-    fetchDirectus<RawBranch>("items/branches?fields=id,branch_code,branch_name&limit=-1"),
+    fetchDirectus<RawBranch>(
+      "items/branches?fields=id,branch_code,branch_name,division_id,isActive&filter[isActive][_eq]=1&filter[division_id][_eq]=1&sort=branch_name&limit=-1"
+    ),
     fetchDirectus<RawCustomer>(
       "items/customer?fields=customer_code,customer_name,store_name&limit=-1"
     ),
@@ -94,14 +115,14 @@ export async function fetchSalesPerformanceLookups(): Promise<SalesPerformanceLo
     ),
   ]);
 
+  const industrialBranches = branches.filter((b) => b.branch_name && isIndustrialBranch(b));
+
   return {
-    branches: branches
-      .filter((b) => b.branch_name)
-      .map((b) => ({
-        value: String(b.id),
-        label: `${b.branch_name}${b.branch_code ? ` (${b.branch_code})` : ""}`,
-        code: b.branch_code || "",
-      })),
+    branches: industrialBranches.map((b) => ({
+      value: String(b.id),
+      label: `${b.branch_name}${b.branch_code ? ` (${b.branch_code})` : ""}`,
+      code: b.branch_code || "",
+    })),
     customers: customers
       .filter((c) => c.customer_name || c.store_name)
       .map((c) => ({
@@ -181,7 +202,7 @@ export async function fetchSalesPerformanceReport(
       "items/customer?fields=customer_code,customer_name,store_name,city,province,isActive&limit=-1"
     ),
     fetchDirectus<RawBranch>(
-      "items/branches?fields=id,branch_name,branch_code&limit=-1"
+      "items/branches?fields=id,branch_name,branch_code,division_id,isActive&limit=-1"
     ),
     fetchDirectus<RawSalesman>(
       "items/salesman?fields=id,salesman_code,salesman_name&limit=-1"

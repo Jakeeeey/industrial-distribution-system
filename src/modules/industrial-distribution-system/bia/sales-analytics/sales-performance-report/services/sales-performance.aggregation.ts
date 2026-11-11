@@ -119,6 +119,7 @@ export interface RawBranch {
   id: number;
   branch_name: string | null;
   branch_code: string | null;
+  division_id?: number | null;
   isActive: number | null;
 }
 
@@ -260,8 +261,30 @@ export function aggregateSalesPerformanceReport(
 
     // Branch filter
     const branchId = Number(inv.branch_id || 0);
-    if (filters.branchId && filters.branchId !== "ALL" && String(branchId) !== filters.branchId) {
-      continue;
+    if (filters.branchId && filters.branchId !== "ALL") {
+      if (String(branchId) !== filters.branchId) {
+        continue;
+      }
+    } else {
+      // DEV-RULE: Scope "All Authorized Branches" aggregate view strictly to authorized industrial branches (division_id = 1)
+      // Exclude non-industrial operational units and van selling routes
+      const branchObj = branchId > 0 ? branchesMap.get(String(branchId)) : undefined;
+      if (branchObj) {
+        if (branchObj.division_id != null && Number(branchObj.division_id) !== 1) {
+          continue;
+        }
+        const bName = (branchObj.branch_name || "").toUpperCase();
+        const bCode = (branchObj.branch_code || "").toUpperCase();
+        const isNonIndustrialVan =
+          bName.includes("VAN") ||
+          bName.includes("CHARIOT") ||
+          bCode.includes("VAN") ||
+          bCode.includes("-VB") ||
+          bCode.includes("-VC");
+        if (isNonIndustrialVan) {
+          continue;
+        }
+      }
     }
 
     // Customer filter
@@ -595,6 +618,7 @@ export function aggregateSalesPerformanceReport(
 
   return {
     records: paginatedRecords,
+    allRecords: filteredRecords,
     totalRecords: filteredRecords.length,
     kpis,
     charts,

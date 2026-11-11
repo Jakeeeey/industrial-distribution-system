@@ -11,8 +11,8 @@ import type {
 } from "../types/sales-performance.types";
 
 const BFF_URL = "/api/ids/bia/sales-analytics/sales-performance-report";
-// DEV-RULE: Bump lookups cache key to v2 and never persist empty array lookups
-const LOOKUPS_STORAGE_KEY = "vos_ids_bia_sales_perf_lookups_v2";
+// DEV-RULE: Bump lookups cache key to v4 to invalidate prior lookups cache and force strict division_id=1 branches
+const LOOKUPS_STORAGE_KEY = "vos_ids_bia_sales_perf_lookups_v4";
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export async function fetchSalesPerformanceReportClient(

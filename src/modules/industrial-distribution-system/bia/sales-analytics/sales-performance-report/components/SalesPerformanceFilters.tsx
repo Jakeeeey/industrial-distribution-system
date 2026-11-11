@@ -8,7 +8,7 @@
 "use client";
 
 import * as React from "react";
-import { Search, Filter, Calendar, RotateCcw } from "lucide-react";
+import { Search, Filter, Calendar, RotateCcw, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +43,26 @@ export function SalesPerformanceFilters() {
   React.useEffect(() => {
     setStaged(filters);
   }, [filters]);
+
+  // DEV-RULE: Reactive debounced search sync - when search query changes or is cleared, automatically re-query
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      const currentQuery = staged.searchQuery || "";
+      const appliedQuery = filters.searchQuery || "";
+      if (currentQuery !== appliedQuery) {
+        applyFilters({ ...staged, searchQuery: currentQuery });
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [staged.searchQuery, filters.searchQuery, staged, applyFilters]);
+
+  // Quick clear search handler that immediately resets search and refreshes
+  const handleClearSearch = () => {
+    const nextStaged = { ...staged, searchQuery: "" };
+    setStaged(nextStaged);
+    applyFilters(nextStaged);
+  };
 
   // Compute if staged filters have uncommitted changes
   const hasPendingChanges = React.useMemo(() => {
@@ -143,9 +163,19 @@ export function SalesPerformanceFilters() {
               value={staged.searchQuery || ""}
               onChange={(e) => updateStaged("searchQuery", e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleApply()}
-              className="pl-9 h-9 text-xs"
+              className="pl-9 pr-8 h-9 text-xs"
               disabled={isLoading}
             />
+            {staged.searchQuery && (
+              <button
+                type="button"
+                onClick={handleClearSearch}
+                aria-label="Clear search"
+                className="absolute right-2 top-2.5 h-4 w-4 rounded-full text-muted-foreground hover:text-foreground inline-flex items-center justify-center transition-colors"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
           </div>
 
           {/* Period Presets: Today, This Week, This Month, Custom Range */}

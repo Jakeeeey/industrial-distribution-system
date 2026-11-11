@@ -15,8 +15,10 @@ export function generateSalesPerformancePrintHtml(
   const formatCurrency = (val: number) =>
     `₱${val.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  const topRowsHtml = report.records
-    .slice(0, 35)
+  // DEV-RULE: Prioritize allRecords so print/PDF export contains the complete filtered dataset across all pages
+  const exportItems = (report.allRecords && report.allRecords.length > 0) ? report.allRecords : report.records;
+
+  const topRowsHtml = exportItems
     .map(
       (r, i) => `
     <tr>
@@ -72,6 +74,8 @@ export function generateSalesPerformancePrintHtml(
     .kpi-label { font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: 600; margin-bottom: 4px; }
     .kpi-val { font-size: 16px; font-weight: bold; color: #0f172a; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 10px; }
+    thead { display: table-header-group; }
+    tr { page-break-inside: avoid; }
     th { background: #f1f5f9; border: 1px solid #94a3b8; padding: 6px; font-weight: 700; text-align: left; }
     .sign-table { width: 100%; margin-top: 28px; page-break-inside: avoid; }
     .sign-box { width: 23%; text-align: center; }
@@ -128,7 +132,7 @@ export function generateSalesPerformancePrintHtml(
     </tbody>
   </table>
 
-  <h4 style="margin: 0 0 6px 0; font-size: 11px; text-transform: uppercase;">Sales Transaction Line Items (${report.records.length} Records)</h4>
+  <h4 style="margin: 0 0 6px 0; font-size: 11px; text-transform: uppercase;">Sales Transaction Line Items (${exportItems.length} Records)</h4>
   <table>
     <thead>
       <tr>
