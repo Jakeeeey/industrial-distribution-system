@@ -28,6 +28,7 @@ import {
 import { generateSupplierPerformancePrintHtml } from './utils/generateSupplierPerformancePrintHtml';
 import { FilterHeader } from './components/FilterHeader';
 import { SummaryCards } from './components/SummaryCards';
+import { SupplierPerformanceCharts } from './components/SupplierPerformanceCharts';
 import { ResultsGrid } from './components/ResultsGrid';
 import { DetailDrawer } from './components/DetailPanel';
 import { AiInsightsPanel } from './components/AiInsightsPanel';
@@ -192,6 +193,13 @@ export const SupplierPerformanceReportModule: React.FC = () => {
 
             {/* High-level KPI Scorecard Summary with Vibrant Theme Colors & Glow */}
             <SummaryCards kpis={reportData?.kpis || null} isLoading={isReportLoading} />
+
+            {/* Visual Graphics: Fulfillment vs Defect & Vendor Risk Distribution */}
+            <SupplierPerformanceCharts
+                suppliers={reportData?.suppliers || []}
+                kpis={reportData?.kpis || null}
+                isLoading={isReportLoading}
+            />
 
             {/* Main Scorecard Results Grid with Smart Active Sorting & Pagination */}
             <ResultsGrid

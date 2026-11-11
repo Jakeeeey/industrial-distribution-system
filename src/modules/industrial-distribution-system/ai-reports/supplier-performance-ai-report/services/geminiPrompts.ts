@@ -21,13 +21,10 @@ Strict Operating Constraints:
     if (isCustomQuery) {
         return `${baseDirectives}
 Mode: EXECUTIVE CONVERSATIONAL COPILOT
-The user is an executive interrogating the supplier performance dataset.
-Answer the user's specific inquiry thoroughly with executive-level clarity.
-Cite exact vendor names, OTIF fulfillment percentages, RTS defect volumes, and cost variances from the data.
-Structure your answer with:
-- **Direct Answer Summary**: 1 concise takeaway answering the question.
-- **Empirical Findings**: Bulleted specifics citing exact numbers from the dataset.
-- **Actionable C-Suite Next Steps**: Concrete contractual or operational follow-ups.`;
+The user is an executive interrogating the active supplier performance dataset.
+CRITICAL CONSTRAINT: You MUST answer the user's inquiry strictly in 1 to 2 sentences maximum.
+Your answer must be brief, highly accurate, and contain concrete figures from the dataset (such as vendor names, OTIF %, or RTS counts).
+Do not use markdown headers, asterisks, bullet points, or introductory conversational filler. Be clear, direct, and actionable.`;
     }
 
     if (tierSlug === 'basic') {
@@ -35,61 +32,63 @@ Structure your answer with:
 Current Tier: BASIC
 Your JSON output MUST adhere to this exact structure:
 {
-  "summary": "1 concise executive paragraph describing the overall supplier performance status, enterprise OTIF percentage, rejection rates, and reliability posture.",
+  "summary": "Strictly 1 to 2 sentences describing enterprise OTIF and defect posture.",
   "keyExposures": [
-    "Exposure/Risk 1: Concrete observation with supplier name and specific metric",
-    "Exposure/Risk 2: Concrete observation with supplier name and specific metric",
-    "Exposure/Risk 3: Concrete observation with supplier name and specific metric"
+    "Exposure 1: 1 sentence citing vendor name and exact metric",
+    "Exposure 2: 1 sentence citing vendor name and exact metric"
   ],
   "strategicActions": [
-    "Action 1: Immediate practical follow-up for procurement officer",
-    "Action 2: Follow-up regarding RTS returns or uninspected deliveries",
-    "Action 3: Actionable recommendation regarding order buffer or vendor review"
+    "Action 1: 1 sentence stating concrete procurement follow-up",
+    "Action 2: 1 sentence stating concrete procurement follow-up"
   ]
 }
-Constraints: Exactly 3 items in keyExposures and exactly 3 items in strategicActions.`;
+Constraints: Strictly 1 to 2 sentences per field. No lengthy filler prose.`;
     }
 
     if (tierSlug === 'pro') {
         return `${baseDirectives}
 Current Tier: PRO
-Include root-cause diagnosis correlating delayed orders with split receipts and RTS defect item remarks.
-Return JSON with "summary", "keyExposures" (3 items), and "strategicActions" (3 items), with root-cause diagnostic depth.`;
+Provide root-cause insights correlating delayed orders with split receipts and RTS defect item remarks.
+All fields must be strictly 1 to 2 sentences maximum. Mention exact numbers and vendor names.
+Return JSON with "summary" (1-2 sentences), "keyExposures" (2 items, 1 sentence each), and "strategicActions" (2 items, 1 sentence each).`;
     }
 
     // Tier 3: Executive Strategic Pillars
     return `${baseDirectives}
 Current Tier: EXECUTIVE STRATEGIC
-Deliver a high-impact C-Suite briefing structured around 3 Strategic Pillars.
+Deliver a high-impact, ultra-concise C-Suite briefing structured around 3 Strategic Pillars.
+CRITICAL EXECUTIVE CONSTRAINT:
+1. Every field in the JSON (summary, each pillar's findings, each key exposure, and each strategic action) MUST BE STRICTLY 1 TO 2 SENTENCES MAXIMUM.
+2. Information must be brief, highly accurate, and detailed with exact numbers (percentages, order counts, return quantities, vendor names).
+3. Absolutely no lengthy paragraphs, no filler prose.
+
 Your JSON output MUST adhere to this exact structure:
 {
-  "summary": "High-impact executive brief synthesizing the strategic risk posture of the vendor portfolio, margin leakage, and systemic operational friction.",
+  "summary": "Strictly 1 to 2 sentences synthesizing the overall risk posture and enterprise OTIF.",
   "executivePillars": [
     {
       "pillar": "Commercial & Margin Integrity",
       "status": "CRITICAL" | "MODERATE" | "STABLE",
-      "findings": "Analysis of pricing compliance, cost variances, and financial exposure from RTS credit memos."
+      "findings": "Strictly 1 to 2 sentences analyzing pricing compliance and cost variances with exact figures."
     },
     {
       "pillar": "Supply Continuity & Logistics Friction",
       "status": "CRITICAL" | "MODERATE" | "STABLE",
-      "findings": "Analysis of systemic OTIF delivery failures, split shipment friction, and lead-time delays."
+      "findings": "Strictly 1 to 2 sentences analyzing OTIF delivery failures and split shipment drag with exact figures."
     },
     {
       "pillar": "Vendor Governance & QBR Leverage",
       "status": "ACTION_REQUIRED",
-      "findings": "Concrete negotiation leverage points, contractual penalties (e.g. liquidated damages/rebates), and vendor probation plans."
+      "findings": "Strictly 1 to 2 sentences detailing contractual probation or negotiation leverage."
     }
   ],
   "keyExposures": [
-    "Commercial Risk: Specific supplier with cost variance or financial drag",
-    "Delivery Deficit: Specific supplier with chronic late deliveries",
-    "Quality Vulnerability: Specific supplier with severe RTS defect volume"
+    "Strictly 1 sentence naming high-risk supplier and exact metric.",
+    "Strictly 1 sentence naming high-risk supplier and exact metric."
   ],
   "strategicActions": [
-    "C-Suite Intervention: Notice to Cure and CAPA mandate for bottom performers",
-    "Logistics Directive: Strict in-full shipping terms to stop split delivery drag",
-    "Commercial Strategy: Pending voucher holds and QBR penalty enforcement"
+    "Strictly 1 sentence specifying exact human procurement intervention.",
+    "Strictly 1 sentence specifying exact human procurement intervention."
   ]
 }`;
 }
@@ -132,7 +131,7 @@ Summary Metrics:
 Active Supplier Performance Data:
 ${JSON.stringify(sanitizedSupplierData, null, 2)}
 
-Provide an executive, formatted answer addressing this inquiry directly.
+Provide an ultra-concise, accurate executive answer strictly in 1 to 2 sentences without headers, asterisks, or fluff. Include exact figures from the dataset.
 `;
     }
 

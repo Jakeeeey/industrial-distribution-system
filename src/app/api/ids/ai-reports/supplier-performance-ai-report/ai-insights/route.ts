@@ -59,57 +59,53 @@ function runDeterministicFallback(
     const otifStr = kpis.averageOtifRate !== null ? `${kpis.averageOtifRate}%` : 'N/A';
     const rejStr = kpis.averageRejectionRate !== null ? `${kpis.averageRejectionRate}%` : '0.00%';
 
-    const summary = `Enterprise supplier fulfillment stands at ${otifStr} OTIF across ${kpis.totalSuppliersEvaluated} evaluated vendors with an average rejection rate of ${rejStr}. A critical concentration of risk is detected: ${kpis.highRiskVendorsCount} supplier(s) currently trigger elevated quality, delivery delay, or cost escalation thresholds requiring strategic intervention.`;
+    // Ultra-concise 1-2 sentence executive summary
+    const summary = `Enterprise supplier fulfillment is at ${otifStr} OTIF with an average rejection rate of ${rejStr} across ${kpis.totalSuppliersEvaluated} evaluated vendors. Strategic intervention is urgently required as ${kpis.highRiskVendorsCount} vendor(s) breach high-risk quality and delivery thresholds.`;
 
+    // 1-2 sentence executive pillars
     const executivePillars: ExecutivePillar[] = [
         {
             pillar: 'Commercial & Margin Integrity',
             status: highVarianceSuppliers.length > 0 ? 'CRITICAL' : 'STABLE',
             findings: highVarianceSuppliers.length > 0
-                ? `${highVarianceSuppliers[0].supplierName} exhibits a +${highVarianceSuppliers[0].averageCostVariancePercentage}% unit cost variance. Ensure pending credit memos match RTS batches.`
-                : 'Unit prices across all received batches comply with contracted and approved purchase order values.',
+                ? `${highVarianceSuppliers[0].supplierName} shows a +${highVarianceSuppliers[0].averageCostVariancePercentage}% unit price variance across fulfilled batches.`
+                : 'Unit purchase costs remain fully compliant with contracted purchase order commitments.',
         },
         {
             pillar: 'Supply Continuity & Logistics Friction',
             status: bottomSuppliers.some((s) => (s.otifPercentage || 0) < 60) ? 'CRITICAL' : 'MODERATE',
             findings: bottomSuppliers.length > 0
-                ? `${bottomSuppliers[0].supplierName} delivered only ${bottomSuppliers[0].otifPercentage}% on-time orders (${bottomSuppliers[0].onTimeOrders}/${bottomSuppliers[0].totalOrdersDue} shipments).`
+                ? `${bottomSuppliers[0].supplierName} delivered only ${bottomSuppliers[0].otifPercentage}% on-time orders across ${bottomSuppliers[0].totalOrdersDue} scheduled shipments.`
                 : 'Fulfillment timelines remain stable across active delivery windows.',
         },
         {
             pillar: 'Vendor Governance & QBR Leverage',
             status: 'ACTION_REQUIRED',
             findings: highestRtsSupplier
-                ? `Mandate a formal Corrective Action Plan (CAPA) for ${highestRtsSupplier.supplierName} citing ${highestRtsSupplier.rtsCount} return events (${highestRtsSupplier.rejectionRatePercentage}% rejection rate).`
-                : 'Maintain standard quarterly reviews and lead-time monitoring.',
+                ? `Mandate a formal Corrective Action Plan for ${highestRtsSupplier.supplierName} citing ${highestRtsSupplier.rtsCount} return events and a ${highestRtsSupplier.rejectionRatePercentage}% rejection rate.`
+                : 'Maintain standard quarterly reviews and routine lead-time monitoring.',
         },
     ];
 
+    // 1 sentence exposures
     const keyExposures: string[] = [
-        `Delivery Deficit: ${bottomSuppliers[0]?.supplierName || 'Vendors'} achieved only ${bottomSuppliers[0]?.otifPercentage ?? 0}% OTIF compliance.`,
-        `Quality Drag: ${highestRtsSupplier?.supplierName || 'Vendors'} accounts for ${highestRtsSupplier?.rtsCount || 0} RTS return documents.`,
-        `Commercial Variance: ${highVarianceSuppliers[0]?.supplierName || 'Vendors'} exhibits price variances exceeding budget tolerances.`,
+        `Delivery Deficit: ${bottomSuppliers[0]?.supplierName || 'Vendors'} achieved only ${bottomSuppliers[0]?.otifPercentage ?? 0}% OTIF compliance across ${bottomSuppliers[0]?.totalOrdersDue || 0} shipments.`,
+        `Quality Drag: ${highestRtsSupplier?.supplierName || 'Vendors'} generated ${highestRtsSupplier?.rtsCount || 0} RTS return documents with ${highestRtsSupplier?.rejectionRatePercentage || 0}% defect rate.`,
     ];
 
+    // 1 sentence actions
     const strategicActions: string[] = [
-        'Enforce 10-business-day Corrective Action Plan (CAPA) mandates on all high-risk vendors.',
-        'Hold pending finance disbursements for suppliers with unallocated RTS return quantities.',
-        'Mandate strict in-full shipment delivery terms to eliminate split delivery administrative friction.',
+        'Enforce 10-business-day Corrective Action Plan (CAPA) mandates on all bottom-tier suppliers.',
+        'Hold pending finance disbursements for suppliers with open, unallocated return-to-supplier credit memos.',
     ];
 
     let qaAnswer: string | undefined = undefined;
     if (userQuery) {
-        qaAnswer = `### Offline Analytical Assessment
-*Note: AI Copilot is operating under rule-based offline mode. Based on live empirical database records:*
-
-1. **Primary Operational Exposure**:
-   - Bottom vendor: **${bottomSuppliers[0]?.supplierName || 'None'}** (${bottomSuppliers[0]?.otifPercentage ?? 'N/A'}% OTIF, ${bottomSuppliers[0]?.totalOrdersDue || 0} orders due).
-
-2. **Quality & Defect Volume**:
-   - Highest return rate: **${highestRtsSupplier?.supplierName || 'None'}** (${highestRtsSupplier?.rtsCount || 0} RTS documents, ${highestRtsSupplier?.rejectionRatePercentage || 0}% rejection rate).
-
-3. **Recommended C-Level Action**:
-   - Enforce contractual liquidated damages or 5-day lead-time buffers before approving purchase agreement renewals.`;
+        // Ultra-concise 1-2 sentence response citing exact figures
+        const primaryIssueVendor = bottomSuppliers[0]?.supplierName || highestRtsSupplier?.supplierName || 'high-risk vendors';
+        const primaryOtif = bottomSuppliers[0]?.otifPercentage ?? '0';
+        const primaryRts = highestRtsSupplier?.rtsCount ?? 0;
+        qaAnswer = `Current portfolio risk is driven by ${primaryIssueVendor} with ${primaryOtif}% OTIF and ${primaryRts} RTS return events. To mitigate this immediately, initiate a 10-day Corrective Action Plan (CAPA) audit and enforce strict in-full delivery clauses before contract renewal.`;
     }
 
     return {
