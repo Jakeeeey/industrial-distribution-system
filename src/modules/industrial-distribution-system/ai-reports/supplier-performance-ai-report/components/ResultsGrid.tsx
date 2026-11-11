@@ -11,7 +11,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { SupplierSummaryRow } from '../types';
 import { ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 
@@ -37,6 +37,17 @@ export const ResultsGrid: React.FC<ResultsGridProps> = ({
     const [pageSize, setPageSize] = useState(25);
     const [sortField, setSortField] = useState<SortField | null>(null);
     const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+    // Track filter/sort state to reset page without triggering cascading effect renders
+    const [prevFiltersKey, setPrevFiltersKey] = useState(
+        `${searchTerm}_${sortField}_${sortDirection}_${suppliers.length}`
+    );
+    const currentFiltersKey = `${searchTerm}_${sortField}_${sortDirection}_${suppliers.length}`;
+
+    if (currentFiltersKey !== prevFiltersKey) {
+        setPrevFiltersKey(currentFiltersKey);
+        setCurrentPage(1);
+    }
 
     // Filter suppliers by name
     const filteredSuppliers = useMemo(() => {
@@ -87,11 +98,6 @@ export const ResultsGrid: React.FC<ResultsGridProps> = ({
 
         return list;
     }, [filteredSuppliers, sortField, sortDirection]);
-
-    // Reset to page 1 on search or sort change
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [searchTerm, sortField, sortDirection, suppliers.length]);
 
     const handleHeaderClick = (field: SortField) => {
         if (sortField === field) {

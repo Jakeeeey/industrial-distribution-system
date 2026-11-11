@@ -169,7 +169,7 @@ export async function POST(req: NextRequest) {
                         };
                     }
 
-                    const parsedJson = parseJsonSafe(rawText);
+                    const parsedJson = parseJsonSafe<Partial<AiInsightResponse>>(rawText);
                     if (parsedJson && parsedJson.summary) {
                         return {
                             tierSlug,
@@ -177,7 +177,7 @@ export async function POST(req: NextRequest) {
                             model: process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite',
                             summary: parsedJson.summary,
                             executivePillars: Array.isArray(parsedJson.executivePillars)
-                                ? parsedJson.executivePillars
+                                ? (parsedJson.executivePillars as ExecutivePillar[])
                                 : undefined,
                             keyExposures: Array.isArray(parsedJson.keyExposures)
                                 ? parsedJson.keyExposures.slice(0, 3)

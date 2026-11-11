@@ -70,7 +70,7 @@ export async function fetchBranchesList(): Promise<Array<{ id: number; branch_na
     }
 }
 
-export async function fetchCompanyPdfData(): Promise<Record<string, any> | null> {
+export async function fetchCompanyPdfData(): Promise<Record<string, unknown> | null> {
     try {
         const res = await fetch('/api/pdf/company', {
             cache: 'no-store',

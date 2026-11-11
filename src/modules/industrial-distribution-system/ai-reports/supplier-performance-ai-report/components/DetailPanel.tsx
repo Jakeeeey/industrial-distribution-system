@@ -9,7 +9,7 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { SupplierSummaryRow } from '../types';
 import {
     Sheet,
@@ -43,12 +43,14 @@ export const DetailDrawer: React.FC<DetailDrawerProps> = ({
 }) => {
     // Pagination for RTS logs (4 logs per page)
     const [rtsPage, setRtsPage] = useState(1);
+    const [prevSupplierId, setPrevSupplierId] = useState(supplier?.supplierId);
     const rtsPageSize = 4;
 
-    // Reset pagination to page 1 whenever a new supplier is selected
-    useEffect(() => {
+    // Reset pagination to page 1 during render whenever a new supplier is selected (avoiding cascading effect render)
+    if (supplier?.supplierId !== prevSupplierId) {
+        setPrevSupplierId(supplier?.supplierId);
         setRtsPage(1);
-    }, [supplier?.supplierId]);
+    }
 
     if (!supplier) return null;
 
@@ -207,7 +209,7 @@ export const DetailDrawer: React.FC<DetailDrawerProps> = ({
                                         </div>
                                     </div>
                                     <p className="text-xs text-rose-900 dark:text-rose-300 font-medium leading-snug">
-                                        "{log.reason}"
+                                        &ldquo;{log.reason}&rdquo;
                                     </p>
                                 </div>
                             ))}

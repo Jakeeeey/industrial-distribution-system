@@ -36,7 +36,7 @@ export const SupplierPerformanceReportModule: React.FC = () => {
     const [filter, setFilter] = useState<SupplierPerformanceFilter>({});
     const [searchTerm, setSearchTerm] = useState('');
     const [branches, setBranches] = useState<Array<{ id: number; branch_name: string }>>([]);
-    const [companyData, setCompanyData] = useState<Record<string, any> | null>(null);
+    const [companyData, setCompanyData] = useState<Record<string, unknown> | null>(null);
     const [reportData, setReportData] = useState<SupplierPerformanceReportPayload | null>(null);
     const [selectedSupplier, setSelectedSupplier] = useState<SupplierSummaryRow | null>(null);
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -88,7 +88,7 @@ export const SupplierPerformanceReportModule: React.FC = () => {
 
     useEffect(() => {
         loadReport();
-    }, []);
+    }, [loadReport]);
 
     // Handle user clicking 'Details >' on any supplier row
     const handleSelectSupplier = (supplier: SupplierSummaryRow) => {

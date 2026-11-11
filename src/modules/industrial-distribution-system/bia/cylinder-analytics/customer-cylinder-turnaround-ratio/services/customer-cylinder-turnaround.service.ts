@@ -200,6 +200,29 @@ async function fetchSpringMovements(token?: string): Promise<RawMovementRow[]> {
   }
 }
 
+/**
+ * Evaluates whether a branch belongs strictly to the Industrial Division.
+ * Filters by division_id === 1 and excludes sub-locations such as bad-stock van routes.
+ */
+function isIndustrialBranch(b: DirectusBranchRow): boolean {
+  // DEV-RULE: Strictly filter branches by division_id === 1 (Industrial Division)
+  if (b.division_id == null || Number(b.division_id) !== 1) {
+    return false;
+  }
+  const name = (b.branch_name || "").toUpperCase();
+  const code = (b.branch_code || "").toUpperCase();
+  if (
+    name.includes("VAN") ||
+    name.includes("CHARIOT") ||
+    code.includes("VAN") ||
+    code.includes("-VB") ||
+    code.includes("-VC")
+  ) {
+    return false;
+  }
+  return true;
+}
+
 // In-memory audit log for workflow status transitions
 const inMemoryAuditLogs: CustomerCylinderTurnaroundAuditLog[] = [];
 
@@ -258,7 +281,7 @@ export async function fetchCustomerCylinderTurnaroundReport(
       `${directusBase}/items/customer?fields=id,customer_code,customer_name,store_name,contact_number,customer_email,city,province&limit=-1`
     ),
     fetchDirectus<{ data?: DirectusBranchRow[] }>(
-      `${directusBase}/items/branches?fields=id,branch_code,branch_name,division_id&filter[division_id][_eq]=1&limit=-1`
+      `${directusBase}/items/branches?fields=id,branch_code,branch_name,division_id,isActive&filter[division_id][_eq]=1&filter[isActive][_eq]=1&sort=branch_name&limit=-1`
     ),
     fetchDirectus<{ data?: DirectusProductRow[] }>(
       `${directusBase}/items/products?fields=product_id,product_code,product_name,product_weight,is_serialized&limit=-1`
@@ -278,10 +301,12 @@ export async function fetchCustomerCylinderTurnaroundReport(
   const liveCylinders = cylinderAssetsRes.data || [];
   const liveInvoices = invoicesRes.data || [];
 
-  // Index Industrial branches by ID
+  // Index Industrial branches by ID (strictly filtered to Industrial Division)
   const branchMap = new Map<number, DirectusBranchRow>();
   for (const b of liveBranches) {
-    branchMap.set(b.id, b);
+    if (isIndustrialBranch(b)) {
+      branchMap.set(b.id, b);
+    }
   }
 
   // Index serialized products by ID
@@ -501,7 +526,7 @@ export async function fetchCustomerCylinderTurnaroundLookups(): Promise<Customer
     ),
     // Industrial Division branches only (division_id: 1)
     fetchDirectus<{ data?: DirectusBranchRow[] }>(
-      `${directusBase}/items/branches?fields=id,branch_code,branch_name,division_id&filter[division_id][_eq]=1&limit=-1`
+      `${directusBase}/items/branches?fields=id,branch_code,branch_name,division_id,isActive&filter[division_id][_eq]=1&filter[isActive][_eq]=1&sort=branch_name&limit=-1`
     ),
     fetchDirectus<{ data?: DirectusProductRow[] }>(
       `${directusBase}/items/products?fields=product_id,product_code,product_name&filter[is_serialized][_eq]=1&limit=-1`
@@ -519,9 +544,10 @@ export async function fetchCustomerCylinderTurnaroundLookups(): Promise<Customer
     sublabel: [c.city, c.province].filter(Boolean).join(", "),
   }));
 
-  // Restrict options strictly to Industrial Division branches
+  // DEV-RULE: Restrict branch options strictly to Industrial Division branches (division_id = 1)
+  // Exclude non-industrial sub-locations and bad-stock van routes
   const branches: LookupOption[] = liveBranches
-    .filter((b) => b.division_id === undefined || b.division_id === null || b.division_id === 1)
+    .filter((b) => b.branch_name && isIndustrialBranch(b))
     .map((b) => ({
       value: b.id,
       label: `${b.branch_name} (${b.branch_code})`,
