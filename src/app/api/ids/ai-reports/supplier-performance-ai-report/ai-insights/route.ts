@@ -3,47 +3,46 @@
  * Always leave behind comments on all changes and development of workflows for efficient long-term coding
  *
  * Implements:
- * - Automatic retry on 503/429
- * - Fallback to gemini-2.5-flash-lite
- * - Deterministic rule-based analytical engine as ultimate zero-crash fallback
+ * - Routing through Centralized Core AI Layer (@/lib/ai) via runCoreAiAnalysis
+ * - Dual-pass GDPR sanitization (PII scrubbing + data minimization)
+ * - Executive 3-Pillar C-Suite parsing and structured Interactive Q&A
+ * - Rule-based zero-crash deterministic fallback guarantee
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
-import { AiTierSlug, SupplierSummaryRow, ReportExecutiveKPIs, AiInsightResponse } from '@/modules/industrial-distribution-system/ai-reports/supplier-performance-ai-report/types';
-import { getSystemInstructionForTier, constructAnalysisPrompt } from '@/modules/industrial-distribution-system/ai-reports/supplier-performance-ai-report/services/geminiPrompts';
+import { runCoreAiAnalysis, parseJsonSafe, redactPiiFromString, TierPolicy, GlobalAiTierSlug } from '@/lib/ai';
+import {
+    AiTierSlug,
+    SupplierSummaryRow,
+    ReportExecutiveKPIs,
+    AiInsightResponse,
+    ExecutivePillar,
+} from '@/modules/industrial-distribution-system/ai-reports/supplier-performance-ai-report/types';
+import {
+    getDomainSystemInstructionForTier,
+    constructAnalysisPrompt,
+} from '@/modules/industrial-distribution-system/ai-reports/supplier-performance-ai-report/services/geminiPrompts';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const PRIMARY_MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
-const FALLBACK_MODEL = 'gemini-2.5-flash-lite';
-
-/**
- * Cleanly parses JSON even if the LLM wraps it in markdown code blocks
- */
-function parseJsonSafe(text: string): { summary?: string; keyExposures?: string[]; strategicActions?: string[]; negotiationNotes?: string[] } | null {
-    try {
-        const cleaned = text
-            .replace(/^```json/im, '')
-            .replace(/^```/im, '')
-            .replace(/```$/im, '')
-            .trim();
-        return JSON.parse(cleaned);
-    } catch {
-        return null;
-    }
+interface AiInsightsRequestBody {
+    kpis: ReportExecutiveKPIs;
+    suppliers: SupplierSummaryRow[];
+    tierSlug?: AiTierSlug;
+    userQuery?: string;
 }
 
 /**
  * Deterministic offline fallback engine
- * Computes exact, high-quality analytical findings directly from empirical data
+ * Produces accurate C-suite findings directly from SQL metrics during outages
  */
-function generateDeterministicInsights(
-    tierSlug: AiTierSlug,
-    kpis: ReportExecutiveKPIs,
-    suppliers: SupplierSummaryRow[]
+function runDeterministicFallback(
+    payload: { kpis: ReportExecutiveKPIs; suppliers: SupplierSummaryRow[]; userQuery?: string },
+    tier: TierPolicy
 ): AiInsightResponse {
+    const { kpis, suppliers, userQuery } = payload;
+
     const bottomSuppliers = [...suppliers]
         .filter((s) => s.totalOrdersDue > 0 && s.otifPercentage !== null)
         .sort((a, b) => (a.otifPercentage ?? 0) - (b.otifPercentage ?? 0))
@@ -60,146 +59,178 @@ function generateDeterministicInsights(
     const otifStr = kpis.averageOtifRate !== null ? `${kpis.averageOtifRate}%` : 'N/A';
     const rejStr = kpis.averageRejectionRate !== null ? `${kpis.averageRejectionRate}%` : '0.00%';
 
-    const summary = `Currently, enterprise supplier fulfillment stands at ${otifStr} OTIF across ${kpis.totalSuppliersEvaluated} evaluated vendors, with an average rejection rate of ${rejStr}. A total of ${kpis.highRiskVendorsCount} supplier(s) exhibit active delivery delays or return-to-supplier flags. Active quality review and delivery reconciliation processes are in place.`;
+    const summary = `Enterprise supplier fulfillment stands at ${otifStr} OTIF across ${kpis.totalSuppliersEvaluated} evaluated vendors with an average rejection rate of ${rejStr}. A critical concentration of risk is detected: ${kpis.highRiskVendorsCount} supplier(s) currently trigger elevated quality, delivery delay, or cost escalation thresholds requiring strategic intervention.`;
 
-    const keyExposures: string[] = [];
-    if (bottomSuppliers.length > 0) {
-        const b = bottomSuppliers[0];
-        keyExposures.push(`Delivery Deficit: ${b.supplierName} achieved only ${b.otifPercentage}% OTIF (${b.onTimeOrders}/${b.totalOrdersDue} on-time orders).`);
-    } else {
-        keyExposures.push('Fulfillment Integrity: No severe delivery delays detected in the evaluated period.');
-    }
-
-    if (highestRtsSupplier) {
-        keyExposures.push(`Quality Return Volume: ${highestRtsSupplier.supplierName} accounts for ${highestRtsSupplier.rtsCount} Return-To-Supplier (RTS) events with a ${highestRtsSupplier.rejectionRatePercentage}% return rate.`);
-    } else {
-        keyExposures.push('Quality Stability: Zero Return-To-Supplier (RTS) events recorded across active receiving lines.');
-    }
-
-    if (highVarianceSuppliers.length > 0) {
-        const v = highVarianceSuppliers[0];
-        keyExposures.push(`Cost Discrepancy: ${v.supplierName} exhibits a +${v.averageCostVariancePercentage}% unit cost variance over approved purchase price.`);
-    } else {
-        keyExposures.push('Price Compliance: Invoiced costs align strictly with approved purchase contract orders.');
-    }
-
-    const strategicActions: string[] = [
-        'Initiate structured delivery reconciliation with vendors holding OTIF scores below the 80% enterprise threshold.',
-        'Verify pending credit memo deductions with Accounts Payable for all posted Return-To-Supplier (RTS) shipments.',
-        'Implement a mandatory 3-day buffer on purchase order lead times for vendors with frequent split deliveries.',
+    const executivePillars: ExecutivePillar[] = [
+        {
+            pillar: 'Commercial & Margin Integrity',
+            status: highVarianceSuppliers.length > 0 ? 'CRITICAL' : 'STABLE',
+            findings: highVarianceSuppliers.length > 0
+                ? `${highVarianceSuppliers[0].supplierName} exhibits a +${highVarianceSuppliers[0].averageCostVariancePercentage}% unit cost variance. Ensure pending credit memos match RTS batches.`
+                : 'Unit prices across all received batches comply with contracted and approved purchase order values.',
+        },
+        {
+            pillar: 'Supply Continuity & Logistics Friction',
+            status: bottomSuppliers.some((s) => (s.otifPercentage || 0) < 60) ? 'CRITICAL' : 'MODERATE',
+            findings: bottomSuppliers.length > 0
+                ? `${bottomSuppliers[0].supplierName} delivered only ${bottomSuppliers[0].otifPercentage}% on-time orders (${bottomSuppliers[0].onTimeOrders}/${bottomSuppliers[0].totalOrdersDue} shipments).`
+                : 'Fulfillment timelines remain stable across active delivery windows.',
+        },
+        {
+            pillar: 'Vendor Governance & QBR Leverage',
+            status: 'ACTION_REQUIRED',
+            findings: highestRtsSupplier
+                ? `Mandate a formal Corrective Action Plan (CAPA) for ${highestRtsSupplier.supplierName} citing ${highestRtsSupplier.rtsCount} return events (${highestRtsSupplier.rejectionRatePercentage}% rejection rate).`
+                : 'Maintain standard quarterly reviews and lead-time monitoring.',
+        },
     ];
 
+    const keyExposures: string[] = [
+        `Delivery Deficit: ${bottomSuppliers[0]?.supplierName || 'Vendors'} achieved only ${bottomSuppliers[0]?.otifPercentage ?? 0}% OTIF compliance.`,
+        `Quality Drag: ${highestRtsSupplier?.supplierName || 'Vendors'} accounts for ${highestRtsSupplier?.rtsCount || 0} RTS return documents.`,
+        `Commercial Variance: ${highVarianceSuppliers[0]?.supplierName || 'Vendors'} exhibits price variances exceeding budget tolerances.`,
+    ];
+
+    const strategicActions: string[] = [
+        'Enforce 10-business-day Corrective Action Plan (CAPA) mandates on all high-risk vendors.',
+        'Hold pending finance disbursements for suppliers with unallocated RTS return quantities.',
+        'Mandate strict in-full shipment delivery terms to eliminate split delivery administrative friction.',
+    ];
+
+    let qaAnswer: string | undefined = undefined;
+    if (userQuery) {
+        qaAnswer = `### Offline Analytical Assessment
+*Note: AI Copilot is operating under rule-based offline mode. Based on live empirical database records:*
+
+1. **Primary Operational Exposure**:
+   - Bottom vendor: **${bottomSuppliers[0]?.supplierName || 'None'}** (${bottomSuppliers[0]?.otifPercentage ?? 'N/A'}% OTIF, ${bottomSuppliers[0]?.totalOrdersDue || 0} orders due).
+
+2. **Quality & Defect Volume**:
+   - Highest return rate: **${highestRtsSupplier?.supplierName || 'None'}** (${highestRtsSupplier?.rtsCount || 0} RTS documents, ${highestRtsSupplier?.rejectionRatePercentage || 0}% rejection rate).
+
+3. **Recommended C-Level Action**:
+   - Enforce contractual liquidated damages or 5-day lead-time buffers before approving purchase agreement renewals.`;
+    }
+
     return {
-        tierSlug,
-        tierName: tierSlug.charAt(0).toUpperCase() + tierSlug.slice(1),
-        model: 'Rule-Based Deterministic Engine (Offline/Spike Protection)',
+        tierSlug: tier.slug as AiTierSlug,
+        tierName: tier.name,
+        model: 'Rule-Based Deterministic Engine (Offline)',
         summary,
+        executivePillars,
         keyExposures,
         strategicActions,
+        userQuery,
+        qaAnswer,
         isFallback: true,
         disclaimer: 'AI recommendations are strictly advisory and require human review. They do not post ERP transactions or alter operating policies.',
     };
 }
 
 export async function POST(req: NextRequest) {
-    let tierSlug: AiTierSlug = 'basic';
-    let kpis: ReportExecutiveKPIs | null = null;
-    let suppliers: SupplierSummaryRow[] = [];
-
     try {
-        const body = await req.json().catch(() => ({}));
-        kpis = body.kpis;
-        suppliers = body.suppliers || [];
-        tierSlug = body.tierSlug || 'basic';
+        const body: AiInsightsRequestBody = await req.json().catch(() => ({}));
+        const { kpis, suppliers, tierSlug = 'basic', userQuery } = body;
 
         if (!kpis || !Array.isArray(suppliers)) {
             return NextResponse.json({ error: 'Invalid payload: kpis and suppliers are required.' }, { status: 400 });
         }
 
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) {
-            console.warn('[Gemini AI] No GEMINI_API_KEY set. Falling back to deterministic engine.');
-            return NextResponse.json(generateDeterministicInsights(tierSlug, kpis, suppliers));
-        }
+        // Sanitize any user inquiry using PII redaction (GDPR Dual-Pass)
+        const sanitizedUserQuery = userQuery ? redactPiiFromString(userQuery.trim()) : undefined;
+        const isCustomQuery = Boolean(sanitizedUserQuery && tierSlug === 'executive');
 
-        const ai = new GoogleGenAI({ apiKey });
-        const systemInstruction = getSystemInstructionForTier(tierSlug);
-        const userPrompt = constructAnalysisPrompt(tierSlug, kpis, suppliers);
+        // Centralized Core AI Execution
+        const coreResponse = await runCoreAiAnalysis<
+            { kpis: ReportExecutiveKPIs; suppliers: SupplierSummaryRow[]; userQuery?: string },
+            AiInsightResponse
+        >(
+            {
+                moduleName: 'supplier-performance-ai-report',
+                tierSlug: tierSlug as GlobalAiTierSlug,
+                payload: { kpis, suppliers, userQuery: sanitizedUserQuery },
+                domainSystemInstruction: getDomainSystemInstructionForTier(tierSlug, isCustomQuery),
+                buildPrompt: (data) =>
+                    constructAnalysisPrompt(tierSlug, data.kpis, data.suppliers, data.userQuery),
+                fallbackEngine: (data, tier) => runDeterministicFallback(data, tier),
+                parseResponse: (rawText: string) => {
+                    if (isCustomQuery) {
+                        return {
+                            tierSlug,
+                            tierName: tierSlug.charAt(0).toUpperCase() + tierSlug.slice(1),
+                            model: process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite',
+                            summary: '',
+                            keyExposures: [],
+                            strategicActions: [],
+                            userQuery: sanitizedUserQuery,
+                            qaAnswer: rawText,
+                            disclaimer:
+                                'AI recommendations are strictly advisory and require human review. They do not post ERP transactions or alter operating policies.',
+                        };
+                    }
 
-        // Attempt 1: Primary Model (from env, e.g. gemini-3.1-flash-lite)
-        let rawText = '';
-        let usedModel = PRIMARY_MODEL;
+                    const parsedJson = parseJsonSafe(rawText);
+                    if (parsedJson && parsedJson.summary) {
+                        return {
+                            tierSlug,
+                            tierName: tierSlug.charAt(0).toUpperCase() + tierSlug.slice(1),
+                            model: process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite',
+                            summary: parsedJson.summary,
+                            executivePillars: Array.isArray(parsedJson.executivePillars)
+                                ? parsedJson.executivePillars
+                                : undefined,
+                            keyExposures: Array.isArray(parsedJson.keyExposures)
+                                ? parsedJson.keyExposures.slice(0, 3)
+                                : [],
+                            strategicActions: Array.isArray(parsedJson.strategicActions)
+                                ? parsedJson.strategicActions.slice(0, 3)
+                                : [],
+                            negotiationNotes: parsedJson.negotiationNotes,
+                            disclaimer:
+                                'AI recommendations are strictly advisory and require human review. They do not post ERP transactions or alter operating policies.',
+                        };
+                    }
 
-        try {
-            const result = await ai.models.generateContent({
-                model: PRIMARY_MODEL,
-                contents: userPrompt,
-                config: {
-                    systemInstruction,
-                    temperature: 0.2,
+                    // Fallback structured mapping
+                    return {
+                        tierSlug,
+                        tierName: tierSlug.charAt(0).toUpperCase() + tierSlug.slice(1),
+                        model: process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite',
+                        summary: rawText.slice(0, 400),
+                        keyExposures: [
+                            `Evaluated ${kpis.totalSuppliersEvaluated} active vendor delivery cycles.`,
+                            `Enterprise OTIF fulfillment recorded at ${kpis.averageOtifRate !== null ? `${kpis.averageOtifRate}%` : 'N/A'}.`,
+                            `${kpis.highRiskVendorsCount} vendor(s) identified with high return or late delivery risk.`,
+                        ],
+                        strategicActions: [
+                            'Review open PO lines with flagged high-risk suppliers.',
+                            'Cross-check Return-to-Supplier item remarks with warehouse receiving.',
+                            'Schedule vendor quarterly review before purchase agreement renewal.',
+                        ],
+                        disclaimer:
+                            'AI recommendations are strictly advisory and require human review. They do not post ERP transactions or alter operating policies.',
+                    };
                 },
-            });
-            rawText = result.text || '';
-        } catch (primaryErr: unknown) {
-            console.warn(`[Gemini AI] Primary model ${PRIMARY_MODEL} failed:`, primaryErr);
-            // Wait 1000ms backoff before Attempt 2
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-
-            // Attempt 2: Fallback Model (gemini-2.5-flash-lite)
-            usedModel = FALLBACK_MODEL;
-            console.info(`[Gemini AI] Retrying with fallback model: ${FALLBACK_MODEL}...`);
-            const fallbackResult = await ai.models.generateContent({
-                model: FALLBACK_MODEL,
-                contents: userPrompt,
-                config: {
-                    systemInstruction,
-                    temperature: 0.2,
+                sanitization: {
+                    maxItemsCap: 30, // Data Minimization GDPR Art. 5
+                    stripSensitiveKeys: true,
+                    redactPii: true,
                 },
-            });
-            rawText = fallbackResult.text || '';
-        }
+            },
+            tierSlug === 'executive' ? 3 : tierSlug === 'pro' ? 2 : 1
+        );
 
-        const parsedJson = parseJsonSafe(rawText);
+        const responsePayload: AiInsightResponse = {
+            ...coreResponse.data,
+            model: coreResponse.governance.modelUsed,
+            isFallback: coreResponse.governance.isFallback,
+            governance: coreResponse.governance,
+        };
 
-        if (parsedJson && parsedJson.summary && Array.isArray(parsedJson.keyExposures)) {
-            const responsePayload: AiInsightResponse = {
-                tierSlug,
-                tierName: tierSlug.charAt(0).toUpperCase() + tierSlug.slice(1),
-                model: usedModel,
-                summary: parsedJson.summary,
-                keyExposures: parsedJson.keyExposures.slice(0, 3),
-                strategicActions: Array.isArray(parsedJson.strategicActions) ? parsedJson.strategicActions.slice(0, 3) : [],
-                negotiationNotes: parsedJson.negotiationNotes,
-                isFallback: false,
-                disclaimer: 'AI recommendations are strictly advisory and require human review. They do not post ERP transactions or alter operating policies.',
-            };
-            return NextResponse.json(responsePayload);
-        }
-
-        // If JSON parsing of Gemini output did not yield the expected keys, build clean structured view
-        return NextResponse.json({
-            tierSlug,
-            tierName: tierSlug.charAt(0).toUpperCase() + tierSlug.slice(1),
-            model: usedModel,
-            summary: rawText.slice(0, 400),
-            keyExposures: [
-                `Evaluated ${kpis.totalSuppliersEvaluated} active vendor delivery cycles.`,
-                `Enterprise OTIF fulfillment recorded at ${kpis.averageOtifRate !== null ? `${kpis.averageOtifRate}%` : 'N/A'}.`,
-                `${kpis.highRiskVendorsCount} vendor(s) identified with high return or late delivery risk.`,
-            ],
-            strategicActions: [
-                'Review open PO lines with flagged high-risk suppliers.',
-                'Cross-check Return-to-Supplier item remarks with warehouse receiving.',
-                'Schedule vendor quarterly review before purchase agreement renewal.',
-            ],
-            isFallback: false,
-            disclaimer: 'AI recommendations are strictly advisory and require human review. They do not post ERP transactions or alter operating policies.',
-        });
-    } catch (finalErr: unknown) {
-        console.error('[Gemini AI] Both remote attempts failed. Triggering deterministic engine:', finalErr);
-        if (kpis) {
-            return NextResponse.json(generateDeterministicInsights(tierSlug, kpis, suppliers));
-        }
-        return NextResponse.json({ error: 'Failed to generate insights' }, { status: 500 });
+        return NextResponse.json(responsePayload);
+    } catch (err: unknown) {
+        const errorMsg = err instanceof Error ? err.message : 'Unknown AI generation error';
+        console.error('[SupplierPerformance AI Route Error]:', errorMsg);
+        return NextResponse.json({ error: 'Failed to process AI request', details: errorMsg }, { status: 500 });
     }
 }

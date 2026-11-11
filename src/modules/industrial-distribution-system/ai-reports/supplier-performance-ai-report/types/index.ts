@@ -3,6 +3,8 @@
  * Always leave behind comments on all changes and development of workflows for efficient long-term coding
  */
 
+import { AiGovernanceMetadata } from '@/lib/ai';
+
 export type AiTierSlug = 'basic' | 'pro' | 'executive';
 
 export interface AiTierInfo {
@@ -72,14 +74,31 @@ export interface SupplierPerformanceReportPayload {
     };
 }
 
+export interface ExecutivePillar {
+    pillar: string;
+    status: 'CRITICAL' | 'MODERATE' | 'STABLE' | 'ACTION_REQUIRED';
+    findings: string;
+}
+
+export interface ChatMessage {
+    id: string;
+    role: 'user' | 'assistant';
+    content: string;
+    timestamp: string;
+}
+
 export interface AiInsightResponse {
     tierSlug: AiTierSlug;
     tierName: string;
     model: string;
     summary: string;
+    executivePillars?: ExecutivePillar[];
     keyExposures: string[];
     strategicActions: string[];
     negotiationNotes?: string[];
+    userQuery?: string;
+    qaAnswer?: string;
     disclaimer: string;
     isFallback?: boolean;
+    governance?: AiGovernanceMetadata;
 }

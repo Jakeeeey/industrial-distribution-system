@@ -2,11 +2,11 @@
  * Main Container Module for Supplier Performance AI Report
  * Always leave behind comments on all changes and development of workflows for efficient long-term coding
  *
- * Revisions:
- * - Smart sorting prioritizing active vendors
- * - Vibrant chromatic metric cards with glowing hover elevations
- * - High-fidelity print generator incorporating company logo, TIN, and full formatted document
- * - Option A: Slide-over Sheet drawer for vendor evidence details
+ * Implements:
+ * - Two-screen segmented AI Copilot (Executive Overview vs Interactive Q&A)
+ * - Centralized Core AI integration
+ * - Print/PDF generator with company header
+ * - Smart active record sorting and pagination
  */
 
 'use client';
@@ -96,7 +96,7 @@ export const SupplierPerformanceReportModule: React.FC = () => {
         setIsDrawerOpen(true);
     };
 
-    // Trigger AI Copilot analysis
+    // Trigger standard AI Copilot analysis (Overview)
     const handleRunAi = async () => {
         if (!reportData) return;
         setShowAiBanner(true);
@@ -110,6 +110,25 @@ export const SupplierPerformanceReportModule: React.FC = () => {
             setErrorMessage(msg);
         } finally {
             setIsAiLoading(false);
+        }
+    };
+
+    // Trigger Executive Custom Inquiry (Interactive Q&A)
+    const handleAskCustomQuery = async (query: string) => {
+        if (!reportData) return;
+        setErrorMessage(null);
+        try {
+            const insights = await generateGeminiInsights(reportData, userTier.tierSlug, query);
+            setAiInsight((prev) => ({
+                ...(prev || insights),
+                userQuery: insights.userQuery,
+                qaAnswer: insights.qaAnswer,
+                model: insights.model,
+                governance: insights.governance,
+            }));
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Failed to answer inquiry';
+            setErrorMessage(msg);
         }
     };
 
@@ -153,13 +172,14 @@ export const SupplierPerformanceReportModule: React.FC = () => {
                 branches={branches}
             />
 
-            {/* AI Copilot Insights Banner */}
+            {/* AI Copilot Insights Banner (Segmented: Executive Overview vs Interactive Q&A) */}
             {showAiBanner && (
                 <AiInsightsPanel
                     aiInsight={aiInsight}
                     activeTier={userTier.tierSlug}
                     isAiLoading={isAiLoading}
                     onDismiss={() => setShowAiBanner(false)}
+                    onAskCustomQuery={handleAskCustomQuery}
                 />
             )}
 

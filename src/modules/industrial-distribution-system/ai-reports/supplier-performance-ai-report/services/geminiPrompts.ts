@@ -2,23 +2,33 @@
  * Gemini Prompt Templates & Tier System Instructions
  * Always leave behind comments on all changes and development of workflows for efficient long-term coding
  *
- * Configured to generate structured insight across:
- * - Basic: 1 Summary Paragraph + 3 Key Exposures & Risks + 3 Strategic Actions
- * - Pro: Root-cause diagnosis (split receipts vs defects) and lead-time trend analysis
- * - Executive: Strategic supplier negotiation battlecards and contractual leverage points
+ * Revisions:
+ * - Upgraded Executive Overview to 3 C-Suite Strategic Pillars (Commercial, Logistics, Negotiation)
+ * - Enhanced interactive Q&A prompts with rich structured Markdown formatting directives
  */
 
 import { AiTierSlug, SupplierSummaryRow, ReportExecutiveKPIs } from '../types';
 
-export function getSystemInstructionForTier(tierSlug: AiTierSlug): string {
+export function getDomainSystemInstructionForTier(tierSlug: AiTierSlug, isCustomQuery: boolean = false): string {
     const baseDirectives = `
-You are an expert AI Procurement and Supply Chain Analyst for an industrial distribution enterprise (IDS).
+You are an expert Chief Procurement Officer (CPO) and Supply Chain Strategy Advisor for an industrial distribution enterprise (IDS).
 Strict Operating Constraints:
-1. All recommendations are purely advisory and strictly require human review.
-2. Never suggest unauthorized transaction postings or policy modifications.
-3. Base all conclusions strictly on the provided empirical metrics. Do not fabricate order numbers or data points.
-4. Output your response as a valid JSON object matching the requested schema. Do NOT include markdown code blocks around the JSON if possible, or use standard json formatting.
+1. All recommendations are purely advisory and strictly require human review before operational changes are enacted.
+2. Base all conclusions strictly on the provided empirical metrics. Do not fabricate order numbers, vendors, or data points.
+3. Structure your response with clean formatting. Use standard Markdown headings and bullet points. Never include raw markdown fence markers or excessive empty whitespace.
 `;
+
+    if (isCustomQuery) {
+        return `${baseDirectives}
+Mode: EXECUTIVE CONVERSATIONAL COPILOT
+The user is an executive interrogating the supplier performance dataset.
+Answer the user's specific inquiry thoroughly with executive-level clarity.
+Cite exact vendor names, OTIF fulfillment percentages, RTS defect volumes, and cost variances from the data.
+Structure your answer with:
+- **Direct Answer Summary**: 1 concise takeaway answering the question.
+- **Empirical Findings**: Bulleted specifics citing exact numbers from the dataset.
+- **Actionable C-Suite Next Steps**: Concrete contractual or operational follow-ups.`;
+    }
 
     if (tierSlug === 'basic') {
         return `${baseDirectives}
@@ -47,18 +57,50 @@ Include root-cause diagnosis correlating delayed orders with split receipts and 
 Return JSON with "summary", "keyExposures" (3 items), and "strategicActions" (3 items), with root-cause diagnostic depth.`;
     }
 
+    // Tier 3: Executive Strategic Pillars
     return `${baseDirectives}
-Current Tier: EXECUTIVE
-Include strategic vendor negotiation leverage points, contractual terms adjustments, and procurement review committee notes.
-Return JSON with "summary", "keyExposures" (3 items), "strategicActions" (3 items), and optional "negotiationNotes" (3 items).`;
+Current Tier: EXECUTIVE STRATEGIC
+Deliver a high-impact C-Suite briefing structured around 3 Strategic Pillars.
+Your JSON output MUST adhere to this exact structure:
+{
+  "summary": "High-impact executive brief synthesizing the strategic risk posture of the vendor portfolio, margin leakage, and systemic operational friction.",
+  "executivePillars": [
+    {
+      "pillar": "Commercial & Margin Integrity",
+      "status": "CRITICAL" | "MODERATE" | "STABLE",
+      "findings": "Analysis of pricing compliance, cost variances, and financial exposure from RTS credit memos."
+    },
+    {
+      "pillar": "Supply Continuity & Logistics Friction",
+      "status": "CRITICAL" | "MODERATE" | "STABLE",
+      "findings": "Analysis of systemic OTIF delivery failures, split shipment friction, and lead-time delays."
+    },
+    {
+      "pillar": "Vendor Governance & QBR Leverage",
+      "status": "ACTION_REQUIRED",
+      "findings": "Concrete negotiation leverage points, contractual penalties (e.g. liquidated damages/rebates), and vendor probation plans."
+    }
+  ],
+  "keyExposures": [
+    "Commercial Risk: Specific supplier with cost variance or financial drag",
+    "Delivery Deficit: Specific supplier with chronic late deliveries",
+    "Quality Vulnerability: Specific supplier with severe RTS defect volume"
+  ],
+  "strategicActions": [
+    "C-Suite Intervention: Notice to Cure and CAPA mandate for bottom performers",
+    "Logistics Directive: Strict in-full shipping terms to stop split delivery drag",
+    "Commercial Strategy: Pending voucher holds and QBR penalty enforcement"
+  ]
+}`;
 }
 
 export function constructAnalysisPrompt(
     tierSlug: AiTierSlug,
     kpis: ReportExecutiveKPIs,
-    suppliers: SupplierSummaryRow[]
+    suppliers: SupplierSummaryRow[],
+    userQuery?: string
 ): string {
-    // Sanitize supplier data (no PII or bank credentials)
+    // Sanitize supplier data (Data Minimization GDPR Art. 5)
     const sanitizedSupplierData = suppliers.slice(0, 30).map((s) => ({
         id: s.supplierId,
         name: s.supplierName,
@@ -75,6 +117,25 @@ export function constructAnalysisPrompt(
         riskDrivers: s.riskDrivers,
     }));
 
+    if (userQuery && userQuery.trim()) {
+        return `
+The executive has submitted the following inquiry regarding the active supplier performance dataset:
+"${userQuery.trim()}"
+
+Summary Metrics:
+- Total Evaluated Suppliers: ${kpis.totalSuppliersEvaluated}
+- Average Enterprise OTIF: ${kpis.averageOtifRate !== null ? `${kpis.averageOtifRate}%` : 'N/A'}
+- Average Enterprise Rejection Rate: ${kpis.averageRejectionRate !== null ? `${kpis.averageRejectionRate}%` : '0%'}
+- High-Risk Suppliers: ${kpis.highRiskVendorsCount}
+- Total RTS Returns Logged: ${kpis.totalRtsReturns}
+
+Active Supplier Performance Data:
+${JSON.stringify(sanitizedSupplierData, null, 2)}
+
+Provide an executive, formatted answer addressing this inquiry directly.
+`;
+    }
+
     return `
 Analyze the following Industrial Distribution System (IDS) Supplier Performance Report:
 
@@ -85,9 +146,9 @@ Summary Metrics:
 - High-Risk Suppliers: ${kpis.highRiskVendorsCount}
 - Total RTS Returns Logged: ${kpis.totalRtsReturns}
 
-Supplier Performance Data:
+Active Supplier Performance Data:
 ${JSON.stringify(sanitizedSupplierData, null, 2)}
 
-Generate the ${tierSlug.toUpperCase()} tier JSON response with summary, keyExposures (3 bullets), and strategicActions (3 bullets).
+Generate the ${tierSlug.toUpperCase()} JSON response adhering strictly to the instructed structure.
 `;
 }

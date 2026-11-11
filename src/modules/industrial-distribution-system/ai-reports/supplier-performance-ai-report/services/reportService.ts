@@ -33,7 +33,8 @@ export async function fetchSupplierPerformanceData(
 
 export async function generateGeminiInsights(
     reportData: SupplierPerformanceReportPayload,
-    tierSlug: AiTierSlug
+    tierSlug: AiTierSlug,
+    userQuery?: string
 ): Promise<AiInsightResponse> {
     const res = await fetch('/api/ids/ai-reports/supplier-performance-ai-report/ai-insights', {
         method: 'POST',
@@ -44,12 +45,13 @@ export async function generateGeminiInsights(
             kpis: reportData.kpis,
             suppliers: reportData.suppliers,
             tierSlug,
+            userQuery,
         }),
     });
 
     if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson?.details || errJson?.error || 'Failed to generate AI insights');
+        throw new Error(errJson?.details || errJson?.error || 'Failed to process AI insights');
     }
 
     return res.json();
