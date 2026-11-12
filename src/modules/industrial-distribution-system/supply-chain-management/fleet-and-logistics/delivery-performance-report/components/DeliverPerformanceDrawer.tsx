@@ -52,6 +52,16 @@ export function DeliverPerformanceDrawer() {
             Fulfilled
           </Badge>
         );
+      case "Delivered - Pending Clearance":
+        return (
+          <Badge
+            variant="outline"
+            className="gap-1.5 border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300 text-xs py-0.5 px-2.5"
+          >
+            <Clock className="h-3.5 w-3.5" />
+            Delivered - Pending Clearance
+          </Badge>
+        );
       case "Fulfilled With Concerns":
         return (
           <Badge
@@ -156,7 +166,7 @@ export function DeliverPerformanceDrawer() {
             </div>
           </div>
 
-          {/* 2. Customer & Branch (2-Column Grid) */}
+          {/* 2. Customer & Branch (2-Column Grid) - Distinctly presents registered business name and customer code */}
           <div className="rounded-lg border border-border bg-card p-3.5 shadow-2xs space-y-2.5">
             <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider flex items-center gap-1.5">
               <Building className="h-3.5 w-3.5 text-primary" /> Destination & Branch Location
@@ -164,11 +174,17 @@ export function DeliverPerformanceDrawer() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <div className="flex flex-col gap-0.5">
                 <span className="text-[11px] text-muted-foreground">Customer Name:</span>
-                <span className="font-semibold text-foreground">{selectedRecord.customerName}</span>
+                <span className="font-semibold text-foreground">
+                  {selectedRecord.customerName && selectedRecord.customerName !== selectedRecord.customerCode
+                    ? selectedRecord.customerName
+                    : selectedRecord.customerName || "Unregistered Customer"}
+                </span>
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="text-[11px] text-muted-foreground">Customer Code:</span>
-                <span className="font-mono text-xs font-medium text-muted-foreground">{selectedRecord.customerCode}</span>
+                <span className="font-mono text-xs font-medium text-muted-foreground">
+                  {selectedRecord.customerCode || "—"}
+                </span>
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="text-[11px] text-muted-foreground">Originating Branch:</span>

@@ -1,94 +1,127 @@
-export type PCRStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+// src/modules/industrial-distribution-system/supply-chain-management/product-pricing-management/product-pricing/types.ts
 
-export type PriceTypeRef = {
+export type PriceType = {
     price_type_id: number;
-    price_type_name?: string;
+    price_type_name: "A" | "B" | "C" | "D" | "E" | string;
+    sort: number | null;
 };
 
-export type UomRef = {
-    unit_id?: number | string | null;
-    unit_name?: string | null;
-    unit_shortcut?: string | null;
+export type Category = { category_id: number; category_name: string };
+export type Brand = { brand_id: number; brand_name: string };
+export type Unit = {
+    unit_id: number;
+    unit_name: string | null;
+    unit_shortcut: string | null;
+    order?: number | null;
 };
 
-export type ProductRef = {
+export type Supplier = {
+    id: number;
+    supplier_name: string;
+    supplier_shortcut: string | null;
+    isActive: number;
+};
+
+export type ProductRow = {
     product_id: number;
-    product_code?: string;
-    product_name?: string;
-    unit_of_measurement?: UomRef | number | string | null;
+    parent_id?: number | null;
+
+    product_code: string | null;
+    barcode: string | null;
+    product_name: string;
+    isActive: number;
+
+    product_category: number | null;
+    product_brand: number | null;
+    unit_of_measurement: number | null;
+
+    // cached mirrors in products table
+    price_per_unit: number | null;
+    priceA: number | null;
+    priceB: number | null;
+    priceC: number | null;
+    priceD: number | null;
+    priceE: number | null;
+    cost_per_unit: number | null;
 };
 
-export type PriceChangeRequestRow = {
-    request_id: number;
-    product_id: number | ProductRef;
-    price_type_id: number | PriceTypeRef;
-    proposed_price: number;
-    status: PCRStatus;
+export type ProductTierKey = "A" | "B" | "C" | "D" | "E" | "LIST";
 
-    requested_by: number;
-    requested_at: string;
-
-    approved_by?: number | null;
-    approved_at?: string | null;
-
-    rejected_by?: number | null;
-    rejected_at?: string | null;
-    reject_reason?: string | null;
-};
-
-export type CostChangeRequestRow = {
-    request_id: number;
-    product_id: number | ProductRef;
-    current_cost?: number | null;
-    proposed_cost: number;
-    status: PCRStatus;
-
-    requested_by: number;
-    requested_at: string;
-
-    approved_by?: number | null;
-    approved_at?: string | null;
-
-    rejected_by?: number | null;
-    rejected_at?: string | null;
-    reject_reason?: string | null;
-};
-
-export type ListMeta = {
-    total_count?: number;
-};
-
-export type ListQuery = {
-    status?: PCRStatus | "";
-    q?: string;
-    product_id?: number | "";
-    supplier_id?: number | "";
-    price_type_id?: number | "";
-    requested_by?: number | "";
-    date_from?: string | "";
-    date_to?: string | "";
-    page?: number;
-    page_size?: number;
-};
-
-export type CreatePCRPayload = {
+export type PriceRow = {
+    id: number;
     product_id: number;
     price_type_id: number;
-    proposed_price: number;
+    price: number | null;
+    status: string;
+    updated_at: string | null;
 };
 
-export type CreateCCRPayload = {
+/**
+ * ✅ New: per-variant cell used in grouped matrix rows
+ * A "variant" is a concrete ProductRow (product_id) under a group,
+ * keyed by its unit_of_measurement.
+ */
+export type VariantCell = {
+    product: ProductRow;
+    tiers: Record<ProductTierKey, number | null>;
+};
+
+/**
+ * ✅ New: grouped matrix row
+ * - group_id: parent_id ?? product_id
+ * - display: representative product row used for Code/Barcode/Product/Category/Brand columns
+ * - variantsByUnitId: actual editable variants keyed by unit_id (UOM)
+ */
+export type MatrixRow = {
+    group_id: number;
+    display: ProductRow;
+    variantsByUnitId: Record<number, VariantCell>;
+    category_name: string | null;
+    brand_name: string | null;
+};
+
+export type PricingFilters = {
+    q: string;
+
+    // ✅ multi-select ids (hook uses number[])
+    category_ids: number[];
+    brand_ids: number[];
+    unit_ids: number[];
+
+    // ✅ multi supplier + scope (hook uses this)
+    supplier_ids: number[];
+    supplier_scope: "ALL" | "LINKED_ONLY";
+
+    active_only: boolean;
+    missing_tier: boolean;
+
+    // ✅ New: UI filters for column visibility
+    price_type_ids: number[];
+    show_list_price: boolean;
+};
+
+export type UpsertLine = {
     product_id: number;
+    price_type_id: number;
+    price: number | null;
+    updated_by?: number | null;
+    created_by?: number | null;
+    status?: string;
+};
+
+export type PriceChangeRequest = {
+    id: number;
+    product_id: number | { product_id: number };
+    price_type_id: number | { price_type_id: number };
+    proposed_price: number;
+    status: string;
+};
+
+export type CostChangeRequest = {
+    id: number;
+    product_id: number | { product_id: number };
     proposed_cost: number;
-    current_cost?: number | null;
+    current_cost: number | null;
+    status: string;
 };
 
-export type ActionPayload =
-    | { action: "approve"; request_id: number }
-    | { action: "cancel"; request_id: number }
-    | { action: "reject"; request_id: number; reject_reason: string };
-
-export type ApproveManyResult = {
-    successIds: number[];
-    failedIds: number[];
-};

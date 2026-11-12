@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { PriceType } from "../../product-pricing/types";
+import type { PriceType } from "../../price-change-request/types";
 
 interface PriceTypeFormDialogProps {
     open: boolean;

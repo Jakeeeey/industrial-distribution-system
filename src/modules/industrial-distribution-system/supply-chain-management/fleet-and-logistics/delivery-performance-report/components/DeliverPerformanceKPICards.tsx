@@ -28,7 +28,7 @@ export function DeliverPerformanceKPICards() {
     {
       title: "Fulfillment Rate",
       value: `${kpis?.fulfillmentRate ?? 0}%`,
-      subtext: `${kpis?.fulfilledCount.toLocaleString() ?? "0"} successfully fulfilled`,
+      subtext: `${kpis?.fulfilledCount.toLocaleString() ?? "0"} fulfilled${(kpis?.pendingClearanceCount ?? 0) > 0 ? ` (${kpis?.pendingClearanceCount} pending audit)` : ""}`,
       icon: CheckCircle2,
       color: "text-emerald-600 dark:text-emerald-400",
       bg: "bg-emerald-50 dark:bg-emerald-950/40",

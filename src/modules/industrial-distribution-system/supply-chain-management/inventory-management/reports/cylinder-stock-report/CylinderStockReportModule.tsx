@@ -31,12 +31,14 @@ function CylinderStockReportContent() {
   }
 
   return (
-    <div className="flex flex-col h-full w-full space-y-2">
+    <div className="flex flex-col min-h-full w-full space-y-3 pb-8">
       <CylinderStockHeader />
       <CylinderStockKPICards />
       <CylinderStockFilters />
-      <CylinderStockTable />
-      <CylinderStockPagination />
+      <div className="flex flex-col w-full space-y-2">
+        <CylinderStockTable />
+        <CylinderStockPagination />
+      </div>
       <CylinderStockDrawer />
     </div>
   );

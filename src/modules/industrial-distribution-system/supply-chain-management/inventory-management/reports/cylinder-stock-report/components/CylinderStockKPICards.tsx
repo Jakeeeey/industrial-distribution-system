@@ -92,9 +92,10 @@ export function CylinderStockKPICards() {
           <Card
             key={idx}
             className={cn(
-              "shadow-none border rounded-lg py-2 px-0 gap-0",
+              "shadow-none border rounded-lg py-2 px-0 gap-0 transition-opacity duration-200",
               item.border,
-              item.bg
+              item.bg,
+              isLoading && "opacity-80"
             )}
           >
             <CardContent className="p-0 px-3.5 py-0.5">
@@ -106,8 +107,12 @@ export function CylinderStockKPICards() {
               </div>
 
               <div className="mt-1">
-                <div className={`text-xl font-bold tracking-tight leading-none ${item.color}`}>
-                  {item.value.toLocaleString()}
+                <div className={`text-xl font-bold tracking-tight leading-none ${item.color} flex items-center min-h-[24px]`}>
+                  {isLoading ? (
+                    <div className="h-5 w-12 bg-muted/60 animate-pulse rounded my-0.5" />
+                  ) : (
+                    item.value.toLocaleString()
+                  )}
                 </div>
                 <div className="text-[10px] text-muted-foreground mt-1 truncate">
                   {item.description}
