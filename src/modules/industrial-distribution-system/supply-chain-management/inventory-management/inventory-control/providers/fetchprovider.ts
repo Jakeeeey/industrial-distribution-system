@@ -25,7 +25,32 @@ async function apiGet<T>(
     }
   }
 
-  const res = await fetch(url.toString(), { method: "GET", cache: "no-store" });
+  // Include credentials so session cookies are always sent to the BFF route
+  let res = await fetch(url.toString(), {
+    method: "GET",
+    credentials: "include",
+    cache: "no-store",
+  });
+
+  // If the access token expired (401), attempt a silent token refresh via /api/auth/refresh and retry once
+  if (res.status === 401) {
+    try {
+      const refreshRes = await fetch("/api/auth/refresh", {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (refreshRes.ok) {
+        res = await fetch(url.toString(), {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        });
+      }
+    } catch {
+      // Ignore refresh network errors and allow standard error handling below
+    }
+  }
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
